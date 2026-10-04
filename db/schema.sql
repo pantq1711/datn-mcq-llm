@@ -1,40 +1,3 @@
--- ============================================================
--- schema_final.sql — BẢN CUỐI, thay cho schema_v6 ... schema_v10
--- 14 bảng. Tên bảng số ít (riêng "users" giữ số nhiều vì USER là
--- từ khóa của PostgreSQL).
---
--- NGUYÊN TẮC CỦA TEACHER_REVIEW:
---   1. Đáp án đúng của câu LUÔN do giáo viên quyết. Form không bao giờ biết đáp án LLM
---      (cả chấm thực nghiệm lẫn duyệt thật).
---   2. approved_as_is / approved_with_edit / rejected chỉ nói về NỘI DUNG ĐỀ VÀ 4 PHƯƠNG ÁN,
---      không nói về đáp án LLM.
---   3. Đáp án LLM đúng hay sai do backend tự so (answer_correct), không ai nhập, không ai thấy.
---
--- ĐÃ CHỐT:
---   * Form có 3 quyết định: approved_as_is / approved_with_edit / rejected
---   * Thang độ khó 3 mức: easy / medium / hard (UI hiển thị Dễ / Trung bình / Khó)
---   * Bỏ question_bank: generated_question.status = 'in_bank'
---   * Lý do từ chối chọn được nhiều (checkbox) -> bảng teacher_review_reason
---   * Giữ subject (3 bảng tham chiếu, và để mở rộng thêm môn)
---
--- ĐỔI SO VỚI v10 (phần đề và mã đề, theo luồng "Sinh mã đề" trong BC_định_kì_1):
---   * generated_question.final_difficulty: độ khó cuối cùng của câu trong ngân hàng (lấy từ giáo viên),
---     dùng để lọc câu theo mức độ khó khi sinh mã đề. llm_difficulty KHÔNG bị ghi đè (dữ liệu nghiên cứu).
---   * exam.exam_code (UNIQUE) và exam.status ('draft' | 'confirmed')
---   * exam_question.option_order: thứ tự phương án hiển thị, ví dụ 'BDAC' = vị trí 1 hiện phương án B gốc...
---   * CHECK: câu in_bank phải có final_difficulty và correct_option
---
--- QUY TẮC DB KHÔNG TỰ ĐẢM BẢO, SERVICE PHẢI KIỂM TRA:
---   1. Review rejected có ít nhất 1 dòng trong teacher_review_reason; review không rejected thì không có.
---   2. Chỉ câu status = 'in_bank' mới được thêm vào exam_question.
---   3. Review 'experiment' phải có dòng tương ứng trong label_assignment.
---   4. Câu thuộc mẫu thực nghiệm không được chuyển sang 'in_bank' (vì khi vào ngân hàng, service ghi đè
---      nội dung và correct_option bằng bản của giáo viên; bản gốc chỉ còn trong raw_llm_output,
---      và embedding sẽ lệch so với bản đã sửa).
---   5. Luôn sắp question_id_1 < question_id_2 trước khi lưu dedup_gold_pair.
---
--- Ghi chú: question_embedding.embedding vẫn BYTEA để import ERD (xem ghi chú trong bảng).
--- ============================================================
 
 CREATE TABLE subject (
     id      SERIAL PRIMARY KEY,
@@ -227,18 +190,6 @@ CREATE TABLE teacher_review (
         OR (edited = TRUE AND edit_distance IS NOT NULL AND edit_distance >= 0))
 );
 
--- Lý do từ chối: một review bị từ chối có thể có nhiều lý do (checkbox).
--- Mã lý do theo 3 nhóm của Quân (11 mục) + 2 mã lỗi đáp án (ĐỀ XUẤT THÊM) + other.
---   Nhóm lỗi nội dung câu hỏi:    content_inaccurate, content_off_curriculum,
---                                 content_insufficient_info, content_unclear
---   Nhóm chất lượng phương án:    options_out_of_scope, options_indistinct
---   Nhóm trình bày và định dạng:  presentation_question_hard_to_read, presentation_options_hard_to_read,
---                                 presentation_missing_question, presentation_grammar,
---                                 presentation_formula_symbol_error
---   Nhóm lỗi đáp án (thêm):       answer_multiple_correct, answer_none_correct
---     Có thể tự tick theo đáp án chính giáo viên đã chọn. Đáp án LLM sai không phải lý do
---     từ chối: hệ thống tự đo qua answer_correct.
--- 'other' bắt buộc có detail (ô nhập text của mục Khác).
 CREATE TABLE teacher_review_reason (
     review_id           INT NOT NULL,
     reason_code         VARCHAR(50) NOT NULL,
