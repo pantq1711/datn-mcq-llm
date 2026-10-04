@@ -37,20 +37,6 @@ CREATE TABLE experiment_run (
     CONSTRAINT fk_er_subject FOREIGN KEY (subject_id) REFERENCES subject(id),
     CONSTRAINT chk_er_strategy CHECK (strategy IN ('zero-shot', 'few-shot', 'few-shot-structured'))
 );
-
--- Vòng đời status (ĐỀ XUẤT, hai bạn xác nhận):
---   generated     : vừa sinh và parse xong, chưa qua QC
---   format_failed : không đạt kiểm tra định dạng
---   duplicate     : bị bước dedup loại
---   qc_passed     : qua QC tự động, chờ giáo viên duyệt
---   rejected      : giáo viên từ chối (luồng duyệt thật)
---   in_bank       : đã duyệt, vào ngân hàng câu hỏi
--- Quy tắc: chỉ review review_purpose = 'production' mới đổi status.
--- Gán nhãn thực nghiệm (review_purpose = 'experiment') KHÔNG đổi status.
--- Khi review 'production' duyệt (as_is hoặc with_edit) và status -> 'in_bank', service ghi:
---   final_option -> correct_option; bản sửa (nếu có) -> question_text/option_*;
---   difficulty_label -> final_difficulty.
--- Bản gốc LLM vẫn nằm trong raw_llm_output. llm_difficulty không bị ghi đè.
 CREATE TABLE generated_question (
     id                          SERIAL PRIMARY KEY,
     template_id                 INT NOT NULL,
