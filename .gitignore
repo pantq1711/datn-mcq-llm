@@ -1,1 +1,24 @@
+# Bí mật
 .env
+.env.local
+
+# Backend (Java)
+target/
+build/
+.gradle/
+
+# Frontend
+node_modules/
+dist/
+
+# Log, dữ liệu cục bộ
+*.log
+*.dump
+pgdata/
+
+# IDE và hệ điều hành
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
