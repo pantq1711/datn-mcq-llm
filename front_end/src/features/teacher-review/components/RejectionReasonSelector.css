@@ -1,0 +1,54 @@
+.rejection-reason-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+}
+
+.rejection-reason-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
+.rejection-reason-group {
+    border: 1px solid #d9d9d9;
+    border-radius: 8px;
+    background-color: #ffffff;
+    overflow: hidden;
+}
+
+.rejection-reason-summary {
+    cursor: pointer;
+    padding: 14px 16px;
+    font-weight: 600;
+    line-height: 1.5;
+    user-select: none;
+}
+
+.rejection-reason-summary:hover {
+    background-color: #fafafa;
+}
+
+.rejection-reason-group[open] .rejection-reason-summary {
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.rejection-reason-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+}
+
+.rejection-reason-checkbox {
+    margin-inline-start: 0 !important;
+    line-height: 1.6;
+}
+
+.rejection-other-reason {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}

@@ -1,0 +1,63 @@
+.review-questions-page {
+    width: 100%;
+    padding: 32px 24px 48px;
+}
+
+.review-questions-header {
+    margin-bottom: 24px;
+}
+
+.review-questions-title {
+    margin: 0 0 6px !important;
+}
+
+.review-summary {
+    margin-bottom: 24px;
+}
+
+.review-filter-card {
+    margin-bottom: 24px;
+}
+
+.review-filter {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.review-search {
+    width: 280px;
+}
+
+.review-filter-select {
+    width: 180px;
+}
+
+.review-question-list-card {
+    width: 100%;
+}
+
+.review-question-list-header {
+    margin-bottom: 20px;
+}
+
+.review-question-list-title {
+    margin: 0 0 4px !important;
+}
+
+@media (max-width: 768px) {
+    .review-questions-page {
+        padding: 24px 16px 40px;
+    }
+
+    .review-search,
+    .review-filter-select {
+        width: 100%;
+    }
+
+    .review-filter {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

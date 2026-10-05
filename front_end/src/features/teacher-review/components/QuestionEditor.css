@@ -1,0 +1,17 @@
+.question-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+}
+
+.question-editor-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.question-editor-answer-options {
+    margin-top: 4px;
+}
