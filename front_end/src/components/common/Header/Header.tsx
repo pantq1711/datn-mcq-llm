@@ -13,6 +13,7 @@ import {
     MenuOutlined,
     UserOutlined,
 } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
 import "./Header.css";
 
@@ -41,9 +42,9 @@ const userMenuItems: MenuProps["items"] = [
 ];
 
 export default function Header({
-    collapsed,
     onToggleSidebar,
 }: HeaderProps) {
+    const navigate = useNavigate();
     return (
         <AntHeader className="app-header">
             <div className="app-header-left">
@@ -54,9 +55,20 @@ export default function Header({
                     className="app-header-sidebar-toggle"
                 />
 
-                <Typography.Title level={4} className="app-header-logo">
-                    Online Learning
-                </Typography.Title>
+                <div className="app-header-brand" onClick={() => navigate("/")}>
+                    <img
+                        src="/favicon.png"
+                        alt="Logo"
+                        className="app-header-brand-logo"
+                    />
+
+                    <Typography.Title
+                        level={4}
+                        className="app-header-brand-title"
+                    >
+                        Online learning
+                    </Typography.Title>
+                </div>
             </div>
 
             <div className="app-header-right">
