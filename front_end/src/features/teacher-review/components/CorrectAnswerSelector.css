@@ -1,0 +1,11 @@
+.correct-answer-selector {
+    width: 100%;
+}
+
+.correct-answer-options {
+    width: 100%;
+}
+
+.correct-answer-option {
+    line-height: 1.5;
+}

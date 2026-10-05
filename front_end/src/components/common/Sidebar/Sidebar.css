@@ -1,0 +1,11 @@
+.app-sidebar {
+    width: 100%;
+    height: 100%;
+    background: #ffffff;
+}
+
+.app-sidebar-menu {
+    width: 100%;
+    height: 100%;
+    border-inline-end: none !important;
+}
