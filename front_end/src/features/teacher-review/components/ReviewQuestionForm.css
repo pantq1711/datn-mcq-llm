@@ -1,0 +1,12 @@
+.question-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.review-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
