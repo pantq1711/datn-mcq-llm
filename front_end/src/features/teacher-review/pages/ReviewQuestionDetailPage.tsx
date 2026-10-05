@@ -14,6 +14,7 @@ import {
     ArrowLeftOutlined,
     SaveOutlined,
 } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 
 import type {
     CorrectAnswer,
@@ -41,6 +42,11 @@ const INITIAL_QUESTION: QuestionDraft = {
 };
 
 export default function ReviewQuestionDetailPage() {
+    const navigate = useNavigate();
+
+    const handleBackToList = () => {
+        navigate("/review");
+    };
     /**
      * ==========================
      * REVIEW STATE
@@ -158,7 +164,7 @@ export default function ReviewQuestionDetailPage() {
                     type="text"
                     icon={<ArrowLeftOutlined />}
                     className="review-back-button"
-                    onClick={() => window.history.back()}
+                    onClick={handleBackToList}
                 >
                     Quay lại danh sách
                 </Button>

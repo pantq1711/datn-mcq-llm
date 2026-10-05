@@ -18,7 +18,7 @@ import type {
     Difficulty,
     FormatStatus,
     QuestionDraft,
-    ReviewDecision as ReviewDecisionType,
+    ReviewDecisions as ReviewDecisionType,
 } from "../types/review.types";
 
 interface ReviewQuestionFormProps {

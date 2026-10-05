@@ -9,8 +9,7 @@
 }
 
 .review-back-button {
-    background-color: #e8f4ff;
-    color: #2573e4;
+    background-color: #ffffff;
     border-radius: 15px;
     margin-bottom: 12px;
 }
@@ -106,8 +105,4 @@
     margin-top: 24px;
     padding-top: 20px;
     border-top: 1px solid #f0f0f0;
-}
-
-.review-question-detail-page .ant-card {
-    background-color: #eaf4ff;
 }

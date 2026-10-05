@@ -1,0 +1,24 @@
+.teacher-layout {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.teacher-layout-body {
+    flex: 1;
+    min-height: 0;
+}
+
+.teacher-layout-sidebar {
+    background: #ffffff !important;
+    border-right: 1px solid #f0f0f0;
+}
+
+.teacher-layout-content {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    background: #f5f5f5;
+}
