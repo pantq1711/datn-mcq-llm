@@ -1,0 +1,24 @@
+.register-form {
+    width: 100%;
+}
+
+.register-form .ant-form-item {
+    margin-bottom: 20px;
+}
+
+.register-form .ant-form-item:last-of-type {
+    margin-bottom: 24px;
+}
+
+.register-form-submit {
+    margin-top: 4px;
+}
+
+.register-form-login {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin-top: 20px;
+    text-align: center;
+}

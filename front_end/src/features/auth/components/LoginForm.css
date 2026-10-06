@@ -1,0 +1,36 @@
+.login-form {
+    width: 100%;
+}
+
+.login-form .ant-form-item {
+    margin-bottom: 20px;
+}
+
+.login-form-options {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.login-form-submit {
+    margin-top: 4px;
+}
+
+.login-form-register {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin-top: 20px;
+    text-align: center;
+}
+
+@media (max-width: 576px) {
+    .login-form-options {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+    }
+}
