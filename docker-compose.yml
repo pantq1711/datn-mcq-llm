@@ -1,13 +1,11 @@
-# Chỉ chạy PostgreSQL có pgvector cho môi trường phát triển.
-# Docker Compose tự đọc file .env ở cùng thư mục (copy từ .env.example).
 services:
   db:
     image: pgvector/pgvector:pg16
     container_name: datn-mcq-db
     environment:
-      POSTGRES_DB: ${DB_NAME:?Cần đặt DB_NAME trong .env}
-      POSTGRES_USER: ${DB_USER:?Cần đặt DB_USER trong .env}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?Cần đặt DB_PASSWORD trong .env}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
