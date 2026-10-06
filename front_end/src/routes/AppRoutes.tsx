@@ -7,7 +7,8 @@ import DashboardPage from "../features/dashboard/pages/DashboardPage";
 import AuthLayout from "../layouts/AuthLayout";
 import LoginPage from "../features/auth/pages/LoginPage";
 import RegisterPage from "../features/auth/pages/RegisterPage";
-import ForgotPassword from "../features/auth/pages/ForgotPassword";
+import ForgotPasswordPage from "../features/auth/pages/ForgotPasswordPage";
+import QuestionBankPage from "../features/question-bank/pages/QuestionBankPage";
 
 export default function AppRoutes() {
     return (
@@ -15,13 +16,14 @@ export default function AppRoutes() {
             <Route path="/auth" element={<AuthLayout />}>
                 <Route path="login" element={<LoginPage />} />
                 <Route path="register" element={<RegisterPage />} />
-                <Route path="forgot-password" element={<ForgotPassword />} />
+                <Route path="forgot-password" element={<ForgotPasswordPage />} />
             </Route>
 
             <Route path="" element={<TeacherLayout />}>
                 <Route path="" element={<DashboardPage />} />
                 <Route path="review" element={<ReviewQuestionsPage />} />
                 <Route path="review/:id" element={<ReviewQuestionDetailPage />} />
+                <Route path="question-bank" element={<QuestionBankPage />} />
             </Route>
         </Routes>
     );
