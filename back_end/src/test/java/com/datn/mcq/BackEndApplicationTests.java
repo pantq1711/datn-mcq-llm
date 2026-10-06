@@ -1,4 +1,4 @@
-package com.datn.back_end;
+package com.datn.mcq;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
