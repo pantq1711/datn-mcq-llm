@@ -1,29 +1,11 @@
-import {
-    Button,
-    Card,
-    Col,
-    Input,
-    Row,
-    Select,
-    Statistic,
-    Table,
-    Tag,
-    Typography,
-} from "antd";
-import {
-    CheckCircleOutlined,
-    ClockCircleOutlined,
-    CloseCircleOutlined,
-    EditOutlined,
-    ReloadOutlined,
-    SearchOutlined,
-} from "@ant-design/icons";
+import { Button, Card, Input, Select, Table, Tag, Typography } from "antd";
+import { ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import "./ReviewQuestionsPage.css";
 import type { ReviewQuestion } from "../types/review.types";
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 const reviewQuestions: ReviewQuestion[] = [
     {
@@ -184,48 +166,6 @@ export default function ReviewQuestionsPage() {
                     </Title>
                 </div>
             </div>
-
-            <Row gutter={[16, 16]} className="review-summary">
-                <Col xs={24} sm={12} lg={6}>
-                    <Card>
-                        <Statistic
-                            title="Chờ duyệt"
-                            value={24}
-                            prefix={<ClockCircleOutlined />}
-                        />
-                    </Card>
-                </Col>
-
-                <Col xs={24} sm={12} lg={6}>
-                    <Card>
-                        <Statistic
-                            title="Đã duyệt"
-                            value={156}
-                            prefix={<CheckCircleOutlined />}
-                        />
-                    </Card>
-                </Col>
-
-                <Col xs={24} sm={12} lg={6}>
-                    <Card>
-                        <Statistic
-                            title="Đã chỉnh sửa"
-                            value={31}
-                            prefix={<EditOutlined />}
-                        />
-                    </Card>
-                </Col>
-
-                <Col xs={24} sm={12} lg={6}>
-                    <Card>
-                        <Statistic
-                            title="Từ chối"
-                            value={18}
-                            prefix={<CloseCircleOutlined />}
-                        />
-                    </Card>
-                </Col>
-            </Row>
 
             <Card className="review-filter-card">
                 <div className="review-filter">
