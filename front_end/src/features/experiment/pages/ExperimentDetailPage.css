@@ -1,0 +1,75 @@
+.experiment-detail-page {
+    width: 100%;
+    padding: 24px 24px 48px;
+}
+
+.experiment-detail-back-button {
+    background-color: #ffffff;
+    border-radius: 15px;
+    margin-bottom: 12px;
+}
+
+.experiment-detail-back-button:hover {
+    background-color: #d0e9ff;
+}
+
+.experiment-detail-page-header {
+    margin-bottom: 24px;
+}
+
+.experiment-detail-page-header-content {
+    width: 100%;
+}
+
+.experiment-detail-page-title-section {
+    min-width: 0;
+}
+
+.experiment-detail-page-title {
+    margin: 0 0 8px !important;
+}
+
+.experiment-detail-page-meta {
+    display: flex;
+    align-items: center;
+}
+
+.experiment-detail-page-meta .ant-tag {
+    margin-inline-end: 0;
+}
+
+.experiment-detail-page-information {
+    width: 100%;
+    margin-bottom: 24px;
+}
+
+.experiment-detail-page-results {
+    width: 100%;
+    margin-bottom: 24px;
+}
+
+.experiment-detail-page-section-header {
+    margin-bottom: 16px;
+}
+
+.experiment-detail-page-section-title {
+    margin: 0 0 4px !important;
+}
+
+.experiment-detail-page-prompt {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.experiment-detail-page-prompt-text {
+    margin-bottom: 0 !important;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+@media (max-width: 576px) {
+    .experiment-detail-page-meta {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}

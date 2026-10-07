@@ -1,0 +1,78 @@
+.experiment-comparison-page {
+    width: 100%;
+    padding: 24px 24px 48px;
+}
+
+.experiment-comparison-back-button {
+    background-color: #ffffff;
+    border-radius: 15px;
+    margin-bottom: 12px;
+}
+
+.experiment-comparison-back-button:hover {
+    background-color: #d0e9ff;
+}
+
+.experiment-comparison-page-header {
+    margin-bottom: 24px;
+}
+
+.experiment-comparison-page-header-content {
+    width: 100%;
+}
+
+.experiment-comparison-page-title-section {
+    min-width: 0;
+}
+
+.experiment-comparison-page-title {
+    margin: 0 0 4px !important;
+}
+
+.experiment-comparison-page-selection {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.experiment-comparison-page-selection .ant-form-item {
+    margin-bottom: 16px;
+}
+
+.experiment-comparison-page-selection-actions {
+    display: flex;
+    align-items: flex-end;
+}
+
+.experiment-comparison-page-overview {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.experiment-comparison-page-strategy {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.experiment-comparison-page-metrics {
+    width: 100%;
+}
+
+.experiment-comparison-page-metrics .ant-card {
+    height: 100%;
+}
+
+@media (max-width: 991px) {
+    .experiment-comparison-page-selection-actions {
+        align-items: stretch;
+    }
+}
+
+@media (max-width: 576px) {
+    .experiment-comparison-page-selection-actions .ant-space {
+        width: 100%;
+    }
+
+    .experiment-comparison-page-selection-actions .ant-btn {
+        flex: 1;
+    }
+}

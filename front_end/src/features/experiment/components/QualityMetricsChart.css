@@ -1,0 +1,91 @@
+.quality-metrics-chart {
+    width: 100%;
+}
+
+.quality-metrics-chart-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.quality-metrics-chart-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    min-width: 0;
+}
+
+.quality-metrics-chart-summary-value {
+    font-size: 20px;
+    line-height: 1.4;
+}
+
+.quality-metrics-chart-best {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.quality-metrics-chart-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.quality-metrics-chart-item {
+    width: 100%;
+    min-width: 0;
+}
+
+.quality-metrics-chart-item-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+
+    margin-bottom: 6px;
+}
+
+.quality-metrics-chart-item-title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    min-width: 0;
+}
+
+.quality-metrics-chart-description {
+    line-height: 1.4;
+}
+
+.quality-metrics-chart-value {
+    flex-shrink: 0;
+
+    font-size: 14px;
+}
+
+.quality-metrics-chart-item .ant-progress {
+    display: block;
+    width: 100%;
+}
+
+.quality-metrics-chart-item-footer {
+    margin-top: 4px;
+}
+
+@media (max-width: 576px) {
+    .quality-metrics-chart-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .quality-metrics-chart-item-header {
+        gap: 8px;
+    }
+}

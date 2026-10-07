@@ -1,0 +1,71 @@
+.experiment-list-page {
+    width: 100%;
+    padding: 32px 24px 48px;
+}
+
+.experiment-list-page-header {
+    margin-bottom: 24px;
+}
+
+.experiment-list-page-title {
+    margin: 0 0 4px !important;
+}
+
+.experiment-list-page-filters {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.experiment-list-page-filters .ant-form-item {
+    margin-bottom: 16px;
+}
+
+.experiment-list-page-filter-actions {
+    display: flex;
+    align-items: flex-end;
+}
+
+.experiment-list-page-section {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.experiment-list-page-metrics {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.experiment-list-page-metrics .ant-card {
+    height: 100%;
+}
+
+.experiment-list-table .ant-table-tbody>tr {
+    cursor: pointer;
+}
+
+.experiment-list-page-section-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.experiment-list-page-section-title {
+    margin: 0 0 4px !important;
+}
+
+@media (max-width: 767px) {
+    .experiment-list-page-filter-actions {
+        align-items: stretch;
+    }
+
+    .experiment-list-page-section-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .experiment-list-page-section-header .ant-btn {
+        width: 100%;
+    }
+}
