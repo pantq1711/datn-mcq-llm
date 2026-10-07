@@ -9,11 +9,14 @@ import LoginPage from "../features/auth/pages/LoginPage";
 import RegisterPage from "../features/auth/pages/RegisterPage";
 import ForgotPasswordPage from "../features/auth/pages/ForgotPasswordPage";
 import QuestionBankPage from "../features/question-bank/pages/QuestionBankPage";
+import GenerateExamPage from "../features/exam/pages/GenerateExamPage";
+import ExamListPage from "../features/exam/pages/ExamListPage";
+import ExamDetailPage from "../features/exam/pages/ExamDetailPage";
 
 export default function AppRoutes() {
     return (
         <Routes>
-            <Route path="/auth" element={<AuthLayout />}>
+            <Route path="auth" element={<AuthLayout />}>
                 <Route path="login" element={<LoginPage />} />
                 <Route path="register" element={<RegisterPage />} />
                 <Route path="forgot-password" element={<ForgotPasswordPage />} />
@@ -24,6 +27,9 @@ export default function AppRoutes() {
                 <Route path="review" element={<ReviewQuestionsPage />} />
                 <Route path="review/:id" element={<ReviewQuestionDetailPage />} />
                 <Route path="question-bank" element={<QuestionBankPage />} />
+                <Route path="exams" element={<ExamListPage />} />
+                <Route path="exams/generate" element={<GenerateExamPage />} />
+                <Route path="exams/:id" element={<ExamDetailPage />} />
             </Route>
         </Routes>
     );
