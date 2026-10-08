@@ -7,7 +7,7 @@ body,
     padding: 0;
 }
 
-html {
+html:has(.auth-layout) {
     scrollbar-gutter: stable;
     background: #867f73;
 }

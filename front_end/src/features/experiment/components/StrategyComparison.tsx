@@ -198,13 +198,6 @@ export default function StrategyComparison({
 
     return (
         <div className="strategy-comparison">
-            <div className="strategy-comparison-description">
-                <Text type="secondary">
-                    So sánh kết quả của các chiến lược sinh câu hỏi trên
-                    các chỉ số chất lượng và mức độ chỉnh sửa của giáo viên.
-                </Text>
-            </div>
-
             <Table
                 rowKey="strategy"
                 columns={columns}

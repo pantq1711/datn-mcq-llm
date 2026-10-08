@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 
 import "./ExperimentListPage.css";
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 interface ExperimentFilterValues {
     subjectId?: number;
@@ -158,11 +158,6 @@ export default function ExperimentListPage() {
                 <Title level={2} className="experiment-list-page-title">
                     Thực nghiệm
                 </Title>
-
-                <Text type="secondary">
-                    Theo dõi và so sánh kết quả các thực nghiệm sinh câu hỏi theo model
-                    và chiến lược prompting.
-                </Text>
             </div>
 
             <Card className="experiment-list-page-filters">
@@ -237,9 +232,6 @@ export default function ExperimentListPage() {
                         <Title level={4} className="experiment-list-page-section-title">
                             Danh sách lần thực nghiệm
                         </Title>
-                        <Text type="secondary">
-                            Chọn các thực nghiệm để xem chi tiết hoặc so sánh kết quả.
-                        </Text>
                     </div>
 
                     <Button

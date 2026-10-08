@@ -24,7 +24,7 @@ import StrategyComparison from "../components/StrategyComparison";
 
 import "./ExperimentComparisonPage.css";
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 interface ComparisonFormValues {
     experimentIds: number[];
@@ -70,7 +70,7 @@ export default function ExperimentComparisonPage() {
                         type="text"
                         icon={<ArrowLeftOutlined />}
                         className="experiment-detail-back-button"
-                        onClick={() => navigate("/teacher/experiments")}
+                        onClick={() => navigate("/experiments")}
                     >
                         Quay lại
                     </Button>
@@ -84,11 +84,6 @@ export default function ExperimentComparisonPage() {
                         >
                             So sánh thực nghiệm
                         </Title>
-
-                        <Text type="secondary">
-                            So sánh kết quả sinh câu hỏi giữa các thực nghiệm
-                            theo model và chiến lược prompting.
-                        </Text>
                     </div>
                 </div>
             </div>

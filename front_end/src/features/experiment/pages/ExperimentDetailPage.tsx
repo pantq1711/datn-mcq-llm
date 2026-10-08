@@ -147,11 +147,6 @@ export default function ExperimentDetailPage() {
                     >
                         Kết quả thực nghiệm
                     </Title>
-
-                    <Text type="secondary">
-                        Các chỉ số đánh giá chất lượng câu hỏi được sinh trong
-                        lần thực nghiệm này.
-                    </Text>
                 </div>
 
                 <Row gutter={[16, 16]}>

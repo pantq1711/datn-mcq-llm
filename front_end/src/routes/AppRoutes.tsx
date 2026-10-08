@@ -15,6 +15,8 @@ import ExamDetailPage from "../features/exam/pages/ExamDetailPage";
 import ExperimentListPage from "../features/experiment/pages/ExperimentListPage";
 import ExperimentDetailPage from "../features/experiment/pages/ExperimentDetailPage";
 import ExperimentComparisonPage from "../features/experiment/pages/ExperimentComparisonPage";
+import GenerateQuestionPage from "../features/question-generation/pages/GenerateQuestionPage";
+import GenerationHistoryPage from "../features/question-generation/pages/GenerationHistoryPage";
 
 export default function AppRoutes() {
     return (
@@ -36,6 +38,8 @@ export default function AppRoutes() {
                 <Route path="experiments" element={<ExperimentListPage />} />
                 <Route path="experiments/:id" element={<ExperimentDetailPage />} />
                 <Route path="experiments/comparison" element={<ExperimentComparisonPage />} />
+                <Route path="generate" element={<GenerateQuestionPage />} />
+                <Route path="generation-history" element={<GenerationHistoryPage />} />
             </Route>
         </Routes>
     );
