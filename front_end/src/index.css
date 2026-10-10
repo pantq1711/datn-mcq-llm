@@ -1,0 +1,18 @@
+html,
+body,
+#root {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+html:has(.auth-layout) {
+    scrollbar-gutter: stable;
+    background: #867f73;
+}
+
+textarea,
+textarea::placeholder {
+    caret-color: #000 !important;
+}

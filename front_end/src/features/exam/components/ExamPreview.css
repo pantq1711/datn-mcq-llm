@@ -1,0 +1,85 @@
+.exam-preview {
+    width: 100%;
+}
+
+.exam-preview-empty {
+    min-height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.exam-preview-header {
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.exam-preview-header-content {
+    width: 100%;
+}
+
+.exam-preview-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+}
+
+.exam-preview-title {
+    margin: 0 !important;
+    line-height: 1.4 !important;
+}
+
+.exam-preview-tags {
+    width: 100%;
+}
+
+.exam-preview-tags .ant-tag {
+    margin-inline-end: 0;
+}
+
+.exam-preview-info {
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.exam-preview-info .ant-descriptions {
+    width: 100%;
+}
+
+.exam-preview-instructions {
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+.exam-preview-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.exam-preview-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+.exam-preview-summary-value {
+    font-size: 18px;
+}
+
+.exam-preview-note {
+    margin-bottom: 0 !important;
+    line-height: 1.6;
+}
+
+@media (max-width: 576px) {
+    .exam-preview-summary {
+        grid-template-columns: 1fr;
+    }
+}

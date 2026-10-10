@@ -28,3 +28,13 @@ export interface RejectionReasonGroup {
         label: string;
     }[];
 }
+
+export interface ReviewQuestion {
+    id: number;
+    question: string;
+    subject: string;
+    qualityStatus: "PASSED" | "FAILED";
+    reviewStatus: "PENDING" | "APPROVED" | "EDITED" | "REJECTED";
+    difficulty: "EASY" | "MEDIUM" | "HARD";
+    createdAt: string;
+}

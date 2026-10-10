@@ -15,32 +15,32 @@ type MenuItem = Required<MenuProps>["items"][number];
 
 const menuItems: MenuItem[] = [
     {
-        key: "/teacher/dashboard",
+        key: "/",
         icon: <HomeOutlined />,
         label: "Tổng quan",
     },
     {
-        key: "/teacher/generate",
+        key: "/generate",
         icon: <FormOutlined />,
         label: "Sinh câu hỏi",
     },
     {
-        key: "/teacher/review",
+        key: "/review",
         icon: <SafetyCertificateOutlined />,
         label: "Duyệt câu hỏi",
     },
     {
-        key: "/teacher/question-bank",
+        key: "/question-bank",
         icon: <ReadOutlined />,
         label: "Ngân hàng câu hỏi",
     },
     {
-        key: "/teacher/exams",
+        key: "/exams",
         icon: <FileTextOutlined />,
         label: "Đề thi",
     },
     {
-        key: "/teacher/experiments",
+        key: "/experiments",
         icon: <ExperimentOutlined />,
         label: "Thực nghiệm",
     },
@@ -63,7 +63,7 @@ export default function Sidebar() {
                     typeof key === "string" &&
                     (location.pathname === key ||
                         location.pathname.startsWith(`${key}/`)),
-            ) ?? "/teacher/dashboard";
+            ) ?? "/";
 
     return (
         <aside className="app-sidebar">
