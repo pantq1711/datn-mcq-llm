@@ -1,24 +1,6 @@
 import { useState } from "react";
-import {
-    Button,
-    Card,
-    Col,
-    Drawer,
-    Form,
-    Input,
-    Row,
-    Select,
-    Space,
-    Statistic,
-    Table,
-    Tag,
-    Typography,
-} from "antd";
-import {
-    EyeOutlined,
-    FilterOutlined,
-    ReloadOutlined,
-} from "@ant-design/icons";
+import { Alert, Button, Card, Col, Drawer, Form, Input, Row, Select, Space, Statistic, Table, Tag, Typography, } from "antd";
+import { EyeOutlined, FilterOutlined, ReloadOutlined, } from "@ant-design/icons";
 
 import GenerationResult from "../components/GenerationResult";
 
@@ -31,15 +13,29 @@ type GenerationStatus =
     | "RUNNING"
     | "FAILED";
 
+type SourceType = "TEXT" | "WORD" | "PDF" | "IMAGE";
+
 interface GenerationHistoryItem {
     id: number;
-    template: string;
+
+    // Thông tin nguồn
+    sourceName: string;
+    sourceType: "TEXT" | "WORD" | "PDF" | "IMAGE";
+    selectedSegmentCount: number;
+
+    // Thông tin sinh câu hỏi
     subject: string;
     strategy: string;
     model: string;
+    temperature: number;
     questionCount: number;
+
+    // Trạng thái và thời gian
     status: GenerationStatus;
     startedAt: string;
+
+    // Có thể có khi sinh thất bại
+    errorMessage?: string;
 }
 
 interface GenerationFilterValues {
@@ -113,64 +109,150 @@ const statusOptions = [
 const mockGenerationHistory: GenerationHistoryItem[] = [
     {
         id: 1,
-        template: "Hàm số bậc hai",
+        sourceName: "Bai_3_Ham_so_bac_hai.pdf",
+        sourceType: "PDF",
+        selectedSegmentCount: 2,
         subject: "Toán học",
         strategy: "Zero-shot",
         model: "GPT-4o-mini",
+        temperature: 0.7,
         questionCount: 10,
         status: "COMPLETED",
         startedAt: "01/10/2026 10:30",
     },
     {
         id: 2,
-        template: "Định luật II Newton",
+        sourceName: "Noi_dung_Dinh_luat_II_Newton.docx",
+        sourceType: "WORD",
+        selectedSegmentCount: 3,
         subject: "Vật lý",
         strategy: "Few-shot",
         model: "GPT-4o-mini",
+        temperature: 0.5,
         questionCount: 20,
         status: "COMPLETED",
         startedAt: "01/10/2026 11:15",
     },
     {
         id: 3,
-        template: "Phản ứng este hóa",
+        sourceName: "Phan_ung_este_hoa.pdf",
+        sourceType: "PDF",
+        selectedSegmentCount: 2,
         subject: "Hóa học",
         strategy: "Structured Output",
         model: "Gemini Flash",
+        temperature: 0.3,
         questionCount: 15,
         status: "RUNNING",
         startedAt: "02/10/2026 09:20",
     },
     {
         id: 4,
-        template: "Di truyền Mendel",
+        sourceName: "Bai_di_truyen_Mendel.png",
+        sourceType: "IMAGE",
+        selectedSegmentCount: 1,
         subject: "Sinh học",
         strategy: "Few-shot",
         model: "Gemini Flash",
+        temperature: 0.7,
         questionCount: 10,
         status: "FAILED",
         startedAt: "02/10/2026 09:45",
+        errorMessage:
+            "Không thể trích xuất đầy đủ nội dung từ hình ảnh. Vui lòng kiểm tra chất lượng ảnh hoặc thử tải lại tài liệu.",
+    },
+    {
+        id: 5,
+        sourceName: "Nội dung nhập trực tiếp",
+        sourceType: "TEXT",
+        selectedSegmentCount: 4,
+        subject: "Toán học",
+        strategy: "Zero-shot",
+        model: "GPT-4o-mini",
+        temperature: 0.6,
+        questionCount: 12,
+        status: "COMPLETED",
+        startedAt: "03/10/2026 14:10",
+    },
+    {
+        id: 6,
+        sourceName: "Bai_dien_tu_hoc.docx",
+        sourceType: "WORD",
+        selectedSegmentCount: 2,
+        subject: "Vật lý",
+        strategy: "Structured Output",
+        model: "Gemini Flash",
+        temperature: 0.4,
+        questionCount: 15,
+        status: "COMPLETED",
+        startedAt: "04/10/2026 08:45",
     },
 ];
+
+// Thêm các hàm helper này vào trước phần generationColumns
+const getSourceColor = (type: SourceType) => {
+    switch (type) {
+        case "PDF":
+            return "red";
+        case "WORD":
+            return "blue";
+        case "IMAGE":
+            return "green";
+        case "TEXT":
+        default:
+            return "default";
+    }
+};
+
+const getSourceLabel = (type: SourceType) => {
+    switch (type) {
+        case "PDF":
+            return "PDF";
+        case "WORD":
+            return "Word";
+        case "IMAGE":
+            return "Ảnh";
+        case "TEXT":
+        default:
+            return "Văn bản";
+    }
+};
 
 const generationColumns = [
     {
         title: "Mã",
         dataIndex: "id",
         key: "id",
-        width: 80,
+        width: 50,
     },
     {
-        title: "Câu hỏi mẫu",
-        dataIndex: "template",
-        key: "template",
+        title: "Nguồn nội dung",
+        dataIndex: "sourceName",
+        key: "sourceName",
         ellipsis: true,
+        render: (text: string, record: GenerationHistoryItem) => (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span>{text}</span>
+                <Tag
+                    color={getSourceColor(record.sourceType)}
+                    style={{ width: "fit-content" }}
+                >
+                    {getSourceLabel(record.sourceType)}
+                </Tag>
+            </div>
+        ),
+    },
+    {
+        title: "Số đoạn chọn",
+        dataIndex: "selectedSegmentCount",
+        key: "selectedSegmentCount",
+        width: 120,
     },
     {
         title: "Môn học",
         dataIndex: "subject",
         key: "subject",
-        width: 120,
+        width: 140,
     },
     {
         title: "Chiến lược",
@@ -182,19 +264,19 @@ const generationColumns = [
         title: "Model",
         dataIndex: "model",
         key: "model",
-        width: 130,
+        width: 140,
     },
     {
         title: "Số câu",
         dataIndex: "questionCount",
         key: "questionCount",
-        width: 90,
+        width: 80,
     },
     {
         title: "Trạng thái",
         dataIndex: "status",
         key: "status",
-        width: 130,
+        width: 110,
         render: (status: GenerationStatus) => {
             if (status === "COMPLETED") {
                 return <Tag color="success">Hoàn thành</Tag>;
@@ -211,7 +293,7 @@ const generationColumns = [
         title: "Thời gian bắt đầu",
         dataIndex: "startedAt",
         key: "startedAt",
-        width: 170,
+        width: 160,
     },
     {
         title: "Thao tác",
@@ -313,7 +395,7 @@ export default function GenerationHistoryPage() {
                                 >
                                     <Input
                                         allowClear
-                                        placeholder="Tìm theo câu hỏi mẫu..."
+                                        placeholder="Tìm theo tên tài liệu hoặc nội dung..."
                                     />
                                 </Form.Item>
                             </Col>
@@ -453,14 +535,31 @@ export default function GenerationHistoryPage() {
                                 </div>
                             </div>
 
+                            {selectedGeneration.status === "FAILED" && (
+                                <Alert
+                                    type="error"
+                                    showIcon
+                                    message="Sinh câu hỏi thất bại"
+                                    description={
+                                        selectedGeneration.errorMessage ||
+                                        "Đã xảy ra lỗi trong quá trình sinh câu hỏi. Vui lòng thử lại."
+                                    }
+                                />
+                            )}
+
                             <div>
                                 <Text type="secondary">
                                     Cấu hình
                                 </Text>
 
                                 <div className="generation-history-page-detail-tags">
+                                    <Tag>{selectedGeneration.selectedSegmentCount} đoạn được chọn</Tag>
                                     <Tag>
                                         {selectedGeneration.subject}
+                                    </Tag>
+
+                                    <Tag>
+                                        {selectedGeneration.questionCount} câu
                                     </Tag>
                                     <Tag>
                                         {selectedGeneration.strategy}
@@ -468,9 +567,7 @@ export default function GenerationHistoryPage() {
                                     <Tag>
                                         {selectedGeneration.model}
                                     </Tag>
-                                    <Tag>
-                                        {selectedGeneration.questionCount} câu
-                                    </Tag>
+                                    <Tag>Temperature: {selectedGeneration.temperature}</Tag>
                                 </div>
                             </div>
 

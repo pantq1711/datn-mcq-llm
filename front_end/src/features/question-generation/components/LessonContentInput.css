@@ -1,0 +1,73 @@
+.lesson-content-input {
+    width: 100%;
+    min-width: 0;
+}
+
+.lesson-content-input .ant-tabs-nav {
+    margin-bottom: 20px;
+}
+
+.lesson-content-input-text {
+    width: 100%;
+    min-width: 0;
+}
+
+.lesson-content-input-textarea {
+    width: 100%;
+}
+
+.lesson-content-input-textarea textarea {
+    line-height: 1.7;
+    resize: vertical;
+}
+
+.lesson-content-input-textarea textarea::placeholder {
+    color: #8c8c8c;
+    opacity: 1;
+}
+
+.lesson-content-input-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.lesson-content-input-upload {
+    width: 100%;
+    min-width: 0;
+}
+
+.lesson-content-input-upload .ant-upload-drag {
+    padding: 20px 16px;
+}
+
+.lesson-content-input-upload .ant-upload-drag-icon {
+    margin-bottom: 12px;
+    font-size: 40px;
+}
+
+.lesson-content-input-upload .ant-upload-hint {
+    padding: 0 8px;
+}
+
+.lesson-content-input-alert {
+    margin-top: 16px;
+}
+
+@media (max-width: 576px) {
+    .lesson-content-input-footer {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .lesson-content-input-footer .ant-btn {
+        align-self: flex-end;
+    }
+
+    .lesson-content-input-upload .ant-upload-drag {
+        padding: 16px 8px;
+    }
+}

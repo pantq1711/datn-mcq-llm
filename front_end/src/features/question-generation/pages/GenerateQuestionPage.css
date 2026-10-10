@@ -1,6 +1,7 @@
 .generate-question-page {
     width: 100%;
     padding: 32px 24px 48px;
+    box-sizing: border-box;
 }
 
 .generate-question-page-header {
@@ -16,10 +17,16 @@
 
 .generate-question-page-header-info {
     min-width: 0;
+    flex: 1;
 }
 
 .generate-question-page-title {
-    margin: 0 0 4px !important;
+    margin: 0 0 8px !important;
+}
+
+.generate-question-page-content {
+    width: 100%;
+    margin-bottom: 16px;
 }
 
 .generate-question-page-configuration {
@@ -27,40 +34,58 @@
     margin-bottom: 16px;
 }
 
-.generate-question-page-template {
-    width: 100%;
-    margin-bottom: 16px;
-}
-
-.generate-question-page-selection {
+.generate-question-page-card {
     width: 100%;
 }
 
-.generate-question-page-progress {
-    width: 100%;
+.generate-question-page-card .ant-card-body {
+    padding-top: 0;
+}
+
+.generate-question-page-description {
+    display: block;
     margin-bottom: 16px;
+}
+
+.generate-question-page-strategy {
+    width: 100%;
+    margin-bottom: 24px;
+}
+
+.generate-question-page-number {
+    width: 100%;
+}
+
+.generate-question-page-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 8px;
 }
 
 .generate-question-page-result {
     width: 100%;
 }
 
-.generate-question-page-strategy {
-    width: 100%;
-    margin-bottom: 16px;
-}
-
-.generate-question-page-form {
-    width: 100%;
-}
-
 @media (max-width: 576px) {
+    .generate-question-page {
+        padding: 24px 16px 32px;
+    }
+
     .generate-question-page-header-content {
         flex-direction: column;
         align-items: stretch;
+        gap: 16px;
     }
 
     .generate-question-page-header-content .ant-btn {
+        width: 100%;
+    }
+
+    .generate-question-page-form-actions {
+        width: 100%;
+    }
+
+    .generate-question-page-form-actions .ant-btn {
         width: 100%;
     }
 }

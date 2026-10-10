@@ -59,6 +59,16 @@
     margin-top: 8px;
 }
 
+.generation-history-page-detail-content .ant-alert {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.generation-history-page-detail-content .ant-alert-description {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 @media (max-width: 991px) {
     .generation-history-page-filter-actions {
         align-items: stretch;

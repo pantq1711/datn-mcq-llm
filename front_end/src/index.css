@@ -11,3 +11,8 @@ html:has(.auth-layout) {
     scrollbar-gutter: stable;
     background: #867f73;
 }
+
+textarea,
+textarea::placeholder {
+    caret-color: #000 !important;
+}
