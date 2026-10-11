@@ -14,14 +14,9 @@ import {
 } from "@ant-design/icons";
 
 import "./GenerationProgress.css";
+import type { GenerationStatus } from "../types/generation.types";
 
 const { Text } = Typography;
-
-export type GenerationStatus =
-    | "IDLE"
-    | "RUNNING"
-    | "COMPLETED"
-    | "FAILED";
 
 interface GenerationProgressProps {
     status?: GenerationStatus;

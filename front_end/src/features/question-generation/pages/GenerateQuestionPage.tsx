@@ -1,42 +1,20 @@
 
-import { useState } from "react";
-
-import {
-    Button,
-    Card,
-    Col,
-    Form,
-    InputNumber,
-    Row,
-    Select,
-    Space,
-    Typography,
-} from "antd";
-
-import {
-    HistoryOutlined,
-    ThunderboltOutlined,
-} from "@ant-design/icons";
-
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { Button, Card, Col, Form, InputNumber, Row, Select, Space, Typography, message } from "antd";
+import { HistoryOutlined, ThunderboltOutlined } from "@ant-design/icons";
+
 import LessonContentInput from "../components/LessonContentInput";
-import TextSegmentSelector, {
-    type TextSegment,
-} from "../components/TextSegmentSelector";
+import TextSegmentSelector, { type TextSegment } from "../components/TextSegmentSelector";
 import TemplateSelector from "../components/TemplateSelector";
 
-import StrategySelector, {
-    type GenerationStrategy,
-} from "../components/StrategySelector";
+import StrategySelector, { type GenerationStrategy } from "../components/StrategySelector";
+import GenerationProgress from "../components/GenerationProgress";
+import GenerationResult from "../components/GenerationResult";
 
-import GenerationProgress, {
-    type GenerationStatus,
-} from "../components/GenerationProgress";
-
-import GenerationResult, {
-    type GenerationResultItem,
-} from "../components/GenerationResult";
+import { createGenerationTask, getGenerationStatus, getGenerationResult } from "../services/generationApi";
+import type { GenerationResultItem, GenerationStatus } from "../types/generation.types";
 
 import "./GenerateQuestionPage.css";
 
@@ -66,6 +44,13 @@ export default function GenerateQuestionPage() {
     const [form] = Form.useForm<GenerationSettings>();
 
     const [lessonContent, setLessonContent] = useState("");
+    const [taskId, setTaskId] = useState<string | number | null>(null);
+    const [generationStatus, setGenerationStatus] = useState<GenerationStatus>("IDLE");
+    const [completedCount, setCompletedCount] = useState(0);
+    const [currentQuestion, setCurrentQuestion] = useState(0);
+    const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
+    const [generatedQuestions, setGeneratedQuestions] = useState<GenerationResultItem[]>([]);
+    const [resultLoading, setResultLoading] = useState(false);
     const [selectedSegments, setSelectedSegments] = useState<
         SelectedTextSegment[]
     >([]);
@@ -78,24 +63,82 @@ export default function GenerateQuestionPage() {
 
     const [questionCount, setQuestionCount] = useState(10);
 
-    // Trạng thái minh họa cho bố cục.
-    // Khi tích hợp backend, lấy các giá trị này từ tiến trình sinh thực tế.
-    const generationStatus: GenerationStatus = "RUNNING";
-    const completedCount = 0;
+    const [loading, setLoading] = useState(false);
 
-    const generatedQuestions: GenerationResultItem[] = [];
+    const handleGeneration = async (values: GenerationSettings) => {
+        try {
+            setGenerationStatus("RUNNING");
+            setCompletedCount(0);
+            setErrorMessage(undefined);
 
-    const handleGeneration = (values: GenerationSettings) => {
-        console.log({
-            ...values,
-            lessonContent,
-            selectedSegments,
-            strategy,
-            selectedTemplateId,
-        });
+            const payload = {
+                lessonContent,
+                selectedSegments,
+                selectedTemplateId,
+                strategy,
+                model: values.model,
+                questionCount: values.questionCount,
+                temperature: values.temperature,
+            };
 
-        // TODO: Gọi API sinh câu hỏi và cập nhật tiến trình/kết quả.
+            const response = await createGenerationTask(payload);
+            setTaskId(response.taskId);
+            message.success("Đã khởi tạo tiến trình sinh câu hỏi!");
+
+        } catch (error) {
+            console.error("Lỗi tạo task:", error);
+            setGenerationStatus("FAILED");
+            setErrorMessage("Không thể kết nối đến máy chủ để tạo task.");
+        }
     };
+
+    // Polling kiểm tra tiến độ định kỳ khớp với kiểu dữ liệu trạng thái
+    useEffect(() => {
+        if (!taskId || generationStatus !== "RUNNING") return;
+
+        const intervalId = setInterval(async () => {
+            try {
+                const data = await getGenerationStatus(taskId);
+
+                setGenerationStatus(data.status);
+                setCompletedCount(data.completedCount);
+                if (data.currentQuestion !== undefined) {
+                    setCurrentQuestion(data.currentQuestion);
+                }
+                if (data.errorMessage) {
+                    setErrorMessage(data.errorMessage);
+                }
+
+                // Dừng polling khi hoàn tất hoặc thất bại
+                if (data.status === "COMPLETED" || data.status === "FAILED") {
+                    clearInterval(intervalId);
+
+                    if (data.status === "COMPLETED") {
+                        message.success("Hoàn thành sinh toàn bộ câu hỏi!");
+
+                        // Gọi tiếp API lấy danh sách câu hỏi kết quả chi tiết
+                        try {
+                            // Nếu bạn có state loading cho kết quả thì bật lên ở đây, ví dụ: setResultLoading(true);
+                            const resultData = await getGenerationResult(taskId);
+                            setGeneratedQuestions(resultData.questions);
+                        } catch (err) {
+                            console.error("Lỗi lấy danh sách câu hỏi kết quả:", err);
+                            message.error("Không thể tải danh sách câu hỏi kết quả.");
+                        } finally {
+                            // Tắt loading nếu có, ví dụ: setResultLoading(false);
+                        }
+
+                    } else {
+                        message.error("Quá trình sinh câu hỏi gặp sự cố.");
+                    }
+                }
+            } catch (error) {
+                console.error("Lỗi lấy tiến độ:", error);
+            }
+        }, 2500);
+
+        return () => clearInterval(intervalId);
+    }, [taskId, generationStatus]);
 
     return (
         <div className="generate-question-page">
@@ -275,6 +318,7 @@ export default function GenerateQuestionPage() {
                             <Button
                                 type="primary"
                                 htmlType="submit"
+                                loading={loading}
                                 icon={<ThunderboltOutlined />}
                                 disabled={
                                     !lessonContent.trim() ||
@@ -318,7 +362,10 @@ export default function GenerateQuestionPage() {
                     }
                     className="generate-question-page-card"
                 >
-                    <GenerationResult data={generatedQuestions} />
+                    <GenerationResult
+                        data={generatedQuestions}
+                        loading={resultLoading}
+                    />
                 </Card>
             </div>
         </div>
