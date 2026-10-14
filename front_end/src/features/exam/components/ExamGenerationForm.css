@@ -1,0 +1,21 @@
+.exam-generation-form {
+    width: 100%;
+}
+
+.exam-generation-form .ant-form-item {
+    margin-bottom: 20px;
+}
+
+.exam-generation-form-number {
+    width: 100%;
+}
+
+.exam-generation-form-options {
+    margin-bottom: 20px;
+}
+
+.exam-generation-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 4px;
+}

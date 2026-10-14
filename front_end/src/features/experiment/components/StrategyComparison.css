@@ -1,0 +1,35 @@
+.strategy-comparison {
+    width: 100%;
+    min-width: 0;
+}
+
+.strategy-comparison-table {
+    width: 100%;
+}
+
+.strategy-comparison-table .ant-table-wrapper {
+    width: 100%;
+}
+
+.strategy-comparison-table .ant-table-cell {
+    vertical-align: middle;
+}
+
+.strategy-comparison-strategy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    min-width: 0;
+}
+
+.strategy-comparison-sample {
+    font-size: 12px;
+}
+
+.strategy-comparison-metric {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}

@@ -1,0 +1,15 @@
+.question-table {
+    width: 100%;
+}
+
+.question-table .ant-table-wrapper {
+    width: 100%;
+}
+
+.question-table-question {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.5;
+}

@@ -1,0 +1,118 @@
+.exam-question-list {
+    width: 100%;
+}
+
+.exam-question-list-empty {
+    min-height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.exam-question-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.exam-question-list-content {
+    width: 100%;
+}
+
+.exam-question-list-content .ant-list-item {
+    padding: 0;
+    border-bottom: none;
+}
+
+.exam-question-item {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.exam-question-item:last-child {
+    margin-bottom: 0;
+}
+
+.exam-question-item-content {
+    width: 100%;
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.exam-question-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.exam-question-item-number {
+    flex-shrink: 0;
+    font-weight: 600;
+}
+
+.exam-question-item-text {
+    margin-bottom: 16px !important;
+    line-height: 1.7;
+    white-space: pre-wrap;
+}
+
+.exam-question-item-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.exam-question-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid #f0f0f0;
+    border-radius: 6px;
+    background: #fafafa;
+    box-sizing: border-box;
+}
+
+.exam-question-option-correct {
+    border-color: #b7eb8f;
+    background: #f6ffed;
+}
+
+.exam-question-option-label {
+    flex-shrink: 0;
+    min-width: 20px;
+}
+
+.exam-question-option-text {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+.exam-question-option-answer {
+    flex-shrink: 0;
+    margin-inline-end: 0;
+}
+
+@media (max-width: 576px) {
+    .exam-question-item-header {
+        align-items: flex-start;
+    }
+
+    .exam-question-option {
+        flex-wrap: wrap;
+    }
+
+    .exam-question-option-answer {
+        margin-left: 28px;
+    }
+}

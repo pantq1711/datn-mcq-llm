@@ -1,0 +1,100 @@
+.edit-distance-chart {
+    width: 100%;
+}
+
+.edit-distance-chart-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.edit-distance-chart-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    min-width: 0;
+}
+
+.edit-distance-chart-summary-value {
+    font-size: 20px;
+    line-height: 1.4;
+}
+
+.edit-distance-chart-best {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.edit-distance-chart-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.edit-distance-chart-item {
+    width: 100%;
+    min-width: 0;
+}
+
+.edit-distance-chart-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+
+    margin-bottom: 8px;
+}
+
+.edit-distance-chart-label {
+    min-width: 0;
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.edit-distance-chart-value {
+    flex-shrink: 0;
+}
+
+.edit-distance-chart-track {
+    width: 100%;
+    height: 10px;
+
+    overflow: hidden;
+
+    background: #f0f0f0;
+    border-radius: 5px;
+}
+
+.edit-distance-chart-bar {
+    height: 100%;
+    min-width: 2px;
+
+    background: #1677ff;
+    border-radius: 5px;
+
+    transition: width 0.3s ease;
+}
+
+.edit-distance-chart-item-footer {
+    margin-top: 4px;
+}
+
+@media (max-width: 576px) {
+    .edit-distance-chart-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .edit-distance-chart-item-header {
+        gap: 8px;
+    }
+}

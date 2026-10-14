@@ -1,4 +1,8 @@
 .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -7,7 +11,7 @@
     padding: 0 24px;
 
     background: #ffffff;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 3px solid #f0f0f0;
 }
 
 .app-header-left {
@@ -16,7 +20,29 @@
     min-width: 0;
 }
 
-.app-header-logo {
+.app-header-sidebar-toggle {
+    width: 40px;
+    height: 40px;
+    margin-right: 12px;
+    font-size: 18px;
+}
+
+.app-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.app-header-brand-logo {
+    width: 50px;
+    height: 50px;
+    object-fit: contain;
+    margin-left: 12px;
+}
+
+.app-header-brand-title {
     margin: 0 !important;
     white-space: nowrap;
 }
@@ -61,13 +87,6 @@
     font-size: 12px;
 }
 
-.app-header-sidebar-toggle {
-    width: 40px;
-    height: 40px;
-    margin-right: 12px;
-    font-size: 18px;
-}
-
 @media (max-width: 768px) {
     .app-header {
         padding: 0 16px;
@@ -77,7 +96,12 @@
         display: none;
     }
 
-    .app-header-logo {
+    .app-header-brand-title {
         font-size: 18px !important;
+    }
+
+    .app-header-brand-logo {
+        width: 32px;
+        height: 32px;
     }
 }
