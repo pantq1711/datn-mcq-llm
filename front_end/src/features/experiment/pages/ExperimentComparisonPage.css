@@ -1,6 +1,8 @@
 .experiment-comparison-page {
     width: 100%;
+    min-width: 0;
     padding: 24px 24px 48px;
+    box-sizing: border-box;
 }
 
 .experiment-comparison-back-button {
@@ -32,6 +34,7 @@
 
 .experiment-comparison-page-selection {
     width: 100%;
+    min-width: 0;
     margin-bottom: 16px;
 }
 
@@ -42,24 +45,67 @@
 .experiment-comparison-page-selection-actions {
     display: flex;
     align-items: flex-end;
+    min-width: 0;
+}
+
+.experiment-comparison-page-source-filter {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin: -4px 0 16px;
+}
+
+.experiment-comparison-page-source-filter-help {
+    font-size: 12px;
+}
+
+.experiment-comparison-page-source-warning {
+    margin-bottom: 16px;
 }
 
 .experiment-comparison-page-overview {
     width: 100%;
+    min-width: 0;
     margin-bottom: 16px;
+}
+
+.experiment-comparison-page-content-hash {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.experiment-comparison-page-source-list {
+    width: 100%;
+}
+
+.experiment-comparison-page-source-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    min-width: 0;
 }
 
 .experiment-comparison-page-strategy {
     width: 100%;
+    min-width: 0;
     margin-bottom: 16px;
 }
 
 .experiment-comparison-page-metrics {
     width: 100%;
+    min-width: 0;
 }
 
 .experiment-comparison-page-metrics .ant-card {
     height: 100%;
+}
+
+.experiment-comparison-page .ant-descriptions,
+.experiment-comparison-page .ant-card {
+    min-width: 0;
 }
 
 @media (max-width: 991px) {
@@ -69,11 +115,20 @@
 }
 
 @media (max-width: 576px) {
+    .experiment-comparison-page {
+        padding: 24px 12px 32px;
+    }
+
     .experiment-comparison-page-selection-actions .ant-space {
         width: 100%;
+        flex-wrap: wrap;
     }
 
     .experiment-comparison-page-selection-actions .ant-btn {
         flex: 1;
+    }
+
+    .experiment-comparison-page-source-filter .ant-checkbox-wrapper {
+        align-items: flex-start;
     }
 }

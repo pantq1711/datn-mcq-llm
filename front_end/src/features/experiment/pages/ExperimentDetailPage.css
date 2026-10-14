@@ -39,9 +39,26 @@
     margin-inline-end: 0;
 }
 
-.experiment-detail-page-information {
+.experiment-detail-page-information,
+.experiment-detail-page-source,
+.experiment-detail-page-selected-scope {
     width: 100%;
     margin-bottom: 24px;
+}
+
+.experiment-detail-page-source-collapse {
+    margin-top: 16px;
+}
+
+.experiment-detail-page-source-content {
+    margin-bottom: 0 !important;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.8;
+}
+
+.experiment-detail-page-segment-selector {
+    margin-top: 16px;
 }
 
 .experiment-detail-page-results {
@@ -69,6 +86,10 @@
 }
 
 @media (max-width: 576px) {
+    .experiment-detail-page {
+        padding: 16px 12px 32px;
+    }
+
     .experiment-detail-page-meta {
         align-items: flex-start;
         flex-direction: column;

@@ -25,6 +25,10 @@
     align-items: flex-end;
 }
 
+.experiment-list-page-filter-actions .ant-space {
+    flex-wrap: wrap;
+}
+
 .experiment-list-page-section {
     width: 100%;
     margin-bottom: 16px;
@@ -39,10 +43,6 @@
     height: 100%;
 }
 
-.experiment-list-table .ant-table-tbody>tr {
-    cursor: pointer;
-}
-
 .experiment-list-page-section-header {
     display: flex;
     align-items: flex-end;
@@ -55,9 +55,31 @@
     margin: 0 0 4px !important;
 }
 
+.experiment-list-table .ant-table-tbody>tr {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+/* Đảm bảo nội dung dài không làm co vỡ bố cục bảng */
+.experiment-list-table .ant-table-cell {
+    overflow-wrap: anywhere;
+}
+
 @media (max-width: 767px) {
+    .experiment-list-page {
+        padding: 24px 12px 32px;
+    }
+
     .experiment-list-page-filter-actions {
         align-items: stretch;
+    }
+
+    .experiment-list-page-filter-actions .ant-space {
+        width: 100%;
+    }
+
+    .experiment-list-page-filter-actions .ant-btn {
+        flex: 1;
     }
 
     .experiment-list-page-section-header {
