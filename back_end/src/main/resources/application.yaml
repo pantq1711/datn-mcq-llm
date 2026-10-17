@@ -1,13 +1,39 @@
 spring:
   application:
     name: back_end
+
+  # Nạp .env khi chạy từ IDE. Đường dẫn tính theo working directory của Run Configuration:
+  #  - IntelliJ mặc định working dir = back_end/  -> dùng ../.env (như dưới)
+  #  - Nếu chạy `mvn spring-boot:run` từ thư mục gốc repo -> đổi thành file:.env[.properties]
+  config:
+    import: optional:file:../.env[.properties]
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME}
     username: ${DB_USER}
     password: ${DB_PASSWORD}
+
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: validate
+      ddl-auto: validate   # Flyway giữ schema, Hibernate chỉ kiểm tra entity khớp bảng
+
   flyway:
     enabled: true
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always   # chỉ dùng khi dev
+
+app:
+  llm:
+    api-key: ${LLM_API_KEY:}   # để trống mặc định để smoke test không văng lỗi thiếu biến
+    model: ${LLM_MODEL:}
+  embedding:
+    model: ${EMBEDDING_MODEL:}
