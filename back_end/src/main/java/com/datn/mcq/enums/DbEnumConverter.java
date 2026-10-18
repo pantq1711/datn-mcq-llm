@@ -18,17 +18,6 @@ public abstract class DbEnumConverter<E extends Enum<E> & DbEnum> implements Att
 
     @Override
     public E convertToEntityAttribute(String dbData) {
-        if (dbData == null) {
-            return null;
-        }
-        // CHAR(n) có thể trả về khoảng trắng thừa
-        String value = dbData.trim();
-        for (E constant : type.getEnumConstants()) {
-            if (constant.getDbValue().equals(value)) {
-                return constant;
-            }
-        }
-        throw new IllegalArgumentException(
-                "Giá trị '" + dbData + "' không hợp lệ cho " + type.getSimpleName());
+        return DbEnum.fromDbValue(type, dbData);
     }
 }

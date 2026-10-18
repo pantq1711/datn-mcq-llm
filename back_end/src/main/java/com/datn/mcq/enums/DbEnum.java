@@ -6,4 +6,18 @@ package com.datn.mcq.enums;
  */
 public interface DbEnum {
     String getDbValue();
+
+    static <E extends Enum<E> & DbEnum> E fromDbValue(Class<E> type, String dbData) {
+        if (dbData == null) {
+            return null;
+        }
+        String value = dbData.trim();
+        for (E constant : type.getEnumConstants()) {
+            if (constant.getDbValue().equals(value)) {
+                return constant;
+            }
+        }
+        throw new IllegalArgumentException(
+                "Giá trị '" + dbData + "' không hợp lệ cho " + type.getSimpleName());
+    }
 }
