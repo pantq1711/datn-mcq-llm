@@ -55,6 +55,7 @@ class DbEnumBindingTest {
     @BeforeEach
     void setUp() {
         this.context = new AnnotationConfigWebApplicationContext();
+        context.setServletContext(new org.springframework.mock.web.MockServletContext());
         this.context.register(TestWebConfig.class);
         this.context.refresh();
         this.mockMvc = MockMvcBuilders.webAppContextSetup(this.context).build();
