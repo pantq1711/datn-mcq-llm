@@ -16,8 +16,8 @@ Phần thực nghiệm so sánh 3 cách sinh: không ví dụ, kèm 3 ví dụ, 
 
 ## Thư mục
 
-- `db/schema_final.sql`: schema đầy đủ, gồm cả các ràng buộc CHECK.
-- `db/schema_final_erd.sql`: bản bỏ CHECK và DEFAULT, chỉ để import vào Visual Paradigm vẽ ERD.
+- `db/schema.sql`: schema đầy đủ (bản đọc nhanh đồng bộ với Flyway V1–V3), gồm cả các ràng buộc CHECK.
+- `db/schema_final_erd.sql`: bản schema dùng để import vẽ ERD.
 - `docs/contract/enums.md`: các giá trị enum mà backend và frontend phải dùng giống nhau.
 
 Backend, frontend, OpenAPI, sơ đồ và prompt sẽ thêm vào sau.
