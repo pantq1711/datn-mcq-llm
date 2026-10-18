@@ -2,11 +2,11 @@ spring:
   application:
     name: back_end
 
-  # Nạp .env khi chạy từ IDE. Đường dẫn tính theo working directory của Run Configuration:
-  #  - IntelliJ mặc định working dir = back_end/  -> dùng ../.env (như dưới)
-  #  - Nếu chạy `mvn spring-boot:run` từ thư mục gốc repo -> đổi thành file:.env[.properties]
+  # Nạp .env khi chạy từ IDE hoặc CLI. Hỗ trợ cả khi working dir là thư mục gốc repo hoặc back_end/:
   config:
-    import: optional:file:../.env[.properties]
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../.env[.properties]
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME}
