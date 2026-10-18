@@ -19,6 +19,7 @@ export interface QuestionDraft {
     optionC: string;
     optionD: string;
     correctAnswer: "A" | "B" | "C" | "D" | null;
+    explanation?: string;
 }
 
 export interface RejectionReasonGroup {

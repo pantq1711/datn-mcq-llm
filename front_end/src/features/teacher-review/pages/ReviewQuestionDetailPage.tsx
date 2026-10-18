@@ -30,6 +30,7 @@ import RejectionReasonSelector from "../components/RejectionReasonSelector";
 import ReviewDecision from "../components/ReviewDecision";
 
 import "./ReviewQuestionDetailPage.css";
+import QuestionExplanationCard from "../components/QuestionExplanationCard";
 
 const INITIAL_QUESTION: QuestionDraft = {
     questionText:
@@ -39,6 +40,7 @@ const INITIAL_QUESTION: QuestionDraft = {
     optionC: "25 m",
     optionD: "40 m",
     correctAnswer: null,
+    explanation: "Áp dụng công thức chuyển động thẳng đều: s = v * t = 5 * 4 = 20 (mét). Do đó đáp án chính xác là phương án B.",
 };
 
 export default function ReviewQuestionDetailPage() {
@@ -189,7 +191,6 @@ export default function ReviewQuestionDetailPage() {
           MAIN CONTENT
           ========================== */}
             <Row
-                gutter={[24, 24]}
                 className="review-page-content"
             >
                 <Col xs={24}>
@@ -260,6 +261,11 @@ export default function ReviewQuestionDetailPage() {
                                     </span>
                                 </div>
                             </div>
+
+                            <QuestionExplanationCard
+                                correctAnswer={question.correctAnswer}
+                                explanation={question.explanation}
+                            />
                         </Card>
 
                         {/* ========================
@@ -335,7 +341,7 @@ export default function ReviewQuestionDetailPage() {
                                     level={5}
                                     className="section-title"
                                 >
-                                    3. Độ khó
+                                    3. Mức độ nhận thức
                                 </Typography.Title>
 
                                 <Typography.Text type="secondary">
@@ -356,15 +362,15 @@ export default function ReviewQuestionDetailPage() {
                                     size={12}
                                 >
                                     <Radio value="EASY">
-                                        Dễ
+                                        Biết
                                     </Radio>
 
                                     <Radio value="MEDIUM">
-                                        Trung bình
+                                        Hiểu
                                     </Radio>
 
                                     <Radio value="HARD">
-                                        Khó
+                                        Vận dụng
                                     </Radio>
                                 </Space>
                             </Radio.Group>

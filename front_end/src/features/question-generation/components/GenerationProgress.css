@@ -52,6 +52,10 @@
     border-radius: 6px;
 }
 
+.generation-progress-statistics .ant-statistic {
+    text-align: center;
+}
+
 @media (max-width: 576px) {
     .generation-progress-header {
         align-items: flex-start;
