@@ -22,11 +22,13 @@ export interface GenerateQuestionPayload {
         startOffset: number;
         endOffset: number;
     }>;
-    selectedTemplateId: number | null;
-    strategy: string | null;
-    model: string;
     questionCount: number;
-    temperature: number;
+    questionMatrix: Array<{
+        topicId: string;
+        topicName: string;
+        cognitiveLevel: "BIET" | "HIEU" | "VAN_DUNG";
+        questionCount: number;
+    }>;
 }
 
 export interface GenerationResultResponse {

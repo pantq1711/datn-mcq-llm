@@ -29,41 +29,149 @@
     margin-bottom: 16px;
 }
 
-.generate-question-page-configuration {
-    width: 100%;
-    margin-bottom: 16px;
-}
-
 .generate-question-page-card {
     width: 100%;
+    min-width: 0;
 }
 
 .generate-question-page-card .ant-card-body {
     padding-top: 0;
 }
 
-.generate-question-page-description {
-    display: block;
+.generate-question-page-result {
+    width: 100%;
+}
+
+/* Tiêu đề và bảng ma trận */
+.generate-question-page-matrix-card-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+    min-width: 0;
+}
+
+.generate-question-page-matrix-number {
+    width: 100%;
+    min-width: 84px;
+}
+
+.generate-question-page-matrix-table {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+}
+
+.generate-question-page-matrix-table .ant-table {
+    min-width: 600px;
+}
+
+.generate-question-page-matrix-table .ant-table-cell {
+    vertical-align: middle;
+}
+
+.generate-question-page-matrix-table .ant-input-number {
+    width: 100%;
+}
+
+.generate-question-page-matrix-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #f0f0f0;
+}
+
+.generate-question-page-matrix-summary {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.generate-question-page-matrix-footer>.ant-btn {
+    min-width: 150px;
+}
+
+.generate-question-page-matrix-table .ant-table-container {
+    overflow-y: hidden !important;
+}
+
+/* Modal tùy chỉnh chủ đề */
+.generate-question-page-topic-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.generate-question-page-topic-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.generate-question-page-topic-row>.ant-input {
+    min-width: 0;
+    flex: 1;
+}
+
+.generate-question-page-error {
     margin-bottom: 16px;
 }
 
-.generate-question-page-strategy {
-    width: 100%;
-    margin-bottom: 24px;
+.generate-question-page-matrix-table .ant-table-thead>tr>th {
+    background-color: #f0f5ff !important;
+    /* Màu nền nhẹ (Ví dụ: xanh nhạt Ant Design Geekblue-1) */
+    color: #1d39c4 !important;
+    /* Màu chữ tiêu đề */
+    font-weight: 600;
+    /* Độ đậm chữ */
 }
 
-.generate-question-page-number {
-    width: 100%;
+.generate-question-page-matrix-table .ant-table-bordered .ant-table-container,
+.generate-question-page-matrix-table .ant-table-bordered .ant-table-container th,
+.generate-question-page-matrix-table .ant-table-bordered .ant-table-container td {
+    border-color: #d9d9d9;
 }
 
-.generate-question-page-form-actions {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: 8px;
+.generate-question-page-matrix-table .ant-table-bordered th.ant-table-cell,
+.generate-question-page-matrix-table .ant-table-bordered td.ant-table-cell {
+    border-right: 1px solid #d9d9d9 !important;
+    border-bottom: 1px solid #d9d9d9 !important;
 }
 
-.generate-question-page-result {
-    width: 100%;
+.generate-question-page-matrix-table .ant-table-bordered .ant-table-container {
+    border-left: 1px solid #d9d9d9 !important;
+    border-top: 1px solid #d9d9d9 !important;
+}
+
+.generate-question-page-matrix-number input {
+    text-align: center !important;
+}
+
+.generate-question-page-matrix-table .ant-table-summary cell,
+.generate-question-page-matrix-table .ant-table-summary tr>td:not(:first-child) {
+    text-align: center !important;
+}
+
+@media (max-width: 768px) {
+    .generate-question-page {
+        padding: 24px 16px 32px;
+    }
+
+    .generate-question-page-matrix-footer {
+        align-items: stretch;
+    }
+
+    .generate-question-page-matrix-footer>.ant-btn {
+        width: 100%;
+    }
 }
 
 @media (max-width: 576px) {
@@ -81,11 +189,17 @@
         width: 100%;
     }
 
-    .generate-question-page-form-actions {
-        width: 100%;
+    .generate-question-page-matrix-card-title {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
     }
 
-    .generate-question-page-form-actions .ant-btn {
-        width: 100%;
+    .generate-question-page-matrix-card-title>.ant-btn {
+        align-self: flex-start;
+    }
+
+    .generate-question-page-topic-row {
+        align-items: stretch;
     }
 }

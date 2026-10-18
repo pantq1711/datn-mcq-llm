@@ -104,13 +104,6 @@ export default function ExamPreview({
                     size={8}
                     className="exam-preview-header-content"
                 >
-                    <Text
-                        type="secondary"
-                        className="exam-preview-label"
-                    >
-                        XEM TRƯỚC ĐỀ THI
-                    </Text>
-
                     <Title
                         level={3}
                         className="exam-preview-title"
@@ -149,35 +142,6 @@ export default function ExamPreview({
                 </Space>
             </div>
 
-            <div className="exam-preview-info">
-                <Descriptions
-                    column={{
-                        xs: 1,
-                        sm: 2,
-                    }}
-                    size="small"
-                    bordered
-                >
-                    <Descriptions.Item label="Môn học">
-                        {exam.subject}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Số câu">
-                        {exam.questionCount}
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Thời gian">
-                        {exam.duration} phút
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Mức độ">
-                        <Tag color={difficulty.color}>
-                            {difficulty.label}
-                        </Tag>
-                    </Descriptions.Item>
-                </Descriptions>
-            </div>
-
             <div className="exam-preview-instructions">
                 <Alert
                     type="info"
@@ -188,28 +152,6 @@ export default function ExamPreview({
                         DEFAULT_INSTRUCTIONS
                     }
                 />
-            </div>
-
-            <div className="exam-preview-summary">
-                <div className="exam-preview-summary-item">
-                    <Text type="secondary">
-                        Tổng số câu hỏi
-                    </Text>
-
-                    <Text strong className="exam-preview-summary-value">
-                        {exam.questionCount}
-                    </Text>
-                </div>
-
-                <div className="exam-preview-summary-item">
-                    <Text type="secondary">
-                        Thời gian làm bài
-                    </Text>
-
-                    <Text strong className="exam-preview-summary-value">
-                        {exam.duration} phút
-                    </Text>
-                </div>
             </div>
 
             <Paragraph

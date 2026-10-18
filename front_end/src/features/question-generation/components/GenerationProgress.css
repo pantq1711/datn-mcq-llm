@@ -39,6 +39,8 @@
 
 .generation-progress-statistics-space {
     width: 100%;
+    display: flex;
+    justify-content: space-around;
 }
 
 .generation-progress-error {

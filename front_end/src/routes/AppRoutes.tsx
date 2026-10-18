@@ -17,6 +17,7 @@ import ExperimentDetailPage from "../features/experiment/pages/ExperimentDetailP
 import ExperimentComparisonPage from "../features/experiment/pages/ExperimentComparisonPage";
 import GenerateQuestionPage from "../features/question-generation/pages/GenerateQuestionPage";
 import GenerationHistoryPage from "../features/question-generation/pages/GenerationHistoryPage";
+import TestKaTeX from "../features/test-katex/pages/TestKaTeX";
 
 export default function AppRoutes() {
     return (
@@ -40,6 +41,7 @@ export default function AppRoutes() {
                 <Route path="experiments/comparison" element={<ExperimentComparisonPage />} />
                 <Route path="generate" element={<GenerateQuestionPage />} />
                 <Route path="generation-history" element={<GenerationHistoryPage />} />
+                <Route path="test-katex" element={<TestKaTeX />} />
             </Route>
         </Routes>
     );

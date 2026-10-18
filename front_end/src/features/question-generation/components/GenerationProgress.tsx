@@ -88,8 +88,6 @@ export default function GenerationProgress({
         <div className="generation-progress">
             <div className="generation-progress-header">
                 <div className="generation-progress-title">
-                    <Text strong>Tiến trình sinh câu hỏi</Text>
-
                     <Tag
                         color={config.color}
                         icon={config.icon}
