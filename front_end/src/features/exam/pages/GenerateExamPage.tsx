@@ -1,4 +1,4 @@
-import { Button, Card, Col, Row, Typography } from "antd";
+import { Button, Card, Typography } from "antd";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
@@ -35,7 +35,9 @@ export default function GenerateExamPage() {
         subject: "Hóa học",
         questionCount: 20,
         duration: 30,
-        difficulty: "MEDIUM",
+        easyCount: 5,
+        mediumCount: 10,
+        hardCount: 5,
         instructions:
             "Thí sinh chọn một đáp án đúng cho mỗi câu hỏi. " +
             "Thời gian làm bài là 30 phút.",
@@ -71,8 +73,7 @@ export default function GenerateExamPage() {
     const handleGenerateExam = (values: ExamGenerationValues) => {
         console.log("Generate exam:", values);
 
-        // TODO:
-        // gọi API tạo đề
+        // TODO: gọi API tạo đề
     };
 
     const handleRemoveQuestion = (
@@ -82,8 +83,7 @@ export default function GenerateExamPage() {
         console.log("Remove question:", question);
         console.log("Index:", index);
 
-        // TODO:
-        // cập nhật danh sách câu hỏi
+        // TODO: cập nhật danh sách câu hỏi
     };
 
     return (
@@ -114,25 +114,20 @@ export default function GenerateExamPage() {
                 </Card>
             </div>
 
-            <Row
-                gutter={[16, 16]}
-                className="generate-exam-page-content"
-            >
-                <Col xs={24} xl={10}>
-                    <Card title="Xem trước đề thi">
-                        <ExamPreview exam={examPreview} />
-                    </Card>
-                </Col>
+            <div className="generate-exam-page-overview">
+                <Card title="Xem trước đề thi">
+                    <ExamPreview exam={examPreview} />
+                </Card>
+            </div>
 
-                <Col xs={24} xl={14}>
-                    <Card title="Danh sách câu hỏi">
-                        <ExamQuestionList
-                            questions={questions}
-                            onRemove={handleRemoveQuestion}
-                        />
-                    </Card>
-                </Col>
-            </Row>
+            <div className="generate-exam-page-question-list">
+                <Card title="Danh sách câu hỏi">
+                    <ExamQuestionList
+                        questions={questions}
+                        onRemove={handleRemoveQuestion}
+                    />
+                </Card>
+            </div>
         </div>
     );
 }

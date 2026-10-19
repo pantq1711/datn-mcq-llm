@@ -1,28 +1,9 @@
 import { useState } from "react";
-import {
-    Alert,
-    Button,
-    Card,
-    Col,
-    Radio,
-    Row,
-    Space,
-    Tag,
-    Typography
-} from "antd";
-import {
-    ArrowLeftOutlined,
-    SaveOutlined,
-} from "@ant-design/icons";
+import { Alert, Button, Card, Col, Radio, Row, Space, Tag, Typography } from "antd";
+import { ArrowLeftOutlined, SaveOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
-import type {
-    CorrectAnswer,
-    Difficulty,
-    FormatStatus,
-    QuestionDraft,
-    ReviewDecisions,
-} from "../types/review.types";
+import type { CorrectAnswer, Difficulty, FormatStatus, QuestionDraft, ReviewDecisions } from "../types/review.types";
 
 import CorrectAnswerSelector from "../components/CorrectAnswerSelector";
 import QuestionEditor from "../components/QuestionEditor";
@@ -49,11 +30,6 @@ export default function ReviewQuestionDetailPage() {
     const handleBackToList = () => {
         navigate("/review");
     };
-    /**
-     * ==========================
-     * REVIEW STATE
-     * ==========================
-     */
 
     const [question, setQuestion] =
         useState<QuestionDraft>(INITIAL_QUESTION);
@@ -76,21 +52,22 @@ export default function ReviewQuestionDetailPage() {
     const [otherReason, setOtherReason] =
         useState("");
 
-    /**
-     * ==========================
-     * DERIVED STATE
-     * ==========================
-     */
-
     const forceReject =
         correctAnswer === "NONE" ||
         correctAnswer === "MULTIPLE";
 
-    /**
-     * ==========================
-     * HANDLERS
-     * ==========================
-     */
+    const isBasicInfoComplete =
+        correctAnswer !== null &&
+        formatStatus !== null &&
+        difficulty !== null &&
+        decision !== null;
+
+    const isRejectionValid =
+        decision === "REJECT" || forceReject
+            ? selectedReasons.length > 0 || otherReason.trim().length > 0
+            : true;
+
+    const isSaveDisabled = !isBasicInfoComplete || !isRejectionValid;
 
     const handleCorrectAnswerChange = (
         value: CorrectAnswer,
@@ -105,11 +82,6 @@ export default function ReviewQuestionDetailPage() {
             return;
         }
 
-        /*
-         * Khi giáo viên chuyển từ "Không có phương án đúng"
-         * hoặc "Có nhiều phương án đúng" sang một đáp án
-         * hợp lệ, cho phép lựa chọn lại kết luận.
-         */
         setDecision(null);
     };
 
@@ -137,6 +109,8 @@ export default function ReviewQuestionDetailPage() {
     };
 
     const handleSubmit = () => {
+        if (isSaveDisabled) return;
+
         const payload = {
             question,
             correctAnswer,
@@ -150,17 +124,8 @@ export default function ReviewQuestionDetailPage() {
         console.log("Review result:", payload);
     };
 
-    /**
-     * ==========================
-     * PAGE
-     * ==========================
-     */
-
     return (
         <div className="review-question-detail-page">
-            {/* ==========================
-          PAGE HEADER
-          ========================== */}
             <div className="review-page-header">
                 <Button
                     type="text"
@@ -187,21 +152,13 @@ export default function ReviewQuestionDetailPage() {
                 </div>
             </div>
 
-            {/* ==========================
-          MAIN CONTENT
-          ========================== */}
-            <Row
-                className="review-page-content"
-            >
+            <Row className="review-page-content">
                 <Col xs={24}>
                     <Space
                         direction="vertical"
                         size={24}
                         className="review-section-list"
                     >
-                        {/* ========================
-                QUESTION
-                ======================== */}
                         <Card className="review-card">
                             <div className="section-heading">
                                 <Typography.Title
@@ -222,43 +179,20 @@ export default function ReviewQuestionDetailPage() {
 
                             <div className="question-options">
                                 <div className="question-option">
-                                    <span className="option-label">
-                                        A.
-                                    </span>
-
-                                    <span className="option-content">
-                                        {question.optionA}
-                                    </span>
+                                    <span className="option-label">A.</span>
+                                    <span className="option-content">{question.optionA}</span>
                                 </div>
-
                                 <div className="question-option">
-                                    <span className="option-label">
-                                        B.
-                                    </span>
-
-                                    <span className="option-content">
-                                        {question.optionB}
-                                    </span>
+                                    <span className="option-label">B.</span>
+                                    <span className="option-content">{question.optionB}</span>
                                 </div>
-
                                 <div className="question-option">
-                                    <span className="option-label">
-                                        C.
-                                    </span>
-
-                                    <span className="option-content">
-                                        {question.optionC}
-                                    </span>
+                                    <span className="option-label">C.</span>
+                                    <span className="option-content">{question.optionC}</span>
                                 </div>
-
                                 <div className="question-option">
-                                    <span className="option-label">
-                                        D.
-                                    </span>
-
-                                    <span className="option-content">
-                                        {question.optionD}
-                                    </span>
+                                    <span className="option-label">D.</span>
+                                    <span className="option-content">{question.optionD}</span>
                                 </div>
                             </div>
 
@@ -268,9 +202,6 @@ export default function ReviewQuestionDetailPage() {
                             />
                         </Card>
 
-                        {/* ========================
-                1. CORRECT ANSWER
-                ======================== */}
                         <Card className="review-card">
                             <div className="section-heading">
                                 <Typography.Title
@@ -291,9 +222,6 @@ export default function ReviewQuestionDetailPage() {
                             />
                         </Card>
 
-                        {/* ========================
-                2. FORMAT
-                ======================== */}
                         <Card className="review-card">
                             <div className="section-heading">
                                 <Typography.Title
@@ -304,8 +232,7 @@ export default function ReviewQuestionDetailPage() {
                                 </Typography.Title>
 
                                 <Typography.Text type="secondary">
-                                    Kiểm tra định dạng của câu hỏi và
-                                    các phương án.
+                                    Kiểm tra định dạng của câu hỏi và các phương án.
                                 </Typography.Text>
                             </div>
 
@@ -317,24 +244,13 @@ export default function ReviewQuestionDetailPage() {
                                     )
                                 }
                             >
-                                <Space
-                                    direction="vertical"
-                                    size={12}
-                                >
-                                    <Radio value="VALID">
-                                        Đạt chuẩn
-                                    </Radio>
-
-                                    <Radio value="INVALID">
-                                        Không đạt chuẩn
-                                    </Radio>
+                                <Space direction="vertical" size={12}>
+                                    <Radio value="VALID">Đạt chuẩn</Radio>
+                                    <Radio value="INVALID">Không đạt chuẩn</Radio>
                                 </Space>
                             </Radio.Group>
                         </Card>
 
-                        {/* ========================
-                3. DIFFICULTY
-                ======================== */}
                         <Card className="review-card">
                             <div className="section-heading">
                                 <Typography.Title
@@ -357,28 +273,14 @@ export default function ReviewQuestionDetailPage() {
                                     )
                                 }
                             >
-                                <Space
-                                    direction="vertical"
-                                    size={12}
-                                >
-                                    <Radio value="EASY">
-                                        Biết
-                                    </Radio>
-
-                                    <Radio value="MEDIUM">
-                                        Hiểu
-                                    </Radio>
-
-                                    <Radio value="HARD">
-                                        Vận dụng
-                                    </Radio>
+                                <Space direction="vertical" size={12}>
+                                    <Radio value="EASY">Biết</Radio>
+                                    <Radio value="MEDIUM">Hiểu</Radio>
+                                    <Radio value="HARD">Vận dụng</Radio>
                                 </Space>
                             </Radio.Group>
                         </Card>
 
-                        {/* ========================
-                4. DECISION
-                ======================== */}
                         <Card className="review-card">
                             <div className="section-heading">
                                 <Typography.Title
@@ -414,9 +316,6 @@ export default function ReviewQuestionDetailPage() {
                             />
                         </Card>
 
-                        {/* ========================
-                5. EDIT QUESTION
-                ======================== */}
                         {decision === "EDIT" && !forceReject && (
                             <Card className="review-card">
                                 <div className="section-heading">
@@ -428,8 +327,7 @@ export default function ReviewQuestionDetailPage() {
                                     </Typography.Title>
 
                                     <Typography.Text type="secondary">
-                                        Chỉnh sửa nội dung câu hỏi và các
-                                        phương án trước khi chấp thuận.
+                                        Chỉnh sửa nội dung câu hỏi và các phương án trước khi chấp thuận.
                                     </Typography.Text>
                                 </div>
 
@@ -440,9 +338,6 @@ export default function ReviewQuestionDetailPage() {
                             </Card>
                         )}
 
-                        {/* ========================
-                6. REJECTION REASON
-                ======================== */}
                         {(decision === "REJECT" || forceReject) && (
                             <Card className="review-card">
                                 <div className="section-heading">
@@ -454,8 +349,7 @@ export default function ReviewQuestionDetailPage() {
                                     </Typography.Title>
 
                                     <Typography.Text type="secondary">
-                                        Chọn một hoặc nhiều lí do phù hợp
-                                        với lỗi của câu hỏi.
+                                        Chọn một hoặc nhiều lí do phù hợp với lỗi của câu hỏi.
                                     </Typography.Text>
                                 </div>
 
@@ -471,19 +365,15 @@ export default function ReviewQuestionDetailPage() {
                 </Col>
             </Row>
 
-            {/* ==========================
-          FOOTER ACTIONS
-          ========================== */}
             <div className="review-page-footer">
-                <Button
-                    onClick={() => window.history.back()}
-                >
+                <Button onClick={() => window.history.back()}>
                     Hủy
                 </Button>
 
                 <Button
                     type="primary"
                     icon={<SaveOutlined />}
+                    disabled={isSaveDisabled}
                     onClick={handleSubmit}
                 >
                     Lưu đánh giá

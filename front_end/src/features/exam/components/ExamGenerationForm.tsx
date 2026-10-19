@@ -1,29 +1,17 @@
-import {
-    Button,
-    Checkbox,
-    Col,
-    Form,
-    Input,
-    InputNumber,
-    Row,
-    Select,
-    Space,
-} from "antd";
-import {
-    ClearOutlined,
-    PlayCircleOutlined,
-} from "@ant-design/icons";
+import { useRef, useState } from "react";
+import { Alert, Button, Checkbox, Col, Form, Input, InputNumber, Row, Select, Space, Typography, } from "antd";
+import { ClearOutlined, PlayCircleOutlined, } from "@ant-design/icons";
 
 import "./ExamGenerationForm.css";
 
-export type ExamDifficulty = "ALL" | "EASY" | "MEDIUM" | "HARD";
-
 export interface ExamGenerationValues {
     title: string;
-    subjectId: number;
-    questionCount: number;
-    duration: number;
-    difficulty: ExamDifficulty;
+    subjectId?: number;
+    questionCount?: number;
+    duration?: number;
+    easyCount?: number;
+    mediumCount?: number;
+    hardCount?: number;
     shuffleQuestions: boolean;
     shuffleOptions: boolean;
 }
@@ -43,10 +31,12 @@ interface ExamGenerationFormProps {
 
 const defaultValues: ExamGenerationValues = {
     title: "",
-    subjectId: 0,
-    questionCount: 20,
-    duration: 30,
-    difficulty: "ALL",
+    subjectId: undefined,
+    questionCount: undefined,
+    duration: undefined,
+    easyCount: undefined,
+    mediumCount: undefined,
+    hardCount: undefined,
     shuffleQuestions: true,
     shuffleOptions: false,
 };
@@ -59,13 +49,140 @@ export default function ExamGenerationForm({
     onReset,
 }: ExamGenerationFormProps) {
     const [form] = Form.useForm<ExamGenerationValues>();
+    const [matrixError, setMatrixError] = useState<string | null>(null);
+
+    type LevelField = "easyCount" | "mediumCount" | "hardCount";
+    const levelFields: LevelField[] = ["easyCount", "mediumCount", "hardCount"];
+
+    const questionCountManuallySet = useRef(
+        initialValues?.questionCount !== undefined && initialValues?.questionCount !== null,
+    );
+
+    const autoCalculatedLevel = useRef<LevelField | null>(null);
+
+    const handleValuesChange = (
+        changedValues: Partial<ExamGenerationValues>,
+        allValues: ExamGenerationValues,
+    ) => {
+        const changedKeys = Object.keys(changedValues);
+        const questionCountChanged = changedKeys.includes("questionCount");
+        const changedLevel = levelFields.find((field) => changedKeys.includes(field));
+
+        if (questionCountChanged) {
+            const hasEnteredTotal =
+                allValues.questionCount !== undefined && allValues.questionCount !== null;
+            questionCountManuallySet.current = hasEnteredTotal;
+
+            if (!hasEnteredTotal) {
+                autoCalculatedLevel.current = null;
+            }
+        }
+
+        if (changedLevel && autoCalculatedLevel.current === changedLevel) {
+            autoCalculatedLevel.current = null;
+        }
+
+        const hasValue = (value: number | undefined | null): value is number =>
+            value !== undefined && value !== null && Number.isFinite(value);
+
+        const values = form.getFieldsValue();
+        const levelValues: Record<LevelField, number | null> = {
+            easyCount: hasValue(values.easyCount) ? Number(values.easyCount) : null,
+            mediumCount: hasValue(values.mediumCount) ? Number(values.mediumCount) : null,
+            hardCount: hasValue(values.hardCount) ? Number(values.hardCount) : null,
+        };
+        const hasTotal = hasValue(values.questionCount);
+        const total = hasTotal ? Number(values.questionCount) : null;
+        const filledLevelFields = levelFields.filter((field) => levelValues[field] !== null);
+        const allLevelsFilled = filledLevelFields.length === levelFields.length;
+
+        if (!questionCountManuallySet.current && allLevelsFilled) {
+            const calculatedTotal = levelFields.reduce(
+                (sum, field) => sum + (levelValues[field] ?? 0),
+                0,
+            );
+
+            if (values.questionCount !== calculatedTotal) {
+                form.setFieldsValue({ questionCount: calculatedTotal });
+            }
+        } else if (questionCountManuallySet.current && hasTotal && autoCalculatedLevel.current) {
+            const autoField = autoCalculatedLevel.current;
+            const otherFields = levelFields.filter((field) => field !== autoField);
+            const firstField = otherFields[0];
+            const secondField = otherFields[1];
+
+            if (!firstField || !secondField) return;
+
+            const first = levelValues[firstField];
+            const second = levelValues[secondField];
+
+            if (first !== null && second !== null) {
+                const remaining = total! - first - second;
+                if (remaining >= 0 && levelValues[autoField] !== remaining) {
+                    form.setFieldsValue({ [autoField]: remaining });
+                }
+            }
+        } else if (questionCountManuallySet.current && hasTotal && filledLevelFields.length === 2) {
+            const missingField = levelFields.find((field) => levelValues[field] === null);
+            if (missingField) {
+                const subtotal = filledLevelFields.reduce(
+                    (sum, field) => sum + (levelValues[field] ?? 0),
+                    0,
+                );
+                const remaining = total! - subtotal;
+
+                if (remaining >= 0) {
+                    autoCalculatedLevel.current = missingField;
+                    form.setFieldsValue({ [missingField]: remaining });
+                }
+            }
+        }
+
+        const updatedValues = form.getFieldsValue();
+        const finalValues = [
+            updatedValues.easyCount,
+            updatedValues.mediumCount,
+            updatedValues.hardCount,
+        ];
+        const finalTotal = updatedValues.questionCount;
+        const everyValueFilled =
+            finalValues.every((value) => hasValue(value)) && hasValue(finalTotal);
+
+        if (everyValueFilled) {
+            const sum = finalValues.reduce((acc, value) => acc + Number(value), 0);
+            if (sum !== Number(finalTotal)) {
+                setMatrixError(
+                    `Tổng số câu theo mức độ (${sum}) không bằng Tổng số câu đề thi (${finalTotal}).`,
+                );
+            } else {
+                setMatrixError(null);
+            }
+        } else {
+            setMatrixError(null);
+        }
+    };
 
     const handleFinish = (values: ExamGenerationValues) => {
+        const e = Number(values.easyCount ?? 0);
+        const m = Number(values.mediumCount ?? 0);
+        const h = Number(values.hardCount ?? 0);
+        const t = Number(values.questionCount ?? 0);
+
+        if (e + m + h !== t) {
+            setMatrixError(`Tổng số câu theo mức độ (${e + m + h}) không bằng Tổng số câu đề thi (${t}).`);
+            return;
+        }
+
+        setMatrixError(null);
         onGenerate?.(values);
     };
 
     const handleReset = () => {
         form.resetFields();
+        questionCountManuallySet.current =
+            initialValues?.questionCount !== undefined && initialValues?.questionCount !== null;
+        autoCalculatedLevel.current = null;
+        setMatrixError(null);
         onReset?.();
     };
 
@@ -77,11 +194,12 @@ export default function ExamGenerationForm({
                 ...defaultValues,
                 ...initialValues,
             }}
+            onValuesChange={handleValuesChange}
             onFinish={handleFinish}
             className="exam-generation-form"
         >
             <Row gutter={[16, 0]}>
-                <Col xs={24} lg={16}>
+                <Col xs={24} md={15}>
                     <Form.Item
                         label="Tên đề thi"
                         name="title"
@@ -92,8 +210,7 @@ export default function ExamGenerationForm({
                             },
                             {
                                 max: 200,
-                                message:
-                                    "Tên đề thi không được vượt quá 200 ký tự.",
+                                message: "Tên đề thi không được vượt quá 200 ký tự.",
                             },
                         ]}
                     >
@@ -101,12 +218,11 @@ export default function ExamGenerationForm({
                             placeholder="Nhập tên đề thi"
                             size="large"
                             maxLength={200}
-                            showCount
                         />
                     </Form.Item>
                 </Col>
 
-                <Col xs={24} lg={8}>
+                <Col xs={24} sm={12} md={6}>
                     <Form.Item
                         label="Môn học"
                         name="subjectId"
@@ -120,12 +236,7 @@ export default function ExamGenerationForm({
                                     if (value && value > 0) {
                                         return Promise.resolve();
                                     }
-
-                                    return Promise.reject(
-                                        new Error(
-                                            "Vui lòng chọn môn học.",
-                                        ),
-                                    );
+                                    return Promise.reject(new Error("Vui lòng chọn môn học."));
                                 },
                             },
                         ]}
@@ -137,53 +248,21 @@ export default function ExamGenerationForm({
                         />
                     </Form.Item>
                 </Col>
-            </Row>
 
-            <Row gutter={[16, 0]}>
-                <Col xs={24} sm={8}>
-                    <Form.Item
-                        label="Số câu hỏi"
-                        name="questionCount"
-                        rules={[
-                            {
-                                required: true,
-                                message: "Vui lòng nhập số câu hỏi.",
-                            },
-                            {
-                                type: "number",
-                                min: 1,
-                                max: 200,
-                                message:
-                                    "Số câu hỏi phải từ 1 đến 200.",
-                            },
-                        ]}
-                    >
-                        <InputNumber
-                            size="large"
-                            min={1}
-                            max={200}
-                            className="exam-generation-form-number"
-                            placeholder="Số câu"
-                        />
-                    </Form.Item>
-                </Col>
-
-                <Col xs={24} sm={8}>
+                <Col xs={24} sm={12} md={3}>
                     <Form.Item
                         label="Thời gian làm bài"
                         name="duration"
                         rules={[
                             {
                                 required: true,
-                                message:
-                                    "Vui lòng nhập thời gian làm bài.",
+                                message: "Vui lòng nhập thời gian làm bài.",
                             },
                             {
                                 type: "number",
                                 min: 1,
                                 max: 300,
-                                message:
-                                    "Thời gian phải từ 1 đến 300 phút.",
+                                message: "Thời gian phải từ 1 đến 300 phút.",
                             },
                         ]}
                     >
@@ -193,87 +272,148 @@ export default function ExamGenerationForm({
                             max={300}
                             addonAfter="phút"
                             className="exam-generation-form-number"
-                        />
-                    </Form.Item>
-                </Col>
-
-                <Col xs={24} sm={8}>
-                    <Form.Item
-                        label="Mức độ"
-                        name="difficulty"
-                    >
-                        <Select
-                            size="large"
-                            options={[
-                                {
-                                    label: "Tất cả mức độ",
-                                    value: "ALL",
-                                },
-                                {
-                                    label: "Dễ",
-                                    value: "EASY",
-                                },
-                                {
-                                    label: "Trung bình",
-                                    value: "MEDIUM",
-                                },
-                                {
-                                    label: "Khó",
-                                    value: "HARD",
-                                },
-                            ]}
+                            placeholder="30"
                         />
                     </Form.Item>
                 </Col>
             </Row>
 
-            <Form.Item
-                label="Tùy chọn"
-                className="exam-generation-form-options"
-            >
-                <Space direction="vertical" size={8}>
-                    <Form.Item
-                        name="shuffleQuestions"
-                        valuePropName="checked"
-                        noStyle
-                    >
-                        <Checkbox>
-                            Trộn thứ tự câu hỏi
-                        </Checkbox>
-                    </Form.Item>
+            {/* Cảnh báo lỗi ma trận nếu tham số không hợp lệ */}
+            {matrixError && (
+                <Alert
+                    type="error"
+                    message="Lỗi ma trận đề thi"
+                    description={matrixError}
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                />
+            )}
 
-                    <Form.Item
-                        name="shuffleOptions"
-                        valuePropName="checked"
-                        noStyle
-                    >
-                        <Checkbox>
-                            Trộn thứ tự đáp án
-                        </Checkbox>
-                    </Form.Item>
-                </Space>
-            </Form.Item>
+            <Row gutter={[16, 16]} className="exam-matrix-options-row">
+                <Col xs={24} lg={8}>
+                    <div className="exam-matrix-container">
+                        <Typography.Title level={5} className="exam-matrix-heading">
+                            Ma trận đề thi
+                        </Typography.Title>
+                        <table className="exam-matrix-table">
+                            <thead>
+                                <tr>
+                                    <th>Mức độ nhận thức</th>
+                                    <th>Số câu</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Biết</td>
+                                    <td>
+                                        <Form.Item
+                                            name="easyCount"
+                                            noStyle
+                                            rules={[
+                                                { required: true, message: "Vui lòng nhập số câu" },
+                                                { type: "number", min: 0, message: "Không được âm" },
+                                            ]}
+                                        >
+                                            <InputNumber min={0} max={200} className="exam-matrix-input" placeholder="0" />
+                                        </Form.Item>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Hiểu</td>
+                                    <td>
+                                        <Form.Item
+                                            name="mediumCount"
+                                            noStyle
+                                            rules={[
+                                                { required: true, message: "Vui lòng nhập số câu" },
+                                                { type: "number", min: 0, message: "Không được âm" },
+                                            ]}
+                                        >
+                                            <InputNumber min={0} max={200} className="exam-matrix-input" placeholder="0" />
+                                        </Form.Item>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Vận dụng</td>
+                                    <td>
+                                        <Form.Item
+                                            name="hardCount"
+                                            noStyle
+                                            rules={[
+                                                { required: true, message: "Vui lòng nhập số câu" },
+                                                { type: "number", min: 0, message: "Không được âm" },
+                                            ]}
+                                        >
+                                            <InputNumber min={0} max={200} className="exam-matrix-input" placeholder="0" />
+                                        </Form.Item>
+                                    </td>
+                                </tr>
+                                <tr className="exam-matrix-total-row">
+                                    <td>Tổng số câu</td>
+                                    <td>
+                                        <Form.Item
+                                            name="questionCount"
+                                            noStyle
+                                            rules={[
+                                                { required: true, message: "Vui lòng nhập tổng số câu" },
+                                                { type: "number", min: 1, max: 200, message: "Số câu từ 1 - 200" },
+                                            ]}
+                                        >
+                                            <InputNumber min={1} max={200} className="exam-matrix-input" placeholder="0" />
+                                        </Form.Item>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </Col>
 
-            <div className="exam-generation-form-actions">
-                <Space>
-                    <Button
-                        icon={<ClearOutlined />}
-                        onClick={handleReset}
-                        disabled={loading}
-                    >
-                        Đặt lại
-                    </Button>
+                <Col xs={24} lg={7} className="exam-right-column">
+                    <div className="exam-options-container">
+                        <Typography.Title level={5} className="exam-matrix-heading">
+                            Tùy chọn
+                        </Typography.Title>
+                        <Space direction="vertical" size={12} className="exam-options-space">
+                            <Form.Item
+                                name="shuffleQuestions"
+                                valuePropName="checked"
+                                noStyle
+                            >
+                                <Checkbox>Trộn thứ tự câu hỏi</Checkbox>
+                            </Form.Item>
 
-                    <Button
-                        type="primary"
-                        htmlType="submit"
-                        icon={<PlayCircleOutlined />}
-                        loading={loading}
-                    >
-                        Tạo đề thi
-                    </Button>
-                </Space>
-            </div>
+                            <Form.Item
+                                name="shuffleOptions"
+                                valuePropName="checked"
+                                noStyle
+                            >
+                                <Checkbox>Trộn thứ tự đáp án</Checkbox>
+                            </Form.Item>
+                        </Space>
+                    </div>
+
+                    <div className="exam-generation-form-actions">
+                        <Space>
+                            <Button
+                                icon={<ClearOutlined />}
+                                onClick={handleReset}
+                                disabled={loading}
+                            >
+                                Đặt lại
+                            </Button>
+
+                            <Button
+                                type="primary"
+                                htmlType="submit"
+                                icon={<PlayCircleOutlined />}
+                                loading={loading}
+                            >
+                                Tạo đề thi
+                            </Button>
+                        </Space>
+                    </div>
+                </Col>
+            </Row>
         </Form>
     );
 }

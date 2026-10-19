@@ -27,6 +27,11 @@
     margin-bottom: 16px;
 }
 
-.generate-exam-page-content {
+.generate-exam-page-overview {
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.generate-exam-page-question-list {
     width: 100%;
 }

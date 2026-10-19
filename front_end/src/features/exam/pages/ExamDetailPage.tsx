@@ -17,7 +17,9 @@ export default function ExamDetailPage() {
         subject: "Hóa học",
         questionCount: 20,
         duration: 30,
-        difficulty: "MEDIUM",
+        easyCount: 5,
+        mediumCount: 10,
+        hardCount: 5,
     };
 
     const questions: ExamQuestionItem[] = [];

@@ -1,16 +1,5 @@
-import {
-    Button,
-    Empty,
-    List,
-    Skeleton,
-    Space,
-    Tag,
-    Tooltip,
-    Typography,
-} from "antd";
-import {
-    DeleteOutlined,
-} from "@ant-design/icons";
+import { Button, Empty, List, Skeleton, Space, Tag, Tooltip, Typography } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
 
 import "./ExamQuestionList.css";
 
@@ -43,15 +32,15 @@ const difficultyConfig: Record<
     }
 > = {
     EASY: {
-        label: "Dễ",
+        label: "Biết",
         color: "green",
     },
     MEDIUM: {
-        label: "Trung bình",
+        label: "Hiểu",
         color: "orange",
     },
     HARD: {
-        label: "Khó",
+        label: "Vận dụng",
         color: "red",
     },
 };
@@ -89,12 +78,6 @@ export default function ExamQuestionList({
 
     return (
         <div className="exam-question-list">
-            <div className="exam-question-list-header">
-                <Text type="secondary">
-                    {questions.length} câu hỏi
-                </Text>
-            </div>
-
             <List
                 dataSource={questions}
                 split={false}
@@ -162,8 +145,8 @@ export default function ExamQuestionList({
                                             <div
                                                 key={label}
                                                 className={`exam-question-option ${isCorrect
-                                                        ? "exam-question-option-correct"
-                                                        : ""
+                                                    ? "exam-question-option-correct"
+                                                    : ""
                                                     }`}
                                             >
                                                 <div className="exam-question-option-label">
