@@ -92,10 +92,6 @@ const getDifficultyTag = (
 export default function ReviewQuestionsPage() {
     const navigate = useNavigate();
 
-    const handleViewQuestion = (id: number) => {
-        navigate(`/review/${id}`);
-    };
-
     const columns: ColumnsType<ReviewQuestion> = [
         {
             title: "ID",
@@ -141,19 +137,6 @@ export default function ReviewQuestionsPage() {
             dataIndex: "createdAt",
             key: "createdAt",
             width: 160,
-        },
-        {
-            title: "Thao tác",
-            key: "action",
-            width: 100,
-            render: (_, record) => (
-                <Button
-                    type="link"
-                    onClick={() => handleViewQuestion(record.id)}
-                >
-                    Xem
-                </Button>
-            ),
         },
     ];
 
@@ -224,7 +207,8 @@ export default function ReviewQuestionsPage() {
                     </div>
                 </div>
 
-                <Table
+                <Table<ReviewQuestion>
+                    className="review-question-table"
                     rowKey="id"
                     columns={columns}
                     dataSource={reviewQuestions}
@@ -233,7 +217,12 @@ export default function ReviewQuestionsPage() {
                         showSizeChanger: true,
                         showTotal: (total) => `Tổng ${total} câu hỏi`,
                     }}
-                    scroll={{ x: 1100 }}
+                    scroll={{ x: 1000 }}
+                    onRow={(record) => ({
+                        onClick: () => {
+                            navigate(`/review/${record.id}`);
+                        },
+                    })}
                 />
             </Card>
         </div>

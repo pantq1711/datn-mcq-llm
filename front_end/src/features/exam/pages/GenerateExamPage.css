@@ -1,21 +1,25 @@
 .generate-exam-page {
     width: 100%;
     padding: 24px 24px 48px;
+    box-sizing: border-box;
+}
+
+.generate-exam-page-header {
+    margin-bottom: 24px;
+}
+
+.generate-exam-page-header-top {
+    margin-bottom: 12px;
 }
 
 .generate-exam-back-button {
     background-color: #ffffff;
     border-radius: 15px;
-    margin-bottom: 12px;
     border: 3px solid #f2f2f2;
 }
 
 .generate-exam-back-button:hover {
     background-color: #d0e9ff;
-}
-
-.generate-exam-page-header {
-    margin-bottom: 24px;
 }
 
 .generate-exam-page-title {
@@ -24,14 +28,124 @@
 
 .generate-exam-page-form {
     width: 100%;
+    margin-bottom: 24px;
+}
+
+.generate-exam-page-list-section {
+    width: 100%;
+    min-width: 0;
+}
+
+.generate-exam-page-list-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
     margin-bottom: 16px;
 }
 
-.generate-exam-page-overview {
-    width: 100%;
-    margin-bottom: 16px;
+.generate-exam-page-list-title {
+    margin: 0 0 4px !important;
 }
 
-.generate-exam-page-question-list {
-    width: 100%;
+.generate-exam-page-count {
+    flex-shrink: 0;
+    padding-bottom: 4px;
+}
+
+.generate-exam-code-card-trigger {
+    height: 100%;
+    border-radius: 8px;
+    cursor: pointer;
+    outline: none;
+}
+
+.generate-exam-code-card-trigger:focus-visible .generate-exam-code-card {
+    outline: 2px solid #1677ff;
+    outline-offset: 2px;
+}
+
+.generate-exam-code-card {
+    height: 100%;
+    min-height: 132px;
+    border-radius: 8px;
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
+}
+
+.generate-exam-code-card:hover {
+    border-color: #91caff;
+    box-shadow: 0 4px 14px rgb(0 0 0 / 6%);
+}
+
+.generate-exam-code-card .ant-card-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+    min-height: 132px;
+    padding: 20px 24px;
+}
+
+.generate-exam-code-title {
+    display: block;
+    color: #434343;
+    overflow-wrap: anywhere;
+}
+
+.generate-exam-code-value {
+    margin: 0 !important;
+    color: #1677ff;
+}
+
+.generate-exam-detail-modal .ant-modal-body {
+    max-height: calc(100vh - 220px);
+    overflow-y: auto;
+}
+
+.generate-exam-detail-tab {
+    min-width: 0;
+    padding-top: 8px;
+}
+
+@media (max-width: 768px) {
+    .generate-exam-page {
+        padding: 24px 16px 32px;
+    }
+
+    .generate-exam-page-list-header {
+        align-items: flex-start;
+    }
+
+    .generate-exam-code-card .ant-card-body {
+        padding: 18px;
+    }
+
+    .generate-exam-detail-modal {
+        max-width: calc(100vw - 24px);
+        margin: 12px auto;
+    }
+
+    .generate-exam-detail-modal .ant-modal-body {
+        max-height: calc(100vh - 180px);
+    }
+}
+
+@media (max-width: 576px) {
+    .generate-exam-page-list-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .generate-exam-page-count {
+        padding-bottom: 0;
+    }
+
+    .generate-exam-code-card,
+    .generate-exam-code-card .ant-card-body {
+        min-height: 112px;
+    }
 }

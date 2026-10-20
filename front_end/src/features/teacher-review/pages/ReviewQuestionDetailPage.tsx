@@ -9,9 +9,9 @@ import CorrectAnswerSelector from "../components/CorrectAnswerSelector";
 import QuestionEditor from "../components/QuestionEditor";
 import RejectionReasonSelector from "../components/RejectionReasonSelector";
 import ReviewDecision from "../components/ReviewDecision";
+import QuestionExplanationCard from "../components/QuestionExplanationCard";
 
 import "./ReviewQuestionDetailPage.css";
-import QuestionExplanationCard from "../components/QuestionExplanationCard";
 
 const INITIAL_QUESTION: QuestionDraft = {
     questionText:
@@ -67,7 +67,18 @@ export default function ReviewQuestionDetailPage() {
             ? selectedReasons.length > 0 || otherReason.trim().length > 0
             : true;
 
-    const isSaveDisabled = !isBasicInfoComplete || !isRejectionValid;
+    const hasQuestionChanged =
+        question.questionText !== INITIAL_QUESTION.questionText ||
+        question.optionA !== INITIAL_QUESTION.optionA ||
+        question.optionB !== INITIAL_QUESTION.optionB ||
+        question.optionC !== INITIAL_QUESTION.optionC ||
+        question.optionD !== INITIAL_QUESTION.optionD ||
+        question.correctAnswer !== INITIAL_QUESTION.correctAnswer;
+
+    const isEditValid =
+        decision === "EDIT" && !forceReject ? hasQuestionChanged : true;
+
+    const isSaveDisabled = !isBasicInfoComplete || !isRejectionValid || !isEditValid;
 
     const handleCorrectAnswerChange = (
         value: CorrectAnswer,

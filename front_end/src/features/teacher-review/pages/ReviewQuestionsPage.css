@@ -42,6 +42,19 @@
     margin: 0 0 4px !important;
 }
 
+.review-question-table .ant-table-tbody>tr {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.review-question-table .ant-table-cell {
+    overflow-wrap: anywhere;
+}
+
+.review-question-table .ant-table-tbody>tr:hover>td {
+    background-color: #f0f0f0 !important;
+}
+
 @media (max-width: 768px) {
     .review-questions-page {
         padding: 24px 16px 40px;

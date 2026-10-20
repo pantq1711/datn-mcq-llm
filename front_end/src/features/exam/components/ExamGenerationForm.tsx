@@ -9,6 +9,7 @@ export interface ExamGenerationValues {
     subjectId?: number;
     questionCount?: number;
     duration?: number;
+    examCodeCount?: number;
     easyCount?: number;
     mediumCount?: number;
     hardCount?: number;
@@ -199,7 +200,7 @@ export default function ExamGenerationForm({
             className="exam-generation-form"
         >
             <Row gutter={[16, 0]}>
-                <Col xs={24} md={15}>
+                <Col xs={24} md={12}>
                     <Form.Item
                         label="Tên đề thi"
                         name="title"
@@ -222,7 +223,7 @@ export default function ExamGenerationForm({
                     </Form.Item>
                 </Col>
 
-                <Col xs={24} sm={12} md={6}>
+                <Col xs={24} sm={12} md={5}>
                     <Form.Item
                         label="Môn học"
                         name="subjectId"
@@ -249,7 +250,7 @@ export default function ExamGenerationForm({
                     </Form.Item>
                 </Col>
 
-                <Col xs={24} sm={12} md={3}>
+                <Col xs={24} sm={12} md={4}>
                     <Form.Item
                         label="Thời gian làm bài"
                         name="duration"
@@ -273,6 +274,34 @@ export default function ExamGenerationForm({
                             addonAfter="phút"
                             className="exam-generation-form-number"
                             placeholder="30"
+                        />
+                    </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12} md={3}>
+                    <Form.Item
+                        label="Số mã đề"
+                        name="examCodeCount"
+                        rules={[
+                            {
+                                required: true,
+                                message: "Vui lòng nhập số mã đề.",
+                            },
+                            {
+                                type: "number",
+                                min: 1,
+                                max: 20,
+                                message: "Số mã đề phải từ 1 đến 20.",
+                            },
+                        ]}
+                    >
+                        <InputNumber
+                            size="large"
+                            min={1}
+                            max={20}
+                            precision={0}
+                            className="exam-generation-form-number"
+                            placeholder="1"
                         />
                     </Form.Item>
                 </Col>
@@ -368,7 +397,7 @@ export default function ExamGenerationForm({
                     </div>
                 </Col>
 
-                <Col xs={24} lg={7} className="exam-right-column">
+                <Col xs={24} lg={9} className="exam-right-column">
                     <div className="exam-options-container">
                         <Typography.Title level={5} className="exam-matrix-heading">
                             Tùy chọn
