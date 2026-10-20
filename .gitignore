@@ -15,6 +15,9 @@ dist/
 *.log
 *.dump
 pgdata/
+llm-probe/m*/
+llm-probe/out_*/
+llm-probe/test_models/
 
 # IDE và hệ điều hành
 .idea/
@@ -22,3 +25,5 @@ pgdata/
 *.iml
 .DS_Store
 Thumbs.db
+__pycache__/
+*.py[cod]
