@@ -4,6 +4,7 @@ import com.datn.mcq.bank.entity.BankItem;
 import com.datn.mcq.bank.repository.BankItemRepository;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
+import com.datn.mcq.exam.repository.ExamQuestionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,9 +15,12 @@ import java.util.List;
 public class BankService {
 
     private final BankItemRepository bankItemRepository;
+    private final ExamQuestionRepository examQuestionRepository;
 
-    public BankService(BankItemRepository bankItemRepository) {
+    public BankService(BankItemRepository bankItemRepository,
+                       ExamQuestionRepository examQuestionRepository) {
         this.bankItemRepository = bankItemRepository;
+        this.examQuestionRepository = examQuestionRepository;
     }
 
     @Transactional(readOnly = true)
@@ -50,6 +54,17 @@ public class BankService {
         item.setDifficulty(difficulty);
         item.setCreatedAt(LocalDateTime.now());
         return bankItemRepository.save(item);
+    }
+
+    @Transactional
+    public void removeBankItemIfUnused(Integer sourceQuestionId) {
+        bankItemRepository.findBySourceQuestionId(sourceQuestionId).ifPresent(item -> {
+            if (examQuestionRepository.existsByBankItemId(item.getId())) {
+                throw new IllegalStateException(
+                        "Câu hỏi đã được đưa vào đề thi (exam), không thể từ chối và gỡ khỏi ngân hàng câu hỏi.");
+            }
+            bankItemRepository.delete(item);
+        });
     }
 }
 

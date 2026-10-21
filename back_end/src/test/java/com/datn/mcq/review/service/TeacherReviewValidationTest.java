@@ -9,6 +9,7 @@ import com.datn.mcq.enums.ReasonCode;
 import com.datn.mcq.enums.ReviewDecision;
 import com.datn.mcq.review.dto.BlindQuestionReviewDto;
 import com.datn.mcq.review.dto.SubmitReviewRequest;
+import com.datn.mcq.review.dto.SubmitReviewResponse;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.RecordComponent;
@@ -35,7 +36,18 @@ class TeacherReviewValidationTest {
         assertFalse(fieldNames.contains("llmDifficulty"));
         assertFalse(fieldNames.contains("judgeAnswer"));
         assertFalse(fieldNames.contains("similarityScore"));
+        assertFalse(fieldNames.contains("explanation"), "BlindQuestionReviewDto tuyệt đối không chứa explanation");
     }
+
+    @Test
+    void submitReviewResponseMustNotExposeAnswerCorrect() {
+        Set<String> fieldNames = Arrays.stream(SubmitReviewResponse.class.getRecordComponents())
+                .map(RecordComponent::getName)
+                .collect(Collectors.toSet());
+        assertFalse(fieldNames.contains("answerCorrect"));
+        assertFalse(fieldNames.contains("answer_correct"));
+    }
+
 
     @Test
     void shouldRejectApprovedAsIsWhenReviewerAnswerIsNoneOrMultiple() {
