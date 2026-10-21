@@ -12,7 +12,9 @@ public record QcPipelineReport(
         Boolean answerCheckPassed,
         AnswerChoice judgeAnswer,
         String judgeModel,
-        String solverReasoning
+        String solverReasoning,
+        AnswerCheckStatus answerCheckStatus,
+        DedupStatus dedupStatus
 ) {
 }
 

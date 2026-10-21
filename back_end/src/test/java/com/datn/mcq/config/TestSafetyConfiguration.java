@@ -137,5 +137,13 @@ public class TestSafetyConfiguration {
                     "BLOCKED: Real Gemini API calls are strictly forbidden in test executions! " +
                     "Mock LlmClient or pass fake response instead.");
         }
+
+        @Override
+        public LlmCallResult callJsonModeWithSchema(
+                String prompt, String modelName, Double temperature, String responseSchemaJson) {
+            throw new UnsupportedOperationException(
+                    "BLOCKED: Real Gemini API calls are strictly forbidden in test executions! " +
+                    "Mock LlmClient or pass fake response instead.");
+        }
     }
 }
