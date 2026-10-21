@@ -71,9 +71,12 @@ class McqTextNormalizerTest {
                 McqTextNormalizer.stemSignature("Hình chữ nhật dài 15 cm, rộng 4 cm. Tính chu vi."));
     }
 
+    // Sửa 2026-10-22 (quyết định 3): danh sách phủ định theo quyết định 5 (21/10) chỉ có cụm "... sai"
+    // (phát biểu sai, nhận định sai, khẳng định sai), không có "sai" đứng riêng; ví dụ cũ
+    // "Khẳng định nào sau đây là sai?" được thay bằng "Chọn khẳng định sai:".
     @Test
     void negationIsDetectedOutsideMathOnly() {
-        assertTrue(McqTextNormalizer.hasNegation("Khẳng định nào sau đây là sai?"));
+        assertTrue(McqTextNormalizer.hasNegation("Chọn khẳng định sai:"));
         assertTrue(McqTextNormalizer.hasNegation("Bất phương trình nào KHÔNG PHẢI là bất phương trình bậc nhất?"));
         assertTrue(McqTextNormalizer.hasNegation("Tất cả đều đúng, ngoại trừ:"));
         assertFalse(McqTextNormalizer.hasNegation("Bất phương trình nào sau đây là bất phương trình bậc nhất một ẩn?"));

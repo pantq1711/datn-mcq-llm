@@ -255,18 +255,48 @@ class BlindReviewContractTest {
 
     // ---------- Danh sách ----------
 
+    // Sửa 2026-10-21 (quyết định 1 lượt 22/10): danh sách production chỉ gồm câu qc_passed chưa được chấm;
+    // trước đây câu production generated cũng nằm trong danh sách. Experiment giữ nguyên chính sách.
     @Test
-    void listExcludesDuplicateAndFormatFailedForProductionAndExperiment() throws Exception {
+    void listShowsOnlyQcPassedForProductionAndAllButDuplicateOrFormatFailedForExperiment() throws Exception {
+        GeneratedQuestion prodInBank = question(prodQcPassedRun(), QuestionStatus.QC_PASSED, "Tính $1 + 5$");
+        prodInBank.setStatus(QuestionStatus.IN_BANK);
+        prodInBank.setFinalDifficulty(Difficulty.EASY); // chk_gq_in_bank_complete
+        prodInBank = questionRepository.save(prodInBank);
+        GeneratedQuestion prodRejected = question(prodQcPassedRun(), QuestionStatus.REJECTED, "Tính $1 + 6$");
+
         Set<Integer> ids = listedIds(body(mockMvc.perform(get("/api/reviews/questions"))
                 .andExpect(status().isOk()).andReturn()));
 
-        for (GeneratedQuestion shown : List.of(prodQcPassed, prodGenerated, expQcPassed,
+        for (GeneratedQuestion shown : List.of(prodQcPassed, expQcPassed,
                 expGeneratedSolverDisagreed, expGeneratedNoAnswerCheck)) {
             assertTrue(ids.contains(shown.getId()), "Thiếu câu id=" + shown.getId());
         }
-        for (GeneratedQuestion hidden : List.of(prodDuplicate, prodFormatFailed, expDuplicate, expFormatFailed)) {
-            assertFalse(ids.contains(hidden.getId()), "Câu id=" + hidden.getId() + " không được vào vòng chấm");
+        for (GeneratedQuestion hidden : List.of(prodGenerated, prodInBank, prodRejected,
+                prodDuplicate, prodFormatFailed, expDuplicate, expFormatFailed)) {
+            assertFalse(ids.contains(hidden.getId()), "Câu id=" + hidden.getId() + " không được vào danh sách chấm");
         }
+    }
+
+    @Test
+    void productionQuestionLeavesTheListOnceItHasBeenReviewed() throws Exception {
+        GeneratedQuestion toReject = question(prodQcPassedRun(), QuestionStatus.QC_PASSED, "Tính $1 + 7$");
+
+        mockMvc.perform(post("/api/reviews/questions/" + prodQcPassed.getId())
+                        .contentType(MediaType.APPLICATION_JSON).content(approveBody(Purpose.PRODUCTION)))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/reviews/questions/" + toReject.getId())
+                        .contentType(MediaType.APPLICATION_JSON).content(rejectBody(Purpose.PRODUCTION)))
+                .andExpect(status().isOk());
+
+        Set<Integer> ids = listedIds(body(mockMvc.perform(get("/api/reviews/questions"))
+                .andExpect(status().isOk()).andReturn()));
+        assertFalse(ids.contains(prodQcPassed.getId()), "Câu đã duyệt không còn trong danh sách");
+        assertFalse(ids.contains(toReject.getId()), "Câu đã từ chối không còn trong danh sách");
+    }
+
+    private ExperimentRun prodQcPassedRun() {
+        return runRepository.findById(prodQcPassed.getRunId()).orElseThrow();
     }
 
     @Test

@@ -52,6 +52,10 @@ public class TeacherReviewService {
     static final String NOT_READY_FOR_BANK_MESSAGE =
             "Câu hỏi chưa đủ điều kiện để duyệt vào ngân hàng câu hỏi.";
 
+    /** Thông điệp trung tính khi request gửi editedExplanation (quyết định 2 ngày 22/10). */
+    static final String EDITED_EXPLANATION_NOT_ACCEPTED_MESSAGE =
+            "Trường editedExplanation không được hỗ trợ ở bước chấm này, hãy để trống.";
+
     private final TeacherReviewRepository teacherReviewRepository;
     private final TeacherReviewReasonRepository teacherReviewReasonRepository;
     private final GenerationService generationService;
@@ -78,9 +82,15 @@ public class TeacherReviewService {
     }
 
     /**
-     * Danh sách chấm mù cho CẢ production và experiment (quyết định 21/10 mục 2 và 5):
-     * loại câu duplicate và format_failed; không lọc theo kết quả answer_check; không nhận tham số lọc
-     * theo trạng thái để người chấm không suy ra được kết quả QC. Item không chứa status hay kết quả QC.
+     * Danh sách chấm mù (quyết định 21/10 mục 2 và 5, quyết định 1 ngày 22/10):
+     * <ul>
+     *   <li>production: chỉ câu qc_passed. Mọi lần nộp đánh giá production đều chuyển câu sang in_bank hoặc
+     *       rejected, nên câu qc_passed là câu chưa được chấm; không cần (và chưa có) danh tính người chấm
+     *       phía server để lọc thêm theo người chấm (Q-6).</li>
+     *   <li>experiment: loại duplicate và format_failed; không lọc theo kết quả answer_check.</li>
+     * </ul>
+     * Không nhận tham số lọc theo trạng thái để người chấm không suy ra được kết quả QC.
+     * Item không chứa status hay kết quả QC.
      */
     @Transactional(readOnly = true)
     public List<ReviewQuestionListItemDto> listQuestionsForReview() {
@@ -90,9 +100,12 @@ public class TeacherReviewService {
             if (!isReviewable(gq)) {
                 continue;
             }
+            ExperimentRun run = experimentService.getById(gq.getRunId());
+            if (run.getPurpose() == Purpose.PRODUCTION && gq.getStatus() != QuestionStatus.QC_PASSED) {
+                continue;
+            }
             QuestionTemplate tpl = catalogService.getTemplateById(gq.getTemplateId());
             Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
-            ExperimentRun run = experimentService.getById(gq.getRunId());
 
             result.add(new ReviewQuestionListItemDto(
                     gq.getId(),
@@ -178,7 +191,6 @@ public class TeacherReviewService {
         String savedEditedB = null;
         String savedEditedC = null;
         String savedEditedD = null;
-        String savedEditedExp = null;
 
         if (decision == ReviewDecision.APPROVED_AS_IS) {
             Option reviewerAsOption = Option.valueOf(reviewerAnswer.name());
@@ -197,21 +209,23 @@ public class TeacherReviewService {
             String effB = fallback(req.editedOptionB(), gq.getOptionB());
             String effC = fallback(req.editedOptionC(), gq.getOptionC());
             String effD = fallback(req.editedOptionD(), gq.getOptionD());
-            String effExp = fallback(req.editedExplanation(), gq.getExplanation());
 
             if (effQ.isBlank() || effA.isBlank() || effB.isBlank() || effC.isBlank() || effD.isBlank()) {
                 throw new IllegalArgumentException("Nội dung câu hỏi và 4 phương án A-D sau khi sửa không được để trống");
             }
+            // Chỉ kiểm tra nội dung giáo viên thấy và sửa được (đề và 4 phương án); lời giải ẩn không tham gia,
+            // để lỗi trả về không tiết lộ gì về lời giải (quyết định 2 ngày 22/10).
             List<String> editedLatexErrors = collectLatexErrors(
-                    subject.getName(), effQ, effA, effB, effC, effD, effExp);
+                    subject.getName(), effQ, effA, effB, effC, effD, null);
             if (!editedLatexErrors.isEmpty()) {
                 throw new IllegalArgumentException(
                         "Bản sửa còn lỗi định dạng công thức LaTeX: " + String.join("; ", editedLatexErrors));
             }
 
+            // edit_distance: tổng Levenshtein trên question_text và 4 phương án (V1, quyết định 2 ngày 22/10).
             int dist = TextDistanceUtils.totalQuestionEditDistance(
-                    gq.getQuestionText(), gq.getOptionA(), gq.getOptionB(), gq.getOptionC(), gq.getOptionD(), gq.getExplanation(),
-                    effQ, effA, effB, effC, effD, effExp
+                    gq.getQuestionText(), gq.getOptionA(), gq.getOptionB(), gq.getOptionC(), gq.getOptionD(),
+                    effQ, effA, effB, effC, effD
             );
             if (dist > 0) {
                 edited = true;
@@ -221,7 +235,6 @@ public class TeacherReviewService {
                 savedEditedB = effB;
                 savedEditedC = effC;
                 savedEditedD = effD;
-                savedEditedExp = effExp;
             }
         }
 
@@ -243,7 +256,8 @@ public class TeacherReviewService {
         review.setEditedOptionB(savedEditedB);
         review.setEditedOptionC(savedEditedC);
         review.setEditedOptionD(savedEditedD);
-        review.setEditedExplanation(savedEditedExp);
+        // Bước chấm này không nhận sửa lời giải: edited_explanation luôn NULL (quyết định 2 ngày 22/10).
+        review.setEditedExplanation(null);
         review.setEditDistance(editDistance);
         review.setReviewedAt(LocalDateTime.now());
         TeacherReview savedReview = teacherReviewRepository.save(review);
@@ -275,7 +289,8 @@ public class TeacherReviewService {
                 String finalB = edited ? savedEditedB : gq.getOptionB();
                 String finalC = edited ? savedEditedC : gq.getOptionC();
                 String finalD = edited ? savedEditedD : gq.getOptionD();
-                String finalExp = edited ? savedEditedExp : gq.getExplanation();
+                // Ngân hàng giữ lời giải LLM như trước (quyết định 21/10 mục 3); không đổi cách chép lời giải.
+                String finalExp = gq.getExplanation();
 
                 GeneratedQuestion updatedGq = generationService.updateStatusAndDifficulty(
                         gq.getId(), QuestionStatus.IN_BANK, req.difficultyLabel());
@@ -323,6 +338,9 @@ public class TeacherReviewService {
     public static void validateSubmitRequest(SubmitReviewRequest req) {
         if (req == null) {
             throw new IllegalArgumentException("Body đánh giá không được rỗng");
+        }
+        if (req.editedExplanation() != null) {
+            throw new IllegalArgumentException(EDITED_EXPLANATION_NOT_ACCEPTED_MESSAGE);
         }
         if (req.reviewerAnswer() == null) {
             throw new IllegalArgumentException("Phải chọn reviewerAnswer (A, B, C, D, multiple, none)");

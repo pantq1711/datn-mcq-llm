@@ -74,6 +74,18 @@ class OpenApiContractTest {
         assertTrue(paths.path("/api/catalog/templates").has("post"), "Thiếu POST /api/catalog/templates");
     }
 
+    /**
+     * V4 (22/10): backend chưa có xác thực/phân quyền (Q-6), nên không được có endpoint công khai nào
+     * kích hoạt chạy lại QC (gọi Solver tính phí cho câu tùy ý).
+     */
+    @Test
+    void noPublicEndpointCanTriggerQcRerun() throws Exception {
+        JsonNode paths = objectMapper.readTree(apiDocs()).path("paths");
+        paths.fieldNames().forEachRemaining(path ->
+                assertFalse(path.toLowerCase().contains("rerun") || path.toLowerCase().contains("/qc"),
+                        "Không được mở endpoint chạy lại QC khi chưa có xác thực: " + path));
+    }
+
     @Test
     void exportOpenApiWhenRequested() throws Exception {
         String target = System.getProperty("openapi.export.path");

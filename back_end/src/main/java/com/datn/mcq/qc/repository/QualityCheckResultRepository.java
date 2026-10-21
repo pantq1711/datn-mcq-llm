@@ -3,8 +3,10 @@ package com.datn.mcq.qc.repository;
 import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.qc.entity.QualityCheckResult;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
@@ -13,6 +15,14 @@ import java.util.Optional;
 public interface QualityCheckResultRepository extends JpaRepository<QualityCheckResult, Integer> {
     List<QualityCheckResult> findByQuestionIdOrderByIdAsc(Integer questionId);
     Optional<QualityCheckResult> findByQuestionIdAndCheckType(Integer questionId, CheckType checkType);
+
+    /** Xóa các dòng QC của một câu theo loại kiểm tra, trong transaction riêng (dùng khi chạy lại QC). */
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM QualityCheckResult q WHERE q.questionId = :questionId AND q.checkType IN :checkTypes")
+    int deleteByQuestionIdAndCheckTypes(
+            @Param("questionId") Integer questionId,
+            @Param("checkTypes") Collection<CheckType> checkTypes);
 
     /**
      * Ứng viên so trùng (quyết định 2, 8 và 9, 2026-10-21). Truy vấn native CHỈ ĐỌC trên generated_question:
