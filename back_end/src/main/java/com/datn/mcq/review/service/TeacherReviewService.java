@@ -33,12 +33,24 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Set;
 
 @Service
 public class TeacherReviewService {
+
+    /** Trạng thái không vào vòng chấm của cả production và experiment (quyết định 21/10 mục 5). */
+    private static final Set<QuestionStatus> EXCLUDED_FROM_REVIEW =
+            EnumSet.of(QuestionStatus.DUPLICATE, QuestionStatus.FORMAT_FAILED);
+
+    /** Thông điệp chung cho câu không tồn tại hoặc bị loại khỏi vòng chấm; không nhắc trùng, định dạng hay QC. */
+    static final String NOT_FOUND_MESSAGE = "Không tìm thấy câu hỏi";
+
+    static final String NOT_READY_FOR_BANK_MESSAGE =
+            "Câu hỏi chưa đủ điều kiện để duyệt vào ngân hàng câu hỏi.";
 
     private final TeacherReviewRepository teacherReviewRepository;
     private final TeacherReviewReasonRepository teacherReviewReasonRepository;
@@ -65,42 +77,22 @@ public class TeacherReviewService {
         this.experimentService = experimentService;
     }
 
+    /**
+     * Danh sách chấm mù cho CẢ production và experiment (quyết định 21/10 mục 2 và 5):
+     * loại câu duplicate và format_failed; không lọc theo kết quả answer_check; không nhận tham số lọc
+     * theo trạng thái để người chấm không suy ra được kết quả QC. Item không chứa status hay kết quả QC.
+     */
     @Transactional(readOnly = true)
-    public List<ReviewQuestionListItemDto> listQuestionsForReview(QuestionStatus status) {
+    public List<ReviewQuestionListItemDto> listQuestionsForReview() {
         List<GeneratedQuestion> questions = generationService.listQuestions(null);
         List<ReviewQuestionListItemDto> result = new ArrayList<>();
         for (GeneratedQuestion gq : questions) {
+            if (!isReviewable(gq)) {
+                continue;
+            }
             QuestionTemplate tpl = catalogService.getTemplateById(gq.getTemplateId());
             Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
             ExperimentRun run = experimentService.getById(gq.getRunId());
-            boolean isExperiment = run.getPurpose() == Purpose.EXPERIMENT;
-
-            // Quyết định 3 (2026-10-21): câu production duplicate là trạng thái cuối, không vào danh sách chấm.
-            // Câu experiment chưa được chốt nên giữ nguyên hành vi cũ.
-            if (!isExperiment && gq.getStatus() == QuestionStatus.DUPLICATE) {
-                continue;
-            }
-
-            // Câu production được lọc theo status; câu experiment luôn được giữ nguyên tập câu độc lập với trạng thái QC
-            if (!isExperiment && status != null && gq.getStatus() != status) {
-                continue;
-            }
-
-            Boolean effLatexValid = null;
-            QuestionStatus effStatus = null;
-            if (!isExperiment) {
-                effStatus = gq.getStatus();
-                List<String> latexErrors = collectLatexErrors(
-                        subject.getName(),
-                        gq.getQuestionText(),
-                        gq.getOptionA(),
-                        gq.getOptionB(),
-                        gq.getOptionC(),
-                        gq.getOptionD(),
-                        gq.getExplanation()
-                );
-                effLatexValid = latexErrors.isEmpty();
-            }
 
             result.add(new ReviewQuestionListItemDto(
                     gq.getId(),
@@ -110,8 +102,6 @@ public class TeacherReviewService {
                     tpl.getGradeLevel(),
                     tpl.getTopic(),
                     gq.getQuestionText(),
-                    effStatus,
-                    effLatexValid,
                     gq.getCreatedAt()
             ));
         }
@@ -120,30 +110,10 @@ public class TeacherReviewService {
 
     @Transactional(readOnly = true)
     public BlindQuestionReviewDto getBlindQuestionForReview(Integer questionId) {
-        GeneratedQuestion gq = generationService.getQuestionById(questionId);
+        GeneratedQuestion gq = loadReviewableQuestion(questionId);
         QuestionTemplate tpl = catalogService.getTemplateById(gq.getTemplateId());
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
         ExperimentRun run = experimentService.getById(gq.getRunId());
-
-        boolean isExperiment = run.getPurpose() == Purpose.EXPERIMENT;
-
-        QuestionStatus effStatus = null;
-        Boolean effLatexValid = null;
-        List<String> effLatexErrors = null;
-
-        if (!isExperiment) {
-            effStatus = gq.getStatus();
-            effLatexErrors = collectLatexErrors(
-                    subject.getName(),
-                    gq.getQuestionText(),
-                    gq.getOptionA(),
-                    gq.getOptionB(),
-                    gq.getOptionC(),
-                    gq.getOptionD(),
-                    gq.getExplanation()
-            );
-            effLatexValid = effLatexErrors.isEmpty();
-        }
 
         return new BlindQuestionReviewDto(
                 gq.getId(),
@@ -157,9 +127,6 @@ public class TeacherReviewService {
                 gq.getOptionB(),
                 gq.getOptionC(),
                 gq.getOptionD(),
-                effStatus,
-                effLatexValid,
-                effLatexErrors,
                 gq.getCreatedAt()
         );
     }
@@ -168,7 +135,8 @@ public class TeacherReviewService {
     public SubmitReviewResponse submitReview(Integer questionId, SubmitReviewRequest req) {
         validateSubmitRequest(req);
 
-        GeneratedQuestion gq = generationService.getQuestionById(questionId);
+        // Câu duplicate/format_failed: 404 như câu không tồn tại, trước mọi thao tác ghi (không ghi đè trạng thái cuối).
+        GeneratedQuestion gq = loadReviewableQuestion(questionId);
         QuestionTemplate tpl = catalogService.getTemplateById(gq.getTemplateId());
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
         ExperimentRun run = experimentService.getById(gq.getRunId());
@@ -178,12 +146,6 @@ public class TeacherReviewService {
             throw new IllegalArgumentException(
                     "reviewPurpose (" + req.reviewPurpose().getDbValue()
                     + ") không khớp với nguồn gốc của câu hỏi (" + actualPurpose.getDbValue() + ").");
-        }
-
-        // Quyết định 3 (2026-10-21): duplicate là trạng thái cuối; duyệt production không được ghi đè.
-        if (actualPurpose == Purpose.PRODUCTION && gq.getStatus() == QuestionStatus.DUPLICATE) {
-            throw new IllegalStateException(
-                    "Câu hỏi đã bị bước dedup đánh dấu trùng (duplicate), không thể duyệt hoặc từ chối.");
         }
 
         Integer reviewerId = req.reviewerId();
@@ -302,11 +264,10 @@ public class TeacherReviewService {
         if (actualPurpose == Purpose.PRODUCTION) {
             resultingQuestionStatus = gq.getStatus();
             if (decision == ReviewDecision.APPROVED_AS_IS || decision == ReviewDecision.APPROVED_WITH_EDIT) {
-                // Chỉ câu đã qua kiểm tra chất lượng tự động (hoặc đang trong ngân hàng) mới được duyệt vào ngân hàng
+                // Chỉ câu đã qua kiểm tra chất lượng tự động (hoặc đang trong ngân hàng) mới được duyệt vào ngân hàng.
+                // Thông báo không nêu trạng thái hay kết quả QC (quyết định 21/10 mục 2).
                 if (gq.getStatus() != QuestionStatus.QC_PASSED && gq.getStatus() != QuestionStatus.IN_BANK) {
-                    throw new IllegalArgumentException(
-                            "Câu hỏi chưa đạt yêu cầu kiểm tra chất lượng tự động (trạng thái: "
-                            + gq.getStatus().getDbValue() + "), không thể duyệt vào ngân hàng câu hỏi.");
+                    throw new IllegalArgumentException(NOT_READY_FOR_BANK_MESSAGE);
                 }
 
                 String finalQ = edited ? savedEditedQ : gq.getQuestionText();
@@ -414,7 +375,28 @@ public class TeacherReviewService {
         return errors;
     }
 
-    /** Chỉ lỗi fatal; cảnh báo (lệnh ngoài danh sách cho phép) không chặn bản sửa và không làm latexValid = false. */
+    private static boolean isReviewable(GeneratedQuestion gq) {
+        return gq.getStatus() == null || !EXCLUDED_FROM_REVIEW.contains(gq.getStatus());
+    }
+
+    /**
+     * Lấy câu cho detail/submit chấm mù. Câu không tồn tại và câu bị loại khỏi vòng chấm (duplicate, format_failed)
+     * đều ném cùng một NoSuchElementException với thông điệp chung, để người chấm không phân biệt được.
+     */
+    private GeneratedQuestion loadReviewableQuestion(Integer questionId) {
+        GeneratedQuestion gq;
+        try {
+            gq = generationService.getQuestionById(questionId);
+        } catch (NoSuchElementException ex) {
+            throw new NoSuchElementException(NOT_FOUND_MESSAGE);
+        }
+        if (!isReviewable(gq)) {
+            throw new NoSuchElementException(NOT_FOUND_MESSAGE);
+        }
+        return gq;
+    }
+
+    /** Chỉ lỗi fatal; cảnh báo (lệnh ngoài danh sách cho phép) không chặn bản sửa. */
     private void appendFieldErrors(String field, String text, List<String> errors) {
         for (String err : LatexFormatValidator.check(text).errors()) {
             errors.add(field + ": " + err);

@@ -126,16 +126,18 @@ class TeacherReviewLatexWarningTest {
                 """.formatted(teacher.getId(), editedQuestionTextJson);
     }
 
+    // Sửa 2026-10-21 (quyết định 21/10 mục 2): form chấm không còn trả latexValid/latexErrors,
+    // nên chỉ kiểm câu có cảnh báo LaTeX vẫn mở được form và không có trường LaTeX/QC nào.
     @Test
-    void reviewFormTreatsWarningOnlyQuestionAsLatexValid() throws Exception {
+    void reviewFormOfWarningOnlyQuestionOpensWithoutLatexOrQcFields() throws Exception {
         GeneratedQuestion q = createQcPassedQuestion("Cho tam giác đều $ABC$. Tính $\\widehat{ABC}$.");
 
         mockMvc.perform(get("/api/reviews/questions/" + q.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.latexValid").value(true))
-                .andExpect(jsonPath("$.latexErrors").isArray())
-                .andExpect(jsonPath("$.latexErrors").isEmpty())
+                .andExpect(jsonPath("$.latexValid").doesNotExist())
+                .andExpect(jsonPath("$.latexErrors").doesNotExist())
                 .andExpect(jsonPath("$.latexWarnings").doesNotExist())
+                .andExpect(jsonPath("$.status").doesNotExist())
                 .andExpect(jsonPath("$.explanation").doesNotExist())
                 .andExpect(jsonPath("$.correctOption").doesNotExist());
     }

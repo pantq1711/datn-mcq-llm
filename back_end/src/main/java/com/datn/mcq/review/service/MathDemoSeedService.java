@@ -207,7 +207,7 @@ public class MathDemoSeedService {
                 generationService.updateStatusAndDifficulty(saved.getId(), report.resultingStatus(), null);
             }
         }
-        return teacherReviewService.listQuestionsForReview(null);
+        return teacherReviewService.listQuestionsForReview();
     }
 }
 

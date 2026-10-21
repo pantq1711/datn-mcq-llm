@@ -171,7 +171,7 @@ Dùng cho đáp án mà một người chấm hoặc một model chấm đưa ra
 ## 3. Quy tắc đi kèm (cần nhớ khi code, DB không tự đảm bảo hết)
 
 - **Đáp án đúng luôn do giáo viên quyết.** API lấy câu để chấm không được trả `correct_option` về form, kể cả trong JSON ẩn. Backend tự so để ra `answer_correct`.
-- **Với `review_purpose = 'experiment'`** form còn giấu `llm_difficulty`, chiến lược và toàn bộ kết quả QC, kể cả `judge_answer`.
+- **Cả `production` và `experiment`** (quyết định 21/10 mục 2): API chấm (danh sách, chi tiết, phản hồi sau khi nộp) không trả `explanation`, `llm_difficulty`, chiến lược, `status`, `latexValid`, `latexErrors` và toàn bộ kết quả QC, kể cả `judge_answer` và kết quả dedup. Danh sách không có tham số lọc theo trạng thái. Riêng phản hồi nộp `production` trả `questionStatus` và `bankItemId`, là kết quả hành động của chính giáo viên; `experiment` không trả `questionStatus`.
 - `reviewer_answer` là `multiple` hoặc `none` thì không được chọn `approved_as_is`.
 - Duyệt (`approved_as_is`, `approved_with_edit`) thì bắt buộc có `final_option` (A-D). `rejected` thì `final_option` phải trống và không lưu bản sửa.
 - `rejected` thì có ít nhất một lý do trong `teacher_review_reason`. Mã `other` bắt buộc có `detail`.
@@ -185,6 +185,7 @@ Dùng cho đáp án mà một người chấm hoặc một model chấm đưa ra
   - Phạm vi so: experiment chỉ trong cùng run; production trong các run production cùng môn. Không bao giờ so chéo experiment và production. Ứng viên là câu `qc_passed`, `in_bank` và câu cùng run đã có dòng dedup `passed = true`.
   - Dedup báo trùng: dòng dedup `passed = false` kèm `compared_to_question_id`, trạng thái `duplicate`. Dedup lỗi hoặc thiếu phạm vi: không ghi dòng dedup, giữ `generated`.
 - `duplicate` là trạng thái cuối: câu không vào vòng chấm (production và experiment), không được nộp đánh giá, không bị ghi đè trạng thái; bản ghi được giữ để truy vết và thống kê. Người chấm không được biết câu nào bị loại vì trùng.
+- Vòng chấm (quyết định 21/10 mục 5): danh sách của cả hai purpose loại `duplicate` và `format_failed`. `experiment` giữ câu `generated` (kể cả khi `answer_check` lệch hoặc không chạy) và `qc_passed`, không lọc theo kết quả `answer_check`. Chi tiết và nộp đánh giá cho câu `duplicate` hoặc `format_failed` trả 404 `Không tìm thấy câu hỏi`, giống hệt câu không tồn tại.
 - Ngân hàng câu hỏi là bảng `bank_item`. Chỉ duyệt thật (`review_purpose = 'production'`) mới sao chép câu sang `bank_item` và đặt `generated_question.status = 'in_bank'`. Câu thuộc mẫu `experiment` không vào ngân hàng.
 - Chỉ `bank_item` mới được thêm vào đề (`exam_question.bank_item_id`).
 - Khi lưu cặp gold set luôn sắp `question_id_1 < question_id_2`.
