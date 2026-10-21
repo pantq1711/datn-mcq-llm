@@ -35,7 +35,9 @@ class OpenApiContractTest {
             "correctOption", "correct_option", "explanation", "llmDifficulty", "llm_difficulty",
             "answerCorrect", "answer_correct", "judgeAnswer", "judge_answer", "judgeModel",
             "similarityScore", "similarity_score", "comparedToQuestionId", "thresholdUsed",
-            "strategy", "difficultyJudgeModel");
+            "strategy", "difficultyJudgeModel",
+            // Quyết định 21/10 mục 2: API chấm không trả status, latexValid, latexErrors (cả hai purpose).
+            "status", "latexValid", "latexErrors", "dedupStatus", "answerCheckStatus");
 
     @Autowired
     private WebApplicationContext webApplicationContext;

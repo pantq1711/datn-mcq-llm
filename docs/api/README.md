@@ -3,9 +3,8 @@
 Cập nhật 2026-10-21. Nguồn chuẩn là code trong `back_end/` và các migration Flyway; file này chỉ tóm tắt.
 Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị trong DB" của [`docs/contract/enums.md`](../contract/enums.md).
 
-> **Trạng thái tài liệu OpenAPI:** `docs/api/openapi.json` CHƯA được ghi vào thư mục này. Lý do nằm ở mục
-> "Trường bị giấu khỏi form chấm": schema form chấm production hiện còn chứa `status`, `latexValid`, `latexErrors`,
-> mâu thuẫn với quyết định Q-1, đang chờ chủ dự án chốt. Sau khi chốt, sinh lại bằng:
+> **Trạng thái tài liệu OpenAPI:** `docs/api/openapi.json` CHƯA được ghi vào thư mục này. Schema form chấm đã bỏ
+> `status`, `latexValid`, `latexErrors` theo quyết định 21/10 mục 2; việc xuất file chờ chủ dự án duyệt. Khi được duyệt, sinh bằng:
 >
 > ```
 > cd back_end
@@ -40,7 +39,7 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 | POST | `/api/generation/jobs/enqueue` | Tạo job sinh câu bất đồng bộ (tối đa 50) |
 | POST | `/api/generation/jobs/process-next?runAnswerCheck=true` | Xử lý ngay 1 job đến hạn. Gọi Gemini |
 | GET | `/api/generation/jobs` | Danh sách job |
-| GET | `/api/reviews/questions?status=` | Danh sách câu để chấm |
+| GET | `/api/reviews/questions` | Danh sách câu để chấm (không có tham số lọc trạng thái) |
 | GET | `/api/reviews/questions/{id}` | Form chấm một câu |
 | POST | `/api/reviews/questions/{id}` | Nộp đánh giá |
 | POST | `/api/reviews/demo/seed-math` | Tạo 5 câu demo; đi qua format và dedup, không chạy answer_check, nên giữ `generated` |
@@ -85,7 +84,8 @@ POST /api/reviews/questions/42
 
 - `reviewerAnswer`: `A`..`D`, `multiple`, `none`. `decision`: `approved_as_is`, `approved_with_edit`, `rejected`.
 - `rejected` cần ít nhất một `reasonCodes`; mã `other` cần `otherReasonDetail`. `rejected` thì `finalOption` phải trống.
-- Duyệt production chỉ nhận câu `qc_passed` hoặc `in_bank`. Câu `duplicate` trả 409.
+- Duyệt production chỉ nhận câu `qc_passed` hoặc `in_bank`; câu khác trả 400 với thông báo chung, không nêu trạng thái.
+- Câu `duplicate` hoặc `format_failed` (cả hai purpose) trả 404 `{"error": "Không tìm thấy câu hỏi"}`, giống câu không tồn tại.
 - Response: `reviewId, questionId, reviewPurpose, reviewerAnswer, formatOk, difficultyLabel, decision, finalOption, edited, editDistance, questionStatus (chỉ production), bankItemId, reviewedAt`. Không có `answerCorrect`, `explanation`.
 
 ## 3. Trường bị giấu khỏi form chấm
@@ -93,13 +93,12 @@ POST /api/reviews/questions/42
 Form chấm gồm `GET /api/reviews/questions`, `GET /api/reviews/questions/{id}` và response sau khi nộp.
 
 - **Không bao giờ có, cả production lẫn experiment:** `correctOption` (đáp án LLM), `explanation`, `llmDifficulty`,
-  `answerCorrect`, chiến lược sinh, kết quả answer-check (`judgeAnswer`, `judgeModel`) và kết quả dedup
-  (`similarityScore`, `comparedToQuestionId`, `thresholdUsed`). Test `OpenApiContractTest` chặn các trường này trong schema.
-- **Experiment còn giấu thêm:** `status`, `latexValid`, `latexErrors` (bị loại khỏi JSON).
-- **Chờ quyết định:** form production hiện TRẢ `status`, `latexValid`, `latexErrors`; danh sách production trả `status`, `latexValid`.
-  Đây là kết quả QC, mâu thuẫn với Q-1 trong `docs/ai-development-rules.md`. Chưa đổi code vì cần chủ dự án chốt.
-- Hợp đồng (`docs/contract/enums.md` mục 3): câu `duplicate` không vào vòng chấm của cả production và experiment.
-  Hiện code mới loại câu production; danh sách experiment chưa loại `duplicate` và `format_failed` (bước sau).
+  `answerCorrect`, chiến lược sinh, `status`, `latexValid`, `latexErrors`, kết quả answer-check (`judgeAnswer`, `judgeModel`)
+  và kết quả dedup (`similarityScore`, `comparedToQuestionId`, `thresholdUsed`). Test `OpenApiContractTest` chặn các trường
+  này trong schema; `BlindReviewContractTest` quét mọi key của JSON thật ở list, detail và submit.
+- **Phản hồi nộp production** giữ `questionStatus` và `bankItemId` (kết quả hành động của giáo viên); experiment không có `questionStatus`.
+- **Vòng chấm:** danh sách của cả hai purpose loại `duplicate` và `format_failed`; experiment không lọc theo kết quả answer-check.
+  Danh sách không nhận `?status=` (tham số lạ bị bỏ qua) để không suy ra được kết quả QC.
 
 Trạng thái câu (`status`): `generated`, `format_failed`, `duplicate`, `qc_passed`, `rejected`, `in_bank`.
 Dedup đã nối vào pipeline: câu sinh thật chỉ đạt `qc_passed` khi format đạt, dedup không trùng và answer_check

@@ -43,7 +43,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Quyết định 3 (2026-10-21), phần production: câu duplicate là trạng thái cuối, không vào danh sách chấm
- * và không bị TeacherReviewService ghi đè trạng thái. Câu experiment chưa được chốt nên không kiểm ở đây.
+ * và không bị TeacherReviewService ghi đè trạng thái. Phần experiment và format_failed: xem BlindReviewContractTest.
+ * Sửa 2026-10-21 (quyết định 21/10): nộp đánh giá cho câu duplicate trả 404 "Không tìm thấy câu hỏi"
+ * thay vì 409, để không tiết lộ việc câu bị loại vì trùng.
  */
 @SpringBootTest
 @Import(TestSafetyConfiguration.class)
@@ -146,7 +148,7 @@ class TeacherReviewDuplicateStatusTest {
                                  "difficultyLabel": "easy", "decision": "rejected",
                                  "reasonCodes": ["content_inaccurate"]}
                                 """.formatted(teacher.getId())))
-                .andExpect(status().isConflict());
+                .andExpect(status().isNotFound());
 
         assertEquals(QuestionStatus.DUPLICATE, questionRepository.findById(duplicate.getId()).orElseThrow().getStatus());
         assertTrue(teacherReviewRepository.findByQuestionIdAndReviewerId(duplicate.getId(), teacher.getId()).isEmpty());
@@ -162,7 +164,7 @@ class TeacherReviewDuplicateStatusTest {
                                 {"reviewerId": %d, "reviewerAnswer": "B", "formatOk": true,
                                  "difficultyLabel": "easy", "decision": "approved_as_is", "finalOption": "B"}
                                 """.formatted(teacher.getId())))
-                .andExpect(status().isConflict());
+                .andExpect(status().isNotFound());
 
         assertEquals(QuestionStatus.DUPLICATE, questionRepository.findById(duplicate.getId()).orElseThrow().getStatus());
         assertTrue(teacherReviewRepository.findByQuestionIdAndReviewerId(duplicate.getId(), teacher.getId()).isEmpty());

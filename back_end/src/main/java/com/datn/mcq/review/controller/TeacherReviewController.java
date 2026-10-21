@@ -1,6 +1,5 @@
 package com.datn.mcq.review.controller;
 
-import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.review.dto.BlindQuestionReviewDto;
 import com.datn.mcq.review.dto.ReviewQuestionListItemDto;
 import com.datn.mcq.review.dto.SubmitReviewRequest;
@@ -12,7 +11,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -31,10 +29,13 @@ public class TeacherReviewController {
         this.mathDemoSeedService = mathDemoSeedService;
     }
 
+    /**
+     * Danh sách chấm mù. Không có tham số lọc theo trạng thái: lọc theo status sẽ cho người chấm suy ra
+     * kết quả QC (quyết định 21/10 mục 2). Tham số lạ như ?status= bị bỏ qua.
+     */
     @GetMapping("/questions")
-    public List<ReviewQuestionListItemDto> listQuestions(
-            @RequestParam(required = false) QuestionStatus status) {
-        return teacherReviewService.listQuestionsForReview(status);
+    public List<ReviewQuestionListItemDto> listQuestions() {
+        return teacherReviewService.listQuestionsForReview();
     }
 
     @GetMapping("/questions/{id}")

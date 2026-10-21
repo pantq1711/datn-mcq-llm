@@ -221,16 +221,18 @@ class TeacherReviewSecurityAndIntegrityTest {
         ExperimentRun prodRun = createRun(Purpose.PRODUCTION);
         GeneratedQuestion q = createQuestion(prodRun.getId(), QuestionStatus.QC_PASSED, Option.A);
 
-        // Theo quyết định Q-1: form ban đầu cho production cũng tuyệt đối không trả explanation
+        // Theo quyết định Q-1: form ban đầu cho production cũng tuyệt đối không trả explanation.
+        // Sửa 2026-10-21 (quyết định 21/10 mục 2): API chấm không trả status, latexValid, latexErrors
+        // cho cả production (trước đây test này kỳ vọng production có ba trường đó).
         mockMvc.perform(get("/api/reviews/questions/" + q.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reviewPurpose").value("production"))
                 .andExpect(jsonPath("$.explanation").doesNotExist())
                 .andExpect(jsonPath("$.correctOption").doesNotExist())
                 .andExpect(jsonPath("$.correct_option").doesNotExist())
-                .andExpect(jsonPath("$.status").value("qc_passed"))
-                .andExpect(jsonPath("$.latexValid").value(true))
-                .andExpect(jsonPath("$.latexErrors").isArray());
+                .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.latexValid").doesNotExist())
+                .andExpect(jsonPath("$.latexErrors").doesNotExist());
     }
 
     @Test
@@ -273,34 +275,23 @@ class TeacherReviewSecurityAndIntegrityTest {
         GeneratedQuestion prodQcPassed = createQuestion(prodRun.getId(), QuestionStatus.QC_PASSED, Option.C);
         GeneratedQuestion prodFormatFailed = createQuestion(prodRun.getId(), QuestionStatus.FORMAT_FAILED, Option.D);
 
-        // 1. Khi filter ?status=qc_passed
-        mockMvc.perform(get("/api/reviews/questions").param("status", "qc_passed"))
-                .andExpect(status().isOk())
-                // Cả 2 câu experiment đều phải xuất hiện
-                .andExpect(jsonPath("$[?(@.id == " + expQcPassed.getId() + ")]").exists())
-                .andExpect(jsonPath("$[?(@.id == " + expFormatFailed.getId() + ")]").exists())
-                // Câu production qc_passed xuất hiện, prod format_failed bị lọc
-                .andExpect(jsonPath("$[?(@.id == " + prodQcPassed.getId() + ")]").exists())
-                .andExpect(jsonPath("$[?(@.id == " + prodFormatFailed.getId() + ")]").doesNotExist())
-                // Item thực nghiệm tuyệt đối không có status hay latexValid
-                .andExpect(jsonPath("$[?(@.id == " + expQcPassed.getId() + ")].status").doesNotExist())
-                .andExpect(jsonPath("$[?(@.id == " + expQcPassed.getId() + ")].latexValid").doesNotExist())
-                .andExpect(jsonPath("$[?(@.id == " + expFormatFailed.getId() + ")].status").doesNotExist())
-                .andExpect(jsonPath("$[?(@.id == " + expFormatFailed.getId() + ")].latexValid").doesNotExist())
-                // Toàn bộ payload danh sách không có correctOption hay explanation
-                .andExpect(jsonPath("$[*].explanation").doesNotExist())
-                .andExpect(jsonPath("$[*].correctOption").doesNotExist())
-                .andExpect(jsonPath("$[*].correct_option").doesNotExist());
-
-        // 2. Khi filter ?status=format_failed
-        mockMvc.perform(get("/api/reviews/questions").param("status", "format_failed"))
-                .andExpect(status().isOk())
-                // Tập câu experiment PHẢI KHÔNG ĐỔI: cả 2 câu đều xuất hiện y hệt
-                .andExpect(jsonPath("$[?(@.id == " + expQcPassed.getId() + ")]").exists())
-                .andExpect(jsonPath("$[?(@.id == " + expFormatFailed.getId() + ")]").exists())
-                // Câu production format_failed xuất hiện, prod qc_passed bị lọc
-                .andExpect(jsonPath("$[?(@.id == " + prodFormatFailed.getId() + ")]").exists())
-                .andExpect(jsonPath("$[?(@.id == " + prodQcPassed.getId() + ")]").doesNotExist());
+        // Sửa 2026-10-21 (quyết định 21/10 mục 2 và 5): trước đây production lọc được theo ?status=
+        // và câu format_failed vẫn vào danh sách. Nay: tham số status không làm đổi tập câu của bất kỳ purpose nào,
+        // format_failed bị loại khỏi vòng chấm của cả hai purpose, không item nào có status hay latexValid.
+        for (String probe : List.of("qc_passed", "format_failed")) {
+            mockMvc.perform(get("/api/reviews/questions").param("status", probe))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id == " + expQcPassed.getId() + ")]").exists())
+                    .andExpect(jsonPath("$[?(@.id == " + prodQcPassed.getId() + ")]").exists())
+                    .andExpect(jsonPath("$[?(@.id == " + expFormatFailed.getId() + ")]").doesNotExist())
+                    .andExpect(jsonPath("$[?(@.id == " + prodFormatFailed.getId() + ")]").doesNotExist())
+                    .andExpect(jsonPath("$[*].status").doesNotExist())
+                    .andExpect(jsonPath("$[*].latexValid").doesNotExist())
+                    // Toàn bộ payload danh sách không có correctOption hay explanation
+                    .andExpect(jsonPath("$[*].explanation").doesNotExist())
+                    .andExpect(jsonPath("$[*].correctOption").doesNotExist())
+                    .andExpect(jsonPath("$[*].correct_option").doesNotExist());
+        }
     }
 
     @Test
@@ -334,8 +325,9 @@ class TeacherReviewSecurityAndIntegrityTest {
     @Test
     void cannotApproveQuestionIntoBankIfQcNotPassed() {
         ExperimentRun prodRun = createRun(Purpose.PRODUCTION);
-        // Câu hỏi bị lỗi format
-        GeneratedQuestion q = createQuestion(prodRun.getId(), QuestionStatus.FORMAT_FAILED, Option.A);
+        // Sửa 2026-10-21: câu format_failed nay không vào vòng chấm (404, xem BlindReviewContractTest),
+        // nên dùng câu generated (chưa qua QC) để giữ ý của test. Thông báo lỗi không được nhắc trạng thái QC.
+        GeneratedQuestion q = createQuestion(prodRun.getId(), QuestionStatus.GENERATED, Option.A);
 
         SubmitReviewRequest req = new SubmitReviewRequest(
                 testTeacher.getId(),
@@ -352,10 +344,11 @@ class TeacherReviewSecurityAndIntegrityTest {
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> teacherReviewService.submitReview(q.getId(), req));
-        assertTrue(ex.getMessage().contains("chưa đạt yêu cầu kiểm tra chất lượng tự động"));
+        assertTrue(ex.getMessage().contains("chưa đủ điều kiện để duyệt vào ngân hàng"), ex.getMessage());
+        assertFalse(ex.getMessage().contains("generated"), "Không được lộ trạng thái QC: " + ex.getMessage());
 
         Optional<BankItem> itemOpt = bankItemRepository.findBySourceQuestionId(q.getId());
-        assertTrue(itemOpt.isEmpty(), "Câu hỏng format không được tạo bank_item");
+        assertTrue(itemOpt.isEmpty(), "Câu chưa qua QC không được tạo bank_item");
     }
 
     @Test
