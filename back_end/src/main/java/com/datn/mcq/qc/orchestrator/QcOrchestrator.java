@@ -206,6 +206,16 @@ public class QcOrchestrator {
         return qualityCheckResultRepository.save(qcr);
     }
 
+    /**
+     * Xóa kết quả dedup và answer_check cũ của một câu trước khi chạy lại QC (V4), để lần chạy lại bị lỗi
+     * không để lại dòng "passed" cũ dễ hiểu nhầm là thành công. Dòng format không xóa: lần chạy lại ghi đè nó.
+     * Không có bảng lịch sử nên kết quả của lần chạy trước không được giữ lại.
+     */
+    public int clearDedupAndAnswerCheckResults(Integer questionId) {
+        return qualityCheckResultRepository.deleteByQuestionIdAndCheckTypes(
+                questionId, List.of(CheckType.DEDUP, CheckType.ANSWER_CHECK));
+    }
+
     @Transactional(readOnly = true)
     public List<QualityCheckResult> getResultsForQuestion(Integer questionId) {
         return qualityCheckResultRepository.findByQuestionIdOrderByIdAsc(questionId);

@@ -42,6 +42,14 @@ class FormatCheckerLatexSeverityTest {
     }
 
     @Test
+    void balancedUnsupportedEnvironmentPassesFormatWithWarning() {
+        FormatChecker.FormatCheckOutcome outcome = formatChecker.check(
+                mathInput("Cho $\\begin{array}{cc} 1 & 2 \\\\ 3 & 4 \\end{array}$. Chọn đáp án:"));
+        assertTrue(outcome.passed(), () -> "Môi trường lạ nhưng cân bằng không được làm format_failed: " + outcome.errors());
+        assertTrue(outcome.warnings().stream().anyMatch(w -> w.contains("array")), () -> outcome.warnings().toString());
+    }
+
+    @Test
     void fatalLatexErrorStillFailsFormat() {
         FormatChecker.FormatCheckOutcome outcome =
                 formatChecker.check(mathInput("Cho tam giác đều $ABC. Tính góc $B$."));

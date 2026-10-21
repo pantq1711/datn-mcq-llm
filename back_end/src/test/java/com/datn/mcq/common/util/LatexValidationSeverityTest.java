@@ -74,6 +74,37 @@ class LatexValidationSeverityTest {
         assertTrue(result.warnings().isEmpty(), () -> result.warnings().toString());
     }
 
+    // ---------- Quyết định 4 (22/10): môi trường ngoài danh sách là cảnh báo nếu cấu trúc cân bằng ----------
+
+    @Test
+    void balancedUnsupportedEnvironmentIsOnlyAWarning() {
+        LatexValidationRules.Result result = LatexValidationRules.check(
+                "Ma trận $\\begin{array}{cc} 1 & 2 \\\\ 3 & 4 \\end{array}$ có định thức là:");
+        assertTrue(result.errors().isEmpty(), () -> "Không được là lỗi: " + result.errors());
+        assertTrue(containsPart(result.warnings(), "array"), () -> result.warnings().toString());
+    }
+
+    @Test
+    void mismatchedBeginEndStaysFatalEvenForUnsupportedEnvironment() {
+        LatexValidationRules.Result result = LatexValidationRules.check(
+                "$\\begin{array}{cc} 1 & 2 \\end{matrix}$");
+        assertTrue(containsPart(result.errors(), "\\end{matrix} không có \\begin tương ứng"),
+                () -> result.errors().toString());
+    }
+
+    @Test
+    void unclosedUnsupportedEnvironmentStaysFatal() {
+        LatexValidationRules.Result result = LatexValidationRules.check("$\\begin{array}{cc} 1 & 2$");
+        assertTrue(containsPart(result.errors(), "\\begin{array} thiếu \\end{array}"), () -> result.errors().toString());
+    }
+
+    @Test
+    void unbalancedBracesInsideUnsupportedEnvironmentStayFatal() {
+        LatexValidationRules.Result result = LatexValidationRules.check(
+                "$\\begin{array}{cc 1 & 2 \\end{array}$");
+        assertTrue(containsPart(result.errors(), "ngoặc { } không cân bằng"), () -> result.errors().toString());
+    }
+
     @Test
     void legacyValidateStillListsEveryFindingIncludingWarnings() {
         // validate() giữ hành vi cũ (liệt kê mọi phát hiện) để không phải sửa test đã duyệt;

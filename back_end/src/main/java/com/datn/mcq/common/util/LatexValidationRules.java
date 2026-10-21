@@ -16,8 +16,9 @@ import java.util.TreeSet;
  * đối số của \frac và \sqrt, cặp \left/\right, cặp \begin/\end, ngoặc nhọn, dấu $).
  * Nó không phải parser LaTeX và không bảo đảm KaTeX render được công thức.
  *
- * <p>Mức độ (quyết định 6, 2026-10-21): lệnh nằm ngoài {@code ALLOWED_COMMANDS} chỉ là CẢNH BÁO;
- * mọi phát hiện còn lại là LỖI. Nơi quyết định format_failed hoặc chặn bản sửa phải dùng
+ * <p>Mức độ (quyết định 6 ngày 21/10, quyết định 4 ngày 22/10): lệnh nằm ngoài {@code ALLOWED_COMMANDS}
+ * và môi trường nằm ngoài {@code ALLOWED_ENVIRONMENTS} chỉ là CẢNH BÁO; mọi phát hiện còn lại là LỖI,
+ * kể cả \begin/\end không khớp và ngoặc lệch. Nơi quyết định format_failed hoặc chặn bản sửa phải dùng
  * {@link #check(String)} và chỉ xét {@link Result#errors()}.
  */
 public final class LatexValidationRules {
@@ -216,7 +217,9 @@ public final class LatexValidationRules {
                     errors.add("\\begin thiếu tên môi trường dạng {tên}");
                 } else {
                     if (!ALLOWED_ENVIRONMENTS.contains(env)) {
-                        errors.add("môi trường " + env + " không hỗ trợ");
+                        // Quyết định 4 (22/10): môi trường ngoài danh sách chỉ là cảnh báo; cặp \begin/\end
+                        // không khớp và ngoặc lệch vẫn bị báo lỗi riêng.
+                        warnings.add("môi trường " + env + " không hỗ trợ");
                     }
                     frames.push(ENV_FRAME_PREFIX + env);
                 }

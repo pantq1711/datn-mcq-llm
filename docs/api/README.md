@@ -45,6 +45,9 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 | POST | `/api/reviews/demo/seed-math` | Tạo 5 câu demo; đi qua format và dedup, không chạy answer_check, nên giữ `generated` |
 | GET | `/api/bank-items` | Ngân hàng câu hỏi đã duyệt |
 
+Chạy lại QC cho câu `generated` (V4) đã có ở tầng service (`QcRerunService`) nhưng CHƯA có endpoint: backend chưa có
+xác thực và phân quyền (Q-6), nên không mở đường công khai có thể gọi Solver tính phí cho câu tùy ý.
+
 ### Tạo template
 
 ```http
@@ -97,7 +100,10 @@ Form chấm gồm `GET /api/reviews/questions`, `GET /api/reviews/questions/{id}
   và kết quả dedup (`similarityScore`, `comparedToQuestionId`, `thresholdUsed`). Test `OpenApiContractTest` chặn các trường
   này trong schema; `BlindReviewContractTest` quét mọi key của JSON thật ở list, detail và submit.
 - **Phản hồi nộp production** giữ `questionStatus` và `bankItemId` (kết quả hành động của giáo viên); experiment không có `questionStatus`.
-- **Vòng chấm:** danh sách của cả hai purpose loại `duplicate` và `format_failed`; experiment không lọc theo kết quả answer-check.
+- **Vòng chấm:** danh sách production chỉ gồm câu `qc_passed` (câu chưa được chấm); danh sách experiment loại `duplicate`
+  và `format_failed`, không lọc theo kết quả answer-check.
+- **Sửa bài:** chỉ sửa được đề và 4 phương án; `editDistance` tính trên 5 trường đó. Request có `editedExplanation`
+  khác null trả 400 với thông điệp trung tính.
   Danh sách không nhận `?status=` (tham số lạ bị bỏ qua) để không suy ra được kết quả QC.
 
 Trạng thái câu (`status`): `generated`, `format_failed`, `duplicate`, `qc_passed`, `rejected`, `in_bank`.
@@ -119,8 +125,8 @@ Backend kiểm tra cú pháp bề mặt, không bảo đảm KaTeX render đư�
 
 | Mức | Trường hợp | Hệ quả |
 |---|---|---|
-| Lỗi | Ký tự điều khiển, số dấu `$` lẻ, ngoặc `{}` không cân bằng, lệnh nằm ngoài `$...$`, thiếu đối số `\frac`/`\sqrt`, `\left`/`\right` hoặc `\begin`/`\end` không khớp, môi trường ngoài danh sách | Câu sinh ra thành `format_failed`; bản sửa của giáo viên bị từ chối (400); `latexValid = false` |
-| Cảnh báo | Lệnh nằm ngoài danh sách cho phép, ví dụ `\widehat`, `\alpha` | Không ảnh hưởng trạng thái, không hiện trong `latexErrors` |
+| Lỗi | Ký tự điều khiển, số dấu `$` lẻ, ngoặc `{}` không cân bằng, lệnh nằm ngoài `$...$`, thiếu đối số `\frac`/`\sqrt`, `\left`/`\right` hoặc `\begin`/`\end` không khớp | Câu sinh ra thành `format_failed`; bản sửa của giáo viên bị từ chối (400) |
+| Cảnh báo | Lệnh nằm ngoài danh sách cho phép, ví dụ `\widehat`, `\alpha`; môi trường ngoài danh sách (ví dụ `array`) khi cấu trúc cân bằng | Không ảnh hưởng trạng thái, không trả về API |
 
 Gợi ý render phía frontend: tách chuỗi theo `$$...$$` và `$...$` (bỏ qua `\$`), render từng đoạn công thức bằng KaTeX
 (`displayMode` cho `$$`), để `throwOnError: false` hoặc bắt lỗi từng đoạn và hiện chuỗi gốc khi không render được.

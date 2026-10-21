@@ -4,6 +4,7 @@ import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -30,11 +31,14 @@ public final class McqTextNormalizer {
     private static final Pattern NUMBER = Pattern.compile("\\d+(?:[.,]\\d+)?");
 
     /**
-     * Cụm từ đảo nghĩa câu hỏi, chỉ xét phần văn bản ngoài công thức.
-     * Danh sách là lựa chọn triển khai, cần chủ dự án xem lại; "khác không", "không âm" cố ý không nằm trong danh sách.
+     * Cụm phủ định tường minh (quyết định 5 ngày 21/10, quyết định 3 ngày 22/10): không, chưa, ngoại trừ,
+     * không phải, không đúng, không thuộc, không là, không thỏa mãn, không thể, phát biểu sai, nhận định sai,
+     * khẳng định sai. Có ranh giới từ ở hai đầu, không phân biệt hoa thường, chấp nhận cách bỏ dấu cũ "thoả".
+     * Cụm dài đứng trước trong phép chọn để khớp dài nhất. Chỉ xét phần văn bản ngoài công thức của thân câu.
      */
     private static final Pattern NEGATION = Pattern.compile(
-            "(?<!\\p{L})(không phải|không đúng|không là|không thuộc|không bằng|không chứa|sai|ngoại trừ)(?!\\p{L})",
+            "(?<!\\p{L})(không thỏa mãn|không thoả mãn|không phải|không đúng|không thuộc|không là|không thể"
+                    + "|phát biểu sai|nhận định sai|khẳng định sai|ngoại trừ|không|chưa)(?!\\p{L})",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     private static final String OPTION_JOINER = " | ";
@@ -100,16 +104,29 @@ public final class McqTextNormalizer {
 
     /** Thân câu có cụm từ phủ định ở phần văn bản ngoài công thức hay không. */
     public static boolean hasNegation(String stem) {
+        return !negationMarkers(stem).isEmpty();
+    }
+
+    /**
+     * Các cụm phủ định tìm thấy trong phần văn bản ngoài công thức của thân câu, theo thứ tự xuất hiện,
+     * ở dạng chữ thường chuẩn ("không thoả mãn" được quy về "không thỏa mãn").
+     */
+    public static List<String> negationMarkers(String stem) {
+        List<String> markers = new ArrayList<>();
         if (stem == null) {
-            return false;
+            return markers;
         }
         StringBuilder text = new StringBuilder();
         for (Segment seg : segments(stem)) {
-            if (!seg.math()) {
-                text.append(seg.content()).append(' ');
-            }
+            // Công thức được thay bằng khoảng trắng để chữ hai bên không dính vào nhau.
+            text.append(seg.math() ? " " : seg.content()).append(' ');
         }
-        return NEGATION.matcher(WHITESPACE.matcher(text).replaceAll(" ")).find();
+        Matcher m = NEGATION.matcher(WHITESPACE.matcher(text).replaceAll(" "));
+        while (m.find()) {
+            String marker = m.group(1).toLowerCase(Locale.ROOT);
+            markers.add(marker.equals("không thoả mãn") ? "không thỏa mãn" : marker);
+        }
+        return markers;
     }
 
     /** Cosine giữa hai vectơ đếm 3-gram ký tự. Đối xứng, nằm trong [0, 1]. */

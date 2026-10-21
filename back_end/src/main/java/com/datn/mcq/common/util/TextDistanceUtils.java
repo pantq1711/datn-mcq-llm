@@ -52,19 +52,18 @@ public final class TextDistanceUtils {
         return prev[m];
     }
 
+    /**
+     * Tổng Levenshtein trên 5 trường giáo viên thấy và sửa được: question_text và 4 phương án
+     * (comment edit_distance trong V1, quyết định 2 ngày 22/10). Không tính lời giải.
+     */
     public static int totalQuestionEditDistance(
-            String origQ, String origA, String origB, String origC, String origD, String origExp,
-            String editQ, String editA, String editB, String editC, String editD, String editExp) {
-        int total = 0;
-        total += levenshteinDistance(origQ, editQ);
-        total += levenshteinDistance(origA, editA);
-        total += levenshteinDistance(origB, editB);
-        total += levenshteinDistance(origC, editC);
-        total += levenshteinDistance(origD, editD);
-        if (editExp != null && !normalize(editExp).isEmpty()) {
-            total += levenshteinDistance(origExp, editExp);
-        }
-        return total;
+            String origQ, String origA, String origB, String origC, String origD,
+            String editQ, String editA, String editB, String editC, String editD) {
+        return levenshteinDistance(origQ, editQ)
+                + levenshteinDistance(origA, editA)
+                + levenshteinDistance(origB, editB)
+                + levenshteinDistance(origC, editC)
+                + levenshteinDistance(origD, editD);
     }
 }
 
