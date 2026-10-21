@@ -2,9 +2,10 @@ package com.datn.mcq.qc.orchestrator;
 
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
-import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.FormatChecker;
+import com.datn.mcq.qc.dto.AnswerCheckStatus;
+import com.datn.mcq.qc.dto.DedupStatus;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.entity.QualityCheckResult;
@@ -47,23 +48,37 @@ public class QcOrchestrator {
         );
 
         if (!formatOutcome.passed()) {
+            // Format lỗi thì dừng sớm, không gọi Solver.
             return new QcPipelineReport(
-                    QuestionStatus.FORMAT_FAILED,
+                    QcStatusDecider.decide(false, DedupStatus.NOT_RUN, AnswerCheckStatus.NOT_RUN),
                     false,
                     formatOutcome.errors(),
                     null,
                     null,
                     null,
-                    null
+                    null,
+                    AnswerCheckStatus.NOT_RUN,
+                    DedupStatus.NOT_RUN
             );
         }
 
+        // Dedup chưa được triển khai: không giả định đã đạt (Q-2).
+        DedupStatus dedupStatus = DedupStatus.NOT_RUN;
+
+        AnswerCheckStatus answerCheckStatus;
         Boolean answerCheckPassed = null;
         AnswerChoice judgeAnswer = null;
         String judgeModel = null;
-        String solverReasoning = null;
+        String solverReasoning;
 
-        if (input.runAnswerCheck() && answerSolverChecker.canRunOnline()) {
+        if (!input.runAnswerCheck()) {
+            answerCheckStatus = AnswerCheckStatus.NOT_RUN;
+            solverReasoning = "answer_check không chạy: bị tắt bởi nơi gọi";
+        } else if (!answerSolverChecker.canRunOnline()) {
+            // Thiếu API key là lỗi cấu hình, không phải một lần kiểm tra thành công.
+            answerCheckStatus = AnswerCheckStatus.NOT_RUN;
+            solverReasoning = "answer_check không chạy: chưa cấu hình API key cho Solver";
+        } else {
             try {
                 AnswerSolverChecker.SolverCheckOutcome solverOutcome = answerSolverChecker.check(
                         input.questionText(),
@@ -85,21 +100,31 @@ public class QcOrchestrator {
                         solverOutcome.judgeAnswer(),
                         solverOutcome.judgeModel()
                 );
+                answerCheckStatus = solverOutcome.passed()
+                        ? AnswerCheckStatus.CONSISTENT
+                        : AnswerCheckStatus.INCONSISTENT;
             } catch (RuntimeException ex) {
-                // Nếu Solver trả về JSON lỗi thoát ký tự hoặc lỗi mạng, không lưu dòng answer_check rỗng
-                // để đảm bảo chk_qcr_judge_only_answer_check luôn thỏa mãn.
+                // Lỗi mạng/HTTP, JSON hỏng, thiếu hoặc sai judge_answer, hoặc lỗi khi lưu kết quả:
+                // không có kết quả hợp lệ -> ERROR. Không lưu dòng answer_check
+                // (chk_qcr_judge_only_answer_check bắt buộc judge_answer; lưu lỗi cần migration riêng).
+                answerCheckStatus = AnswerCheckStatus.ERROR;
+                answerCheckPassed = null;
+                judgeAnswer = null;
+                judgeModel = null;
                 solverReasoning = "Không hoàn tất answer_check: " + ex.getMessage();
             }
         }
 
         return new QcPipelineReport(
-                QuestionStatus.QC_PASSED,
+                QcStatusDecider.decide(true, dedupStatus, answerCheckStatus),
                 true,
                 List.of(),
                 answerCheckPassed,
                 judgeAnswer,
                 judgeModel,
-                solverReasoning
+                solverReasoning,
+                answerCheckStatus,
+                dedupStatus
         );
     }
 

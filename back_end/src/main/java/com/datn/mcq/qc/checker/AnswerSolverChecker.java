@@ -22,6 +22,14 @@ public class AnswerSolverChecker {
             String reasoning
     ) {}
 
+    /** Cấu trúc JSON bắt buộc cho phản hồi của Solver (Gemini responseSchema). */
+    public static final String SOLVER_RESPONSE_SCHEMA_JSON = """
+            {"type":"OBJECT","properties":{
+              "reasoning":{"type":"STRING"},
+              "judge_answer":{"type":"STRING","enum":["A","B","C","D","multiple","none"]}
+            },"required":["reasoning","judge_answer"],"propertyOrdering":["reasoning","judge_answer"]}
+            """;
+
     private final LlmClient llmClient;
     private final PromptBuilder promptBuilder;
     private final String solverModel;
@@ -49,7 +57,8 @@ public class AnswerSolverChecker {
             String optionD,
             Option generatorCorrectOption) {
         String prompt = promptBuilder.buildSolverPrompt(questionText, optionA, optionB, optionC, optionD);
-        LlmCallResult result = llmClient.callJsonMode(prompt, solverModel, 0.0);
+        LlmCallResult result = llmClient.callJsonModeWithSchema(
+                prompt, solverModel, 0.0, SOLVER_RESPONSE_SCHEMA_JSON);
         return parseAndCompare(result.rawText(), result.modelName(), generatorCorrectOption);
     }
 
@@ -65,10 +74,16 @@ public class AnswerSolverChecker {
         String reasoning = map.get("reasoning") != null
                 ? String.valueOf(map.get("reasoning")).trim()
                 : "";
+        // Structured output không phải bảo đảm tuyệt đối: vẫn kiểm tra kết quả sau khi parse.
+        // Thiếu judge_answer, giá trị lạ hoặc thiếu correct_option để so -> ném lỗi (không coi là kết quả hợp lệ).
+        if (judgeStr.isEmpty()) {
+            throw new IllegalArgumentException("Phản hồi Solver thiếu judge_answer");
+        }
+        if (generatorCorrectOption == null) {
+            throw new IllegalArgumentException("Thiếu correct_option của câu hỏi để so với Solver");
+        }
         AnswerChoice judgeChoice = DbEnum.fromDbValue(AnswerChoice.class, judgeStr);
-        boolean passed = generatorCorrectOption != null
-                && judgeChoice != null
-                && judgeChoice.getDbValue().equals(generatorCorrectOption.getDbValue());
+        boolean passed = judgeChoice.getDbValue().equals(generatorCorrectOption.getDbValue());
         return new SolverCheckOutcome(
                 passed,
                 judgeChoice,

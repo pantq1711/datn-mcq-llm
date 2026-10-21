@@ -69,6 +69,26 @@ public class LlmClient {
         return callGemini(prompt, modelName, generationConfig);
     }
 
+    /**
+     * Gọi ở JSON mode kèm responseSchema để model trả JSON đúng cấu trúc.
+     * Structured output chỉ giảm lỗi định dạng, không thay thế bước kiểm tra kết quả ở phía gọi.
+     */
+    public LlmCallResult callJsonModeWithSchema(
+            String prompt, String modelName, Double temperature, String responseSchemaJson) {
+        return callGemini(prompt, modelName, jsonModeGenerationConfig(temperature, responseSchemaJson));
+    }
+
+    /** Dựng phần generationConfig cho JSON mode kèm responseSchema (không gọi mạng). */
+    public static String jsonModeGenerationConfig(Double temperature, String responseSchemaJson) {
+        if (responseSchemaJson == null || responseSchemaJson.isBlank()) {
+            throw new IllegalArgumentException("responseSchemaJson không được để trống");
+        }
+        double temp = temperature != null ? temperature : 0.0;
+        return "\"generationConfig\":{\"temperature\":" + temp
+                + ",\"responseMimeType\":\"application/json\""
+                + ",\"responseSchema\":" + responseSchemaJson.strip() + "}";
+    }
+
     private String buildGenerationConfig(Strategy strategy, Double temperature) {
         double temp = temperature != null ? temperature : 0.7;
         if (strategy == Strategy.FEW_SHOT_STRUCTURED) {
