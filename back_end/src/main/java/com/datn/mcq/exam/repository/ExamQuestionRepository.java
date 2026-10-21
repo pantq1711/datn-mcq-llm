@@ -8,5 +8,6 @@ import java.util.List;
 public interface ExamQuestionRepository
         extends JpaRepository<ExamQuestion, ExamQuestion.ExamQuestionId> {
     List<ExamQuestion> findByExamIdOrderByPositionAsc(Integer examId);
+    boolean existsByBankItemId(Integer bankItemId);
 }
 
