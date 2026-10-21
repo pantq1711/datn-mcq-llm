@@ -266,3 +266,18 @@ Xác nhận: không chạy lệnh thuộc M-27 / không gọi API tính phí / k
 ## Lịch sử
 
 - v1 (2026-10-21): bản đầu, tổng hợp từ audit repository.
+## Quyết định ngày 21/10/2026 (thay thế các comment xung đột trong V1__init_schema.sql)
+
+Không sửa file V1 (đã chạy, sửa sẽ lệch checksum Flyway). Khi comment trong V1 mâu thuẫn với mục này, mục này thắng.
+
+1. Quy tắc trong V1 "không báo giáo viên biết đáp án họ chọn trùng hay lệch đáp án LLM, trước hay sau khi nộp" chỉ bắt buộc cho review_purpose = experiment. Với production, dự kiến cho xem đáp án và lời giải LLM sau khi giáo viên đã chấm (mục 4). Chưa làm.
+2. Demo 24/10: chấm một bước như hiện tại. Form chấm của cả hai purpose không hiện đáp án LLM, lời giải, độ khó LLM, kết quả QC. API chấm không trả status, latexValid, latexErrors.
+3. Ngân hàng (demo): giữ lời giải LLM, frontend gắn nhãn "Lời giải do AI gợi ý, chưa được giáo viên kiểm tra". Chưa làm việc đổi lời giải ngân hàng thành NULL.
+4. Sau demo, nếu thầy đồng ý, làm duyệt hai bước trên cùng một màn:
+   - Bước 1 (mù, khóa sau khi ghi nhận): đáp án giáo viên, độ khó, "đề và 4 phương án dùng được nguyên trạng không".
+   - Bước 2: mở đáp án và lời giải LLM; giáo viên duyệt, sửa (kể cả lời giải) hoặc từ chối; đánh giá lời giải đúng / cần sửa / sai.
+   - Lưu riêng đáp án ban đầu (bước 1) và đáp án cuối (bước 2), không ghi đè.
+   - Chỉ số "duyệt không sửa" theo đề cương lấy từ bước 1; bước 2 là chỉ số bổ sung.
+   - Chỉ lời giải đã qua bước 2 mới được coi là lời giải chính thức trong ngân hàng.
+   - Cần migration, API và frontend mới. Chưa quyết thực nghiệm có làm bước 2 không.
+5. Phạm vi dedup: experiment chỉ so trong cùng run; production so cùng môn, cùng purpose; không so giữa experiment và production. Mẫu chấm experiment chỉ loại duplicate và format_failed, không lọc theo answer_check.
