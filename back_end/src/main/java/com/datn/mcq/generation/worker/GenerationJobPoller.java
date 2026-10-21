@@ -3,6 +3,7 @@ package com.datn.mcq.generation.worker;
 import com.datn.mcq.generation.dto.ParsedMcqDto;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.parser.McqJsonParser;
+import com.datn.mcq.generation.service.DedupScopeResolver;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.qc.dto.QcPipelineReport;
@@ -19,7 +20,8 @@ import java.util.Optional;
  * 1. Gọi GenerationJobProcessor.claimNextPendingJob() (transaction ngắn #1).
  * 2. Gọi LlmClient.generateMcq(...) ngoài transaction.
  * 3. Lưu GeneratedQuestion + cập nhật GenerationJob (transaction ngắn #2),
- *    chạy pipeline QC và cập nhật QuestionStatus.
+ *    dựng phạm vi dedup theo purpose của run, chạy pipeline QC (format -> dedup -> answer_check)
+ *    và cập nhật QuestionStatus.
  */
 @Component
 public class GenerationJobPoller {
@@ -36,16 +38,19 @@ public class GenerationJobPoller {
     private final GenerationJobProcessor processor;
     private final LlmClient llmClient;
     private final QcOrchestrator qcOrchestrator;
+    private final DedupScopeResolver dedupScopeResolver;
     private final int maxAttempts;
 
     public GenerationJobPoller(
             GenerationJobProcessor processor,
             LlmClient llmClient,
             QcOrchestrator qcOrchestrator,
+            DedupScopeResolver dedupScopeResolver,
             @Value("${app.worker.max-attempts:3}") int maxAttempts) {
         this.processor = processor;
         this.llmClient = llmClient;
         this.qcOrchestrator = qcOrchestrator;
+        this.dedupScopeResolver = dedupScopeResolver;
         this.maxAttempts = Math.max(1, maxAttempts);
     }
 
@@ -95,7 +100,7 @@ public class GenerationJobPoller {
                 parsed.explanation(),
                 ctx.validateLatex(),
                 runAnswerCheck
-        ));
+        ), dedupScopeResolver.resolve(ctx.runId()));
         processor.updateQuestionStatus(savedQuestion.getId(), qcReport.resultingStatus());
 
         return new ProcessedJobSummary(

@@ -81,7 +81,7 @@ Dùng cho đáp án mà một người chấm hoặc một model chấm đưa ra
 |---|---|
 | `generated` | Vừa sinh và parse xong, chưa qua QC |
 | `format_failed` | Không đạt kiểm tra định dạng |
-| `duplicate` | Bị bước dedup loại |
+| `duplicate` | Bị bước dedup loại; trạng thái cuối, không vào vòng chấm |
 | `qc_passed` | Qua QC tự động, chờ giáo viên duyệt |
 | `rejected` | Giáo viên từ chối (luồng duyệt thật) |
 | `in_bank` | Đã duyệt thật, đã sao chép sang `bank_item` |
@@ -177,7 +177,14 @@ Dùng cho đáp án mà một người chấm hoặc một model chấm đưa ra
 - `rejected` thì có ít nhất một lý do trong `teacher_review_reason`. Mã `other` bắt buộc có `detail`.
 - `edited = true` chỉ khi văn bản sau khi trim và chuẩn hóa xuống dòng thật sự khác bản gốc (`edit_distance > 0`).
 - `judge_answer` và `judge_model` chỉ có giá trị khi `check_type = 'answer_check'`.
-- Dedup: `similarity_score`, `threshold_used` và `predicted_similarity` đều là độ tương đồng (`1 - cosine distance`), câu bị coi là trùng khi `similarity >= τ`.
+- Dedup (chốt 2026-10-21, không dùng embedding):
+  - Thứ tự QC: `format` → `dedup` → `answer_check`. Solver chỉ được gọi khi dedup kết luận không trùng.
+  - Trùng khi (a) cùng dấu vân tay sau chuẩn hóa (NFC, khoảng trắng, `\le`/`\leq`, `\ge`/`\geq`, `\ne`/`\neq` như nhau, tập 4 phương án đã sắp xếp; không gồm đáp án và lời giải), hoặc (b) `similarity >= τ` VÀ qua hai chốt chặn: số liệu và công thức trong thân câu giống nhau, hai câu không lệch nhau về phủ định.
+  - `similarity_score`, `threshold_used`, `predicted_similarity` là cosine (`1 - cosine distance`) giữa vectơ đếm 3-gram ký tự của văn bản đã chuẩn hóa. Câu không trùng lưu điểm của ứng viên gần nhất đã qua hai chốt chặn, nên luôn `< τ`.
+  - `τ = 0.90` là hằng số tạm, CHƯA hiệu chỉnh trên gold set; chưa có precision/recall.
+  - Phạm vi so: experiment chỉ trong cùng run; production trong các run production cùng môn. Không bao giờ so chéo experiment và production. Ứng viên là câu `qc_passed`, `in_bank` và câu cùng run đã có dòng dedup `passed = true`.
+  - Dedup báo trùng: dòng dedup `passed = false` kèm `compared_to_question_id`, trạng thái `duplicate`. Dedup lỗi hoặc thiếu phạm vi: không ghi dòng dedup, giữ `generated`.
+- `duplicate` là trạng thái cuối: câu không vào vòng chấm (production và experiment), không được nộp đánh giá, không bị ghi đè trạng thái; bản ghi được giữ để truy vết và thống kê. Người chấm không được biết câu nào bị loại vì trùng.
 - Ngân hàng câu hỏi là bảng `bank_item`. Chỉ duyệt thật (`review_purpose = 'production'`) mới sao chép câu sang `bank_item` và đặt `generated_question.status = 'in_bank'`. Câu thuộc mẫu `experiment` không vào ngân hàng.
 - Chỉ `bank_item` mới được thêm vào đề (`exam_question.bank_item_id`).
 - Khi lưu cặp gold set luôn sắp `question_id_1 < question_id_2`.

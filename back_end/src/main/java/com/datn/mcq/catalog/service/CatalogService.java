@@ -1,5 +1,6 @@
 package com.datn.mcq.catalog.service;
 
+import com.datn.mcq.catalog.dto.CreateTemplateRequest;
 import com.datn.mcq.catalog.entity.QuestionTemplate;
 import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.repository.QuestionTemplateRepository;
@@ -52,6 +53,48 @@ public class CatalogService {
             return questionTemplateRepository.findBySubjectIdOrderByIdAsc(subjectId);
         }
         return questionTemplateRepository.findAll();
+    }
+
+    /**
+     * Tạo question_template mới cho subject đã tồn tại. Không tạo subject.
+     * Kiểm tra trước các ràng buộc của bảng (V1, V2) để trả 400 thay vì lỗi DB.
+     */
+    @Transactional
+    public QuestionTemplate createTemplate(CreateTemplateRequest req) {
+        if (req == null || req.subjectId() == null) {
+            throw new IllegalArgumentException("Phải truyền subjectId");
+        }
+        String sourceQuestion = req.sourceQuestion() != null ? req.sourceQuestion().trim() : "";
+        if (sourceQuestion.isEmpty()) {
+            throw new IllegalArgumentException("sourceQuestion không được để trống");
+        }
+        if (req.gradeLevel() != null && (req.gradeLevel() < 6 || req.gradeLevel() > 9)) {
+            throw new IllegalArgumentException("gradeLevel phải nằm trong khoảng 6 đến 9");
+        }
+        String topic = blankToNull(req.topic());
+        if (topic != null && topic.length() > 255) {
+            throw new IllegalArgumentException("topic dài tối đa 255 ký tự");
+        }
+        Subject subject = getSubjectById(req.subjectId());
+
+        QuestionTemplate tpl = new QuestionTemplate();
+        tpl.setSubjectId(subject.getId());
+        tpl.setGradeLevel(req.gradeLevel());
+        tpl.setTopic(topic);
+        tpl.setLearningOutcome(blankToNull(req.learningOutcome()));
+        tpl.setSourceType(req.sourceType() != null ? req.sourceType() : SourceType.TEXT);
+        tpl.setSourceQuestion(sourceQuestion);
+        tpl.setVersion(1);
+        tpl.setIsActive(Boolean.TRUE);
+        return questionTemplateRepository.save(tpl);
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     @Transactional

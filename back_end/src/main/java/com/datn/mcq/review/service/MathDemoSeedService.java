@@ -3,18 +3,16 @@ package com.datn.mcq.review.service;
 import com.datn.mcq.catalog.entity.QuestionTemplate;
 import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.service.CatalogService;
-import com.datn.mcq.enums.AnswerChoice;
-import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.Difficulty;
-import com.datn.mcq.enums.Option;
-import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.experiment.entity.ExperimentRun;
 import com.datn.mcq.experiment.service.ExperimentService;
 import com.datn.mcq.generation.dto.ParsedMcqDto;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.parser.McqJsonParser;
+import com.datn.mcq.generation.service.DedupScopeResolver;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.llm.dto.LlmCallResult;
+import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import com.datn.mcq.review.dto.ReviewQuestionListItemDto;
@@ -25,9 +23,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Khởi tạo 5 câu hỏi Toán Đại số 8 mẫu (kèm question_template, experiment_run và quality_check_result)
- * để demo hiển thị công thức KaTeX và luồng chấm mù / duyệt vào ngân hàng.
+ * Khởi tạo 5 câu hỏi Toán Đại số 8 mẫu (kèm question_template, experiment_run) để demo hiển thị công thức KaTeX.
  * Hàm seedMathDemoQuestions() có tính idempotent (gọi nhiều lần không tạo bản ghi trùng).
+ *
+ * <p>Quyết định 7 (2026-10-21): seed đi qua pipeline QC thật ở bước format và dedup, KHÔNG chạy answer_check
+ * (không gọi Gemini), không ghi kết quả QC dựng sẵn và không ép QC_PASSED. Vì vậy câu seed giữ trạng thái
+ * do pipeline quyết định (thường là generated) và không dùng làm bằng chứng QC hay để duyệt vào ngân hàng.
  */
 @Service
 public class MathDemoSeedService {
@@ -37,9 +38,7 @@ public class MathDemoSeedService {
             String learningOutcome,
             String sourceQuestion,
             Difficulty difficulty,
-            String rawJson,
-            AnswerChoice solverJudgeAnswer,
-            boolean solverPassed
+            String rawJson
     ) {}
 
     private static final List<DemoMathItem> DEMO_ITEMS = List.of(
@@ -58,9 +57,7 @@ public class MathDemoSeedService {
                       "correct_option": "B",
                       "explanation": "Ta có $\\\\frac{4x^2y}{8xy^3} = \\\\frac{4xy \\\\cdot x}{4xy \\\\cdot 2y^2} = \\\\frac{x}{2y^2}$ khi chia cả tử và mẫu cho nhân tử chung $4xy$."
                     }
-                    """,
-                    AnswerChoice.B,
-                    true
+                    """
             ),
             new DemoMathItem(
                     "Căn bậc hai của số chính phương",
@@ -77,9 +74,7 @@ public class MathDemoSeedService {
                       "correct_option": "B",
                       "explanation": "Áp dụng hằng đẳng thức $\\\\sqrt{A^2} = |A|$ với mọi số thực $A$, ta được $\\\\sqrt{(-5)^2} = |-5| = 5$."
                     }
-                    """,
-                    AnswerChoice.B,
-                    true
+                    """
             ),
             new DemoMathItem(
                     "Bất phương trình bậc nhất một ẩn",
@@ -96,9 +91,7 @@ public class MathDemoSeedService {
                       "correct_option": "A",
                       "explanation": "Bất phương trình bậc nhất một ẩn có dạng $ax + b > 0$ (hoặc $<, \\\\ge, \\\\le$) với $a \\\\neq 0$. Phương án A có $a = 2 \\\\neq 0$ nên thỏa mãn."
                     }
-                    """,
-                    AnswerChoice.A,
-                    true
+                    """
             ),
             new DemoMathItem(
                     "Hệ hai phương trình bậc nhất hai ẩn",
@@ -115,9 +108,7 @@ public class MathDemoSeedService {
                       "correct_option": "B",
                       "explanation": "Cộng từng vế hai phương trình: $(2x + y) + (x - y) = 5 + 1 \\\\Leftrightarrow 3x = 6 \\\\Leftrightarrow x = 2$. Thế $x = 2$ vào $x - y = 1$ được $y = 1$. Vậy nghiệm là $(2; 1)$."
                     }
-                    """,
-                    AnswerChoice.B,
-                    true
+                    """
             ),
             new DemoMathItem(
                     "Tính giá trị biểu thức chứa lũy thừa",
@@ -134,9 +125,7 @@ public class MathDemoSeedService {
                       "correct_option": "A",
                       "explanation": "Ta có $2^3 \\\\cdot 2^2 = 2^5 = 32$, $3^2 = 9$, và $(-2)^4 = 16$. Thay vào biểu thức: $A = 32 + 9 - 16 = 25$."
                     }
-                    """,
-                    AnswerChoice.B,
-                    false
+                    """
             )
     );
 
@@ -145,6 +134,7 @@ public class MathDemoSeedService {
     private final ExperimentService experimentService;
     private final GenerationService generationService;
     private final QcOrchestrator qcOrchestrator;
+    private final DedupScopeResolver dedupScopeResolver;
     private final TeacherReviewService teacherReviewService;
 
     public MathDemoSeedService(
@@ -153,12 +143,14 @@ public class MathDemoSeedService {
             ExperimentService experimentService,
             GenerationService generationService,
             QcOrchestrator qcOrchestrator,
+            DedupScopeResolver dedupScopeResolver,
             TeacherReviewService teacherReviewService) {
         this.userService = userService;
         this.catalogService = catalogService;
         this.experimentService = experimentService;
         this.generationService = generationService;
         this.qcOrchestrator = qcOrchestrator;
+        this.dedupScopeResolver = dedupScopeResolver;
         this.teacherReviewService = teacherReviewService;
     }
 
@@ -197,8 +189,9 @@ public class MathDemoSeedService {
                         parsed
                 );
 
-                // Chạy kiểm tra định dạng thật qua QcOrchestrator (LatexFormatValidator)
-                qcOrchestrator.evaluateAndSave(new QuestionQcInput(
+                // Pipeline QC thật: format -> dedup (phạm vi theo purpose của run seed).
+                // runAnswerCheck = false: không gọi Gemini, nên câu không thể đạt QC_PASSED (Q-2).
+                QcPipelineReport report = qcOrchestrator.evaluateAndSave(new QuestionQcInput(
                         saved.getId(),
                         parsed.parseSuccess(),
                         parsed.questionText(),
@@ -210,16 +203,8 @@ public class MathDemoSeedService {
                         parsed.explanation(),
                         true,
                         false
-                ));
-                // Ghi kết quả answer_check của Solver (trong đó câu số 5 là ca lệch khóa A vs B đã bắt được)
-                qcOrchestrator.upsertCheckResult(
-                        saved.getId(),
-                        CheckType.ANSWER_CHECK,
-                        item.solverPassed(),
-                        item.solverJudgeAnswer(),
-                        "gemini-3.5-flash-lite"
-                );
-                generationService.updateStatusAndDifficulty(saved.getId(), QuestionStatus.QC_PASSED, null);
+                ), dedupScopeResolver.resolve(demoRun.getId()));
+                generationService.updateStatusAndDifficulty(saved.getId(), report.resultingStatus(), null);
             }
         }
         return teacherReviewService.listQuestionsForReview(null);

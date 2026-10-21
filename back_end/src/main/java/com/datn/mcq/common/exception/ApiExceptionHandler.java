@@ -28,5 +28,12 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", ex.getMessage() != null ? ex.getMessage() : "Trạng thái không hợp lệ"));
     }
+
+    /** Gemini trả 429 hoặc 503: trả lại đúng mã đó thay vì 500. */
+    @ExceptionHandler(UpstreamServiceException.class)
+    public ResponseEntity<Map<String, String>> handleUpstream(UpstreamServiceException ex) {
+        return ResponseEntity.status(ex.getHttpStatus())
+                .body(Map.of("error", ex.getMessage() != null ? ex.getMessage() : "Dịch vụ ngoài tạm thời không phục vụ"));
+    }
 }
 

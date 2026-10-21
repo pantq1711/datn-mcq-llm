@@ -75,6 +75,12 @@ public class TeacherReviewService {
             ExperimentRun run = experimentService.getById(gq.getRunId());
             boolean isExperiment = run.getPurpose() == Purpose.EXPERIMENT;
 
+            // Quyết định 3 (2026-10-21): câu production duplicate là trạng thái cuối, không vào danh sách chấm.
+            // Câu experiment chưa được chốt nên giữ nguyên hành vi cũ.
+            if (!isExperiment && gq.getStatus() == QuestionStatus.DUPLICATE) {
+                continue;
+            }
+
             // Câu production được lọc theo status; câu experiment luôn được giữ nguyên tập câu độc lập với trạng thái QC
             if (!isExperiment && status != null && gq.getStatus() != status) {
                 continue;
@@ -172,6 +178,12 @@ public class TeacherReviewService {
             throw new IllegalArgumentException(
                     "reviewPurpose (" + req.reviewPurpose().getDbValue()
                     + ") không khớp với nguồn gốc của câu hỏi (" + actualPurpose.getDbValue() + ").");
+        }
+
+        // Quyết định 3 (2026-10-21): duplicate là trạng thái cuối; duyệt production không được ghi đè.
+        if (actualPurpose == Purpose.PRODUCTION && gq.getStatus() == QuestionStatus.DUPLICATE) {
+            throw new IllegalStateException(
+                    "Câu hỏi đã bị bước dedup đánh dấu trùng (duplicate), không thể duyệt hoặc từ chối.");
         }
 
         Integer reviewerId = req.reviewerId();
@@ -402,8 +414,9 @@ public class TeacherReviewService {
         return errors;
     }
 
+    /** Chỉ lỗi fatal; cảnh báo (lệnh ngoài danh sách cho phép) không chặn bản sửa và không làm latexValid = false. */
     private void appendFieldErrors(String field, String text, List<String> errors) {
-        for (String err : LatexFormatValidator.validate(text)) {
+        for (String err : LatexFormatValidator.check(text).errors()) {
             errors.add(field + ": " + err);
         }
     }

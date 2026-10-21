@@ -90,6 +90,7 @@ public class GenerationService {
     private final PromptBuilder promptBuilder;
     private final LlmClient llmClient;
     private final QcOrchestrator qcOrchestrator;
+    private final DedupScopeResolver dedupScopeResolver;
 
     public GenerationService(
             GeneratedQuestionRepository generatedQuestionRepository,
@@ -98,7 +99,8 @@ public class GenerationService {
             ExperimentService experimentService,
             PromptBuilder promptBuilder,
             LlmClient llmClient,
-            QcOrchestrator qcOrchestrator) {
+            QcOrchestrator qcOrchestrator,
+            DedupScopeResolver dedupScopeResolver) {
         this.generatedQuestionRepository = generatedQuestionRepository;
         this.generationJobRepository = generationJobRepository;
         this.catalogService = catalogService;
@@ -106,6 +108,7 @@ public class GenerationService {
         this.promptBuilder = promptBuilder;
         this.llmClient = llmClient;
         this.qcOrchestrator = qcOrchestrator;
+        this.dedupScopeResolver = dedupScopeResolver;
     }
 
     /**
@@ -172,7 +175,7 @@ public class GenerationService {
                 parsed.explanation(),
                 validateLatex,
                 runAnswerCheck
-        ));
+        ), dedupScopeResolver.resolve(run.getId()));
         GeneratedQuestion updated = updateStatusAndDifficulty(saved.getId(), qcReport.resultingStatus(), null);
         return new SyncGenerationResponse(GeneratedQuestionSummaryDto.fromEntity(updated), qcReport);
     }
