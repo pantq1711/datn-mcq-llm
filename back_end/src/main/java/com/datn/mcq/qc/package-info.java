@@ -1,5 +1,6 @@
 /**
- * Pipeline kiểm tra chất lượng: format (JSON + LaTeX) -> dedup (pgvector) -> answer_check và độ khó. Ghi kết quả từng bước.
+ * Pipeline kiểm tra chất lượng: format (JSON + LaTeX) -> dedup (chuẩn hóa + cosine 3-gram ký tự, không embedding)
+ * -> answer_check. Solver chỉ chạy khi dedup kết luận không trùng. Ghi kết quả từng bước.
  *
  * <p>Bảng sở hữu: quality_check_result, question_embedding.
  * <br>Được phép phụ thuộc: llm, common.

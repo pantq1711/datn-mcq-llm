@@ -12,7 +12,13 @@ public final class LatexFormatValidator {
 
     private LatexFormatValidator() {}
 
+    /** Liệt kê mọi phát hiện, kể cả cảnh báo. Không dùng để quyết định chặn; dùng {@link #check(String)}. */
     public static List<String> validate(String text) {
         return LatexValidationRules.validate(text);
+    }
+
+    /** Kết quả tách lỗi fatal và cảnh báo. */
+    public static LatexValidationRules.Result check(String text) {
+        return LatexValidationRules.check(text);
     }
 }

@@ -13,13 +13,19 @@ import java.util.Set;
 @Component
 public class FormatChecker {
 
-    public record FormatCheckOutcome(boolean passed, List<String> errors) {}
+    /**
+     * @param passed   true khi không có lỗi fatal
+     * @param errors   lỗi fatal, làm câu format_failed
+     * @param warnings cảnh báo LaTeX (lệnh ngoài danh sách cho phép), không ảnh hưởng {@code passed}
+     */
+    public record FormatCheckOutcome(boolean passed, List<String> errors, List<String> warnings) {}
 
     public FormatCheckOutcome check(QuestionQcInput input) {
         List<String> errors = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         if (!input.parseSuccess()) {
             errors.add("Không giải mã được JSON hợp lệ từ phản hồi LLM");
-            return new FormatCheckOutcome(false, errors);
+            return new FormatCheckOutcome(false, errors, warnings);
         }
         checkNonBlank("question_text", input.questionText(), errors);
         checkNonBlank("option_a", input.optionA(), errors);
@@ -44,15 +50,15 @@ public class FormatChecker {
         }
 
         if (input.validateLatex()) {
-            validateFieldLatex("question_text", input.questionText(), errors);
-            validateFieldLatex("option_a", input.optionA(), errors);
-            validateFieldLatex("option_b", input.optionB(), errors);
-            validateFieldLatex("option_c", input.optionC(), errors);
-            validateFieldLatex("option_d", input.optionD(), errors);
-            validateFieldLatex("explanation", input.explanation(), errors);
+            validateFieldLatex("question_text", input.questionText(), errors, warnings);
+            validateFieldLatex("option_a", input.optionA(), errors, warnings);
+            validateFieldLatex("option_b", input.optionB(), errors, warnings);
+            validateFieldLatex("option_c", input.optionC(), errors, warnings);
+            validateFieldLatex("option_d", input.optionD(), errors, warnings);
+            validateFieldLatex("explanation", input.explanation(), errors, warnings);
         }
 
-        return new FormatCheckOutcome(errors.isEmpty(), errors);
+        return new FormatCheckOutcome(errors.isEmpty(), errors, warnings);
     }
 
     private void checkNonBlank(String fieldName, String value, List<String> errors) {
@@ -61,12 +67,16 @@ public class FormatChecker {
         }
     }
 
-    private void validateFieldLatex(String fieldName, String value, List<String> errors) {
+    private void validateFieldLatex(String fieldName, String value, List<String> errors, List<String> warnings) {
         if (value == null || value.isBlank()) {
             return;
         }
-        for (String err : LatexValidationRules.validate(value)) {
+        LatexValidationRules.Result result = LatexValidationRules.check(value);
+        for (String err : result.errors()) {
             errors.add(fieldName + ": " + err);
+        }
+        for (String warning : result.warnings()) {
+            warnings.add(fieldName + ": " + warning);
         }
     }
 }

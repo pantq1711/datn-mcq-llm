@@ -15,10 +15,31 @@ import java.util.TreeSet;
  * <p>Đây chỉ là kiểm tra cú pháp bề mặt trong phạm vi toán THCS (tập lệnh cho phép cố định,
  * đối số của \frac và \sqrt, cặp \left/\right, cặp \begin/\end, ngoặc nhọn, dấu $).
  * Nó không phải parser LaTeX và không bảo đảm KaTeX render được công thức.
+ *
+ * <p>Mức độ (quyết định 6, 2026-10-21): lệnh nằm ngoài {@code ALLOWED_COMMANDS} chỉ là CẢNH BÁO;
+ * mọi phát hiện còn lại là LỖI. Nơi quyết định format_failed hoặc chặn bản sửa phải dùng
+ * {@link #check(String)} và chỉ xét {@link Result#errors()}.
  */
 public final class LatexValidationRules {
 
-    /** Lệnh được phép trong công thức; lệnh khác bị báo lỗi (có thể do sai chính tả). */
+    /**
+     * Kết quả kiểm tra tách theo mức độ.
+     *
+     * @param errors   lỗi fatal: làm câu format_failed và chặn bản sửa của giáo viên
+     * @param warnings cảnh báo: chỉ để tham khảo, không ảnh hưởng trạng thái
+     */
+    public record Result(List<String> errors, List<String> warnings) {
+        public Result {
+            errors = List.copyOf(errors);
+            warnings = List.copyOf(warnings);
+        }
+
+        public boolean hasErrors() {
+            return !errors.isEmpty();
+        }
+    }
+
+    /** Lệnh được phép trong công thức; lệnh khác bị báo cảnh báo (có thể do sai chính tả). */
     private static final Set<String> ALLOWED_COMMANDS = Set.of(
             "frac", "sqrt", "cdot", "times", "div", "pm",
             "neq", "ne", "le", "leq", "ge", "geq",
@@ -38,11 +59,31 @@ public final class LatexValidationRules {
 
     private LatexValidationRules() {}
 
-    public static List<String> validate(String text) {
+    /**
+     * Kiểm tra và tách lỗi fatal với cảnh báo.
+     */
+    public static Result check(String text) {
         List<String> errors = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        collect(text, errors, warnings);
+        return new Result(errors, warnings);
+    }
+
+    /**
+     * Liệt kê mọi phát hiện (lỗi trước, cảnh báo sau). Giữ để tương thích với test đã duyệt.
+     * Không dùng kết quả này để quyết định format_failed; dùng {@link #check(String)}.
+     */
+    public static List<String> validate(String text) {
+        Result result = check(text);
+        List<String> all = new ArrayList<>(result.errors());
+        all.addAll(result.warnings());
+        return all;
+    }
+
+    private static void collect(String text, List<String> errors, List<String> warnings) {
         if (text == null || text.isBlank()) {
             errors.add("Nội dung trống");
-            return errors;
+            return;
         }
         int n = text.length();
         for (int i = 0; i < n; i++) {
@@ -70,7 +111,7 @@ public final class LatexValidationRules {
                     }
                     i += 2;
                 } else {
-                    i = scanCommand(text, i, frames, errors, reportedCommands);
+                    i = scanCommand(text, i, frames, errors, warnings, reportedCommands);
                 }
                 continue;
             }
@@ -127,15 +168,15 @@ public final class LatexValidationRules {
         if (inMath) {
             errors.add("số dấu $ bị lẻ");
         }
-        return errors;
     }
 
     /**
      * Xử lý một dấu '\' bên trong công thức, trả về vị trí tiếp theo cần quét.
      * Ký hiệu một ký tự như \{ \} \$ \\ được bỏ qua nguyên khối nên không ảnh hưởng đếm ngoặc.
+     * Lệnh ngoài danh sách cho phép được ghi vào {@code warnings}; mọi phát hiện khác vào {@code errors}.
      */
     private static int scanCommand(String text, int start, Deque<String> frames,
-                                   List<String> errors, Set<String> reportedCommands) {
+                                   List<String> errors, List<String> warnings, Set<String> reportedCommands) {
         int n = text.length();
         if (start + 1 >= n) {
             return n;
@@ -150,7 +191,7 @@ public final class LatexValidationRules {
         String name = text.substring(start + 1, end);
         if (!ALLOWED_COMMANDS.contains(name)) {
             if (reportedCommands.add(name)) {
-                errors.add(unknownCommandMessage(name));
+                warnings.add(unknownCommandMessage(name));
             }
             return end;
         }

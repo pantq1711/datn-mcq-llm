@@ -5,11 +5,15 @@ import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.AnswerCheckStatus;
+import com.datn.mcq.qc.dto.DedupCandidate;
+import com.datn.mcq.qc.dto.DedupOutcome;
+import com.datn.mcq.qc.dto.DedupScope;
 import com.datn.mcq.qc.dto.DedupStatus;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.entity.QualityCheckResult;
 import com.datn.mcq.qc.repository.QualityCheckResultRepository;
+import com.datn.mcq.qc.service.DedupService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,9 +21,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Điều phối tuần tự pipeline QC: format -> (dedup) -> answer_check.
+ * Điều phối tuần tự pipeline QC: format -> dedup -> answer_check.
  * Tuân thủ quy tắc 4 trong docs/architecture/backend-structure.md:
- * qc không đọc entity generated_question; generation truyền nội dung câu hỏi vào và tự cập nhật status.
+ * qc không đọc entity generated_question; generation truyền nội dung câu hỏi và phạm vi dedup vào,
+ * nhận báo cáo rồi tự cập nhật status.
+ *
+ * <p>Solver (gọi LLM, có thể tốn phí) chỉ được gọi khi dedup kết luận NO_DUPLICATE (quyết định 1, 4).
  */
 @Service
 public class QcOrchestrator {
@@ -27,17 +34,24 @@ public class QcOrchestrator {
     private final FormatChecker formatChecker;
     private final AnswerSolverChecker answerSolverChecker;
     private final QualityCheckResultRepository qualityCheckResultRepository;
+    private final DedupService dedupService;
 
     public QcOrchestrator(
             FormatChecker formatChecker,
             AnswerSolverChecker answerSolverChecker,
-            QualityCheckResultRepository qualityCheckResultRepository) {
+            QualityCheckResultRepository qualityCheckResultRepository,
+            DedupService dedupService) {
         this.formatChecker = formatChecker;
         this.answerSolverChecker = answerSolverChecker;
         this.qualityCheckResultRepository = qualityCheckResultRepository;
+        this.dedupService = dedupService;
     }
 
-    public QcPipelineReport evaluateAndSave(QuestionQcInput input) {
+    /**
+     * @param scope phạm vi dedup do nơi gọi tính (generation); null hoặc sai hình dạng thì dedup = ERROR,
+     *              câu giữ generated và Solver không được gọi
+     */
+    public QcPipelineReport evaluateAndSave(QuestionQcInput input, DedupScope scope) {
         FormatChecker.FormatCheckOutcome formatOutcome = formatChecker.check(input);
         upsertCheckResult(
                 input.questionId(),
@@ -58,12 +72,31 @@ public class QcOrchestrator {
                     null,
                     null,
                     AnswerCheckStatus.NOT_RUN,
-                    DedupStatus.NOT_RUN
+                    DedupStatus.NOT_RUN,
+                    null
             );
         }
 
-        // Dedup chưa được triển khai: không giả định đã đạt (Q-2).
-        DedupStatus dedupStatus = DedupStatus.NOT_RUN;
+        DedupOutcome dedupOutcome = runDedup(input, scope);
+        DedupStatus dedupStatus = dedupOutcome.status();
+        if (dedupStatus != DedupStatus.NO_DUPLICATE) {
+            // Trùng, lỗi hoặc thiếu phạm vi: không gọi Solver. Trùng -> DUPLICATE; còn lại -> GENERATED.
+            String reason = dedupStatus == DedupStatus.DUPLICATE
+                    ? "answer_check không chạy: câu bị dedup đánh dấu trùng (" + dedupOutcome.detail() + ")"
+                    : "answer_check không chạy: dedup chưa kết luận không trùng (" + dedupOutcome.detail() + ")";
+            return new QcPipelineReport(
+                    QcStatusDecider.decide(true, dedupStatus, AnswerCheckStatus.NOT_RUN),
+                    true,
+                    List.of(),
+                    null,
+                    null,
+                    null,
+                    reason,
+                    AnswerCheckStatus.NOT_RUN,
+                    dedupStatus,
+                    dedupOutcome
+            );
+        }
 
         AnswerCheckStatus answerCheckStatus;
         Boolean answerCheckPassed = null;
@@ -124,8 +157,29 @@ public class QcOrchestrator {
                 judgeModel,
                 solverReasoning,
                 answerCheckStatus,
-                dedupStatus
+                dedupStatus,
+                dedupOutcome
         );
+    }
+
+    /**
+     * Gọi bước dedup (transaction ngắn riêng, không gọi mạng). Mọi lỗi được quy về ERROR:
+     * transaction của DedupService đã rollback nên không có dòng dedup nào được ghi.
+     */
+    private DedupOutcome runDedup(QuestionQcInput input, DedupScope scope) {
+        try {
+            DedupOutcome outcome = dedupService.checkAndRecord(new DedupCandidate(
+                    input.questionId(),
+                    input.questionText(),
+                    input.optionA(),
+                    input.optionB(),
+                    input.optionC(),
+                    input.optionD()
+            ), scope);
+            return outcome != null ? outcome : DedupOutcome.error("DedupService không trả kết quả");
+        } catch (RuntimeException ex) {
+            return DedupOutcome.error("Không hoàn tất dedup: " + ex.getMessage());
+        }
     }
 
     @Transactional

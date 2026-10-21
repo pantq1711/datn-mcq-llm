@@ -11,11 +11,13 @@ import com.datn.mcq.llm.prompt.PromptBuilder;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.AnswerCheckStatus;
+import com.datn.mcq.qc.dto.DedupScope;
 import com.datn.mcq.qc.dto.DedupStatus;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.entity.QualityCheckResult;
 import com.datn.mcq.qc.repository.QualityCheckResultRepository;
+import com.datn.mcq.qc.service.DedupService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -32,23 +34,32 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * Hợp đồng Q-2 (chốt 2026-10-21): QC_PASSED chỉ khi format hợp lệ, dedup đã chạy và không trùng,
- * answer_check chạy thành công và judge_answer khớp correct_option. Mọi trường hợp khác (trừ format lỗi)
- * phải ở trạng thái GENERATED.
+ * answer_check chạy thành công và judge_answer khớp correct_option. Dedup báo trùng -> DUPLICATE.
+ * Mọi trường hợp khác (trừ format lỗi) phải ở trạng thái GENERATED.
+ *
+ * <p>Sửa 2026-10-21 theo quyết định 1: dedup phải kết luận NO_DUPLICATE trước khi gọi Solver.
+ * DedupService thật chạy trên repository mock (mặc định không có ứng viên -> NO_DUPLICATE);
+ * các nhánh answer_check vì vậy được kiểm sau khi dedup đã kết luận không trùng.
  *
  * Test không gọi mạng: LlmClient được thay bằng bản giả trả JSON dựng sẵn hoặc ném lỗi,
- * repository được mock. Dedup hiện chưa được triển khai nên không có trường hợp nào được QC_PASSED.
+ * repository được mock.
  */
 class QcOrchestratorStatusTest {
 
     private static final String SOLVER_MODEL = "solver-test-model";
+
+    /** Phạm vi production hợp lệ: run 7 là run duy nhất cùng môn. */
+    private static final DedupScope SCOPE = DedupScope.forProduction(7, List.of(7));
 
     private QualityCheckResultRepository repository;
 
@@ -68,29 +79,90 @@ class QcOrchestratorStatusTest {
                 1, true, "Câu hỏi $x = 2$", "$x = 2$", "$x = 2$", "$x = 4$", "$x = 0$",
                 Option.A, "Giải thích $x = 2$.", true, true);
 
-        QcPipelineReport report = orchestrator(llm).evaluateAndSave(input);
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(input, SCOPE);
 
         assertEquals(AnswerCheckStatus.NOT_RUN, report.answerCheckStatus());
-        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus());
+        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus(), "Format lỗi thì dừng trước dedup");
 
         assertEquals(QuestionStatus.FORMAT_FAILED, report.resultingStatus());
         assertEquals(0, llm.solverCalls, "Format lỗi thì không được gọi Solver");
+        verify(repository, never()).findDedupCandidateRows(any(), any(), any());
     }
 
-    // ---------- Nhánh answer_check đúng (CONSISTENT) nhưng dedup chưa chạy ----------
+    // ---------- Dedup chưa kết luận: thiếu phạm vi, lỗi, hoặc trùng ----------
+    // Sửa 2026-10-21 (quyết định 1): trước đây test này kỳ vọng Solver vẫn được gọi khi dedup chưa chạy
+    // (solverCalls = 1, answer_check CONSISTENT). Hợp đồng mới: dedup chưa kết luận thì KHÔNG gọi Solver.
 
     @Test
-    void consistentAnswerCheckButDedupNotRunMustStayGenerated() {
+    void missingDedupScopeMustStayGeneratedAndNeverCallSolver() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("A"));
 
-        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true));
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), null);
 
-        assertEquals(AnswerCheckStatus.CONSISTENT, report.answerCheckStatus());
-        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus());
-
+        assertEquals(DedupStatus.ERROR, report.dedupStatus());
+        assertEquals(AnswerCheckStatus.NOT_RUN, report.answerCheckStatus());
         assertEquals(QuestionStatus.GENERATED, report.resultingStatus(),
-                "Dedup chưa chạy thì không được QC_PASSED dù Solver khớp đáp án (Q-2)");
+                "Thiếu phạm vi dedup thì không được QC_PASSED dù Solver sẽ khớp đáp án (Q-2)");
+        assertEquals(0, llm.solverCalls, "Dedup chưa kết luận thì không được gọi Solver");
+        assertNoAnswerCheckRowSaved();
+        assertNoDedupRowSaved();
+        verify(repository, never()).findDedupCandidateRows(any(), any(), any());
+    }
+
+    @Test
+    void dedupFailureMustStayGeneratedAndNeverCallSolver() {
+        FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("A"));
+        when(repository.findDedupCandidateRows(anyInt(), anyInt(), anyCollection()))
+                .thenThrow(new IllegalStateException("mất kết nối DB"));
+
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
+
+        assertEquals(DedupStatus.ERROR, report.dedupStatus());
+        assertEquals(AnswerCheckStatus.NOT_RUN, report.answerCheckStatus());
+        assertEquals(QuestionStatus.GENERATED, report.resultingStatus());
+        assertEquals(0, llm.solverCalls);
+        assertNoAnswerCheckRowSaved();
+        assertNoDedupRowSaved();
+    }
+
+    @Test
+    void duplicateMustBeDuplicateAndNeverCallSolver() {
+        FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("A"));
+        when(repository.findDedupCandidateRows(anyInt(), anyInt(), anyCollection()))
+                .thenReturn(List.<Object[]>of(duplicateCandidateRow(5)));
+
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
+
+        assertEquals(DedupStatus.DUPLICATE, report.dedupStatus());
+        assertEquals(AnswerCheckStatus.NOT_RUN, report.answerCheckStatus());
+        assertEquals(QuestionStatus.DUPLICATE, report.resultingStatus());
+        assertEquals(0, llm.solverCalls, "Câu trùng không bao giờ gọi Solver");
+        assertNoAnswerCheckRowSaved();
+        QualityCheckResult dedupRow = savedDedupRow();
+        assertFalse(dedupRow.getPassed());
+        assertEquals(5, dedupRow.getComparedToQuestionId());
+        assertEquals(5, report.dedup().comparedToQuestionId());
+    }
+
+    // ---------- Đường duy nhất tới QC_PASSED ----------
+
+    @Test
+    void noDuplicateThenConsistentAnswerCheckReachesQcPassed() {
+        FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("A"));
+        boolean[] dedupRanBeforeSolver = {false};
+        when(repository.findDedupCandidateRows(anyInt(), anyInt(), anyCollection())).thenAnswer(inv -> {
+            dedupRanBeforeSolver[0] = llm.solverCalls == 0;
+            return List.of();
+        });
+
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
+
+        assertTrue(dedupRanBeforeSolver[0], "Dedup phải chạy trước Solver");
+        assertEquals(DedupStatus.NO_DUPLICATE, report.dedupStatus());
+        assertEquals(AnswerCheckStatus.CONSISTENT, report.answerCheckStatus());
+        assertEquals(QuestionStatus.QC_PASSED, report.resultingStatus());
         assertEquals(1, llm.solverCalls);
+        assertTrue(savedDedupRow().getPassed());
         QualityCheckResult row = savedAnswerCheckRow();
         assertTrue(row.getPassed());
         assertEquals(AnswerChoice.A, row.getJudgeAnswer());
@@ -103,10 +175,10 @@ class QcOrchestratorStatusTest {
     void solverDisagreeingWithKeyMustStayGeneratedAndRecordFailedRow() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("B"));
 
-        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true));
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
 
         assertEquals(AnswerCheckStatus.INCONSISTENT, report.answerCheckStatus());
-        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus());
+        assertEquals(DedupStatus.NO_DUPLICATE, report.dedupStatus());
 
         assertEquals(QuestionStatus.GENERATED, report.resultingStatus());
         QualityCheckResult row = savedAnswerCheckRow();
@@ -118,10 +190,10 @@ class QcOrchestratorStatusTest {
     void solverAnsweringNoneMustStayGeneratedAndRecordFailedRow() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("none"));
 
-        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true));
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
 
         assertEquals(AnswerCheckStatus.INCONSISTENT, report.answerCheckStatus());
-        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus());
+        assertEquals(DedupStatus.NO_DUPLICATE, report.dedupStatus());
 
         assertEquals(QuestionStatus.GENERATED, report.resultingStatus());
         QualityCheckResult row = savedAnswerCheckRow();
@@ -133,10 +205,10 @@ class QcOrchestratorStatusTest {
     void solverAnsweringMultipleMustStayGeneratedAndRecordFailedRow() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("multiple"));
 
-        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true));
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
 
         assertEquals(AnswerCheckStatus.INCONSISTENT, report.answerCheckStatus());
-        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus());
+        assertEquals(DedupStatus.NO_DUPLICATE, report.dedupStatus());
 
         assertEquals(QuestionStatus.GENERATED, report.resultingStatus());
         QualityCheckResult row = savedAnswerCheckRow();
@@ -151,10 +223,10 @@ class QcOrchestratorStatusTest {
         FakeSolverLlmClient llm = FakeSolverLlmClient.throwing(
                 () -> new RuntimeException("HTTP 503 từ Gemini API: UNAVAILABLE"));
 
-        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true));
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
 
         assertEquals(AnswerCheckStatus.ERROR, report.answerCheckStatus());
-        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus());
+        assertEquals(DedupStatus.NO_DUPLICATE, report.dedupStatus());
 
         assertEquals(QuestionStatus.GENERATED, report.resultingStatus(),
                 "Solver lỗi không được coi là đã kiểm tra thành công");
@@ -168,10 +240,10 @@ class QcOrchestratorStatusTest {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning(
                 "{\"reasoning\": \"Ta có \\sqrt{4} = 2\", \"judge_answer\": \"A\"}");
 
-        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true));
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
 
         assertEquals(AnswerCheckStatus.ERROR, report.answerCheckStatus());
-        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus());
+        assertEquals(DedupStatus.NO_DUPLICATE, report.dedupStatus());
 
         assertEquals(QuestionStatus.GENERATED, report.resultingStatus());
         assertNoAnswerCheckRowSaved();
@@ -181,10 +253,10 @@ class QcOrchestratorStatusTest {
     void solverMissingJudgeAnswerMustStayGeneratedWithoutAnswerCheckRow() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning("{\"reasoning\": \"Không kết luận được\"}");
 
-        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true));
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
 
         assertEquals(AnswerCheckStatus.ERROR, report.answerCheckStatus());
-        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus());
+        assertEquals(DedupStatus.NO_DUPLICATE, report.dedupStatus());
 
         assertEquals(QuestionStatus.GENERATED, report.resultingStatus());
         assertNoAnswerCheckRowSaved();
@@ -194,10 +266,10 @@ class QcOrchestratorStatusTest {
     void solverUnknownJudgeAnswerValueMustStayGeneratedWithoutAnswerCheckRow() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("E"));
 
-        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true));
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
 
         assertEquals(AnswerCheckStatus.ERROR, report.answerCheckStatus());
-        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus());
+        assertEquals(DedupStatus.NO_DUPLICATE, report.dedupStatus());
 
         assertEquals(QuestionStatus.GENERATED, report.resultingStatus());
         assertNoAnswerCheckRowSaved();
@@ -209,10 +281,10 @@ class QcOrchestratorStatusTest {
     void missingApiKeyMustStayGeneratedAndNeverCallSolver() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.notConfigured();
 
-        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true));
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
 
         assertEquals(AnswerCheckStatus.NOT_RUN, report.answerCheckStatus());
-        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus());
+        assertEquals(DedupStatus.NO_DUPLICATE, report.dedupStatus());
 
         assertEquals(QuestionStatus.GENERATED, report.resultingStatus(),
                 "Thiếu API key không được coi là một lần kiểm tra thành công");
@@ -224,10 +296,10 @@ class QcOrchestratorStatusTest {
     void answerCheckDisabledByCallerMustStayGeneratedAndNeverCallSolver() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("A"));
 
-        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, false));
+        QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, false), SCOPE);
 
         assertEquals(AnswerCheckStatus.NOT_RUN, report.answerCheckStatus());
-        assertEquals(DedupStatus.NOT_RUN, report.dedupStatus());
+        assertEquals(DedupStatus.NO_DUPLICATE, report.dedupStatus());
 
         assertEquals(QuestionStatus.GENERATED, report.resultingStatus());
         assertEquals(0, llm.solverCalls);
@@ -236,18 +308,35 @@ class QcOrchestratorStatusTest {
 
     // ---------- Bất biến chung ----------
 
+    // Sửa 2026-10-21 (quyết định 1): trước đây vòng lặp chỉ kiểm "không QC_PASSED" khi dedup chưa chạy.
+    // Nay kiểm mọi kết luận dedup khác NO_DUPLICATE (thiếu phạm vi, lỗi, trùng) với mọi loại phản hồi Solver:
+    // không QC_PASSED và Solver không bao giờ được gọi.
     @Test
-    void noBranchWithoutDedupMayReachQcPassed() {
-        List<FakeSolverLlmClient> clients = List.of(
-                FakeSolverLlmClient.returning(solverJson("A")),
-                FakeSolverLlmClient.returning(solverJson("C")),
-                FakeSolverLlmClient.returning("không phải JSON"),
-                FakeSolverLlmClient.throwing(() -> new IllegalStateException("lỗi bất kỳ")),
-                FakeSolverLlmClient.notConfigured());
-        for (FakeSolverLlmClient llm : clients) {
-            setUp();
-            QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true));
-            assertNotEquals(QuestionStatus.QC_PASSED, report.resultingStatus());
+    void noDedupOutcomeOtherThanNoDuplicateMayReachQcPassedOrCallSolver() {
+        List<Supplier<FakeSolverLlmClient>> clients = List.of(
+                () -> FakeSolverLlmClient.returning(solverJson("A")),
+                () -> FakeSolverLlmClient.returning(solverJson("C")),
+                () -> FakeSolverLlmClient.returning("không phải JSON"),
+                () -> FakeSolverLlmClient.throwing(() -> new IllegalStateException("lỗi bất kỳ")),
+                FakeSolverLlmClient::notConfigured);
+        for (Supplier<FakeSolverLlmClient> client : clients) {
+            for (String dedupCase : List.of("missing-scope", "dedup-error", "duplicate")) {
+                setUp();
+                FakeSolverLlmClient llm = client.get();
+                DedupScope scope = SCOPE;
+                if (dedupCase.equals("missing-scope")) {
+                    scope = null;
+                } else if (dedupCase.equals("dedup-error")) {
+                    when(repository.findDedupCandidateRows(anyInt(), anyInt(), anyCollection()))
+                            .thenThrow(new IllegalStateException("lỗi đọc ứng viên"));
+                } else {
+                    when(repository.findDedupCandidateRows(anyInt(), anyInt(), anyCollection()))
+                            .thenReturn(List.<Object[]>of(duplicateCandidateRow(5)));
+                }
+                QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), scope);
+                assertNotEquals(QuestionStatus.QC_PASSED, report.resultingStatus(), dedupCase);
+                assertEquals(0, llm.solverCalls, "Solver bị gọi khi dedup = " + dedupCase);
+            }
         }
     }
 
@@ -257,7 +346,7 @@ class QcOrchestratorStatusTest {
     void solverMustSendResponseSchemaThroughSchemaAwareCall() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("A"));
 
-        orchestrator(llm).evaluateAndSave(validInput(Option.A, true));
+        orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
 
         assertEquals(1, llm.solverCalls);
         assertEquals(AnswerSolverChecker.SOLVER_RESPONSE_SCHEMA_JSON, llm.lastSchema,
@@ -300,7 +389,27 @@ class QcOrchestratorStatusTest {
 
     private QcOrchestrator orchestrator(FakeSolverLlmClient llm) {
         AnswerSolverChecker solver = new AnswerSolverChecker(llm, new PromptBuilder(), SOLVER_MODEL);
-        return new QcOrchestrator(new FormatChecker(), solver, repository);
+        return new QcOrchestrator(new FormatChecker(), solver, repository, new DedupService(repository));
+    }
+
+    /** Một dòng ứng viên trùng nội dung với validInput (thứ tự phương án khác). */
+    private static Object[] duplicateCandidateRow(int id) {
+        return new Object[]{id, "Nghiệm của phương trình $\\frac{x}{2} = 1$ là:",
+                "$x = 0$", "$x = 4$", "$x = 1$", "$x = 2$"};
+    }
+
+    private void assertNoDedupRowSaved() {
+        verify(repository, never()).saveAndFlush(any(QualityCheckResult.class));
+    }
+
+    private QualityCheckResult savedDedupRow() {
+        ArgumentCaptor<QualityCheckResult> captor = ArgumentCaptor.forClass(QualityCheckResult.class);
+        verify(repository, atLeastOnce()).saveAndFlush(captor.capture());
+        List<QualityCheckResult> rows = captor.getAllValues().stream()
+                .filter(r -> r.getCheckType() == CheckType.DEDUP)
+                .toList();
+        assertEquals(1, rows.size(), "Phải lưu đúng 1 dòng dedup");
+        return rows.get(0);
     }
 
     private static QuestionQcInput validInput(Option correctOption, boolean runAnswerCheck) {

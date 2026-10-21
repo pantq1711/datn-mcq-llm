@@ -1,8 +1,11 @@
 package com.datn.mcq.llm.client;
 
+import com.datn.mcq.common.exception.UpstreamServiceException;
 import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.llm.dto.LlmCallResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +20,8 @@ import java.util.Map;
 
 @Component
 public class LlmClient {
+
+    private static final Logger LOG = LoggerFactory.getLogger(LlmClient.class);
 
     private static final String GEMINI_BASE_URL =
             "https://generativelanguage.googleapis.com/v1beta/models/";
@@ -138,7 +143,7 @@ public class LlmClient {
 
         int status = response.statusCode();
         if (status < 200 || status >= 300) {
-            throw new RuntimeException("HTTP " + status + " từ Gemini API: " + response.body());
+            throw errorForStatus(status, response.body());
         }
 
         Map<String, Object> root = SimpleJson.parseObject(response.body());
@@ -164,6 +169,32 @@ public class LlmClient {
             }
         }
         return new LlmCallResult(text, totalTokens, latencyMs, 0.0, model);
+    }
+
+    /**
+     * Lỗi cho mã HTTP không thành công từ Gemini (không gọi mạng).
+     * 429 và 503 thành {@link UpstreamServiceException} với thông báo ngắn; body thô chỉ ghi vào log máy chủ.
+     * Mã khác giữ nguyên thông báo cũ.
+     */
+    static RuntimeException errorForStatus(int status, String body) {
+        if (status == 429) {
+            LOG.warn("Gemini trả HTTP 429: {}", abbreviate(body));
+            return new UpstreamServiceException(429,
+                    "Gemini đang giới hạn tần suất gọi (HTTP 429). Hãy chờ khoảng một phút rồi thử lại.");
+        }
+        if (status == 503) {
+            LOG.warn("Gemini trả HTTP 503: {}", abbreviate(body));
+            return new UpstreamServiceException(503,
+                    "Gemini tạm thời quá tải hoặc bảo trì (HTTP 503). Hãy thử lại sau ít phút.");
+        }
+        return new RuntimeException("HTTP " + status + " từ Gemini API: " + body);
+    }
+
+    private static String abbreviate(String body) {
+        if (body == null) {
+            return "";
+        }
+        return body.length() <= 500 ? body : body.substring(0, 500) + "...";
     }
 
     private String resolveApiKey() {
