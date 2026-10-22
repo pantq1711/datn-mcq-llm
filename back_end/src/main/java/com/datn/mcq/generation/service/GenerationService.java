@@ -174,7 +174,8 @@ public class GenerationService {
                 parsed.correctOption(),
                 parsed.explanation(),
                 validateLatex,
-                runAnswerCheck
+                runAnswerCheck,
+                parsed.parseError()
         ), dedupScopeResolver.resolve(run.getId()));
         GeneratedQuestion updated = updateStatusAndDifficulty(saved.getId(), qcReport.resultingStatus(), null);
         return new SyncGenerationResponse(GeneratedQuestionSummaryDto.fromEntity(updated), qcReport);

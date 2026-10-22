@@ -54,6 +54,25 @@ class McqLiteralNewlineTest {
     }
 
     @Test
+    void vietnameseWordsStartingWithNAreNotMistakenForCommands() {
+        // Cả cụm chữ cái sau "\" là "nuôi"/"nếu"/"nên", không phải tên lệnh \nu, \ne.
+        assertEquals("Bước 1:\nuôi", McqJsonParser.normalizeLiteralNewlines("Bước 1:\\nuôi"));
+        assertEquals("a\nếu", McqJsonParser.normalizeLiteralNewlines("a\\nếu"));
+        assertEquals("Do đó\nên chọn B", McqJsonParser.normalizeLiteralNewlines("Do đó\\nên chọn B"));
+    }
+
+    @Test
+    void decomposedVietnameseLettersAreStillOneWord() {
+        // Dạng tổ hợp (NFD): "nếu" = n, e, dấu mũ, dấu sắc, u. Dấu kết hợp không phải chữ cái nhưng thuộc cùng chữ,
+        // nên không được đọc thành lệnh \ne.
+        String nfdNeu = java.text.Normalizer.normalize("nếu", java.text.Normalizer.Form.NFD);
+        String nfdNen = java.text.Normalizer.normalize("nên", java.text.Normalizer.Form.NFD);
+        // "\n" theo nghĩa đen dùng chữ n đầu từ, nên sau khi đổi còn xuống dòng + phần sau chữ n.
+        assertEquals("a\n" + nfdNeu.substring(1), McqJsonParser.normalizeLiteralNewlines("a\\" + nfdNeu));
+        assertEquals("Do đó\n" + nfdNen.substring(1), McqJsonParser.normalizeLiteralNewlines("Do đó\\" + nfdNen));
+    }
+
+    @Test
     void questionLikeId4PassesFormatAfterParsing() {
         // JSON thô như model trả: \\n trong JSON giải mã thành "\n" theo nghĩa đen.
         String raw = "{\"question_text\": \"Nghiệm của phương trình $3x - 9 = 0$ là:\","
@@ -70,5 +89,17 @@ class McqLiteralNewlineTest {
                 4, true, parsed.questionText(), parsed.optionA(), parsed.optionB(), parsed.optionC(),
                 parsed.optionD(), parsed.correctOption(), parsed.explanation(), true, false));
         assertTrue(outcome.passed(), () -> "Phải qua format: " + outcome.errors());
+    }
+
+    @Test
+    void literalNewlineBeforeVietnameseWordInsideJsonIsConverted() {
+        String raw = "{\"question_text\": \"Cho $x = 2$.\\\\nếu $y = x + 1$ thì $y$ bằng:\","
+                + " \"option_a\": \"$1$\", \"option_b\": \"$2$\", \"option_c\": \"$3$\", \"option_d\": \"$4$\","
+                + " \"correct_option\": \"C\", \"explanation\": \"Bước 1:\\\\nuôi giá trị $x = 2$ vào.\"}";
+
+        ParsedMcqDto parsed = McqJsonParser.parse(raw);
+
+        assertEquals("Cho $x = 2$.\nếu $y = x + 1$ thì $y$ bằng:", parsed.questionText());
+        assertEquals("Bước 1:\nuôi giá trị $x = 2$ vào.", parsed.explanation());
     }
 }
