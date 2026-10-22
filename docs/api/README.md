@@ -31,7 +31,9 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 
 Dạng câu (`questionType`): `mcq` (trắc nghiệm 4 phương án, mặc định khi bỏ trống), `tf` (Đúng/Sai: đề dẫn và đúng 4 ý
 a-d), `sa` (Trả lời ngắn: đề và một đáp số). Câu `tf` và `sa` chỉ sinh cho `production`, chiến lược `zero-shot`, prompt
-bản nháp (`tf-v0-draft`, `sa-v0-draft`). Thực nghiệm C1/C2/C3 chỉ dùng `mcq`.
+bản nháp (`tf-v1-draft`, `sa-v1-draft`; run trước ngày 22/10 là `v0`). Thực nghiệm C1/C2/C3 chỉ dùng `mcq`.
+Khi sinh câu `tf`/`sa` (sync và job), prompt gửi model kèm tối đa 10 câu gần nhất cùng template và cùng dạng để model
+không lặp lại bài toán hay số liệu; xem `enums.md` mục 3, "Độ đa dạng".
 
 ## 2. Endpoint
 
@@ -91,11 +93,13 @@ POST /api/catalog/templates
   answerCheckStatus, dedupStatus, dedup`, cộng các trường chỉ có khi khác rỗng:
   - `answerWarnings` (`sa`, `tf`): cảnh báo không chặn, ví dụ `answer: phân số chưa tối giản`, `label: 4 ý cùng nhãn T`,
     `statement_a: đã bỏ tiền tố "a)" ở đầu ý` (quy tắc bỏ tiền tố ở mục 4.3 của `enums.md`; dạng `a.` chỉ bỏ khi ký tự
-    ngay sau dấu chấm không phải chữ cái, nên `a.b = 0` giữ nguyên còn `a. Điều kiện` thì bỏ);
+    ngay sau dấu chấm không phải chữ cái, nên `a.b = 0` giữ nguyên còn `a. Điều kiện` thì bỏ). Từ V5 cảnh báo được
+    lưu ở `quality_check_result.warnings` (dòng `format`), cả luồng job, và `answerWarnings` đọc lại từ cột đó;
   - `saJudgeKind`, `saJudgeAnswer` (`sa`): loại đáp số Solver trả (`number`, `ambiguous`, `unparseable`) và chuỗi gốc;
   - `tfJudgements` (`tf`): `[{key, judgeLabel}]`, nhãn Solver cho 4 ý (`T`, `F`, `undecidable`).
 - `dedupStatus`: `NOT_RUN` (format lỗi), `NO_DUPLICATE`, `DUPLICATE`, `ERROR`. `dedup` gồm `status, similarity,
-  comparedToQuestionId, thresholdUsed, layer, detail`. Dedup chỉ so câu cùng dạng. Solver chỉ được gọi khi
+  comparedToQuestionId, thresholdUsed, layer, detail`; `layer` là `NONE`, `FINGERPRINT`, `TRIGRAM` hoặc (chỉ `tf`)
+  `TF_STATEMENTS` (đề dẫn giống và ít nhất 3/4 ý giống nhau). Dedup chỉ so câu cùng dạng. Solver chỉ được gọi khi
   `dedupStatus = NO_DUPLICATE`; câu trùng có `status = duplicate`, dedup lỗi giữ `generated`.
 - `answerCheckStatus`: `CONSISTENT` (Solver khớp; với `tf` là khớp đủ 4 ý), `INCONSISTENT`, `ERROR`, `NOT_RUN`. Câu chỉ
   đạt `qc_passed` khi `CONSISTENT`.

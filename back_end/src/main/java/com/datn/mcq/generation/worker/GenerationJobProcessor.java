@@ -14,6 +14,7 @@ import com.datn.mcq.generation.dto.ParsedMcqDto;
 import com.datn.mcq.generation.dto.ParsedSaDto;
 import com.datn.mcq.generation.dto.ParsedTfDto;
 import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.generation.service.PreviousQuestionLookup;
 import com.datn.mcq.generation.service.TrueFalseQuestionStore;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
@@ -60,6 +61,7 @@ public class GenerationJobProcessor {
     private final CatalogService catalogService;
     private final ExperimentService experimentService;
     private final PromptBuilder promptBuilder;
+    private final PreviousQuestionLookup previousQuestionLookup;
     private final TrueFalseQuestionStore trueFalseQuestionStore;
 
     public GenerationJobProcessor(
@@ -68,13 +70,15 @@ public class GenerationJobProcessor {
             CatalogService catalogService,
             ExperimentService experimentService,
             PromptBuilder promptBuilder,
-            TrueFalseQuestionStore trueFalseQuestionStore) {
+            TrueFalseQuestionStore trueFalseQuestionStore,
+            PreviousQuestionLookup previousQuestionLookup) {
         this.generationJobRepository = generationJobRepository;
         this.generatedQuestionRepository = generatedQuestionRepository;
         this.catalogService = catalogService;
         this.experimentService = experimentService;
         this.promptBuilder = promptBuilder;
         this.trueFalseQuestionStore = trueFalseQuestionStore;
+        this.previousQuestionLookup = previousQuestionLookup;
     }
 
     @Transactional
@@ -104,7 +108,8 @@ public class GenerationJobProcessor {
                         tpl.getTopic(),
                         tpl.getLearningOutcome(),
                         tpl.getSourceQuestion(),
-                        statementLevels)
+                        statementLevels,
+                        previousQuestionLookup.recent(tpl.getId(), QuestionType.TF))
                 : questionType == QuestionType.SA
                 ? SaPromptDraftV0.buildGenerationPrompt(
                         subject.getName(),
@@ -112,7 +117,8 @@ public class GenerationJobProcessor {
                         tpl.getTopic(),
                         tpl.getLearningOutcome(),
                         tpl.getSourceQuestion(),
-                        job.getTargetDifficulty())
+                        job.getTargetDifficulty(),
+                        previousQuestionLookup.recent(tpl.getId(), QuestionType.SA))
                 : promptBuilder.buildGenerationPrompt(
                         subject.getName(),
                         tpl.getGradeLevel(),

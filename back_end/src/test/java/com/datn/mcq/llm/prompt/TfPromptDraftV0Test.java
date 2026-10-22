@@ -58,12 +58,26 @@ class TfPromptDraftV0Test {
     }
 
     @Test
+    void cauNguonChiLaDinhHuongBatBuocTaoBaiMoi() {
+        List<Difficulty> levels = List.of(Difficulty.EASY, Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD);
+        String p = TfPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, "Giải $2x - 6 = 0$.", levels);
+        for (String part : List.of("chỉ để định hướng dạng bài và kiến thức", "BẮT BUỘC tạo một bài toán MỚI",
+                "số liệu, biểu thức hoặc ngữ cảnh khác câu hỏi nguồn",
+                "không chép lại phương trình, biểu thức hay số liệu của câu hỏi nguồn vào đề dẫn hay các ý")) {
+            assertTrue(p.contains(part), "Prompt thiếu: " + part);
+        }
+        assertTrue(p.indexOf("Giải $2x - 6 = 0$.") < p.indexOf("BẮT BUỘC tạo một bài toán MỚI"));
+        String noSource = TfPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, null, levels);
+        assertFalse(noSource.contains("câu hỏi nguồn"), "không có câu nguồn thì không nhắc câu nguồn");
+    }
+
+    @Test
     void promptSolverKhongKemNhan() {
         String p = TfPromptDraftV0.buildSolverPrompt("Cho $P = x$.", List.of("Ý A1", "Ý B1", "Ý C1", "Ý D1"));
         for (String part : List.of("Cho $P = x$.", "a) Ý A1", "b) Ý B1", "c) Ý C1", "d) Ý D1", "undecidable",
                 "\"reasoning_a\"", "\"judge_d\"")) {
             assertTrue(p.contains(part), "Prompt Solver thiếu: " + part);
         }
-        assertEquals("tf-v0-draft", TfPromptDraftV0.PROMPT_VERSION);
+        assertEquals("tf-v1-draft", TfPromptDraftV0.PROMPT_VERSION);
     }
 }

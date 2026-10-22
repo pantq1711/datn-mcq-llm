@@ -20,11 +20,15 @@ public record DedupOutcome(
         Layer layer,
         String detail
 ) {
-    /** Tầng kết luận: dấu vân tay sau chuẩn hóa, hoặc cosine 3-gram có chốt chặn. */
+    /**
+     * Tầng kết luận: dấu vân tay sau chuẩn hóa, cosine 3-gram có chốt chặn, hoặc (chỉ câu tf) đề dẫn giống nhau và
+     * ít nhất 3/4 ý ghép được thành cặp giống nhau.
+     */
     public enum Layer {
         NONE,
         FINGERPRINT,
-        TRIGRAM
+        TRIGRAM,
+        TF_STATEMENTS
     }
 
     public static DedupOutcome error(String detail) {

@@ -260,7 +260,7 @@ class TrueFalseFlowTest {
         assertEquals("tf", run.get("question_type"));
         assertEquals("production", run.get("purpose"));
         assertEquals("zero-shot", run.get("strategy"));
-        assertEquals("tf-v0-draft", run.get("prompt_version"));
+        assertEquals("tf-v1-draft", run.get("prompt_version"));
         assertEquals(List.of("tf", "tf", "tf"), jdbc.queryForList("SELECT question_type FROM quality_check_result"
                 + " WHERE question_id = ? ORDER BY check_type", String.class, id));
         Map<String, Object> answerCheck = jdbc.queryForMap("SELECT * FROM quality_check_result WHERE question_id = ?"
@@ -478,6 +478,7 @@ class TrueFalseFlowTest {
 
     static final class FakeGeneratorClient extends LlmClient {
         String lastSchema;
+        List<String> labels = List.of("T", "T", "F", "F");
 
         FakeGeneratorClient() {
             super("FAKE_KEY_FOR_TESTS", "fake-generator-model");
@@ -491,8 +492,40 @@ class TrueFalseFlowTest {
         @Override
         public LlmCallResult callJsonModeWithSchema(String prompt, String modelName, Double temperature, String schema) {
             lastSchema = schema;
-            return new LlmCallResult(tfJson(STEM, STATEMENTS, List.of("T", "T", "F", "F")), 30, 2.0, 0.0, modelName);
+            return new LlmCallResult(tfJson(STEM, STATEMENTS, labels), 30, 2.0, 0.0, modelName);
         }
+    }
+
+    /** V5 (Q8): cảnh báo bước format được lưu ở dòng format, cả sync và job; API đọc lại đúng giá trị đó. */
+    @Test
+    void canhBaoDuocLuuODongFormatCaSyncVaJob() throws Exception {
+        JsonNode same = generateTf(tfJson(STEM, STATEMENTS, List.of("T", "T", "T", "T")), false);
+        int syncId = same.get("question").get("id").asInt();
+        assertEquals(objectMapper.readTree("[\"label: 4 ý cùng nhãn T\"]"), formatWarnings(syncId));
+        assertEquals(same.get("qcReport").get("answerWarnings"), formatWarnings(syncId));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type <> 'format' AND warnings IS NOT NULL", Integer.class, syncId));
+
+        JsonNode normal = generateTf(tfJson("Cho $Q = 2$.", STATEMENTS, List.of("T", "F", "T", "F")), false);
+        assertNull(jdbc.queryForObject("SELECT warnings::text FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type = 'format'", String.class, normal.get("question").get("id").asInt()),
+                "không có cảnh báo thì NULL");
+
+        mockMvc.perform(post("/api/generation/jobs/enqueue").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"templateId\": " + template.getId() + ", \"questionType\": \"tf\","
+                        + " \"targetStatementDifficulties\": [\"easy\", \"easy\", \"medium\", \"hard\"]}"))
+                .andExpect(status().isOk());
+        jdbc.update("UPDATE generation_job SET next_run_at = now() - interval '1 minute'");
+        FakeGeneratorClient generator = new FakeGeneratorClient();
+        generator.labels = List.of("F", "F", "F", "F");
+        GenerationJobPoller.ProcessedJobSummary summary = new GenerationJobPoller(jobProcessor, generator,
+                qcOrchestrator, dedupScopeResolver, 3).processNextJob(false);
+        assertEquals(objectMapper.readTree("[\"label: 4 ý cùng nhãn F\"]"), formatWarnings(summary.questionId()));
+    }
+
+    private JsonNode formatWarnings(int questionId) throws Exception {
+        return objectMapper.readTree(jdbc.queryForObject("SELECT warnings::text FROM quality_check_result"
+                + " WHERE question_id = ? AND check_type = 'format'", String.class, questionId));
     }
 
     @Test
@@ -506,7 +539,7 @@ class TrueFalseFlowTest {
         assertTrue(jobs.get(0).get("targetDifficulty").isNull());
         Map<String, Object> run = jdbc.queryForMap("SELECT * FROM experiment_run");
         assertEquals("tf", run.get("question_type"));
-        assertEquals("tf-v0-draft", run.get("prompt_version"));
+        assertEquals("tf-v1-draft", run.get("prompt_version"));
 
         FakeGeneratorClient generator = new FakeGeneratorClient();
         GenerationJobPoller poller = new GenerationJobPoller(jobProcessor, generator, qcOrchestrator,

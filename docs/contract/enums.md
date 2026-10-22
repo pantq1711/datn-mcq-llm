@@ -245,6 +245,7 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - `τ = 0.90` là hằng số tạm, CHƯA hiệu chỉnh trên gold set; chưa có precision/recall.
   - Phạm vi so: experiment chỉ trong cùng run; production trong các run production cùng môn. Không bao giờ so chéo experiment và production. Ứng viên là câu `qc_passed`, `in_bank` và câu cùng run đã có dòng dedup `passed = true`.
   - Dedup báo trùng: dòng dedup `passed = false` kèm `compared_to_question_id`, trạng thái `duplicate`. Dedup lỗi hoặc thiếu phạm vi: không ghi dòng dedup, giữ `generated`.
+  - Câu `tf` có thêm tầng (c) `TF_STATEMENTS` (quyết định Q6-Q7 ngày 22/10), xét sau (a) và (b): trùng khi đề dẫn giống nhau sau chuẩn hóa (hoặc cosine đề dẫn `>= τ` VÀ đề dẫn qua chốt chặn số liệu và phủ định) VÀ ít nhất 3/4 ý ghép được thành cặp có cosine `>= τ`. Ghép không phụ thuộc thứ tự, mỗi ý ghép tối đa với một ý của câu kia; KHÔNG áp chốt chặn số liệu hay phủ định ở mức ý. `similarity_score` là giá trị nhỏ nhất trong cosine đề dẫn và cosine các cặp ý đã ghép, nên vẫn `>= τ`. Ca biên đã biết: chữ `sai` trong "Xét tính đúng sai…" tính là phủ định, nên chốt chặn phủ định ở đề dẫn không phân biệt hai đề dẫn cùng có cụm đó.
 - `duplicate` là trạng thái cuối: câu không vào vòng chấm (production và experiment), không được nộp đánh giá, không bị ghi đè trạng thái; bản ghi được giữ để truy vết và thống kê. Người chấm không được biết câu nào bị loại vì trùng.
 - Vòng chấm (quyết định 21/10 mục 5 và quyết định 22/10): danh sách `production` chỉ gồm câu `qc_passed` (mọi lần nộp production đều chuyển câu sang `in_bank` hoặc `rejected`, nên đó là câu chưa được chấm). Danh sách `experiment` loại `duplicate` và `format_failed`, giữ câu `generated` (kể cả khi `answer_check` lệch hoặc không chạy) và `qc_passed`, không lọc theo kết quả `answer_check`. Chi tiết và nộp đánh giá cho câu `duplicate` hoặc `format_failed` trả 404 `Không tìm thấy câu hỏi`, giống hệt câu không tồn tại.
 - Định dạng (việc 1 và 2 ngày 22/10): sau khi giải mã JSON, chuỗi `\n` theo nghĩa đen nằm ngoài `$...$`/`$$...$$` ở các trường văn bản được đổi thành ký tự xuống dòng (trong công thức giữ nguyên; `raw_llm_output` giữ bản gốc). Lỗi LaTeX ở `question_text` và 4 phương án làm câu `format_failed`; lỗi LaTeX ở `explanation` chỉ là cảnh báo. Khi chép vào `bank_item`, lời giải còn lỗi định dạng nghiêm trọng được lưu `explanation = NULL`.
@@ -253,7 +254,9 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
 - Khi lưu cặp gold set luôn sắp `question_id_1 < question_id_2`.
 - Dạng câu (V4, thiết kế duyệt 22/10):
   - Mọi dữ liệu trước V4 là `mcq`. `question_type` không đổi sau khi tạo; các bảng con dùng khóa ngoại kép `(id, question_type)` nên DB chặn ý TF gắn vào câu khác dạng, `bank_item`/`teacher_review`/`quality_check_result` khác dạng câu gốc, và câu khác dạng run.
-  - Run `tf`/`sa` chỉ cho `production`, `strategy = 'zero-shot'`, `prompt_version` là `sa-v0-draft` hoặc `tf-v0-draft`. Phân tích C1/C2/C3 lọc `question_type = 'mcq'`.
+  - Run `tf`/`sa` chỉ cho `production`, `strategy = 'zero-shot'`. `prompt_version` là `sa-v1-draft` / `tf-v1-draft` (từ ngày 22/10, thêm quy tắc đa dạng); run cũ giữ `sa-v0-draft` / `tf-v0-draft`. Phân tích C1/C2/C3 lọc `question_type = 'mcq'`.
+  - Độ đa dạng (Q1-Q3 ngày 22/10, chỉ `sa`/`tf`, không áp cho `mcq`): prompt gửi model có thêm tối đa 10 câu gần nhất cùng template và cùng dạng câu, ở mọi run và mọi trạng thái (kể cả `duplicate`, `rejected`), chỉ câu `parse_success = TRUE`; `sa` lấy đề, `tf` lấy đề dẫn và 4 ý; không kèm đáp số hay nhãn; mỗi mục (đề, đề dẫn, một ý) cắt tối đa 200 ký tự. Áp cho cả `generate-sync` và job. `experiment_run.prompt_text` giữ prompt gốc (không có danh sách). Dựng lại danh sách của một câu: lấy câu cùng `template_id` và `question_type`, `parse_success = TRUE`, `created_at` nhỏ hơn câu đó, sắp `created_at DESC, id DESC`, lấy 10. Hạn chế: hai lần sinh chạy đồng thời không thấy câu của nhau, và danh sách dựng lại có thể lệch nếu dữ liệu bị sửa sau đó.
+  - `quality_check_result.warnings` (V5, JSONB mảng chuỗi): cảnh báo không chặn của bước format (`answer: phân số chưa tối giản`, `label: 4 ý cùng nhãn T`, `statement_a: đã bỏ tiền tố "a)" ở đầu ý`), chỉ ở dòng `check_type = 'format'`, NULL khi không có. Cả sync và job đều ghi; `qcReport.answerWarnings` đọc lại từ cột này. Chạy lại QC ghi đè cột theo kết quả mới (cảnh báo bỏ tiền tố không tái tạo được vì ý đã lưu không còn tiền tố).
   - Câu `tf` và `sa` không dùng `option_a..d`, `correct_option`; `teacher_review.reviewer_answer`, `final_option` để NULL. Câu `tf` để NULL mức độ cấp câu (`llm_difficulty`, `final_difficulty`, `difficulty_label`, `bank_item.difficulty`): mức độ ghi theo từng ý. `llm_difficulty` của ý là mức mục tiêu khi sinh (Q-5 chốt thế nào áp cho cả hai).
   - Câu `tf` có đúng 4 ý a-d ở mỗi bảng con: DB chỉ chặn quá 4 (khóa chính + `position`), service kiểm đủ 4.
   - Đáp số `sa` lưu `TEXT` đúng chuỗi được viết (đã trim), DB không kiểm định dạng; phân tích và so theo giá trị làm trong Java.
@@ -265,9 +268,9 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
 Quy tắc chung cho mọi JSON dưới đây:
 
 - Một đối tượng JSON duy nhất; được phép bọc trong rào ` ```json `. Khóa trùng trong cùng đối tượng là lỗi: ở JSON sinh câu thì câu thành `format_failed`, ở JSON Solver thì `answer_check` là `ERROR` (không ghi dòng).
-- Mỗi dấu `\` của LaTeX viết thành `\` trong JSON, ví dụ `"$\frac{1}{2}$"`. Chuỗi `\n` theo nghĩa đen nằm ngoài công thức ở các trường văn bản được đổi thành ký tự xuống dòng.
+- Mỗi dấu `\` của LaTeX viết thành `\\` trong JSON, ví dụ `"$\\frac{1}{2}$"`. Chuỗi `\n` theo nghĩa đen nằm ngoài công thức ở các trường văn bản được đổi thành ký tự xuống dòng.
 - Thứ tự trường là `propertyOrdering` của schema gửi Gemini (`GENERATION_RESPONSE_SCHEMA_JSON`, `SOLVER_RESPONSE_SCHEMA_JSON`). Backend đọc theo tên khóa nên không kiểm thứ tự.
-- Prompt `sa` và `tf` là bản nháp (`sa-v0-draft` trong `SaPromptDraftV0`, `tf-v0-draft` trong `TfPromptDraftV0`), chờ thành viên phụ trách prompt duyệt. Hợp đồng JSON dưới đây là phần backend kiểm; nội dung prompt có thể đổi mà không đổi hợp đồng.
+- Prompt `sa` và `tf` là bản nháp (`sa-v1-draft` trong `SaPromptDraftV0`, `tf-v1-draft` trong `TfPromptDraftV0`; tên lớp giữ hậu tố V0), chờ thành viên phụ trách prompt duyệt. Hợp đồng JSON dưới đây là phần backend kiểm; nội dung prompt có thể đổi mà không đổi hợp đồng.
 
 ### 4.1. Sinh câu `mcq` (7 trường, không có độ khó)
 
@@ -298,8 +301,8 @@ Mức mục tiêu (`targetDifficulty`, bỏ trống là `easy`) đi trong prompt
 ```json
 {
   "question_text": "Cho tam giác $ABC$ vuông cân tại $A$ có $AB = AC = 3$. Tính độ dài cạnh $BC$.",
-  "explanation": "Theo định lí Pythagore, $BC^2 = AB^2 + AC^2 = 9 + 9 = 18$, nên $BC = \sqrt{18} = 3\sqrt{2}$.",
-  "answer": "$3\sqrt{2}$"
+  "explanation": "Theo định lí Pythagore, $BC^2 = AB^2 + AC^2 = 9 + 9 = 18$, nên $BC = \\sqrt{18} = 3\\sqrt{2}$.",
+  "answer": "$3\\sqrt{2}$"
 }
 ```
 
@@ -320,12 +323,12 @@ Thứ tự: `question_text`, `statement_a`, `statement_b`, `statement_c`, `state
 
 ```json
 {
-  "question_text": "Cho biểu thức $P = \frac{x^2 - 1}{x^2 - x}$.",
-  "statement_a": "Điều kiện xác định của $P$ là $x \neq 0$ và $x \neq 1$.",
-  "statement_b": "Với điều kiện xác định, $P = \frac{x+1}{x}$.",
+  "question_text": "Cho biểu thức $P = \\frac{x^2 - 1}{x^2 - x}$.",
+  "statement_a": "Điều kiện xác định của $P$ là $x \\neq 0$ và $x \\neq 1$.",
+  "statement_b": "Với điều kiện xác định, $P = \\frac{x+1}{x}$.",
   "statement_c": "Tại $x = 2$ thì $P = 2$.",
   "statement_d": "Có đúng hai giá trị nguyên của $x$ để $P$ nhận giá trị nguyên.",
-  "explanation": "a) $x^2 - x = x(x-1) \neq 0$. b) Rút gọn tử và mẫu cho $x - 1$. c) $P = \frac{3}{2}$. d) $\frac{x+1}{x} = 1 + \frac{1}{x}$ nguyên khi $x = -1$; $x = 1$ bị loại.",
+  "explanation": "a) $x^2 - x = x(x-1) \\neq 0$. b) Rút gọn tử và mẫu cho $x - 1$. c) $P = \\frac{3}{2}$. d) $\\frac{x+1}{x} = 1 + \\frac{1}{x}$ nguyên khi $x = -1$; $x = 1$ bị loại.",
   "label_a": "T",
   "label_b": "T",
   "label_c": "F",
@@ -352,8 +355,8 @@ Solver chỉ thấy đề (`question_text`), không thấy đáp số và lời 
 
 ```json
 {
-  "reasoning": "Tam giác vuông cân nên $BC = AB\sqrt{2} = 3\sqrt{2}$.",
-  "judge_answer": "$3\sqrt{2}$"
+  "reasoning": "Tam giác vuông cân nên $BC = AB\\sqrt{2} = 3\\sqrt{2}$.",
+  "judge_answer": "$3\\sqrt{2}$"
 }
 ```
 
@@ -371,13 +374,13 @@ Solver chỉ thấy đề dẫn và 4 ý, không thấy nhãn và lời giải c
 
 ```json
 {
-  "reasoning_a": "Mẫu $x^2 - x = x(x-1)$ khác 0 khi $x \neq 0$ và $x \neq 1$.",
+  "reasoning_a": "Mẫu $x^2 - x = x(x-1)$ khác 0 khi $x \\neq 0$ và $x \\neq 1$.",
   "judge_a": "T",
   "reasoning_b": "Tử $(x-1)(x+1)$, mẫu $x(x-1)$, rút gọn cho $x - 1$.",
   "judge_b": "T",
-  "reasoning_c": "$P(2) = \frac{3}{2}$.",
+  "reasoning_c": "$P(2) = \\frac{3}{2}$.",
   "judge_c": "F",
-  "reasoning_d": "$1 + \frac{1}{x}$ nguyên khi $x = \pm 1$, loại $x = 1$, còn một giá trị.",
+  "reasoning_d": "$1 + \\frac{1}{x}$ nguyên khi $x = \\pm 1$, loại $x = 1$, còn một giá trị.",
   "judge_d": "F"
 }
 ```

@@ -1,5 +1,6 @@
 package com.datn.mcq.qc.orchestrator;
 
+import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.QuestionType;
@@ -84,8 +85,7 @@ public class QcOrchestrator {
      */
     public QcPipelineReport evaluateAndSave(QuestionQcInput input, DedupScope scope) {
         FormatChecker.FormatCheckOutcome formatOutcome = formatChecker.check(input);
-        List<String> answerWarnings = formatOutcome.answerWarnings();
-        upsertCheckResult(
+        QualityCheckResult formatRow = upsertCheckResult(
                 input.questionId(),
                 input.questionType(),
                 CheckType.FORMAT,
@@ -93,8 +93,11 @@ public class QcOrchestrator {
                 null,
                 null,
                 null,
-                null
+                null,
+                formatOutcome.answerWarnings()
         );
+        // V5 (Q8 ngày 22/10): cảnh báo lưu ở cột warnings của dòng format; báo cáo đọc lại từ chính cột đó.
+        List<String> answerWarnings = readWarnings(formatRow.getWarnings());
 
         if (!formatOutcome.passed()) {
             // Format lỗi thì dừng sớm, không gọi Solver.
@@ -318,6 +321,25 @@ public class QcOrchestrator {
             String judgeModel,
             SaJudgeKind judgeSaKind,
             String judgeSaAnswer) {
+        return upsertCheckResult(questionId, questionType, checkType, passed, judgeAnswer, judgeModel, judgeSaKind,
+                judgeSaAnswer, null);
+    }
+
+    /**
+     * Như trên, kèm cảnh báo (V5): chỉ ghi vào dòng format (rỗng hoặc null thì cột để NULL); dòng khác luôn NULL.
+     * Ghi đè dòng format cũ nên lần chạy lại QC thay cả cảnh báo.
+     */
+    @Transactional
+    public QualityCheckResult upsertCheckResult(
+            Integer questionId,
+            QuestionType questionType,
+            CheckType checkType,
+            boolean passed,
+            AnswerChoice judgeAnswer,
+            String judgeModel,
+            SaJudgeKind judgeSaKind,
+            String judgeSaAnswer,
+            List<String> warnings) {
         QualityCheckResult qcr = qualityCheckResultRepository
                 .findByQuestionIdAndCheckType(questionId, checkType)
                 .orElseGet(QualityCheckResult::new);
@@ -336,8 +358,36 @@ public class QcOrchestrator {
             qcr.setJudgeSaKind(null);
             qcr.setJudgeSaAnswer(null);
         }
+        qcr.setWarnings(checkType == CheckType.FORMAT ? writeWarnings(warnings) : null);
         qcr.setCheckedAt(LocalDateTime.now());
         return qualityCheckResultRepository.save(qcr);
+    }
+
+    /** Mảng JSON các chuỗi; null khi không có cảnh báo. */
+    static String writeWarnings(List<String> warnings) {
+        if (warnings == null || warnings.isEmpty()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < warnings.size(); i++) {
+            sb.append(i > 0 ? "," : "").append(SimpleJson.quote(warnings.get(i)));
+        }
+        return sb.append("]").toString();
+    }
+
+    /** Đọc lại cột warnings (mảng JSON chuỗi); null hoặc rỗng thì danh sách rỗng. */
+    static List<String> readWarnings(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        Object parsed = SimpleJson.parseObject("{\"w\":" + json + "}").get("w");
+        List<String> out = new ArrayList<>();
+        if (parsed instanceof List<?> items) {
+            for (Object item : items) {
+                out.add(String.valueOf(item));
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**

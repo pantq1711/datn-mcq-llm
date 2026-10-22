@@ -153,7 +153,7 @@ class V4UpgradeFromV3Test {
 
         Map<String, List<Map<String, Object>>> before = snapshot();
 
-        assertEquals(1, flyway("latest").migrate().migrationsExecuted);
+        assertEquals(1, flyway("4").migrate().migrationsExecuted); // V5 trở đi có test riêng
         assertEquals("4", jdbc.queryForObject("SELECT version FROM " + SCHEMA
                 + ".flyway_schema_history WHERE success ORDER BY installed_rank DESC LIMIT 1", String.class));
 

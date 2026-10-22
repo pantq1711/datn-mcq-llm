@@ -26,6 +26,9 @@ import java.util.Objects;
  * <p>V4: chỉ so với ứng viên cùng dạng câu. Văn bản chuẩn của câu sa là thân câu đã chuẩn hóa cộng khóa chuẩn của
  * đáp số ({@link #answerKey(String)}); hai chốt chặn vẫn chỉ xét thân câu. Văn bản chuẩn của câu tf là đề dẫn cộng
  * 4 ý đã chuẩn hóa và sắp xếp (không gồm nhãn); hai chốt chặn xét cả đề dẫn và 4 ý.
+ *
+ * <p>Câu tf có thêm tầng thứ ba {@link DedupOutcome.Layer#TF_STATEMENTS} (quyết định Q6-Q7 ngày 22/10), xét sau hai
+ * tầng trên: đề dẫn giống nhau và ít nhất 3/4 ý ghép được thành cặp giống nhau; xem {@link #matchStatements}.
  */
 public final class DedupChecker {
 
@@ -70,6 +73,8 @@ public final class DedupChecker {
         double duplicateScore = -1.0;
         Integer nearestId = null;
         double nearestScore = -1.0;
+        Integer statementDuplicateId = null;
+        StatementMatch statementDuplicate = null;
 
         for (DedupCandidate c : ordered) {
             String candidateText = canonical(c);
@@ -81,19 +86,28 @@ public final class DedupChecker {
             }
             boolean sameSignature = subjectSignature.equals(signature(c));
             boolean sameNegation = subjectNegation.equals(negationKey(c));
-            if (!sameSignature || !sameNegation) {
-                continue;
-            }
-            double score = McqTextNormalizer.trigramCosine(subjectText, candidateText);
-            // Duyệt theo id tăng dần và chỉ thay khi điểm lớn hơn hẳn: hòa điểm thì giữ id nhỏ nhất.
-            if (score >= threshold) {
-                if (score > duplicateScore) {
-                    duplicateScore = score;
-                    duplicateId = c.questionId();
+            if (sameSignature && sameNegation) {
+                double score = McqTextNormalizer.trigramCosine(subjectText, candidateText);
+                // Duyệt theo id tăng dần và chỉ thay khi điểm lớn hơn hẳn: hòa điểm thì giữ id nhỏ nhất.
+                if (score >= threshold) {
+                    if (score > duplicateScore) {
+                        duplicateScore = score;
+                        duplicateId = c.questionId();
+                    }
+                    continue;
                 }
-            } else if (score > nearestScore) {
-                nearestScore = score;
-                nearestId = c.questionId();
+                if (score > nearestScore) {
+                    nearestScore = score;
+                    nearestId = c.questionId();
+                }
+            }
+            // Câu tf (Q6-Q7 ngày 22/10): xét thêm theo ý, không phụ thuộc chốt chặn của cả câu.
+            if (subject.questionType() == QuestionType.TF) {
+                StatementMatch match = matchStatements(subject, c, threshold);
+                if (match != null && (statementDuplicate == null || match.score() > statementDuplicate.score())) {
+                    statementDuplicate = match;
+                    statementDuplicateId = c.questionId();
+                }
             }
         }
 
@@ -106,9 +120,103 @@ public final class DedupChecker {
                     DedupOutcome.Layer.TRIGRAM, "Cosine 3-gram " + duplicateScore + " >= " + threshold
                     + " với câu id=" + duplicateId + ", cùng số liệu/công thức và cùng phủ định");
         }
+        if (statementDuplicateId != null) {
+            return new DedupOutcome(DedupStatus.DUPLICATE, statementDuplicate.score(), statementDuplicateId, threshold,
+                    DedupOutcome.Layer.TF_STATEMENTS, "Đề dẫn giống (cosine " + statementDuplicate.stemScore()
+                    + ") và " + statementDuplicate.matched() + "/4 ý ghép được thành cặp có cosine >= " + threshold
+                    + " với câu id=" + statementDuplicateId);
+        }
         return new DedupOutcome(DedupStatus.NO_DUPLICATE,
                 nearestId != null ? nearestScore : null, nearestId, threshold,
                 DedupOutcome.Layer.NONE, "Không trùng với " + ordered.size() + " ứng viên");
+    }
+
+    /** Số ý tối thiểu phải ghép được để hai câu tf bị coi là trùng theo ý. */
+    static final int MIN_MATCHED_STATEMENTS = 3;
+
+    /**
+     * @param score     điểm lưu lại: nhỏ nhất trong cosine đề dẫn và cosine các cặp ý đã ghép, nên luôn {@code >= tau}
+     * @param stemScore 1.0 khi đề dẫn giống nhau sau chuẩn hóa
+     * @param matched   số cặp ý ghép được (3 hoặc 4)
+     */
+    record StatementMatch(double score, double stemScore, int matched) {}
+
+    /**
+     * Quy tắc theo ý cho câu tf (quyết định Q6-Q7 ngày 22/10). Trùng khi:
+     * <ol>
+     *   <li>đề dẫn giống nhau sau chuẩn hóa, hoặc cosine đề dẫn {@code >= tau} và đề dẫn qua hai chốt chặn (số liệu,
+     *       phủ định);</li>
+     *   <li>ít nhất {@value #MIN_MATCHED_STATEMENTS}/4 ý ghép được thành cặp có cosine {@code >= tau}. Ghép không phụ
+     *       thuộc thứ tự, mỗi ý ghép tối đa với một ý của câu kia; KHÔNG áp chốt chặn số liệu hay phủ định ở mức ý.</li>
+     * </ol>
+     *
+     * @return null khi không trùng theo quy tắc này
+     */
+    static StatementMatch matchStatements(DedupCandidate subject, DedupCandidate candidate, double threshold) {
+        String stemA = McqTextNormalizer.normalize(subject.questionText());
+        String stemB = McqTextNormalizer.normalize(candidate.questionText());
+        double stemScore;
+        if (stemA.equals(stemB)) {
+            stemScore = 1.0;
+        } else {
+            if (!McqTextNormalizer.stemSignature(subject.questionText())
+                    .equals(McqTextNormalizer.stemSignature(candidate.questionText()))
+                    || McqTextNormalizer.hasNegation(subject.questionText())
+                    != McqTextNormalizer.hasNegation(candidate.questionText())) {
+                return null;
+            }
+            stemScore = McqTextNormalizer.trigramCosine(stemA, stemB);
+            if (stemScore < threshold) {
+                return null;
+            }
+        }
+        List<String> left = subject.statements();
+        List<String> right = candidate.statements();
+        int n = Math.min(left.size(), right.size());
+        double[][] cos = new double[n][n];
+        for (int i = 0; i < n; i++) {
+            String a = McqTextNormalizer.normalize(left.get(i));
+            for (int j = 0; j < n; j++) {
+                cos[i][j] = McqTextNormalizer.trigramCosine(a, McqTextNormalizer.normalize(right.get(j)));
+            }
+        }
+        // Ghép một-một tốt nhất: nhiều cặp >= tau nhất; hòa thì chọn cách có cặp yếu nhất cao hơn. n = 4 nên duyệt 24 hoán vị.
+        int[] best = {0};
+        double[] bestMin = {-1.0};
+        permute(new int[n], new boolean[n], 0, cos, threshold, best, bestMin);
+        if (best[0] < MIN_MATCHED_STATEMENTS) {
+            return null;
+        }
+        return new StatementMatch(Math.min(stemScore, bestMin[0]), stemScore, best[0]);
+    }
+
+    private static void permute(int[] perm, boolean[] used, int depth, double[][] cos, double threshold,
+                                int[] best, double[] bestMin) {
+        int n = perm.length;
+        if (depth == n) {
+            int count = 0;
+            double min = Double.MAX_VALUE;
+            for (int i = 0; i < n; i++) {
+                double s = cos[i][perm[i]];
+                if (s >= threshold) {
+                    count++;
+                    min = Math.min(min, s);
+                }
+            }
+            if (count > best[0] || (count == best[0] && count > 0 && min > bestMin[0])) {
+                best[0] = count;
+                bestMin[0] = min;
+            }
+            return;
+        }
+        for (int j = 0; j < n; j++) {
+            if (!used[j]) {
+                used[j] = true;
+                perm[depth] = j;
+                permute(perm, used, depth + 1, cos, threshold, best, bestMin);
+                used[j] = false;
+            }
+        }
     }
 
     private static String canonical(DedupCandidate c) {

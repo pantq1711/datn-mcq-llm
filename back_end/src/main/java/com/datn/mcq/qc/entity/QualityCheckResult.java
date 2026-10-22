@@ -10,6 +10,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -60,7 +62,20 @@ public class QualityCheckResult {
     @Column(name = "checked_at")
     private LocalDateTime checkedAt;
 
+    /** V5: cảnh báo không chặn của bước format, dạng mảng JSON; chỉ dòng format; NULL khi không có. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "warnings", columnDefinition = "jsonb")
+    private String warnings;
+
     public QualityCheckResult() {}
+
+    public String getWarnings() {
+        return warnings;
+    }
+
+    public void setWarnings(String warnings) {
+        this.warnings = warnings;
+    }
 
     public Integer getId() {
         return id;
