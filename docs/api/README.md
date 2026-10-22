@@ -120,6 +120,9 @@ Các trường `questionText`, `optionA`..`optionD`, `explanation` là văn bả
   Ví dụ hệ phương trình: `$\left\{\begin{matrix} 2x + y = 5 \\ x - y = 1 \end{matrix}\right.$`.
 - Ký tự xuống dòng thật chỉ hợp lệ ngoài công thức, trong `$$...$$` hoặc trong môi trường.
 - Trong JSON, mỗi dấu `\` của LaTeX được viết thành `\\`, ví dụ `"$\\frac{1}{2}$"`.
+- JSON có khóa trùng trong cùng một đối tượng (ví dụ hai khóa `option_c`) bị coi là lỗi định dạng: câu thành `format_failed`,
+  thông báo nêu tên khóa trùng; backend không lấy giá trị đầu hay giá trị sau. Phản hồi Solver có khóa trùng
+  (ví dụ hai khóa `judge_answer`) cho `answerCheckStatus = ERROR`, câu giữ `generated`.
 
 Backend kiểm tra cú pháp bề mặt, không bảo đảm KaTeX render được:
 
