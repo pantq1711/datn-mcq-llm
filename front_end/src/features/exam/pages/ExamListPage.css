@@ -1,0 +1,30 @@
+.exam-list-page {
+    width: 100%;
+    padding: 32px 24px 48px;
+}
+
+.exam-list-page-header {
+    margin-bottom: 24px;
+}
+
+.exam-list-page-header-content {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.exam-list-page-title {
+    margin: 0 0 4px !important;
+}
+
+.exam-list-page-table {
+    width: 100%;
+}
+
+@media (max-width: 576px) {
+    .exam-list-page-header-content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

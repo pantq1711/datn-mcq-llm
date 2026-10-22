@@ -1,0 +1,18 @@
+html,
+body,
+#root {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+html:has(.auth-layout) {
+    scrollbar-gutter: stable;
+    background: #867f73;
+}
+
+textarea,
+textarea::placeholder {
+    cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='20' viewBox='0 0 16 24' fill='none' stroke-linecap='round'><path d='M4 3h8M4 21h8M8 3v18' stroke='white' stroke-width='4'/><path d='M4 3h8M4 21h8M8 3v18' stroke='black' stroke-width='2'/></svg>") 8 12, text;
+}

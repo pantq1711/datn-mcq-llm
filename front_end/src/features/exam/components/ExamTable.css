@@ -1,0 +1,15 @@
+.exam-table {
+    width: 100%;
+}
+
+.exam-table .ant-table-wrapper {
+    width: 100%;
+}
+
+.exam-table-title {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

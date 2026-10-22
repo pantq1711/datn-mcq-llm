@@ -1,0 +1,36 @@
+.question-filters {
+    width: 100%;
+}
+
+.question-filters .ant-form-item {
+    margin-bottom: 16px;
+}
+
+.question-filters-select {
+    width: 100%;
+}
+
+.question-filters-actions-col {
+    display: flex;
+    align-items: flex-end;
+}
+
+.question-filters-actions {
+    display: flex;
+    width: 100%;
+}
+
+.question-filters-actions .ant-btn {
+    flex: 1;
+    min-width: 0;
+}
+
+@media (max-width: 767px) {
+    .question-filters-actions-col {
+        align-items: stretch;
+    }
+
+    .question-filters-actions {
+        width: 100%;
+    }
+}

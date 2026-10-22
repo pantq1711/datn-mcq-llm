@@ -11,10 +11,6 @@
     margin: 0 0 6px !important;
 }
 
-.review-summary {
-    margin-bottom: 24px;
-}
-
 .review-filter-card {
     margin-bottom: 24px;
 }
@@ -44,6 +40,26 @@
 
 .review-question-list-title {
     margin: 0 0 4px !important;
+}
+
+.review-question-table .ant-table-tbody>tr {
+    transition: background-color 0.2s ease;
+}
+
+.review-question-table .ant-table-cell {
+    overflow-wrap: anywhere;
+}
+
+.review-question-table .ant-table-tbody>tr:hover>td {
+    background-color: #f0f0f0 !important;
+}
+
+.review-row-clickable {
+    cursor: pointer;
+}
+
+.review-row-disabled {
+    opacity: 0.6;
 }
 
 @media (max-width: 768px) {

@@ -1,38 +1,11 @@
-import {
-    Button,
-    Card,
-    Col,
-    Input,
-    Row,
-    Select,
-    Statistic,
-    Table,
-    Tag,
-    Typography,
-} from "antd";
-import {
-    CheckCircleOutlined,
-    ClockCircleOutlined,
-    CloseCircleOutlined,
-    EditOutlined,
-    ReloadOutlined,
-    SearchOutlined,
-} from "@ant-design/icons";
+import { Button, Card, Input, Select, Table, Tag, Typography } from "antd";
+import { ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
 import "./ReviewQuestionsPage.css";
+import type { ReviewQuestion } from "../types/review.types";
 
-const { Title, Text } = Typography;
-
-interface ReviewQuestion {
-    id: number;
-    question: string;
-    subject: string;
-    qualityStatus: "PASSED" | "FAILED";
-    reviewStatus: "PENDING" | "APPROVED" | "EDITED" | "REJECTED";
-    difficulty: "EASY" | "MEDIUM" | "HARD";
-    createdAt: string;
-}
+const { Title } = Typography;
 
 const reviewQuestions: ReviewQuestion[] = [
     {
@@ -40,9 +13,9 @@ const reviewQuestions: ReviewQuestion[] = [
         question:
             "Một vật chuyển động thẳng đều với vận tốc 5 m/s. Trong 4 giây, vật đi được quãng đường bao nhiêu?",
         subject: "Vật lý",
-        qualityStatus: "PASSED",
-        reviewStatus: "PENDING",
-        difficulty: "MEDIUM",
+        qualityStatus: "qc_passed",
+        reviewStatus: "pending",
+        difficulty: "medium",
         createdAt: "05/10/2026 14:30",
     },
     {
@@ -50,9 +23,9 @@ const reviewQuestions: ReviewQuestion[] = [
         question:
             "Hành tinh nào nằm gần Mặt Trời nhất trong hệ Mặt Trời?",
         subject: "Vật lý",
-        qualityStatus: "PASSED",
-        reviewStatus: "PENDING",
-        difficulty: "EASY",
+        qualityStatus: "qc_passed",
+        reviewStatus: "pending",
+        difficulty: "easy",
         createdAt: "05/10/2026 14:18",
     },
     {
@@ -60,9 +33,9 @@ const reviewQuestions: ReviewQuestion[] = [
         question:
             "Cơ quan nào giữ vai trò bơm máu đi khắp cơ thể người?",
         subject: "Sinh học",
-        qualityStatus: "FAILED",
-        reviewStatus: "PENDING",
-        difficulty: "EASY",
+        qualityStatus: "format_failed",
+        reviewStatus: "pending",
+        difficulty: "easy",
         createdAt: "05/10/2026 13:52",
     },
 ];
@@ -70,7 +43,7 @@ const reviewQuestions: ReviewQuestion[] = [
 const getQualityStatusTag = (
     status: ReviewQuestion["qualityStatus"],
 ) => {
-    if (status === "PASSED") {
+    if (status === "qc_passed") {
         return <Tag color="success">Đạt QC</Tag>;
     }
 
@@ -81,16 +54,16 @@ const getReviewStatusTag = (
     status: ReviewQuestion["reviewStatus"],
 ) => {
     switch (status) {
-        case "PENDING":
+        case "pending":
             return <Tag color="processing">Chờ duyệt</Tag>;
 
-        case "APPROVED":
+        case "approved_as_is":
             return <Tag color="success">Đã duyệt</Tag>;
 
-        case "EDITED":
+        case "approved_with_edit":
             return <Tag color="warning">Đã chỉnh sửa</Tag>;
 
-        case "REJECTED":
+        case "rejected":
             return <Tag color="error">Từ chối</Tag>;
 
         default:
@@ -102,13 +75,13 @@ const getDifficultyTag = (
     difficulty: ReviewQuestion["difficulty"],
 ) => {
     switch (difficulty) {
-        case "EASY":
+        case "easy":
             return <Tag>Dễ</Tag>;
 
-        case "MEDIUM":
+        case "medium":
             return <Tag color="blue">Trung bình</Tag>;
 
-        case "HARD":
+        case "hard":
             return <Tag color="purple">Khó</Tag>;
 
         default:
@@ -118,10 +91,6 @@ const getDifficultyTag = (
 
 export default function ReviewQuestionsPage() {
     const navigate = useNavigate();
-
-    const handleViewQuestion = (id: number) => {
-        navigate(`/review/${id}`);
-    };
 
     const columns: ColumnsType<ReviewQuestion> = [
         {
@@ -169,19 +138,6 @@ export default function ReviewQuestionsPage() {
             key: "createdAt",
             width: 160,
         },
-        {
-            title: "Thao tác",
-            key: "action",
-            width: 100,
-            render: (_, record) => (
-                <Button
-                    type="link"
-                    onClick={() => handleViewQuestion(record.id)}
-                >
-                    Xem
-                </Button>
-            ),
-        },
     ];
 
     return (
@@ -191,54 +147,8 @@ export default function ReviewQuestionsPage() {
                     <Title level={2} className="review-questions-title">
                         Duyệt câu hỏi
                     </Title>
-
-                    <Text type="secondary">
-                        Xem và kiểm duyệt các câu hỏi trắc nghiệm được hệ thống sinh tự động.
-                    </Text>
                 </div>
             </div>
-
-            <Row gutter={[16, 16]} className="review-summary">
-                <Col xs={24} sm={12} lg={6}>
-                    <Card>
-                        <Statistic
-                            title="Chờ duyệt"
-                            value={24}
-                            prefix={<ClockCircleOutlined />}
-                        />
-                    </Card>
-                </Col>
-
-                <Col xs={24} sm={12} lg={6}>
-                    <Card>
-                        <Statistic
-                            title="Đã duyệt"
-                            value={156}
-                            prefix={<CheckCircleOutlined />}
-                        />
-                    </Card>
-                </Col>
-
-                <Col xs={24} sm={12} lg={6}>
-                    <Card>
-                        <Statistic
-                            title="Đã chỉnh sửa"
-                            value={31}
-                            prefix={<EditOutlined />}
-                        />
-                    </Card>
-                </Col>
-
-                <Col xs={24} sm={12} lg={6}>
-                    <Card>
-                        <Statistic
-                            title="Từ chối"
-                            value={18}
-                            prefix={<CloseCircleOutlined />}
-                        />
-                    </Card>
-                </Col>
-            </Row>
 
             <Card className="review-filter-card">
                 <div className="review-filter">
@@ -265,8 +175,8 @@ export default function ReviewQuestionsPage() {
                         placeholder="Trạng thái QC"
                         allowClear
                         options={[
-                            { label: "Đạt QC", value: "PASSED" },
-                            { label: "Không đạt QC", value: "FAILED" },
+                            { label: "Đạt QC", value: "qc_passed" },
+                            { label: "Không đạt QC", value: "format_failed" },
                         ]}
                     />
 
@@ -275,10 +185,10 @@ export default function ReviewQuestionsPage() {
                         placeholder="Trạng thái duyệt"
                         allowClear
                         options={[
-                            { label: "Chờ duyệt", value: "PENDING" },
-                            { label: "Đã duyệt", value: "APPROVED" },
-                            { label: "Đã chỉnh sửa", value: "EDITED" },
-                            { label: "Từ chối", value: "REJECTED" },
+                            { label: "Chờ duyệt", value: "pending" },
+                            { label: "Đã duyệt", value: "approved_as_is" },
+                            { label: "Đã chỉnh sửa", value: "approved_with_edit" },
+                            { label: "Từ chối", value: "rejected" },
                         ]}
                     />
 
@@ -294,14 +204,11 @@ export default function ReviewQuestionsPage() {
                         <Title level={4} className="review-question-list-title">
                             Danh sách câu hỏi
                         </Title>
-
-                        <Text type="secondary">
-                            Các câu hỏi được sinh từ hệ thống và đang chờ giáo viên kiểm duyệt.
-                        </Text>
                     </div>
                 </div>
 
-                <Table
+                <Table<ReviewQuestion>
+                    className="review-question-table"
                     rowKey="id"
                     columns={columns}
                     dataSource={reviewQuestions}
@@ -310,7 +217,20 @@ export default function ReviewQuestionsPage() {
                         showSizeChanger: true,
                         showTotal: (total) => `Tổng ${total} câu hỏi`,
                     }}
-                    scroll={{ x: 1100 }}
+                    scroll={{ x: 1000 }}
+                    rowClassName={(record) =>
+                        record.qualityStatus === "qc_passed"
+                            ? "review-row-clickable"
+                            : "review-row-disabled"
+                    }
+                    onRow={(record) => ({
+                        onClick: () => {
+                            // Chỉ cho phép chuyển trang khi đạt QC
+                            if (record.qualityStatus === "qc_passed") {
+                                navigate(`/review/${record.id}`);
+                            }
+                        },
+                    })}
                 />
             </Card>
         </div>
