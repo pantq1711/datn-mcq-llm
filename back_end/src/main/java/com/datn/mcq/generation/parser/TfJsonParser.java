@@ -16,7 +16,8 @@ import java.util.regex.Pattern;
  *
  * <p>GĐ4: nếu một ý mở đầu bằng tiền tố nhãn "a)", "a.", "(a)" hoặc "a:" (không phân biệt hoa thường, cho phép
  * khoảng trắng) và chữ cái khớp đúng vị trí của ý, tiền tố được bỏ (một lần) và ghi cảnh báo vào
- * {@link ParsedTfDto#parseWarnings()}. Chữ cái không khớp vị trí thì giữ nguyên.
+ * {@link ParsedTfDto#parseWarnings()}. Chữ cái không khớp vị trí thì giữ nguyên. Riêng dạng "a." chỉ bỏ khi ký tự
+ * ngay sau dấu chấm không phải chữ cái ("a.b = 0" giữ nguyên, "a. Điều kiện" bỏ).
  */
 public final class TfJsonParser {
 
@@ -67,6 +68,11 @@ public final class TfJsonParser {
         }
         String letter = m.group(1) != null ? m.group(1) : m.group(2);
         if (!letter.equalsIgnoreCase(key)) {
+            return statement;
+        }
+        // Dạng "a.": chỉ bỏ khi ký tự ngay sau dấu chấm không phải chữ cái, để "a.b = 0" giữ nguyên.
+        if (m.group().endsWith(".") && m.end() < statement.length()
+                && Character.isLetter(statement.charAt(m.end()))) {
             return statement;
         }
         warnings.add(prefixWarning(key, m.group()));

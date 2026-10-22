@@ -107,13 +107,13 @@ class ShortAnswerReviewTest {
     void requestKhongHopLeTra400TrungTinh() throws Exception {
         assertRejected(saQuestion, SA + "\"decision\": \"approved_as_is\", \"reviewerAnswer\": \"A\","
                 + " \"reviewerSaKind\": \"number\", \"reviewerSaAnswer\": \"1\"",
-                "Trường reviewerAnswer không áp dụng cho câu trả lời ngắn.");
+                "Dữ liệu đánh giá không khớp dạng câu hỏi.");
         assertRejected(saQuestion, SA + "\"decision\": \"approved_with_edit\", \"finalOption\": \"A\","
                 + " \"reviewerSaKind\": \"number\", \"reviewerSaAnswer\": \"1\", \"finalSaAnswer\": \"1\"",
-                "Trường finalOption không áp dụng cho câu trả lời ngắn.");
+                "Dữ liệu đánh giá không khớp dạng câu hỏi.");
         assertRejected(saQuestion, SA + "\"decision\": \"approved_with_edit\", \"editedOptionA\": \"x\","
                 + " \"reviewerSaKind\": \"number\", \"reviewerSaAnswer\": \"1\", \"finalSaAnswer\": \"1\"",
-                "Trường editedOptionA không áp dụng cho câu trả lời ngắn.");
+                "Dữ liệu đánh giá không khớp dạng câu hỏi.");
         assertRejected(saQuestion, SA + "\"decision\": \"approved_as_is\"",
                 "Phải chọn reviewerSaKind (number, ambiguous)");
         assertRejected(saQuestion, SA + "\"decision\": \"approved_as_is\", \"reviewerSaKind\": \"number\"",

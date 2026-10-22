@@ -111,6 +111,18 @@ class TfJsonParserTest {
     }
 
     @Test
+    void tienToChamChiBoKhiSauDauChamKhongPhaiChuCai() {
+        ParsedTfDto p = withStatements("a.b = 0 với mọi $x$.", "b.Điều kiện xác định", "c. Điều kiện", "d.  $x = 2$");
+        assertEquals(List.of("a.b = 0 với mọi $x$.", "b.Điều kiện xác định", "Điều kiện", "$x = 2$"), p.statements());
+        assertEquals(List.of(
+                "statement_c: đã bỏ tiền tố \"c.\" ở đầu ý",
+                "statement_d: đã bỏ tiền tố \"d.\" ở đầu ý"), p.parseWarnings());
+        ParsedTfDto q = withStatements("a. Điều kiện", "B .C > 0", "c.5 là số dương", "d)Ý bốn");
+        assertEquals(List.of("Điều kiện", "B .C > 0", "5 là số dương", "Ý bốn"), q.statements());
+        assertEquals(3, q.parseWarnings().size(), q.parseWarnings().toString());
+    }
+
+    @Test
     void chiBoMotLan() {
         ParsedTfDto p = withStatements("a) a) Ý một", "Ý hai", "Ý ba", "Ý bốn");
         assertEquals("a) Ý một", p.statements().get(0));

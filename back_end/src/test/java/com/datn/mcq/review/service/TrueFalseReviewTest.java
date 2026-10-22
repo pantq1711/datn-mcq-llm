@@ -134,11 +134,11 @@ class TrueFalseReviewTest {
         assertRejected(tfQuestion, "\"decision\": \"approved_as_is\", " + statements(st("a", "T", "easy", null),
                 st("b", "T", "easy", null), st("c", "F", "medium", null), st("c", "T", "hard", null)), need4);
         assertRejected(tfQuestion, "\"decision\": \"approved_as_is\", \"reviewerAnswer\": \"A\", " + FOUR_ASIS,
-                "Trường reviewerAnswer không áp dụng cho câu đúng/sai.");
+                "Dữ liệu đánh giá không khớp dạng câu hỏi.");
         assertRejected(tfQuestion, "\"decision\": \"approved_as_is\", \"difficultyLabel\": \"easy\", " + FOUR_ASIS,
-                "Trường difficultyLabel không áp dụng cho câu đúng/sai.");
+                "Dữ liệu đánh giá không khớp dạng câu hỏi.");
         assertRejected(tfQuestion, "\"decision\": \"approved_as_is\", \"reviewerSaKind\": \"number\", " + FOUR_ASIS,
-                "Trường reviewerSaKind không áp dụng cho câu đúng/sai.");
+                "Dữ liệu đánh giá không khớp dạng câu hỏi.");
         assertRejected(tfQuestion, "\"decision\": \"approved_as_is\", " + statements(st("a", "T", "easy", null),
                 st("b", "T", "easy", null), st("c", null, "medium", null), st("d", "T", "hard", null)),
                 "Ý c: phải chọn reviewerLabel (T, F, undecidable)");
