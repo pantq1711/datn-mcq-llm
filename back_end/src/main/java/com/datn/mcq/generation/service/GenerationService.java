@@ -412,7 +412,8 @@ public class GenerationService {
                 parsed.explanation(),
                 validateLatex,
                 runAnswerCheck,
-                parsed.parseError()
+                parsed.parseError(),
+                parsed.parseWarnings()
         );
     }
 

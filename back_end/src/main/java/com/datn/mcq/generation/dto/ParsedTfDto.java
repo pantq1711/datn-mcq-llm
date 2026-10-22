@@ -9,6 +9,8 @@ import java.util.List;
  * @param labels     4 nhãn đúng như LLM viết, đã trim, theo thứ tự a-d (phần tử null khi thiếu); rỗng khi giải mã lỗi.
  *                   Kiểm tra giá trị T/F làm ở FormatChecker.
  * @param parseError thông báo lỗi giải mã (ví dụ khóa trùng); null khi giải mã được
+ * @param parseWarnings cảnh báo khi giải mã (GĐ4: đã bỏ tiền tố nhãn "a)" ở đầu ý); FormatChecker chép vào
+ *                      answerWarnings. Rỗng khi không có.
  */
 public record ParsedTfDto(
         boolean parseSuccess,
@@ -16,10 +18,18 @@ public record ParsedTfDto(
         List<String> statements,
         String explanation,
         List<String> labels,
-        String parseError
+        String parseError,
+        List<String> parseWarnings
 ) {
     public ParsedTfDto {
         statements = statements == null ? List.of() : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(statements));
         labels = labels == null ? List.of() : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(labels));
+        parseWarnings = parseWarnings == null ? List.of() : List.copyOf(parseWarnings);
+    }
+
+    /** Không có cảnh báo giải mã. */
+    public ParsedTfDto(boolean parseSuccess, String questionText, List<String> statements, String explanation,
+                       List<String> labels, String parseError) {
+        this(parseSuccess, questionText, statements, explanation, labels, parseError, List.of());
     }
 }

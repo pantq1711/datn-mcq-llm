@@ -138,6 +138,8 @@ public class FormatChecker {
                     + (detail != null && !detail.isBlank() ? ": " + detail : ""));
             return new FormatCheckOutcome(false, errors, warnings);
         }
+        // GĐ4: cảnh báo từ bước giải mã (đã bỏ tiền tố nhãn ở đầu ý) đứng trước các cảnh báo khác.
+        answerWarnings.addAll(input.parseWarnings());
         List<String> statements = new ArrayList<>(4);
         List<TruthValue> labels = new ArrayList<>(4);
         checkNonBlank("question_text", input.questionText(), errors);

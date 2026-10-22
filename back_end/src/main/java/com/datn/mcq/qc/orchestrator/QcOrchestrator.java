@@ -44,7 +44,18 @@ public class QcOrchestrator {
     private final DedupService dedupService;
     private final AnswerCheckRecorder answerCheckRecorder;
 
-    /** Chữ ký trước GĐ3 (test mcq dựng tay): không có bộ ghi kết quả Solver TF; câu tf khi đó cho ERROR. */
+    /**
+     * Chữ ký trước GĐ3, giữ lại cho các test dựng tay QcOrchestrator với câu MCQ. Không dùng trong mã chính:
+     * Spring dùng constructor 5 tham số.
+     *
+     * <p>Constructor này không có {@link AnswerCheckRecorder}, nên câu Đúng/Sai (tf) đi qua nó luôn có
+     * answer_check ERROR mà không gọi Solver. Câu Trả lời ngắn (sa) không cần bộ ghi đó nên vẫn chạy Solver như
+     * constructor đầy đủ, nhưng chỉ nên dùng constructor này cho test MCQ.
+     *
+     * @deprecated chỉ dùng cho test MCQ; dùng {@link #QcOrchestrator(FormatChecker, AnswerSolverChecker,
+     *             QualityCheckResultRepository, DedupService, AnswerCheckRecorder)}.
+     */
+    @Deprecated
     public QcOrchestrator(
             FormatChecker formatChecker,
             AnswerSolverChecker answerSolverChecker,

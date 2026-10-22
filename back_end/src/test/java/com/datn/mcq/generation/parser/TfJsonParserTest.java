@@ -70,4 +70,57 @@ class TfJsonParserTest {
         assertFalse(TfJsonParser.parse("  ").parseSuccess());
         assertFalse(TfJsonParser.parse("```json\nkhông phải JSON\n```").parseSuccess());
     }
+
+    // ---------- tiền tố nhãn ở đầu ý (GĐ4) ----------
+
+    private static ParsedTfDto withStatements(String a, String b, String c, String d) {
+        return TfJsonParser.parse(tfJson("S", a, b, c, d, "E", "T", "F", "T", "F"));
+    }
+
+    @Test
+    void boTienToKhopViTriKemCanhBao() {
+        ParsedTfDto p = withStatements("a) Ý một", "B. Ý hai", "( c ) Ý ba", "d : Ý bốn");
+        assertEquals(List.of("Ý một", "Ý hai", "Ý ba", "Ý bốn"), p.statements());
+        assertEquals(List.of(
+                "statement_a: đã bỏ tiền tố \"a)\" ở đầu ý",
+                "statement_b: đã bỏ tiền tố \"B.\" ở đầu ý",
+                "statement_c: đã bỏ tiền tố \"( c )\" ở đầu ý",
+                "statement_d: đã bỏ tiền tố \"d :\" ở đầu ý"), p.parseWarnings());
+    }
+
+    @Test
+    void boTienToKhongCanKhoangTrangSauVaBoKhoangTrangDau() {
+        ParsedTfDto p = withStatements("  (A)Ý một", "b)Ý hai", "C:Ý ba", "Ý bốn");
+        assertEquals(List.of("Ý một", "Ý hai", "Ý ba", "Ý bốn"), p.statements());
+        assertEquals(3, p.parseWarnings().size(), p.parseWarnings().toString());
+    }
+
+    @Test
+    void khongBoKhiChuCaiKhongKhopViTri() {
+        ParsedTfDto p = withStatements("b) Ý một", "a. Ý hai", "(d) Ý ba", "c: Ý bốn");
+        assertEquals(List.of("b) Ý một", "a. Ý hai", "(d) Ý ba", "c: Ý bốn"), p.statements());
+        assertEquals(List.of(), p.parseWarnings());
+    }
+
+    @Test
+    void khongBoKhiKhongPhaiTienTo() {
+        ParsedTfDto p = withStatements("a là số thực dương.", "$b) = 2$", "c = 3 với mọi x.", "Đồ thị cắt trục hoành.");
+        assertEquals(List.of("a là số thực dương.", "$b) = 2$", "c = 3 với mọi x.", "Đồ thị cắt trục hoành."),
+                p.statements());
+        assertEquals(List.of(), p.parseWarnings());
+    }
+
+    @Test
+    void chiBoMotLan() {
+        ParsedTfDto p = withStatements("a) a) Ý một", "Ý hai", "Ý ba", "Ý bốn");
+        assertEquals("a) Ý một", p.statements().get(0));
+        assertEquals(1, p.parseWarnings().size());
+    }
+
+    @Test
+    void khongCoTienToThiKhongCanhBao() {
+        ParsedTfDto p = withStatements("Ý một", "Ý hai", "Ý ba", "Ý bốn");
+        assertEquals(List.of(), p.parseWarnings());
+        assertEquals(List.of(), TfJsonParser.parse(null).parseWarnings());
+    }
 }
