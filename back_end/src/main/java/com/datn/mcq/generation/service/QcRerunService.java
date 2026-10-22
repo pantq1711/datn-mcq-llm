@@ -3,13 +3,17 @@ package com.datn.mcq.generation.service;
 import com.datn.mcq.catalog.entity.QuestionTemplate;
 import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.service.CatalogService;
+import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.worker.GenerationJobProcessor;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
+import com.datn.mcq.qc.entity.QualityCheckResult;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import org.springframework.stereotype.Service;
+
+import java.util.Optional;
 
 /**
  * V4 (quyết định 6 ngày 22/10): chạy lại QC cho một câu ở trạng thái generated.
@@ -51,7 +55,8 @@ public class QcRerunService {
 
     /**
      * @throws java.util.NoSuchElementException câu không tồn tại
-     * @throws IllegalStateException            câu không ở trạng thái generated (duplicate là trạng thái cuối)
+     * @throws IllegalStateException            câu không ở trạng thái generated (duplicate là trạng thái cuối),
+     *                                          hoặc đã có dòng answer_check (Solver đã cho kết luận hợp lệ)
      */
     public QcRerunResult rerun(Integer questionId) {
         GeneratedQuestion gq = generationService.getQuestionById(questionId);
@@ -59,6 +64,20 @@ public class QcRerunService {
         if (previous != QuestionStatus.GENERATED) {
             throw new IllegalStateException("Chỉ chạy lại QC cho câu ở trạng thái generated (câu id="
                     + questionId + " đang ở " + (previous != null ? previous.getDbValue() : "null") + ").");
+        }
+        // Chỉ chạy lại sau lỗi hạ tầng (quyết định 22/10): answer_check ERROR/NOT_RUN hoặc dedup ERROR.
+        // Cả ba trường hợp đó đều KHÔNG để lại dòng answer_check (lỗi không ghi dòng; dedup chưa kết luận thì
+        // không gọi Solver). Có dòng answer_check nghĩa là Solver đã cho kết luận hợp lệ -> từ chối (409),
+        // để tránh chạy lại Solver đến khi "qua".
+        Optional<QualityCheckResult> answerCheck = qcOrchestrator.getResultsForQuestion(gq.getId()).stream()
+                .filter(r -> r.getCheckType() == CheckType.ANSWER_CHECK)
+                .findFirst();
+        if (answerCheck.isPresent()) {
+            throw new IllegalStateException(Boolean.TRUE.equals(answerCheck.get().getPassed())
+                    ? "Không chạy lại QC: answer_check của câu id=" + questionId
+                            + " đã có kết quả hợp lệ, lần QC trước không dừng vì lỗi hạ tầng."
+                    : "Không chạy lại QC: Solver đã cho kết luận hợp lệ là lệch đáp án (answer_check INCONSISTENT)"
+                            + " với câu id=" + questionId + ".");
         }
 
         qcOrchestrator.clearDedupAndAnswerCheckResults(gq.getId());

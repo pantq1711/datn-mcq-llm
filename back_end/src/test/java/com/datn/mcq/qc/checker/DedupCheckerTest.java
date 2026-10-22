@@ -83,6 +83,20 @@ class DedupCheckerTest {
     }
 
     @Test
+    void askingForTheFalseStatementIsNotADuplicateOfAskingForTheTrueOne() {
+        // Quyết định 22/10: "sai" đứng riêng (có ranh giới từ) là dấu hiệu phủ định.
+        String a = "$x^2 \\ge 0$ với mọi $x$";
+        String b = "$\\sqrt{4} = 2$";
+        String c = "$2^3 = 6$";
+        String d = "$\\frac{1}{2} = 0,5$";
+        DedupCandidate askFalse = q(10, "Khẳng định nào sau đây là sai?", a, b, c, d);
+        DedupCandidate askTrue = q(4, "Khẳng định nào sau đây là đúng?", a, b, c, d);
+
+        assertEquals(DedupStatus.NO_DUPLICATE, DedupChecker.check(askFalse, List.of(askTrue), TAU).status());
+        assertEquals(DedupStatus.NO_DUPLICATE, DedupChecker.check(askTrue, List.of(askFalse), TAU).status());
+    }
+
+    @Test
     void storedSimilarityForNoDuplicateIsBelowThreshold() {
         // Ứng viên bị chốt chặn loại không được dùng làm "câu gần nhất", để điểm lưu luôn < tau khi không trùng.
         DedupCandidate subject = q(10,

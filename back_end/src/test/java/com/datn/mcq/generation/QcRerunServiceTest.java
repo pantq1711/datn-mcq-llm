@@ -223,10 +223,11 @@ class QcRerunServiceTest {
         assertTrue(find(q, CheckType.ANSWER_CHECK).orElseThrow().getPassed());
     }
 
+    // Sửa 2026-10-22 (quyết định mục 2): chỉ chạy lại sau lỗi hạ tầng. Trước đây test này dựng sẵn một dòng
+    // answer_check passed; nay ca đó bị từ chối, nên dựng ca "dedup đã qua nhưng Solver lỗi" (không có dòng answer_check).
     @Test
-    void stalePassedAnswerCheckIsRemovedSoAFailedRerunIsNotMistakenForSuccess() {
+    void rerunAfterSolverErrorReplacesDedupRowAndAFailedRerunLeavesNoAnswerCheckRow() {
         GeneratedQuestion q = question(productionRun, QuestionStatus.GENERATED, "Nghiệm của $\\frac{x}{2} = 1$ là:");
-        row(q, CheckType.ANSWER_CHECK, true);
         row(q, CheckType.DEDUP, true);
         FakeSolver solver = FakeSolver.failing();
 
@@ -235,9 +236,37 @@ class QcRerunServiceTest {
         assertEquals(QuestionStatus.GENERATED, result.resultingStatus());
         assertEquals(AnswerCheckStatus.ERROR, result.qcReport().answerCheckStatus());
         assertEquals(1, solver.calls);
-        assertTrue(find(q, CheckType.ANSWER_CHECK).isEmpty(), "Dòng answer_check cũ (passed) phải bị xóa");
+        assertTrue(find(q, CheckType.ANSWER_CHECK).isEmpty(), "Lần chạy lỗi không được để lại dòng answer_check");
         QualityCheckResult dedup = find(q, CheckType.DEDUP).orElseThrow();
         assertTrue(dedup.getCheckedAt().isAfter(LocalDateTime.now().minusHours(1)), "Dòng dedup phải là của lần chạy lại");
+    }
+
+    @Test
+    void inconsistentAnswerCheckIsRefusedAndNothingChanges() {
+        GeneratedQuestion q = question(productionRun, QuestionStatus.GENERATED, "Nghiệm của $\\frac{x}{2} = 1$ là:");
+        row(q, CheckType.DEDUP, true);
+        row(q, CheckType.ANSWER_CHECK, false); // Solver lệch đáp án: kết luận hợp lệ, không phải lỗi hạ tầng
+        FakeSolver solver = FakeSolver.answering("A");
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> service(solver).rerun(q.getId()));
+
+        assertTrue(ex.getMessage().contains("lệch"), ex.getMessage());
+        assertEquals(0, solver.calls);
+        assertEquals(QuestionStatus.GENERATED, questionRepository.findById(q.getId()).orElseThrow().getStatus());
+        assertFalse(find(q, CheckType.ANSWER_CHECK).orElseThrow().getPassed(), "Kết luận cũ phải được giữ nguyên");
+        assertTrue(find(q, CheckType.DEDUP).isPresent());
+    }
+
+    @Test
+    void generatedQuestionWithConsistentAnswerCheckIsAlsoRefused() {
+        // Chỉ có ở dữ liệu cũ (trước khi nối dedup): answer_check đã chạy thành công, không phải lỗi hạ tầng.
+        GeneratedQuestion q = question(productionRun, QuestionStatus.GENERATED, "Nghiệm của $\\frac{x}{2} = 1$ là:");
+        row(q, CheckType.ANSWER_CHECK, true);
+        FakeSolver solver = FakeSolver.answering("A");
+
+        assertThrows(IllegalStateException.class, () -> service(solver).rerun(q.getId()));
+        assertEquals(0, solver.calls);
+        assertTrue(find(q, CheckType.ANSWER_CHECK).orElseThrow().getPassed());
     }
 
     @Test
@@ -245,7 +274,6 @@ class QcRerunServiceTest {
         String stem = "Nghiệm của $\\frac{x}{2} = 1$ là:";
         GeneratedQuestion original = question(run(Purpose.PRODUCTION), QuestionStatus.QC_PASSED, stem);
         GeneratedQuestion q = question(productionRun, QuestionStatus.GENERATED, stem);
-        row(q, CheckType.ANSWER_CHECK, true);
         FakeSolver solver = FakeSolver.answering("A");
 
         QcRerunService.QcRerunResult result = service(solver).rerun(q.getId());

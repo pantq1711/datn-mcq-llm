@@ -33,12 +33,12 @@ public final class McqTextNormalizer {
     /**
      * Cụm phủ định tường minh (quyết định 5 ngày 21/10, quyết định 3 ngày 22/10): không, chưa, ngoại trừ,
      * không phải, không đúng, không thuộc, không là, không thỏa mãn, không thể, phát biểu sai, nhận định sai,
-     * khẳng định sai. Có ranh giới từ ở hai đầu, không phân biệt hoa thường, chấp nhận cách bỏ dấu cũ "thoả".
+     * khẳng định sai, và "sai" đứng riêng (quyết định ngày 22/10, lượt sau). Có ranh giới từ ở hai đầu, không phân biệt hoa thường, chấp nhận cách bỏ dấu cũ "thoả".
      * Cụm dài đứng trước trong phép chọn để khớp dài nhất. Chỉ xét phần văn bản ngoài công thức của thân câu.
      */
     private static final Pattern NEGATION = Pattern.compile(
             "(?<!\\p{L})(không thỏa mãn|không thoả mãn|không phải|không đúng|không thuộc|không là|không thể"
-                    + "|phát biểu sai|nhận định sai|khẳng định sai|ngoại trừ|không|chưa)(?!\\p{L})",
+                    + "|phát biểu sai|nhận định sai|khẳng định sai|ngoại trừ|không|chưa|sai)(?!\\p{L})",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     private static final String OPTION_JOINER = " | ";
