@@ -406,6 +406,26 @@ class TrueFalseFlowTest {
         assertEquals("[\"label: 4 ý cùng nhãn T\"]", same.get("qcReport").get("answerWarnings").toString());
     }
 
+    @Test
+    void tienToNhanODauYDuocBoTruocKhiLuuVaCanhBao() throws Exception {
+        List<String> prefixed = List.of("a) " + STATEMENTS.get(0), "(B) " + STATEMENTS.get(1),
+                "c. " + STATEMENTS.get(2), "a: " + STATEMENTS.get(3));
+        JsonNode resp = generateTf(tfJson(STEM, prefixed, List.of("T", "T", "F", "F")), true);
+        assertEquals("qc_passed", resp.get("question").get("status").asText());
+        assertEquals(STATEMENTS.get(0), resp.get("question").get("statements").get(0).get("text").asText());
+        assertEquals("[\"statement_a: đã bỏ tiền tố \\\"a)\\\" ở đầu ý\","
+                + "\"statement_b: đã bỏ tiền tố \\\"(B)\\\" ở đầu ý\","
+                + "\"statement_c: đã bỏ tiền tố \\\"c.\\\" ở đầu ý\"]",
+                resp.get("qcReport").get("answerWarnings").toString());
+        List<Object> stored = rows("SELECT statement_text FROM generated_question_statement WHERE question_id = ?"
+                + " ORDER BY position", resp.get("question").get("id").asInt()).stream()
+                .map(r -> r.get("statement_text")).toList();
+        assertEquals(List.of(STATEMENTS.get(0), STATEMENTS.get(1), STATEMENTS.get(2), "a: " + STATEMENTS.get(3)),
+                stored, "ý d mang chữ a không khớp vị trí nên giữ nguyên");
+        assertTrue(SOLVER.prompts.get(0).contains("a) " + STATEMENTS.get(0)));
+        assertFalse(SOLVER.prompts.get(0).contains("a) a) "));
+    }
+
     // ---------- dedup ----------
 
     @Test

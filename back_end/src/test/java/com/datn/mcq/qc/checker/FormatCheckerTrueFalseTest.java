@@ -105,4 +105,14 @@ class FormatCheckerTrueFalseTest {
         assertFalse(out.passed());
         assertEquals(List.of("Không giải mã được JSON hợp lệ từ phản hồi LLM: Khóa trùng: \"label_c\""), out.errors());
     }
+
+    @Test
+    void canhBaoGiaiMaDuocChepVaoAnswerWarnings() {
+        String warn = "statement_a: đã bỏ tiền tố \"a)\" ở đầu ý";
+        FormatChecker.FormatCheckOutcome out = checker.check(QuestionQcInput.trueFalse(1, true, STEM, STATEMENTS,
+                List.of("T", "T", "T", "T"), "E", true, false, null, List.of(warn)));
+        assertTrue(out.passed(), out.errors().toString());
+        assertEquals(List.of(warn, "label: 4 ý cùng nhãn T"), out.answerWarnings());
+        assertEquals(List.of(), out.warnings());
+    }
 }

@@ -260,7 +260,16 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - `teacher_review.answer_correct`: `mcq` như cũ; `sa` NULL chỉ khi đáp số LLM đã lưu không còn phân tích được, `ambiguous` luôn FALSE; `tf` NULL, đúng/sai tính theo từng ý ở `teacher_review_statement.label_correct` (`undecidable` luôn FALSE).
   - `answer_check` của `sa`: `judge_sa_kind` bắt buộc, `judge_sa_answer` có khi kind là `number` hoặc `unparseable`. Của `tf`: nhãn từng ý ở `answer_check_statement`, xóa dây chuyền theo dòng `answer_check`.
 
-## 4. JSON mà LLM phải trả khi sinh câu hỏi (7 trường, không có độ khó)
+## 4. JSON mà LLM phải trả
+
+Quy tắc chung cho mọi JSON dưới đây:
+
+- Một đối tượng JSON duy nhất; được phép bọc trong rào ` ```json `. Khóa trùng trong cùng đối tượng là lỗi: ở JSON sinh câu thì câu thành `format_failed`, ở JSON Solver thì `answer_check` là `ERROR` (không ghi dòng).
+- Mỗi dấu `\` của LaTeX viết thành `\` trong JSON, ví dụ `"$\frac{1}{2}$"`. Chuỗi `\n` theo nghĩa đen nằm ngoài công thức ở các trường văn bản được đổi thành ký tự xuống dòng.
+- Thứ tự trường là `propertyOrdering` của schema gửi Gemini (`GENERATION_RESPONSE_SCHEMA_JSON`, `SOLVER_RESPONSE_SCHEMA_JSON`). Backend đọc theo tên khóa nên không kiểm thứ tự.
+- Prompt `sa` và `tf` là bản nháp (`sa-v0-draft` trong `SaPromptDraftV0`, `tf-v0-draft` trong `TfPromptDraftV0`), chờ thành viên phụ trách prompt duyệt. Hợp đồng JSON dưới đây là phần backend kiểm; nội dung prompt có thể đổi mà không đổi hợp đồng.
+
+### 4.1. Sinh câu `mcq` (7 trường, không có độ khó)
 
 ```json
 {
@@ -272,3 +281,103 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   "correct_option": "A",
   "explanation": "Giải thích ngắn gọn vì sao đáp án đó đúng"
 }
+```
+
+### 4.2. Sinh câu `sa` (3 trường, không có độ khó)
+
+Thứ tự: `question_text`, `explanation`, `answer`. Lời giải đứng trước đáp số để đáp số dựa vào lời giải vừa viết.
+
+| Trường | Kiểu | Backend kiểm |
+|---|---|---|
+| `question_text` | chuỗi | Không trống. Với môn Toán, lỗi LaTeX là lỗi chặn (`format_failed`) |
+| `explanation` | chuỗi | Không trống. Lỗi LaTeX chỉ là cảnh báo |
+| `answer` | **chuỗi** | Không trống; phải là chuỗi JSON (`"5"`, không phải `5`); phân tích được ở chế độ chặt (STRICT), xem bảng đáp số ở `docs/api/README.md`. Lỗi LaTeX là lỗi chặn. Phân số chưa tối giản (`2/4`) vẫn hợp lệ, kèm cảnh báo `answer: phân số chưa tối giản` trong `answerWarnings` |
+
+Mức mục tiêu (`targetDifficulty`, bỏ trống là `easy`) đi trong prompt, không nằm trong JSON; backend lưu nó ở `generated_question.llm_difficulty`.
+
+```json
+{
+  "question_text": "Cho tam giác $ABC$ vuông cân tại $A$ có $AB = AC = 3$. Tính độ dài cạnh $BC$.",
+  "explanation": "Theo định lí Pythagore, $BC^2 = AB^2 + AC^2 = 9 + 9 = 18$, nên $BC = \sqrt{18} = 3\sqrt{2}$.",
+  "answer": "$3\sqrt{2}$"
+}
+```
+
+### 4.3. Sinh câu `tf` (10 trường, không có độ khó)
+
+Thứ tự: `question_text`, `statement_a`, `statement_b`, `statement_c`, `statement_d`, `explanation`, `label_a`, `label_b`, `label_c`, `label_d`. Bốn nhãn đứng sau lời giải để nhãn dựa vào lời giải vừa viết.
+
+| Trường | Kiểu | Backend kiểm |
+|---|---|---|
+| `question_text` | chuỗi | Đề dẫn. Không trống; lỗi LaTeX là lỗi chặn |
+| `statement_a` .. `statement_d` | chuỗi | Không trống; lỗi LaTeX là lỗi chặn; 4 ý phải khác nhau sau chuẩn hóa (trùng thì `format_failed`) |
+| `explanation` | chuỗi | Lời giải cho từng ý. Không trống; lỗi LaTeX chỉ là cảnh báo |
+| `label_a` .. `label_d` | chuỗi `T` hoặc `F` | Sau khi trim, không phân biệt hoa thường; giá trị khác là lỗi chặn. Không bắt buộc số ý Đúng hay số ý Sai: 4 nhãn giống nhau chỉ cảnh báo `label: 4 ý cùng nhãn T` (hoặc `F`) trong `answerWarnings` |
+
+- Ý không ghi nhãn ở đầu. Nếu ý mở đầu bằng `a)`, `a.`, `(a)` hoặc `a:` (không phân biệt hoa thường, cho phép khoảng trắng) và chữ cái khớp đúng vị trí của ý, backend bỏ tiền tố đó một lần trước khi lưu và ghi cảnh báo, ví dụ `statement_a: đã bỏ tiền tố "a)" ở đầu ý`, vào `answerWarnings`. Chữ cái không khớp vị trí (ví dụ `statement_b` mở đầu bằng `a)`) thì giữ nguyên. `raw_llm_output` vẫn giữ bản gốc.
+- Mức mục tiêu của 4 ý (`targetStatementDifficulties`) đi trong prompt, không nằm trong JSON; backend lưu ở `generated_question_statement.llm_difficulty`. Mức cấp câu để NULL.
+- JSON giải mã lỗi (ví dụ khóa trùng) thì không lưu ý nào.
+
+```json
+{
+  "question_text": "Cho biểu thức $P = \frac{x^2 - 1}{x^2 - x}$.",
+  "statement_a": "Điều kiện xác định của $P$ là $x \neq 0$ và $x \neq 1$.",
+  "statement_b": "Với điều kiện xác định, $P = \frac{x+1}{x}$.",
+  "statement_c": "Tại $x = 2$ thì $P = 2$.",
+  "statement_d": "Có đúng hai giá trị nguyên của $x$ để $P$ nhận giá trị nguyên.",
+  "explanation": "a) $x^2 - x = x(x-1) \neq 0$. b) Rút gọn tử và mẫu cho $x - 1$. c) $P = \frac{3}{2}$. d) $\frac{x+1}{x} = 1 + \frac{1}{x}$ nguyên khi $x = -1$; $x = 1$ bị loại.",
+  "label_a": "T",
+  "label_b": "T",
+  "label_c": "F",
+  "label_d": "F"
+}
+```
+
+### 4.4. Solver câu `sa` (2 trường)
+
+Solver chỉ thấy đề (`question_text`), không thấy đáp số và lời giải của câu. Thứ tự: `reasoning`, `judge_answer`.
+
+| Trường | Kiểu | Ý nghĩa |
+|---|---|---|
+| `reasoning` | chuỗi | Lời giải của Solver |
+| `judge_answer` | chuỗi | Một đáp số (đọc ở chế độ rộng LENIENT), hoặc `ambiguous` khi đề có nhiều cách hiểu cho ra đáp số khác nhau (so sau khi trim, không phân biệt hoa thường) |
+
+| Solver trả | `answerCheckStatus` | `judge_sa_kind` | `judge_sa_answer` |
+|---|---|---|---|
+| Đáp số cùng giá trị với đáp số LLM (ví dụ `3√2` và `$\sqrt{18}$`) | `CONSISTENT` | `number` | chuỗi Solver trả |
+| Đáp số khác giá trị | `INCONSISTENT` | `number` | chuỗi Solver trả |
+| `ambiguous` | `INCONSISTENT` | `ambiguous` | NULL |
+| Chuỗi không phân tích được thành số (ví dụ `2 cm`) | `INCONSISTENT` | `unparseable` | chuỗi Solver trả |
+| JSON hỏng, khóa trùng, thiếu hoặc rỗng `judge_answer`, lỗi gọi | `ERROR` | không ghi dòng | không ghi dòng |
+
+```json
+{
+  "reasoning": "Tam giác vuông cân nên $BC = AB\sqrt{2} = 3\sqrt{2}$.",
+  "judge_answer": "$3\sqrt{2}$"
+}
+```
+
+### 4.5. Solver câu `tf` (8 trường)
+
+Solver chỉ thấy đề dẫn và 4 ý, không thấy nhãn và lời giải của câu. Thứ tự: `reasoning_a`, `judge_a`, `reasoning_b`, `judge_b`, `reasoning_c`, `judge_c`, `reasoning_d`, `judge_d`, để ý sau dùng được kết quả ý trước.
+
+| Trường | Kiểu | Ý nghĩa |
+|---|---|---|
+| `reasoning_a` .. `reasoning_d` | chuỗi | Lập luận cho từng ý |
+| `judge_a` .. `judge_d` | chuỗi `T`, `F` hoặc `undecidable` | Nhãn Solver cho từng ý (trim, không phân biệt hoa thường), lưu ở `answer_check_statement.judge_label` |
+
+- `CONSISTENT` chỉ khi cả 4 ý có nhãn `T`/`F` và đều khớp nhãn LLM. Có ý lệch hoặc `undecidable` thì `INCONSISTENT` (vẫn ghi dòng `answer_check` và 4 dòng `answer_check_statement`).
+- JSON hỏng, khóa trùng, thiếu hoặc sai giá trị `judge_x`, lỗi gọi: `ERROR`, không ghi dòng nào.
+
+```json
+{
+  "reasoning_a": "Mẫu $x^2 - x = x(x-1)$ khác 0 khi $x \neq 0$ và $x \neq 1$.",
+  "judge_a": "T",
+  "reasoning_b": "Tử $(x-1)(x+1)$, mẫu $x(x-1)$, rút gọn cho $x - 1$.",
+  "judge_b": "T",
+  "reasoning_c": "$P(2) = \frac{3}{2}$.",
+  "judge_c": "F",
+  "reasoning_d": "$1 + \frac{1}{x}$ nguyên khi $x = \pm 1$, loại $x = 1$, còn một giá trị.",
+  "judge_d": "F"
+}
+```

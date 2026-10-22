@@ -301,6 +301,15 @@
       "get" : {
         "tags" : [ "bank-controller" ],
         "operationId" : "listBankItems",
+        "parameters" : [ {
+          "name" : "questionType",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          }
+        } ],
         "responses" : {
           "200" : {
             "description" : "OK",
@@ -309,7 +318,7 @@
                 "schema" : {
                   "type" : "array",
                   "items" : {
-                    "$ref" : "#/components/schemas/BankItem"
+                    "$ref" : "#/components/schemas/BankItemDto"
                   }
                 }
               }
@@ -321,6 +330,30 @@
   },
   "components" : {
     "schemas" : {
+      "StatementReviewInput" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string",
+            "enum" : [ "a", "b", "c", "d" ]
+          },
+          "reviewerLabel" : {
+            "type" : "string",
+            "enum" : [ "T", "F", "undecidable" ]
+          },
+          "difficultyLabel" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          },
+          "finalLabel" : {
+            "type" : "string",
+            "enum" : [ "T", "F" ]
+          },
+          "editedText" : {
+            "type" : "string"
+          }
+        }
+      },
       "SubmitReviewRequest" : {
         "type" : "object",
         "properties" : {
@@ -373,11 +406,52 @@
             "type" : "array",
             "items" : {
               "type" : "string",
-              "enum" : [ "content_inaccurate", "content_off_curriculum", "content_insufficient_info", "content_unclear", "options_out_of_scope", "options_indistinct", "presentation_question_hard_to_read", "presentation_options_hard_to_read", "presentation_missing_question", "presentation_grammar", "presentation_formula_symbol_error", "answer_multiple_correct", "answer_none_correct", "other" ]
+              "enum" : [ "content_inaccurate", "content_off_curriculum", "content_insufficient_info", "content_unclear", "options_out_of_scope", "options_indistinct", "presentation_question_hard_to_read", "presentation_options_hard_to_read", "presentation_missing_question", "presentation_grammar", "presentation_formula_symbol_error", "answer_multiple_correct", "answer_none_correct", "statement_undecidable", "answer_ambiguous", "other" ]
             }
           },
           "otherReasonDetail" : {
             "type" : "string"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "reviewerSaKind" : {
+            "type" : "string",
+            "enum" : [ "number", "ambiguous" ]
+          },
+          "reviewerSaAnswer" : {
+            "type" : "string"
+          },
+          "finalSaAnswer" : {
+            "type" : "string"
+          },
+          "statements" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/StatementReviewInput"
+            }
+          }
+        }
+      },
+      "StatementReviewResult" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string",
+            "enum" : [ "a", "b", "c", "d" ]
+          },
+          "reviewerLabel" : {
+            "type" : "string",
+            "enum" : [ "T", "F", "undecidable" ]
+          },
+          "difficultyLabel" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          },
+          "finalLabel" : {
+            "type" : "string",
+            "enum" : [ "T", "F" ]
           }
         }
       },
@@ -433,6 +507,22 @@
           "reviewedAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "reviewerSaKind" : {
+            "type" : "string",
+            "enum" : [ "number", "ambiguous" ]
+          },
+          "reviewerSaAnswer" : {
+            "type" : "string"
+          },
+          "finalSaAnswer" : {
+            "type" : "string"
+          },
+          "statements" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/StatementReviewResult"
+            }
           }
         }
       },
@@ -467,6 +557,10 @@
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
           }
         }
       },
@@ -516,6 +610,17 @@
           "count" : {
             "type" : "integer",
             "format" : "int32"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "targetStatementDifficulties" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "enum" : [ "easy", "medium", "hard" ]
+            }
           }
         }
       },
@@ -541,6 +646,13 @@
           "targetDifficulty" : {
             "type" : "string",
             "enum" : [ "easy", "medium", "hard" ]
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "targetStatementDifficulties" : {
+            "type" : "string"
           },
           "status" : {
             "type" : "string",
@@ -606,6 +718,17 @@
           },
           "rawLlmOutputOverride" : {
             "type" : "string"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "targetStatementDifficulties" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "enum" : [ "easy", "medium", "hard" ]
+            }
           }
         }
       },
@@ -685,6 +808,16 @@
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "statements" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/StatementTextDto"
+            }
           }
         }
       },
@@ -727,6 +860,37 @@
           },
           "dedup" : {
             "$ref" : "#/components/schemas/DedupOutcome"
+          },
+          "answerWarnings" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "saJudgeKind" : {
+            "type" : "string",
+            "enum" : [ "number", "ambiguous", "unparseable" ]
+          },
+          "saJudgeAnswer" : {
+            "type" : "string"
+          },
+          "tfJudgements" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TfJudgement"
+            }
+          }
+        }
+      },
+      "StatementTextDto" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string",
+            "enum" : [ "a", "b", "c", "d" ]
+          },
+          "text" : {
+            "type" : "string"
           }
         }
       },
@@ -738,6 +902,19 @@
           },
           "qcReport" : {
             "$ref" : "#/components/schemas/QcPipelineReport"
+          }
+        }
+      },
+      "TfJudgement" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string",
+            "enum" : [ "a", "b", "c", "d" ]
+          },
+          "judgeLabel" : {
+            "type" : "string",
+            "enum" : [ "T", "F", "undecidable" ]
           }
         }
       },
@@ -847,6 +1024,28 @@
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "statements" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/BlindStatementDto"
+            }
+          }
+        }
+      },
+      "BlindStatementDto" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string",
+            "enum" : [ "a", "b", "c", "d" ]
+          },
+          "text" : {
+            "type" : "string"
           }
         }
       },
@@ -862,7 +1061,7 @@
           }
         }
       },
-      "BankItem" : {
+      "BankItemDto" : {
         "type" : "object",
         "properties" : {
           "id" : {
@@ -906,6 +1105,39 @@
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "saAnswer" : {
+            "type" : "string"
+          },
+          "statements" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/StatementDto"
+            }
+          }
+        }
+      },
+      "StatementDto" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string",
+            "enum" : [ "a", "b", "c", "d" ]
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string",
+            "enum" : [ "T", "F" ]
+          },
+          "difficulty" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
           }
         }
       }
