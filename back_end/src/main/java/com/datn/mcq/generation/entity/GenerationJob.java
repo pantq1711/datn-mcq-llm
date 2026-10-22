@@ -3,7 +3,7 @@ package com.datn.mcq.generation.entity;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.enums.QuestionType;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -33,16 +33,15 @@ public class GenerationJob {
     @Column(name = "target_difficulty", length = 10)
     private Difficulty targetDifficulty;
 
-    // Hai trường V4 dưới đây chưa xuất ra JSON của /api/generation/jobs (entity đang được trả thẳng),
-    // để API của mcq không đổi ở giai đoạn 1; mở khi API sinh câu nhận questionType.
-
-    /** Dạng câu (V4); khóa ngoại kép tới experiment_run(id, question_type). */
-    @JsonIgnore
+    /** Dạng câu (V4); khóa ngoại kép tới experiment_run(id, question_type). Xuất ra JSON từ GĐ2. */
     @Column(name = "question_type", nullable = false, length = 10, updatable = false)
     private QuestionType questionType = QuestionType.MCQ;
 
-    /** Chỉ với tf: mức mục tiêu của 4 ý a,b,c,d, ví dụ "easy,easy,medium,hard" (CHECK chk_gj_target_statements). */
-    @JsonIgnore
+    /**
+     * Chỉ với tf: mức mục tiêu của 4 ý a,b,c,d, ví dụ "easy,easy,medium,hard" (CHECK chk_gj_target_statements).
+     * Bỏ khỏi JSON khi null, nên job mcq/sa không có key này.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Column(name = "target_statement_difficulties", length = 40)
     private String targetStatementDifficulties;
 

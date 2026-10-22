@@ -1,6 +1,7 @@
 package com.datn.mcq.experiment.service;
 
 import com.datn.mcq.enums.Purpose;
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.experiment.entity.ExperimentRun;
 import com.datn.mcq.experiment.repository.ExperimentRunRepository;
@@ -42,7 +43,27 @@ public class ExperimentService {
             String promptVersion,
             String promptText,
             Integer numQuestionsRequested) {
+        return createRun(subjectId, purpose, strategy, modelName, temperature, promptVersion, promptText,
+                numQuestionsRequested, QuestionType.MCQ);
+    }
+
+    /**
+     * Tạo run cho một dạng câu (V4). Run tf/sa phải là production với strategy zero-shot
+     * (CHECK chk_er_tf_sa_production); nơi gọi chịu trách nhiệm truyền đúng.
+     */
+    @Transactional
+    public ExperimentRun createRun(
+            Integer subjectId,
+            Purpose purpose,
+            Strategy strategy,
+            String modelName,
+            Double temperature,
+            String promptVersion,
+            String promptText,
+            Integer numQuestionsRequested,
+            QuestionType questionType) {
         ExperimentRun run = new ExperimentRun();
+        run.setQuestionType(questionType != null ? questionType : QuestionType.MCQ);
         run.setSubjectId(subjectId);
         run.setPurpose(purpose != null ? purpose : Purpose.PRODUCTION);
         run.setStrategy(strategy != null ? strategy : Strategy.FEW_SHOT_STRUCTURED);

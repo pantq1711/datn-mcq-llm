@@ -2,7 +2,7 @@
 
 Nguồn duy nhất: các CHECK trong migration Flyway (`V1`, `V2`, ...). Frontend và backend dùng **đúng chuỗi trong cột "Giá trị trong DB"**; cột "Hiển thị / ý nghĩa" chỉ dành cho giao diện. Muốn đổi giá trị thì viết migration mới, rồi cập nhật file này trong cùng một commit.
 
-Các cột có cùng bộ giá trị được gom thành một enum dùng chung (47 cột gom thành 21 enum, tính đến V4). Mục 1 cho biết cột nào dùng enum nào.
+Các cột có cùng bộ giá trị được gom thành một enum dùng chung (48 cột gom thành 21 enum, tính đến V4). Mục 1 cho biết cột nào dùng enum nào.
 
 Java: đặt tên hằng kiểu `ZERO_SHOT`, `FEW_SHOT_STRUCTURED`... và có bước chuyển đổi hai chiều (`AttributeConverter`) với chuỗi trong DB. Các giá trị DB có dấu gạch ngang (`zero-shot`, `few-shot`, `few-shot-structured`) và các giá trị viết thường (`multiple`, `none`, `easy`...) đều phải qua converter, không dùng `@Enumerated` mặc định.
 
@@ -12,7 +12,7 @@ Java: đặt tên hằng kiểu `ZERO_SHOT`, `FEW_SHOT_STRUCTURED`... và có b�
 |---|---|
 | `Strategy` | `experiment_run.strategy` |
 | `Purpose` | `experiment_run.purpose`, `teacher_review.review_purpose` |
-| `Difficulty` | `generated_question.llm_difficulty`, `generated_question.final_difficulty`, `teacher_review.difficulty_label`, `bank_item.difficulty`; V4: `generated_question_statement.llm_difficulty`, `generated_question_statement.final_difficulty`, `teacher_review_statement.difficulty_label`, `bank_item_statement.difficulty` |
+| `Difficulty` | `generated_question.llm_difficulty`, `generated_question.final_difficulty`, `teacher_review.difficulty_label`, `bank_item.difficulty`, `generation_job.target_difficulty` (V2); V4: `generated_question_statement.llm_difficulty`, `generated_question_statement.final_difficulty`, `teacher_review_statement.difficulty_label`, `bank_item_statement.difficulty` |
 | `Option` | `generated_question.correct_option`, `teacher_review.final_option`, `bank_item.correct_option` |
 | `AnswerChoice` | `teacher_review.reviewer_answer`, `quality_check_result.judge_answer` |
 | `QuestionStatus` | `generated_question.status` |

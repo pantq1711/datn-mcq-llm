@@ -7,10 +7,14 @@ import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.enums.Purpose;
 import com.datn.mcq.enums.QuestionStatus;
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.experiment.entity.ExperimentRun;
 import com.datn.mcq.experiment.service.ExperimentService;
 import com.datn.mcq.generation.dto.ParsedMcqDto;
+import com.datn.mcq.generation.dto.ParsedSaDto;
+import com.datn.mcq.generation.parser.SaJsonParser;
+import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.parser.McqJsonParser;
@@ -34,6 +38,10 @@ import java.util.NoSuchElementException;
 @Service
 public class GenerationService {
 
+    /**
+     * @param questionType dạng câu (V4); bỏ trống là mcq. sa luôn sinh với strategy zero-shot, purpose production,
+     *                     prompt_version sa-v0-draft (quyết định 2 ngày 22/10); tf chưa hỗ trợ (GĐ3).
+     */
     public record SyncGenerationRequest(
             Integer templateId,
             Strategy strategy,
@@ -41,8 +49,34 @@ public class GenerationService {
             String modelName,
             Double temperature,
             Boolean runAnswerCheck,
-            String rawLlmOutputOverride
-    ) {}
+            String rawLlmOutputOverride,
+            QuestionType questionType
+    ) {
+        /** Chữ ký trước V4 (mcq). */
+        public SyncGenerationRequest(Integer templateId, Strategy strategy, Difficulty targetDifficulty,
+                                     String modelName, Double temperature, Boolean runAnswerCheck,
+                                     String rawLlmOutputOverride) {
+            this(templateId, strategy, targetDifficulty, modelName, temperature, runAnswerCheck, rawLlmOutputOverride,
+                    null);
+        }
+    }
+
+    static final String SA_STRATEGY_MESSAGE = "Câu trả lời ngắn luôn sinh với strategy zero-shot.";
+
+    /** Dạng câu được yêu cầu; tf chưa hỗ trợ ở GĐ2. */
+    static QuestionType requireSupportedType(QuestionType requested) {
+        QuestionType type = requested != null ? requested : QuestionType.MCQ;
+        if (type == QuestionType.TF) {
+            throw new IllegalArgumentException("Dạng câu tf chưa được hỗ trợ.");
+        }
+        return type;
+    }
+
+    static void requireZeroShotForShortAnswer(QuestionType type, Strategy strategy) {
+        if (type == QuestionType.SA && strategy != null && strategy != Strategy.ZERO_SHOT) {
+            throw new IllegalArgumentException(SA_STRATEGY_MESSAGE);
+        }
+    }
 
     public record GeneratedQuestionSummaryDto(
             Integer id,
@@ -57,8 +91,10 @@ public class GenerationService {
             QuestionStatus status,
             Integer tokenCount,
             Double latencyMs,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            QuestionType questionType
     ) {
+        /** Không kèm đáp án (correct_option, sa_answer), giống trước V4. */
         public static GeneratedQuestionSummaryDto fromEntity(GeneratedQuestion gq) {
             return new GeneratedQuestionSummaryDto(
                     gq.getId(),
@@ -73,7 +109,8 @@ public class GenerationService {
                     gq.getStatus(),
                     gq.getTokenCount(),
                     gq.getLatencyMs(),
-                    gq.getCreatedAt()
+                    gq.getCreatedAt(),
+                    gq.getQuestionType()
             );
         }
     }
@@ -119,8 +156,13 @@ public class GenerationService {
         if (req.templateId() == null) {
             throw new IllegalArgumentException("Phải truyền templateId");
         }
+        QuestionType questionType = requireSupportedType(req.questionType());
+        requireZeroShotForShortAnswer(questionType, req.strategy());
         QuestionTemplate tpl = catalogService.getTemplateById(req.templateId());
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
+        if (questionType == QuestionType.SA) {
+            return generateShortAnswerSync(req, tpl, subject);
+        }
 
         Strategy strategy = req.strategy() != null ? req.strategy() : Strategy.FEW_SHOT_STRUCTURED;
         Difficulty targetDiff = req.targetDifficulty() != null ? req.targetDifficulty() : Difficulty.EASY;
@@ -181,6 +223,104 @@ public class GenerationService {
         return new SyncGenerationResponse(GeneratedQuestionSummaryDto.fromEntity(updated), qcReport);
     }
 
+    /**
+     * Sinh đồng bộ 1 câu Trả lời ngắn (V4, GĐ2). Run: production, zero-shot, prompt_version sa-v0-draft.
+     * Gọi LLM ở JSON mode kèm schema SA (lời giải trước đáp số) ngoài transaction DB, rồi chạy QC như mcq.
+     */
+    private SyncGenerationResponse generateShortAnswerSync(
+            SyncGenerationRequest req, QuestionTemplate tpl, Subject subject) {
+        Difficulty targetDiff = req.targetDifficulty() != null ? req.targetDifficulty() : Difficulty.EASY;
+        Double temperature = req.temperature() != null ? req.temperature() : 0.7;
+        String model = (req.modelName() != null && !req.modelName().isBlank())
+                ? req.modelName().trim()
+                : llmClient.getDefaultModel();
+        String prompt = SaPromptDraftV0.buildGenerationPrompt(
+                subject.getName(),
+                tpl.getGradeLevel(),
+                tpl.getTopic(),
+                tpl.getLearningOutcome(),
+                tpl.getSourceQuestion(),
+                targetDiff
+        );
+
+        LlmCallResult llmResult;
+        if (req.rawLlmOutputOverride() != null && !req.rawLlmOutputOverride().isBlank()) {
+            llmResult = new LlmCallResult(req.rawLlmOutputOverride(), 0, 0.0, 0.0, model);
+        } else {
+            llmResult = llmClient.callJsonModeWithSchema(
+                    prompt, model, temperature, SaPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON);
+        }
+
+        ParsedSaDto parsed = SaJsonParser.parse(llmResult.rawText());
+        ExperimentRun run = experimentService.createRun(
+                subject.getId(),
+                Purpose.PRODUCTION,
+                Strategy.ZERO_SHOT,
+                llmResult.modelName(),
+                temperature,
+                SaPromptDraftV0.PROMPT_VERSION,
+                prompt,
+                1,
+                QuestionType.SA
+        );
+
+        GeneratedQuestion saved = saveParsedShortAnswer(tpl.getId(), run.getId(), targetDiff, llmResult, parsed, 1);
+        boolean runAnswerCheck = req.runAnswerCheck() != null ? req.runAnswerCheck() : true;
+        QcPipelineReport qcReport = qcOrchestrator.evaluateAndSave(
+                shortAnswerQcInput(saved.getId(), parsed, GenerationJobProcessor.isMathSubject(subject.getName()),
+                        runAnswerCheck),
+                dedupScopeResolver.resolve(run.getId()));
+        GeneratedQuestion updated = updateStatusAndDifficulty(saved.getId(), qcReport.resultingStatus(), null);
+        return new SyncGenerationResponse(GeneratedQuestionSummaryDto.fromEntity(updated), qcReport);
+    }
+
+    /** Đầu vào QC của câu sa vừa giải mã (dùng chung cho generate-sync và worker). */
+    public static QuestionQcInput shortAnswerQcInput(
+            Integer questionId, ParsedSaDto parsed, boolean validateLatex, boolean runAnswerCheck) {
+        return QuestionQcInput.shortAnswer(
+                questionId,
+                parsed.parseSuccess(),
+                parsed.questionText(),
+                parsed.explanation(),
+                parsed.answer(),
+                parsed.answerIsString(),
+                validateLatex,
+                runAnswerCheck,
+                parsed.parseError()
+        );
+    }
+
+    /**
+     * Lưu câu sa: không có phương án và correct_option; sa_answer là chuỗi LLM viết (đã trim), raw_llm_output giữ
+     * bản gốc. llm_difficulty là mức mục tiêu khi sinh, như mcq (F-8, chờ Q-5).
+     */
+    @Transactional
+    public GeneratedQuestion saveParsedShortAnswer(
+            Integer templateId,
+            Integer runId,
+            Difficulty targetDifficulty,
+            LlmCallResult llmResult,
+            ParsedSaDto parsed,
+            int attemptCount) {
+        GeneratedQuestion gq = new GeneratedQuestion();
+        gq.setQuestionType(QuestionType.SA);
+        gq.setTemplateId(templateId);
+        gq.setRunId(runId);
+        gq.setQuestionText(parsed.questionText());
+        gq.setSaAnswer(parsed.answer());
+        gq.setExplanation(parsed.explanation());
+        gq.setRawLlmOutput(llmResult.rawText() != null ? llmResult.rawText() : "");
+        gq.setLlmDifficulty(targetDifficulty != null ? targetDifficulty : Difficulty.EASY);
+        gq.setParseSuccess(parsed.parseSuccess());
+        gq.setTokenCount(llmResult.tokenCount());
+        gq.setLatencyMs(llmResult.latencyMs());
+        gq.setCostUsd(llmResult.costUsd());
+        gq.setAttemptCount(Math.max(1, attemptCount));
+        gq.setStatus(QuestionStatus.GENERATED);
+        gq.setCreatedAt(LocalDateTime.now());
+        return generatedQuestionRepository.save(gq);
+    }
+
     @Transactional
     public GeneratedQuestion saveParsedQuestion(
             Integer templateId,
@@ -217,38 +357,66 @@ public class GenerationService {
             Difficulty targetDifficulty,
             String modelName,
             int count) {
+        return enqueueJobs(templateId, strategy, targetDifficulty, modelName, count, null);
+    }
+
+    /**
+     * Tạo job sinh câu (V4: theo dạng câu). sa: run production, zero-shot, prompt_version sa-v0-draft;
+     * tf chưa hỗ trợ.
+     */
+    @Transactional
+    public List<GenerationJob> enqueueJobs(
+            Integer templateId,
+            Strategy strategy,
+            Difficulty targetDifficulty,
+            String modelName,
+            int count,
+            QuestionType requestedType) {
         if (templateId == null) {
             throw new IllegalArgumentException("Phải truyền templateId");
         }
+        QuestionType questionType = requireSupportedType(requestedType);
+        requireZeroShotForShortAnswer(questionType, strategy);
         int numJobs = Math.max(1, Math.min(count, 50));
         QuestionTemplate tpl = catalogService.getTemplateById(templateId);
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
-        Strategy chosenStrategy = strategy != null ? strategy : Strategy.FEW_SHOT_STRUCTURED;
+        boolean shortAnswer = questionType == QuestionType.SA;
+        Strategy chosenStrategy = shortAnswer ? Strategy.ZERO_SHOT
+                : strategy != null ? strategy : Strategy.FEW_SHOT_STRUCTURED;
         Difficulty chosenDiff = targetDifficulty != null ? targetDifficulty : Difficulty.EASY;
-        String prompt = promptBuilder.buildGenerationPrompt(
-                subject.getName(),
-                tpl.getGradeLevel(),
-                tpl.getTopic(),
-                tpl.getLearningOutcome(),
-                tpl.getSourceQuestion(),
-                chosenStrategy,
-                chosenDiff
-        );
+        String prompt = shortAnswer
+                ? SaPromptDraftV0.buildGenerationPrompt(
+                        subject.getName(),
+                        tpl.getGradeLevel(),
+                        tpl.getTopic(),
+                        tpl.getLearningOutcome(),
+                        tpl.getSourceQuestion(),
+                        chosenDiff)
+                : promptBuilder.buildGenerationPrompt(
+                        subject.getName(),
+                        tpl.getGradeLevel(),
+                        tpl.getTopic(),
+                        tpl.getLearningOutcome(),
+                        tpl.getSourceQuestion(),
+                        chosenStrategy,
+                        chosenDiff);
         ExperimentRun run = experimentService.createRun(
                 subject.getId(),
                 Purpose.PRODUCTION,
                 chosenStrategy,
                 modelName != null && !modelName.isBlank() ? modelName : llmClient.getDefaultModel(),
                 0.7,
-                "async-queue-v1",
+                shortAnswer ? SaPromptDraftV0.PROMPT_VERSION : "async-queue-v1",
                 prompt,
-                numJobs
+                numJobs,
+                questionType
         );
 
         List<GenerationJob> created = new ArrayList<>(numJobs);
         LocalDateTime now = LocalDateTime.now();
         for (int i = 0; i < numJobs; i++) {
             GenerationJob job = new GenerationJob();
+            job.setQuestionType(questionType);
             job.setRunId(run.getId());
             job.setTemplateId(tpl.getId());
             job.setTargetDifficulty(chosenDiff);

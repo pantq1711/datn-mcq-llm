@@ -1,6 +1,7 @@
 package com.datn.mcq.review.dto;
 
 import com.datn.mcq.enums.Purpose;
+import com.datn.mcq.enums.QuestionType;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.LocalDateTime;
@@ -11,6 +12,9 @@ import java.time.LocalDateTime;
  * và quyết định 21/10 mục 2 trong docs/ai-development-rules.md. Áp dụng cho CẢ production và experiment:
  * KHÔNG chứa correct_option, explanation, llm_difficulty, status, latexValid, latexErrors
  * hay bất kỳ kết quả QC nào (format, dedup, answer_check).
+ *
+ * <p>V4: có questionType để frontend dựng đúng form. Câu sa không có optionA..optionD (null nên bị bỏ khỏi JSON)
+ * và KHÔNG có đáp số LLM (sa_answer) hay cảnh báo về đáp số.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record BlindQuestionReviewDto(
@@ -25,6 +29,7 @@ public record BlindQuestionReviewDto(
         String optionB,
         String optionC,
         String optionD,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        QuestionType questionType
 ) {
 }

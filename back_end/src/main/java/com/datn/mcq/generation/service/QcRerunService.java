@@ -5,6 +5,7 @@ import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.service.CatalogService;
 import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.QuestionStatus;
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.worker.GenerationJobProcessor;
 import com.datn.mcq.qc.dto.QcPipelineReport;
@@ -84,19 +85,33 @@ public class QcRerunService {
 
         QuestionTemplate tpl = catalogService.getTemplateById(gq.getTemplateId());
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
-        QcPipelineReport report = qcOrchestrator.evaluateAndSave(new QuestionQcInput(
-                gq.getId(),
-                Boolean.TRUE.equals(gq.getParseSuccess()),
-                gq.getQuestionText(),
-                gq.getOptionA(),
-                gq.getOptionB(),
-                gq.getOptionC(),
-                gq.getOptionD(),
-                gq.getCorrectOption(),
-                gq.getExplanation(),
-                GenerationJobProcessor.isMathSubject(subject.getName()),
-                true
-        ), dedupScopeResolver.resolve(gq.getRunId()));
+        boolean validateLatex = GenerationJobProcessor.isMathSubject(subject.getName());
+        QuestionQcInput input = gq.getQuestionType() == QuestionType.SA
+                // sa_answer lưu dạng TEXT là chuỗi JSON đã giải mã, nên coi là chuỗi.
+                ? QuestionQcInput.shortAnswer(
+                        gq.getId(),
+                        Boolean.TRUE.equals(gq.getParseSuccess()),
+                        gq.getQuestionText(),
+                        gq.getExplanation(),
+                        gq.getSaAnswer(),
+                        true,
+                        validateLatex,
+                        true,
+                        null)
+                : new QuestionQcInput(
+                        gq.getId(),
+                        Boolean.TRUE.equals(gq.getParseSuccess()),
+                        gq.getQuestionText(),
+                        gq.getOptionA(),
+                        gq.getOptionB(),
+                        gq.getOptionC(),
+                        gq.getOptionD(),
+                        gq.getCorrectOption(),
+                        gq.getExplanation(),
+                        validateLatex,
+                        true
+                );
+        QcPipelineReport report = qcOrchestrator.evaluateAndSave(input, dedupScopeResolver.resolve(gq.getRunId()));
 
         GeneratedQuestion updated = generationService.updateStatusAndDifficulty(
                 gq.getId(), report.resultingStatus(), null);

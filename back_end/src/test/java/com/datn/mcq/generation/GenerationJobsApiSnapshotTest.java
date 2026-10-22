@@ -24,8 +24,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * GET /api/generation/jobs trả thẳng entity GenerationJob. V4 thêm question_type và target_statement_difficulties
- * vào bảng; ở giai đoạn 1 hai trường này không được xuất ra JSON, để API của mcq không đổi.
+ * GET /api/generation/jobs trả thẳng entity GenerationJob. GĐ2 mở questionType (mặc định mcq) theo yêu cầu đã duyệt;
+ * targetStatementDifficulties chỉ có với tf nên bị bỏ khỏi JSON của job mcq. Các key cũ giữ nguyên.
  */
 @SpringBootTest
 @Import(TestSafetyConfiguration.class)
@@ -63,7 +63,7 @@ class GenerationJobsApiSnapshotTest {
     }
 
     @Test
-    void jobMcqGiuNguyenKeyCu() throws Exception {
+    void jobMcqGiuKeyCuVaThemQuestionType() throws Exception {
         String body = mockMvc.perform(get("/api/generation/jobs"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
@@ -71,7 +71,10 @@ class GenerationJobsApiSnapshotTest {
         assertEquals(1, jobs.size());
         Set<String> keys = new LinkedHashSet<>();
         jobs.get(0).fieldNames().forEachRemaining(keys::add);
-        assertEquals(OLD_KEYS, keys);
+        Set<String> expected = new LinkedHashSet<>(OLD_KEYS);
+        expected.add("questionType");
+        assertEquals(expected, keys);
+        assertEquals("mcq", jobs.get(0).get("questionType").asText());
         assertEquals("easy", jobs.get(0).get("targetDifficulty").asText());
     }
 }

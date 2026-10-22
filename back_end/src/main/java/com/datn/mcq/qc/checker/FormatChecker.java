@@ -1,6 +1,8 @@
 package com.datn.mcq.qc.checker;
 
 import com.datn.mcq.common.util.LatexValidationRules;
+import com.datn.mcq.common.util.ShortAnswerValue;
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.common.util.TextDistanceUtils;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import org.springframework.stereotype.Component;
@@ -18,9 +20,17 @@ public class FormatChecker {
      * @param errors   lỗi fatal, làm câu format_failed
      * @param warnings cảnh báo LaTeX (lệnh ngoài danh sách cho phép), không ảnh hưởng {@code passed}
      */
-    public record FormatCheckOutcome(boolean passed, List<String> errors, List<String> warnings) {}
+    public record FormatCheckOutcome(boolean passed, List<String> errors, List<String> warnings,
+                                     List<String> answerWarnings) {
+        public FormatCheckOutcome(boolean passed, List<String> errors, List<String> warnings) {
+            this(passed, errors, warnings, List.of());
+        }
+    }
 
     public FormatCheckOutcome check(QuestionQcInput input) {
+        if (input.questionType() == QuestionType.SA) {
+            return checkShortAnswer(input);
+        }
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         if (!input.parseSuccess()) {
@@ -63,6 +73,48 @@ public class FormatChecker {
         }
 
         return new FormatCheckOutcome(errors.isEmpty(), errors, warnings);
+    }
+
+    /**
+     * Câu Trả lời ngắn (V4, bản sửa 1 mục 5): question_text, explanation, answer không trống; answer là chuỗi JSON
+     * và phân tích được ở chế độ STRICT (lỗi là fatal). Với môn Toán, LaTeX ở question_text và answer là lỗi chặn
+     * (quyết định B), ở explanation chỉ là cảnh báo. Phân số chưa tối giản chỉ vào answerWarnings.
+     * Không còn quy tắc "đáp số không nguyên phải có yêu cầu làm tròn".
+     */
+    private FormatCheckOutcome checkShortAnswer(QuestionQcInput input) {
+        List<String> errors = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        List<String> answerWarnings = new ArrayList<>();
+        if (!input.parseSuccess()) {
+            String detail = input.parseError();
+            errors.add("Không giải mã được JSON hợp lệ từ phản hồi LLM"
+                    + (detail != null && !detail.isBlank() ? ": " + detail : ""));
+            return new FormatCheckOutcome(false, errors, warnings);
+        }
+        checkNonBlank("question_text", input.questionText(), errors);
+        checkNonBlank("explanation", input.explanation(), errors);
+        String answer = input.saAnswer();
+        if (answer == null || answer.isBlank()) {
+            errors.add("answer: nội dung trống");
+        } else if (!input.saAnswerIsString()) {
+            errors.add("answer: phải là chuỗi JSON");
+        } else {
+            ShortAnswerValue.ParseResult parsed = ShortAnswerValue.parse(answer, ShortAnswerValue.Mode.STRICT);
+            if (!parsed.ok()) {
+                errors.add("answer: " + parsed.error());
+            }
+            for (String w : parsed.warnings()) {
+                answerWarnings.add("answer: " + w);
+            }
+        }
+        if (input.validateLatex()) {
+            validateFieldLatex("question_text", input.questionText(), errors, warnings);
+            if (input.saAnswerIsString()) {
+                validateFieldLatex("answer", answer, errors, warnings);
+            }
+            validateFieldLatex("explanation", input.explanation(), warnings, warnings);
+        }
+        return new FormatCheckOutcome(errors.isEmpty(), errors, warnings, answerWarnings);
     }
 
     private void checkNonBlank(String fieldName, String value, List<String> errors) {

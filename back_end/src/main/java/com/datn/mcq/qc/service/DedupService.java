@@ -1,6 +1,7 @@
 package com.datn.mcq.qc.service;
 
 import com.datn.mcq.enums.CheckType;
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.qc.checker.DedupChecker;
 import com.datn.mcq.qc.dto.DedupCandidate;
 import com.datn.mcq.qc.dto.DedupOutcome;
@@ -44,11 +45,22 @@ public class DedupService {
         }
 
         List<DedupCandidate> candidates = new ArrayList<>();
-        for (Object[] row : repository.findDedupCandidateRows(
-                subject.questionId(), scope.runId(), scope.comparableRunIds())) {
-            candidates.add(new DedupCandidate(
-                    ((Number) row[0]).intValue(),
-                    (String) row[1], (String) row[2], (String) row[3], (String) row[4], (String) row[5]));
+        if (subject.questionType() == QuestionType.SA) {
+            // V4: chỉ so với câu cùng dạng; câu sa so theo thân câu và khóa chuẩn của đáp số.
+            for (Object[] row : repository.findShortAnswerDedupCandidateRows(
+                    subject.questionId(), scope.runId(), scope.comparableRunIds())) {
+                candidates.add(DedupCandidate.shortAnswer(
+                        ((Number) row[0]).intValue(), (String) row[1], (String) row[2]));
+            }
+        } else if (subject.questionType() == QuestionType.MCQ) {
+            for (Object[] row : repository.findDedupCandidateRows(
+                    subject.questionId(), scope.runId(), scope.comparableRunIds())) {
+                candidates.add(new DedupCandidate(
+                        ((Number) row[0]).intValue(),
+                        (String) row[1], (String) row[2], (String) row[3], (String) row[4], (String) row[5]));
+            }
+        } else {
+            return DedupOutcome.error("Dedup chưa hỗ trợ dạng câu " + subject.questionType().getDbValue());
         }
 
         DedupOutcome outcome = DedupChecker.check(subject, candidates, DedupChecker.PROVISIONAL_THRESHOLD);
@@ -57,6 +69,7 @@ public class DedupService {
                 .findByQuestionIdAndCheckType(subject.questionId(), CheckType.DEDUP)
                 .orElseGet(QualityCheckResult::new);
         result.setQuestionId(subject.questionId());
+        result.setQuestionType(subject.questionType());
         result.setCheckType(CheckType.DEDUP);
         result.setPassed(outcome.status() == DedupStatus.NO_DUPLICATE);
         result.setSimilarityScore(outcome.similarity());

@@ -1,6 +1,9 @@
 package com.datn.mcq.qc.checker;
 
+import com.datn.mcq.common.util.ShortAnswerValue;
 import com.datn.mcq.common.util.SimpleJson;
+import com.datn.mcq.enums.SaJudgeKind;
+import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.DbEnum;
 import com.datn.mcq.enums.Option;
@@ -60,6 +63,68 @@ public class AnswerSolverChecker {
         LlmCallResult result = llmClient.callJsonModeWithSchema(
                 prompt, solverModel, 0.0, SOLVER_RESPONSE_SCHEMA_JSON);
         return parseAndCompare(result.rawText(), result.modelName(), generatorCorrectOption);
+    }
+
+    /**
+     * Kết quả Solver cho câu Trả lời ngắn (V4, bản sửa 1 mục 7).
+     *
+     * @param passed      true khi Solver trả một số bằng giá trị đáp số LLM (CONSISTENT)
+     * @param judgeKind   number, ambiguous hoặc unparseable
+     * @param judgeAnswer chuỗi gốc Solver trả (trim); null khi ambiguous
+     */
+    public record SaSolverOutcome(
+            boolean passed,
+            SaJudgeKind judgeKind,
+            String judgeAnswer,
+            String judgeModel,
+            String reasoning
+    ) {}
+
+    /** Giá trị judge_answer Solver ghi khi đề có nhiều cách hiểu cho ra đáp số khác nhau. */
+    public static final String SA_AMBIGUOUS = "ambiguous";
+
+    static final String SA_NOT_COMPARABLE_PREFIX = "không so tự động được: ";
+
+    /** Gọi Solver cho câu sa. Solver chỉ thấy đề, không thấy đáp số và lời giải của người soạn. */
+    public SaSolverOutcome checkShortAnswer(String questionText, String llmAnswer) {
+        String prompt = SaPromptDraftV0.buildSolverPrompt(questionText);
+        LlmCallResult result = llmClient.callJsonModeWithSchema(
+                prompt, solverModel, 0.0, SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON);
+        return parseAndCompareShortAnswer(result.rawText(), result.modelName(), llmAnswer);
+    }
+
+    /**
+     * So đáp số Solver với đáp số LLM theo giá trị, chế độ LENIENT (nhận dấu chấm thập phân, quyết định 10).
+     * <ul>
+     *   <li>số phân tích được, cùng giá trị: CONSISTENT; khác giá trị: INCONSISTENT (kind number)</li>
+     *   <li>"ambiguous": INCONSISTENT (kind ambiguous)</li>
+     *   <li>chuỗi không phân tích được: INCONSISTENT (kind unparseable), lý do "không so tự động được"</li>
+     * </ul>
+     * Ném IllegalArgumentException (nơi gọi coi là ERROR, không ghi dòng) khi JSON hỏng hoặc có khóa trùng,
+     * thiếu hoặc rỗng judge_answer, hoặc đáp số LLM đã lưu không phân tích được.
+     */
+    public SaSolverOutcome parseAndCompareShortAnswer(String rawSolverJson, String modelUsed, String llmAnswer) {
+        Map<String, Object> map = SimpleJson.parseObject(SimpleJson.stripMarkdownFence(rawSolverJson));
+        String judgeStr = map.get("judge_answer") != null ? String.valueOf(map.get("judge_answer")).trim() : "";
+        String reasoning = map.get("reasoning") != null ? String.valueOf(map.get("reasoning")).trim() : "";
+        if (judgeStr.isEmpty()) {
+            throw new IllegalArgumentException("Phản hồi Solver thiếu judge_answer");
+        }
+        ShortAnswerValue.ParseResult expected = ShortAnswerValue.parse(llmAnswer, ShortAnswerValue.Mode.LENIENT);
+        if (!expected.ok()) {
+            throw new IllegalArgumentException("Đáp số của câu hỏi không phân tích được để so với Solver");
+        }
+        String model = modelUsed != null && !modelUsed.isBlank() ? modelUsed : solverModel;
+        if (SA_AMBIGUOUS.equals(judgeStr)) {
+            return new SaSolverOutcome(false, SaJudgeKind.AMBIGUOUS, null, model, reasoning);
+        }
+        ShortAnswerValue.ParseResult judged = ShortAnswerValue.parse(judgeStr, ShortAnswerValue.Mode.LENIENT);
+        if (!judged.ok()) {
+            return new SaSolverOutcome(false, SaJudgeKind.UNPARSEABLE, judgeStr, model,
+                    SA_NOT_COMPARABLE_PREFIX + judged.error() + (reasoning.isEmpty() ? "" : ". " + reasoning));
+        }
+        return new SaSolverOutcome(judged.value().sameValue(expected.value()), SaJudgeKind.NUMBER, judgeStr,
+                model, reasoning);
     }
 
     public SolverCheckOutcome parseAndCompare(

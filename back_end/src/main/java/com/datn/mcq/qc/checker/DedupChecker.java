@@ -1,5 +1,7 @@
 package com.datn.mcq.qc.checker;
 
+import com.datn.mcq.common.util.ShortAnswerValue;
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.qc.dto.DedupCandidate;
 import com.datn.mcq.qc.dto.DedupOutcome;
 import com.datn.mcq.qc.dto.DedupStatus;
@@ -20,6 +22,9 @@ import java.util.Objects;
  * </ol>
  * Ứng viên bị chốt chặn loại không được dùng làm "câu gần nhất", nên khi không trùng
  * điểm lưu lại luôn nhỏ hơn ngưỡng (khớp enums.md mục 3: trùng khi similarity >= tau).
+ *
+ * <p>V4: chỉ so với ứng viên cùng dạng câu. Văn bản chuẩn của câu sa là thân câu đã chuẩn hóa cộng khóa chuẩn của
+ * đáp số ({@link #answerKey(String)}); hai chốt chặn vẫn chỉ xét thân câu.
  */
 public final class DedupChecker {
 
@@ -49,7 +54,9 @@ public final class DedupChecker {
         List<DedupCandidate> ordered = new ArrayList<>();
         if (candidates != null) {
             for (DedupCandidate c : candidates) {
-                if (c != null && c.hasContent() && !Objects.equals(c.questionId(), subject.questionId())) {
+                // V4: chỉ so với câu cùng dạng (quyết định 11 ngày 22/10).
+                if (c != null && c.questionType() == subject.questionType() && c.hasContent()
+                        && !Objects.equals(c.questionId(), subject.questionId())) {
                     ordered.add(c);
                 }
             }
@@ -104,6 +111,24 @@ public final class DedupChecker {
     }
 
     private static String canonical(DedupCandidate c) {
+        if (c.questionType() == QuestionType.SA) {
+            return McqTextNormalizer.normalize(c.questionText()) + SA_ANSWER_SEPARATOR + answerKey(c.saAnswer());
+        }
         return McqTextNormalizer.canonicalText(c.questionText(), c.optionA(), c.optionB(), c.optionC(), c.optionD());
+    }
+
+    private static final String SA_ANSWER_SEPARATOR = " || ";
+
+    /**
+     * Phần đáp số trong văn bản chuẩn của câu sa (bản sửa 1 mục 6): khóa chuẩn của giá trị, nên "-0,75" và
+     * "$-\frac{3}{4}$" như nhau. Đáp số không phân tích được (chỉ xảy ra với dữ liệu cũ khi bộ phân tích đổi) dùng
+     * "raw:" + chuỗi đã bỏ khoảng trắng; tiền tố bảo đảm không trùng một khóa hợp lệ.
+     */
+    static String answerKey(String saAnswer) {
+        ShortAnswerValue.ParseResult parsed = ShortAnswerValue.parse(saAnswer, ShortAnswerValue.Mode.LENIENT);
+        if (parsed.ok()) {
+            return parsed.value().canonicalKey();
+        }
+        return "raw:" + (saAnswer == null ? "" : saAnswer.replaceAll("\\s+", ""));
     }
 }
