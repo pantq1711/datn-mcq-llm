@@ -55,7 +55,9 @@ public class FormatChecker {
             validateFieldLatex("option_b", input.optionB(), errors, warnings);
             validateFieldLatex("option_c", input.optionC(), errors, warnings);
             validateFieldLatex("option_d", input.optionD(), errors, warnings);
-            validateFieldLatex("explanation", input.explanation(), errors, warnings);
+            // Việc 2 (22/10): lỗi LaTeX của lời giải chỉ là cảnh báo, không làm câu format_failed;
+            // khi chép vào ngân hàng, lời giải còn lỗi nghiêm trọng được lưu NULL (TeacherReviewService).
+            validateFieldLatex("explanation", input.explanation(), warnings, warnings);
         }
 
         return new FormatCheckOutcome(errors.isEmpty(), errors, warnings);

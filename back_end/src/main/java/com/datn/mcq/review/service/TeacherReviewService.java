@@ -289,8 +289,9 @@ public class TeacherReviewService {
                 String finalB = edited ? savedEditedB : gq.getOptionB();
                 String finalC = edited ? savedEditedC : gq.getOptionC();
                 String finalD = edited ? savedEditedD : gq.getOptionD();
-                // Ngân hàng giữ lời giải LLM như trước (quyết định 21/10 mục 3); không đổi cách chép lời giải.
-                String finalExp = gq.getExplanation();
+                // Ngân hàng giữ lời giải LLM (quyết định 21/10 mục 3), trừ khi lời giải còn lỗi định dạng
+                // LaTeX nghiêm trọng thì lưu NULL (việc 2 ngày 22/10).
+                String finalExp = explanationForBank(subject.getName(), gq.getExplanation());
 
                 GeneratedQuestion updatedGq = generationService.updateStatusAndDifficulty(
                         gq.getId(), QuestionStatus.IN_BANK, req.difficultyLabel());
@@ -391,6 +392,17 @@ public class TeacherReviewService {
             appendFieldErrors("explanation", exp, errors);
         }
         return errors;
+    }
+
+    /**
+     * Lời giải chép vào bank_item (việc 2 ngày 22/10): với môn Toán, lời giải còn lỗi định dạng LaTeX nghiêm trọng
+     * thì trả null; lời giải hợp lệ hoặc chỉ có cảnh báo được giữ nguyên. Môn khác không kiểm LaTeX.
+     */
+    static String explanationForBank(String subjectName, String explanation) {
+        if (explanation == null || explanation.isBlank() || !GenerationJobProcessor.isMathSubject(subjectName)) {
+            return explanation;
+        }
+        return LatexFormatValidator.check(explanation).hasErrors() ? null : explanation;
     }
 
     private static boolean isReviewable(GeneratedQuestion gq) {

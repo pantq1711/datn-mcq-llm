@@ -202,6 +202,8 @@ class TeacherReviewEditPolicyTest {
 
         assertNull(teacherReviewRepository.findByQuestionIdAndReviewerId(prod.getId(), teacher.getId())
                 .orElseThrow().getEditedExplanation());
+        // Việc 2 (22/10): lời giải còn lỗi định dạng nghiêm trọng thì ngân hàng lưu NULL.
+        assertNull(bankItemRepository.findBySourceQuestionId(prod.getId()).orElseThrow().getExplanation());
     }
 
     @Test
