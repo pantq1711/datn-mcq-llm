@@ -9,6 +9,7 @@ import java.util.Map;
  * Bộ đọc/ghi JSON tuân thủ RFC 8259 dùng cho phản hồi LLM và payload gọi Gemini.
  * Bắt chặt các chuỗi thoát không hợp lệ (ví dụ \g, \l, \c, \s chưa nhân đôi dấu \)
  * và không phụ thuộc vào khác biệt package giữa Jackson 2 và Jackson 3.
+ * Khóa trùng trong cùng một đối tượng (ở mọi độ sâu) bị từ chối với thông báo nêu tên khóa.
  */
 public final class SimpleJson {
 
@@ -140,7 +141,14 @@ public final class SimpleJson {
                 if (!peek('"')) {
                     throw new IllegalArgumentException("Tên trường JSON phải đặt trong dấu ngoặc kép tại vị trí " + pos);
                 }
+                int keyPos = pos;
                 String key = parseString();
+                // Khóa trùng ở bất kỳ đối tượng nào là lỗi: không lấy giá trị đầu hay giá trị sau
+                // (ví dụ model trả hai khóa "option_c", khóa sau đáng lẽ là "correct_option").
+                if (map.containsKey(key)) {
+                    throw new IllegalArgumentException(
+                            "Khóa JSON bị trùng: " + quote(key) + " tại vị trí " + keyPos);
+                }
                 skipWhitespace();
                 expect(':');
                 Object val = parseValue();

@@ -121,12 +121,26 @@ public final class McqJsonParser {
         return sb.toString();
     }
 
+    /**
+     * So cả cụm chữ sau "\" với tên lệnh: chữ cái Unicode (Character.isLetter, gồm "ô", "ế"...) và cả dấu kết hợp,
+     * để "nếu" viết dạng tổ hợp NFD (n, e, dấu mũ, dấu sắc, u) không bị đọc thành lệnh \ne.
+     */
     private static boolean startsKnownNCommand(String text, int letterStart) {
         int end = letterStart;
-        while (end < text.length() && Character.isLetter(text.charAt(end))) {
+        while (end < text.length() && isWordChar(text.charAt(end))) {
             end++;
         }
         return COMMANDS_STARTING_WITH_N.contains(text.substring(letterStart, end));
+    }
+
+    private static boolean isWordChar(char c) {
+        if (Character.isLetter(c)) {
+            return true;
+        }
+        int type = Character.getType(c);
+        return type == Character.NON_SPACING_MARK
+                || type == Character.COMBINING_SPACING_MARK
+                || type == Character.ENCLOSING_MARK;
     }
 }
 

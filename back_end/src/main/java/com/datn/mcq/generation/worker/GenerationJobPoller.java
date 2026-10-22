@@ -99,7 +99,8 @@ public class GenerationJobPoller {
                 parsed.correctOption(),
                 parsed.explanation(),
                 ctx.validateLatex(),
-                runAnswerCheck
+                runAnswerCheck,
+                parsed.parseError()
         ), dedupScopeResolver.resolve(ctx.runId()));
         processor.updateQuestionStatus(savedQuestion.getId(), qcReport.resultingStatus());
 

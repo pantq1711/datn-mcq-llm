@@ -24,7 +24,9 @@ public class FormatChecker {
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         if (!input.parseSuccess()) {
-            errors.add("Không giải mã được JSON hợp lệ từ phản hồi LLM");
+            String detail = input.parseError();
+            errors.add("Không giải mã được JSON hợp lệ từ phản hồi LLM"
+                    + (detail != null && !detail.isBlank() ? ": " + detail : ""));
             return new FormatCheckOutcome(false, errors, warnings);
         }
         checkNonBlank("question_text", input.questionText(), errors);

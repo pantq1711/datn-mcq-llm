@@ -202,7 +202,8 @@ public class MathDemoSeedService {
                         parsed.correctOption(),
                         parsed.explanation(),
                         true,
-                        false
+                        false,
+                        parsed.parseError()
                 ), dedupScopeResolver.resolve(demoRun.getId()));
                 generationService.updateStatusAndDifficulty(saved.getId(), report.resultingStatus(), null);
             }
