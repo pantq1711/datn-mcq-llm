@@ -14,6 +14,7 @@ import java.util.List;
  * @param answerWarnings (V4) cảnh báo về đáp số, ví dụ phân số chưa tối giản; bỏ khỏi JSON khi rỗng
  * @param saJudgeKind    (V4, câu sa) loại đáp số Solver trả; bỏ khỏi JSON khi null
  * @param saJudgeAnswer  (V4, câu sa) chuỗi gốc Solver trả; bỏ khỏi JSON khi null
+ * @param tfJudgements   (V4, câu tf) nhãn Solver cho 4 ý; bỏ khỏi JSON khi null
  */
 public record QcPipelineReport(
         QuestionStatus resultingStatus,
@@ -28,8 +29,28 @@ public record QcPipelineReport(
         DedupOutcome dedup,
         @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> answerWarnings,
         @JsonInclude(JsonInclude.Include.NON_NULL) SaJudgeKind saJudgeKind,
-        @JsonInclude(JsonInclude.Include.NON_NULL) String saJudgeAnswer
+        @JsonInclude(JsonInclude.Include.NON_NULL) String saJudgeAnswer,
+        @JsonInclude(JsonInclude.Include.NON_NULL) List<TfJudgement> tfJudgements
 ) {
+    /** Báo cáo có trường SA (chữ ký GĐ2): không có kết quả Solver TF. */
+    public QcPipelineReport(
+            QuestionStatus resultingStatus,
+            boolean formatPassed,
+            List<String> formatErrors,
+            Boolean answerCheckPassed,
+            AnswerChoice judgeAnswer,
+            String judgeModel,
+            String solverReasoning,
+            AnswerCheckStatus answerCheckStatus,
+            DedupStatus dedupStatus,
+            DedupOutcome dedup,
+            List<String> answerWarnings,
+            SaJudgeKind saJudgeKind,
+            String saJudgeAnswer) {
+        this(resultingStatus, formatPassed, formatErrors, answerCheckPassed, judgeAnswer, judgeModel, solverReasoning,
+                answerCheckStatus, dedupStatus, dedup, answerWarnings, saJudgeKind, saJudgeAnswer, null);
+    }
+
     /** Báo cáo của câu mcq (chữ ký trước V4): không có trường SA. */
     public QcPipelineReport(
             QuestionStatus resultingStatus,
@@ -43,6 +64,6 @@ public record QcPipelineReport(
             DedupStatus dedupStatus,
             DedupOutcome dedup) {
         this(resultingStatus, formatPassed, formatErrors, answerCheckPassed, judgeAnswer, judgeModel, solverReasoning,
-                answerCheckStatus, dedupStatus, dedup, List.of(), null, null);
+                answerCheckStatus, dedupStatus, dedup, List.of(), null, null, null);
     }
 }

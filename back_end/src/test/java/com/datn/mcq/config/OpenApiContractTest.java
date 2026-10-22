@@ -20,6 +20,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -44,7 +45,10 @@ class OpenApiContractTest {
             "status", "latexValid", "latexErrors", "dedupStatus", "answerCheckStatus",
             // GĐ2 (V4): đáp số SA của LLM, kết quả Solver SA và cảnh báo định dạng đáp số.
             "saAnswer", "sa_answer", "judgeSaKind", "judge_sa_kind", "judgeSaAnswer", "judge_sa_answer",
-            "answerWarnings", "qcReport");
+            "answerWarnings", "qcReport",
+            // GĐ3 (V4): nhãn và mức của LLM cho từng ý TF, kết quả Solver TF, đúng/sai từng ý do server tính.
+            "label", "llmLabel", "llm_label", "difficulty", "finalDifficulty", "final_difficulty",
+            "labelCorrect", "label_correct", "judgeLabel", "judge_label", "tfJudgements");
 
     @Autowired
     private WebApplicationContext webApplicationContext;
@@ -86,6 +90,20 @@ class OpenApiContractTest {
         for (String dto : List.of("BlindQuestionReviewDto", "ReviewQuestionListItemDto")) {
             assertTrue(schemas.path(dto).path("properties").has("questionType"), dto + " thiếu questionType");
         }
+    }
+
+    /** GĐ3: form chấm TF có 4 ý, mỗi ý chỉ có key và text (không có nhãn hay mức của LLM). */
+    @Test
+    void reviewFormStatementsOnlyHaveKeyAndText() throws Exception {
+        JsonNode schemas = objectMapper.readTree(apiDocs()).path("components").path("schemas");
+        JsonNode statements = schemas.path("BlindQuestionReviewDto").path("properties").path("statements");
+        assertFalse(statements.isMissingNode(), "BlindQuestionReviewDto thiếu statements");
+        String ref = statements.path("items").path("$ref").asText();
+        assertTrue(ref.startsWith("#/components/schemas/"), "statements phải là mảng schema riêng: " + statements);
+        JsonNode item = schemas.path(ref.substring("#/components/schemas/".length())).path("properties");
+        Set<String> keys = new LinkedHashSet<>();
+        item.fieldNames().forEachRemaining(keys::add);
+        assertEquals(Set.of("key", "text"), keys);
     }
 
     private static Set<String> reachableSchemas(JsonNode schemas, String root) {

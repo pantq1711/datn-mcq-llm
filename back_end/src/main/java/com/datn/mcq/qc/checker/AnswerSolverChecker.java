@@ -3,7 +3,10 @@ package com.datn.mcq.qc.checker;
 import com.datn.mcq.common.util.ShortAnswerValue;
 import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.enums.SaJudgeKind;
+import com.datn.mcq.enums.TruthChoice;
+import com.datn.mcq.enums.TruthValue;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
+import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.DbEnum;
 import com.datn.mcq.enums.Option;
@@ -13,6 +16,8 @@ import com.datn.mcq.llm.prompt.PromptBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -80,6 +85,71 @@ public class AnswerSolverChecker {
             String reasoning
     ) {}
 
+    /**
+     * Kết quả Solver cho câu Đúng/Sai (V4, GĐ3).
+     *
+     * @param passed      true chỉ khi đủ 4 ý có nhãn T/F và đều khớp nhãn LLM (CONSISTENT)
+     * @param judgeLabels nhãn Solver cho 4 ý theo thứ tự a-d (T, F, undecidable)
+     */
+    public record TfSolverOutcome(
+            boolean passed,
+            List<TruthChoice> judgeLabels,
+            String judgeModel,
+            String reasoning
+    ) {
+        public TfSolverOutcome {
+            judgeLabels = List.copyOf(judgeLabels);
+        }
+    }
+
+    private static final List<String> TF_KEYS = List.of("a", "b", "c", "d");
+
+    /** Gọi Solver cho câu tf. Solver chỉ thấy đề dẫn và 4 ý, không thấy nhãn và lời giải của người soạn. */
+    public TfSolverOutcome checkTrueFalse(String questionText, List<String> statements, List<String> llmLabels) {
+        String prompt = TfPromptDraftV0.buildSolverPrompt(questionText, statements);
+        LlmCallResult result = llmClient.callJsonModeWithSchema(
+                prompt, solverModel, 0.0, TfPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON);
+        return parseAndCompareTrueFalse(result.rawText(), result.modelName(), llmLabels);
+    }
+
+    /**
+     * So nhãn Solver với nhãn LLM cho từng ý (GĐ3). CONSISTENT chỉ khi đủ 4 ý có nhãn T/F và đều khớp; có ý lệch hoặc
+     * undecidable là INCONSISTENT. Ném IllegalArgumentException (nơi gọi coi là ERROR, không ghi dòng) khi JSON hỏng
+     * hoặc có khóa trùng, thiếu hoặc sai judge_x, hoặc nhãn LLM không đủ 4 giá trị T/F.
+     */
+    public TfSolverOutcome parseAndCompareTrueFalse(String rawSolverJson, String modelUsed, List<String> llmLabels) {
+        if (llmLabels == null || llmLabels.size() != 4) {
+            throw new IllegalArgumentException("Câu đúng/sai phải có đủ 4 nhãn để so với Solver");
+        }
+        List<TruthValue> expected = new ArrayList<>(4);
+        for (String raw : llmLabels) {
+            TruthValue v = TruthValue.fromLabel(raw);
+            if (v == null) {
+                throw new IllegalArgumentException("Nhãn của câu hỏi không hợp lệ để so với Solver");
+            }
+            expected.add(v);
+        }
+        Map<String, Object> map = SimpleJson.parseObject(SimpleJson.stripMarkdownFence(rawSolverJson));
+        List<TruthChoice> judged = new ArrayList<>(4);
+        StringBuilder reasoning = new StringBuilder();
+        boolean allMatch = true;
+        for (int i = 0; i < TF_KEYS.size(); i++) {
+            String key = TF_KEYS.get(i);
+            Object raw = map.get("judge_" + key);
+            TruthChoice choice = raw != null ? TruthChoice.fromJudge(String.valueOf(raw)) : null;
+            if (choice == null) {
+                throw new IllegalArgumentException("Phản hồi Solver thiếu hoặc sai judge_" + key);
+            }
+            judged.add(choice);
+            allMatch &= choice.matches(expected.get(i));
+            Object why = map.get("reasoning_" + key);
+            reasoning.append(i > 0 ? "\n" : "").append(key).append(") ")
+                    .append(why != null ? String.valueOf(why).trim() : "");
+        }
+        return new TfSolverOutcome(allMatch, judged,
+                modelUsed != null && !modelUsed.isBlank() ? modelUsed : solverModel, reasoning.toString());
+    }
+
     /** Giá trị judge_answer Solver ghi khi đề có nhiều cách hiểu cho ra đáp số khác nhau. */
     public static final String SA_AMBIGUOUS = "ambiguous";
 
@@ -115,7 +185,8 @@ public class AnswerSolverChecker {
             throw new IllegalArgumentException("Đáp số của câu hỏi không phân tích được để so với Solver");
         }
         String model = modelUsed != null && !modelUsed.isBlank() ? modelUsed : solverModel;
-        if (SA_AMBIGUOUS.equals(judgeStr)) {
+        // Không phân biệt hoa thường, sau khi trim (quyết định 2 sau GĐ2).
+        if (SA_AMBIGUOUS.equalsIgnoreCase(judgeStr)) {
             return new SaSolverOutcome(false, SaJudgeKind.AMBIGUOUS, null, model, reasoning);
         }
         ShortAnswerValue.ParseResult judged = ShortAnswerValue.parse(judgeStr, ShortAnswerValue.Mode.LENIENT);

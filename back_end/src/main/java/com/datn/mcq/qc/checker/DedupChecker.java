@@ -24,7 +24,8 @@ import java.util.Objects;
  * điểm lưu lại luôn nhỏ hơn ngưỡng (khớp enums.md mục 3: trùng khi similarity >= tau).
  *
  * <p>V4: chỉ so với ứng viên cùng dạng câu. Văn bản chuẩn của câu sa là thân câu đã chuẩn hóa cộng khóa chuẩn của
- * đáp số ({@link #answerKey(String)}); hai chốt chặn vẫn chỉ xét thân câu.
+ * đáp số ({@link #answerKey(String)}); hai chốt chặn vẫn chỉ xét thân câu. Văn bản chuẩn của câu tf là đề dẫn cộng
+ * 4 ý đã chuẩn hóa và sắp xếp (không gồm nhãn); hai chốt chặn xét cả đề dẫn và 4 ý.
  */
 public final class DedupChecker {
 
@@ -48,8 +49,8 @@ public final class DedupChecker {
             throw new IllegalArgumentException("Câu cần so trùng thiếu thân câu hoặc phương án");
         }
         String subjectText = canonical(subject);
-        List<String> subjectSignature = McqTextNormalizer.stemSignature(subject.questionText());
-        boolean subjectNegation = McqTextNormalizer.hasNegation(subject.questionText());
+        List<String> subjectSignature = signature(subject);
+        String subjectNegation = negationKey(subject);
 
         List<DedupCandidate> ordered = new ArrayList<>();
         if (candidates != null) {
@@ -78,8 +79,8 @@ public final class DedupChecker {
                 }
                 continue;
             }
-            boolean sameSignature = subjectSignature.equals(McqTextNormalizer.stemSignature(c.questionText()));
-            boolean sameNegation = subjectNegation == McqTextNormalizer.hasNegation(c.questionText());
+            boolean sameSignature = subjectSignature.equals(signature(c));
+            boolean sameNegation = subjectNegation.equals(negationKey(c));
             if (!sameSignature || !sameNegation) {
                 continue;
             }
@@ -114,7 +115,46 @@ public final class DedupChecker {
         if (c.questionType() == QuestionType.SA) {
             return McqTextNormalizer.normalize(c.questionText()) + SA_ANSWER_SEPARATOR + answerKey(c.saAnswer());
         }
+        if (c.questionType() == QuestionType.TF) {
+            // Đề dẫn + 4 ý đã chuẩn hóa và sắp xếp: đảo thứ tự ý vẫn trùng. Nhãn Đúng/Sai không tham gia.
+            List<String> statements = new ArrayList<>();
+            for (String s : c.statements()) {
+                statements.add(McqTextNormalizer.normalize(s));
+            }
+            statements.sort(null);
+            return McqTextNormalizer.normalize(c.questionText()) + SA_ANSWER_SEPARATOR + String.join(" | ", statements);
+        }
         return McqTextNormalizer.canonicalText(c.questionText(), c.optionA(), c.optionB(), c.optionC(), c.optionD());
+    }
+
+    /** Chốt chặn số liệu: mcq/sa xét thân câu; tf gộp số liệu và công thức của đề dẫn và 4 ý (đã sắp xếp). */
+    private static List<String> signature(DedupCandidate c) {
+        if (c.questionType() != QuestionType.TF) {
+            return McqTextNormalizer.stemSignature(c.questionText());
+        }
+        List<String> all = new ArrayList<>(McqTextNormalizer.stemSignature(c.questionText()));
+        for (String s : c.statements()) {
+            all.addAll(McqTextNormalizer.stemSignature(s));
+        }
+        all.sort(null);
+        return all;
+    }
+
+    /**
+     * Chốt chặn phủ định: mcq/sa xét thân câu; tf so phủ định của đề dẫn và danh sách phủ định của 4 ý đã sắp xếp
+     * (thiết kế bản sửa 1, mục 6).
+     */
+    private static String negationKey(DedupCandidate c) {
+        String stem = String.valueOf(McqTextNormalizer.hasNegation(c.questionText()));
+        if (c.questionType() != QuestionType.TF) {
+            return stem;
+        }
+        List<Boolean> perStatement = new ArrayList<>();
+        for (String s : c.statements()) {
+            perStatement.add(McqTextNormalizer.hasNegation(s));
+        }
+        perStatement.sort(null);
+        return stem + ":" + perStatement;
     }
 
     private static final String SA_ANSWER_SEPARATOR = " || ";

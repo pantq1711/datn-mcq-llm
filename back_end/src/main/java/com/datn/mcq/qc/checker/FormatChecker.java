@@ -3,6 +3,7 @@ package com.datn.mcq.qc.checker;
 import com.datn.mcq.common.util.LatexValidationRules;
 import com.datn.mcq.common.util.ShortAnswerValue;
 import com.datn.mcq.enums.QuestionType;
+import com.datn.mcq.enums.TruthValue;
 import com.datn.mcq.common.util.TextDistanceUtils;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import org.springframework.stereotype.Component;
@@ -30,6 +31,9 @@ public class FormatChecker {
     public FormatCheckOutcome check(QuestionQcInput input) {
         if (input.questionType() == QuestionType.SA) {
             return checkShortAnswer(input);
+        }
+        if (input.questionType() == QuestionType.TF) {
+            return checkTrueFalse(input);
         }
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
@@ -111,6 +115,70 @@ public class FormatChecker {
             validateFieldLatex("question_text", input.questionText(), errors, warnings);
             if (input.saAnswerIsString()) {
                 validateFieldLatex("answer", answer, errors, warnings);
+            }
+            validateFieldLatex("explanation", input.explanation(), warnings, warnings);
+        }
+        return new FormatCheckOutcome(errors.isEmpty(), errors, warnings, answerWarnings);
+    }
+
+    private static final List<String> TF_KEYS = List.of("a", "b", "c", "d");
+
+    /**
+     * Câu Đúng/Sai (V4, GĐ3): đề dẫn, 4 ý, lời giải không trống; 4 nhãn là T hoặc F (sau trim, không phân biệt hoa
+     * thường); 4 ý khác nhau sau chuẩn hóa. Với môn Toán, LaTeX ở đề dẫn và ý là lỗi chặn, ở lời giải chỉ là cảnh
+     * báo. 4 nhãn giống nhau chỉ là cảnh báo trong answerWarnings (quyết định ngày 22/10).
+     */
+    private FormatCheckOutcome checkTrueFalse(QuestionQcInput input) {
+        List<String> errors = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        List<String> answerWarnings = new ArrayList<>();
+        if (!input.parseSuccess()) {
+            String detail = input.parseError();
+            errors.add("Không giải mã được JSON hợp lệ từ phản hồi LLM"
+                    + (detail != null && !detail.isBlank() ? ": " + detail : ""));
+            return new FormatCheckOutcome(false, errors, warnings);
+        }
+        List<String> statements = new ArrayList<>(4);
+        List<TruthValue> labels = new ArrayList<>(4);
+        checkNonBlank("question_text", input.questionText(), errors);
+        for (int i = 0; i < TF_KEYS.size(); i++) {
+            String statement = i < input.statements().size() ? input.statements().get(i) : null;
+            statements.add(statement);
+            checkNonBlank("statement_" + TF_KEYS.get(i), statement, errors);
+        }
+        checkNonBlank("explanation", input.explanation(), errors);
+        for (int i = 0; i < TF_KEYS.size(); i++) {
+            String raw = i < input.statementLabels().size() ? input.statementLabels().get(i) : null;
+            String field = "label_" + TF_KEYS.get(i);
+            if (raw == null || raw.isBlank()) {
+                errors.add(field + ": nội dung trống");
+                labels.add(null);
+                continue;
+            }
+            TruthValue label = TruthValue.fromLabel(raw);
+            if (label == null) {
+                errors.add(field + ": phải là T hoặc F");
+            }
+            labels.add(label);
+        }
+
+        if (statements.stream().allMatch(s -> s != null && !s.isBlank())) {
+            Set<String> distinct = new HashSet<>();
+            for (String s : statements) {
+                distinct.add(TextDistanceUtils.normalize(s));
+            }
+            if (distinct.size() < 4) {
+                errors.add("4 ý a, b, c, d có nội dung trùng lặp nhau");
+            }
+        }
+        if (labels.stream().allMatch(l -> l != null) && new HashSet<>(labels).size() == 1) {
+            answerWarnings.add("label: 4 ý cùng nhãn " + labels.get(0).getDbValue());
+        }
+
+        if (input.validateLatex()) {
+            validateFieldLatex("question_text", input.questionText(), errors, warnings);
+            for (int i = 0; i < TF_KEYS.size(); i++) {
+                validateFieldLatex("statement_" + TF_KEYS.get(i), statements.get(i), errors, warnings);
             }
             validateFieldLatex("explanation", input.explanation(), warnings, warnings);
         }

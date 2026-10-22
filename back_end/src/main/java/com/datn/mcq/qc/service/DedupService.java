@@ -52,6 +52,13 @@ public class DedupService {
                 candidates.add(DedupCandidate.shortAnswer(
                         ((Number) row[0]).intValue(), (String) row[1], (String) row[2]));
             }
+        } else if (subject.questionType() == QuestionType.TF) {
+            // GĐ3: đề dẫn và 4 ý (không gồm nhãn).
+            for (Object[] row : repository.findTrueFalseDedupCandidateRows(
+                    subject.questionId(), scope.runId(), scope.comparableRunIds())) {
+                candidates.add(DedupCandidate.trueFalse(((Number) row[0]).intValue(), (String) row[1],
+                        java.util.Arrays.asList((String) row[2], (String) row[3], (String) row[4], (String) row[5])));
+            }
         } else if (subject.questionType() == QuestionType.MCQ) {
             for (Object[] row : repository.findDedupCandidateRows(
                     subject.questionId(), scope.runId(), scope.comparableRunIds())) {

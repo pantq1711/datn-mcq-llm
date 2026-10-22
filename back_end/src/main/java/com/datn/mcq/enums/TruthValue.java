@@ -24,6 +24,15 @@ public enum TruthValue implements DbEnum {
         return dbValue;
     }
 
+    /** Nhãn LLM viết trong JSON: sau trim, "T"/"F" không phân biệt hoa thường; giá trị khác hoặc null trả null. */
+    public static TruthValue fromLabel(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String v = raw.strip();
+        return v.equalsIgnoreCase("T") ? TRUE : v.equalsIgnoreCase("F") ? FALSE : null;
+    }
+
     @Converter(autoApply = true)
     public static class Conv extends DbEnumConverter<TruthValue> {
         public Conv() {

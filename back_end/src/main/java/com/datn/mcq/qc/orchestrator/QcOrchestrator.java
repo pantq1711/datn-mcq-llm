@@ -4,6 +4,7 @@ import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SaJudgeKind;
+import com.datn.mcq.enums.StatementKey;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.AnswerCheckStatus;
@@ -13,13 +14,17 @@ import com.datn.mcq.qc.dto.DedupScope;
 import com.datn.mcq.qc.dto.DedupStatus;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
+import com.datn.mcq.qc.dto.TfJudgement;
 import com.datn.mcq.qc.entity.QualityCheckResult;
 import com.datn.mcq.qc.repository.QualityCheckResultRepository;
+import com.datn.mcq.qc.service.AnswerCheckRecorder;
 import com.datn.mcq.qc.service.DedupService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -37,16 +42,29 @@ public class QcOrchestrator {
     private final AnswerSolverChecker answerSolverChecker;
     private final QualityCheckResultRepository qualityCheckResultRepository;
     private final DedupService dedupService;
+    private final AnswerCheckRecorder answerCheckRecorder;
 
+    /** Chữ ký trước GĐ3 (test mcq dựng tay): không có bộ ghi kết quả Solver TF; câu tf khi đó cho ERROR. */
     public QcOrchestrator(
             FormatChecker formatChecker,
             AnswerSolverChecker answerSolverChecker,
             QualityCheckResultRepository qualityCheckResultRepository,
             DedupService dedupService) {
+        this(formatChecker, answerSolverChecker, qualityCheckResultRepository, dedupService, null);
+    }
+
+    @Autowired
+    public QcOrchestrator(
+            FormatChecker formatChecker,
+            AnswerSolverChecker answerSolverChecker,
+            QualityCheckResultRepository qualityCheckResultRepository,
+            DedupService dedupService,
+            AnswerCheckRecorder answerCheckRecorder) {
         this.formatChecker = formatChecker;
         this.answerSolverChecker = answerSolverChecker;
         this.qualityCheckResultRepository = qualityCheckResultRepository;
         this.dedupService = dedupService;
+        this.answerCheckRecorder = answerCheckRecorder;
     }
 
     /**
@@ -117,6 +135,7 @@ public class QcOrchestrator {
         String solverReasoning;
         SaJudgeKind saJudgeKind = null;
         String saJudgeAnswer = null;
+        List<TfJudgement> tfJudgements = null;
 
         if (!input.runAnswerCheck()) {
             answerCheckStatus = AnswerCheckStatus.NOT_RUN;
@@ -125,6 +144,33 @@ public class QcOrchestrator {
             // Thiếu API key là lỗi cấu hình, không phải một lần kiểm tra thành công.
             answerCheckStatus = AnswerCheckStatus.NOT_RUN;
             solverReasoning = "answer_check không chạy: chưa cấu hình API key cho Solver";
+        } else if (input.questionType() == QuestionType.TF) {
+            // GĐ3: CONSISTENT chỉ khi đủ 4 ý khớp; có ý lệch hoặc undecidable là INCONSISTENT (có ghi dòng).
+            // Dòng answer_check và 4 dòng ý ghi trong cùng một transaction (AnswerCheckRecorder); lỗi là ERROR.
+            try {
+                if (answerCheckRecorder == null) {
+                    throw new IllegalStateException("Chưa có bộ ghi kết quả Solver câu đúng/sai");
+                }
+                AnswerSolverChecker.TfSolverOutcome tf = answerSolverChecker.checkTrueFalse(
+                        input.questionText(), input.statements(), input.statementLabels());
+                answerCheckRecorder.recordTrueFalse(input.questionId(), tf.passed(), tf.judgeModel(), tf.judgeLabels());
+                answerCheckPassed = tf.passed();
+                judgeModel = tf.judgeModel();
+                solverReasoning = tf.reasoning();
+                List<TfJudgement> judgements = new ArrayList<>(4);
+                StatementKey[] keys = StatementKey.values();
+                for (int i = 0; i < keys.length; i++) {
+                    judgements.add(new TfJudgement(keys[i], tf.judgeLabels().get(i)));
+                }
+                tfJudgements = judgements;
+                answerCheckStatus = tf.passed() ? AnswerCheckStatus.CONSISTENT : AnswerCheckStatus.INCONSISTENT;
+            } catch (RuntimeException ex) {
+                answerCheckStatus = AnswerCheckStatus.ERROR;
+                answerCheckPassed = null;
+                judgeModel = null;
+                tfJudgements = null;
+                solverReasoning = "Không hoàn tất answer_check: " + ex.getMessage();
+            }
         } else if (input.questionType() == QuestionType.SA) {
             // V4, bản sửa 1 mục 7: so đáp số theo giá trị; ambiguous và không phân tích được là INCONSISTENT
             // (có ghi dòng); lỗi gọi hoặc phản hồi hỏng là ERROR (không ghi dòng).
@@ -208,7 +254,8 @@ public class QcOrchestrator {
                 dedupOutcome,
                 answerWarnings,
                 saJudgeKind,
-                saJudgeAnswer
+                saJudgeAnswer,
+                tfJudgements
         );
     }
 
@@ -226,7 +273,8 @@ public class QcOrchestrator {
                     input.optionC(),
                     input.optionD(),
                     input.questionType(),
-                    input.saAnswer()
+                    input.saAnswer(),
+                    input.statements()
             ), scope);
             return outcome != null ? outcome : DedupOutcome.error("DedupService không trả kết quả");
         } catch (RuntimeException ex) {

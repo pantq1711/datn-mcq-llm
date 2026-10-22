@@ -128,9 +128,13 @@ class ShortAnswerReviewTest {
         assertRejected(saQuestion, SA + "\"decision\": \"approved_as_is\", \"reviewerSaKind\": \"number\","
                 + " \"reviewerSaAnswer\": \"-0,75\", \"finalSaAnswer\": \"-3/4\"",
                 "Khi chọn approved_as_is, finalSaAnswer phải trùng reviewerSaAnswer");
-        // Quyết định E: đáp số cuối dùng chế độ STRICT, nên "05" chỉ dùng được ở bước chấm mù.
+        // Quyết định E: đáp số cuối dùng chế độ STRICT, nên "05" chỉ dùng được ở bước chấm mù. Quyết định 3 sau GĐ2:
+        // thông báo nêu cách sửa, lấy từ chính chuỗi giáo viên nhập (không lộ đáp số LLM).
         assertRejected(saQuestion, SA + "\"decision\": \"approved_as_is\", \"reviewerSaKind\": \"number\","
-                + " \"reviewerSaAnswer\": \"05\"", "Đáp số cuối không hợp lệ: có chữ số 0 thừa ở đầu");
+                + " \"reviewerSaAnswer\": \"05\"", "Đáp số có chữ số 0 thừa ở đầu, hãy nhập 5");
+        assertRejected(saQuestion, SA + "\"decision\": \"approved_with_edit\", \"reviewerSaKind\": \"number\","
+                + " \"reviewerSaAnswer\": \"1\", \"finalSaAnswer\": \"-007,5\"",
+                "Đáp số có chữ số 0 thừa ở đầu, hãy nhập -7,5");
         assertRejected(saQuestion, SA + "\"decision\": \"approved_with_edit\", \"reviewerSaKind\": \"number\","
                 + " \"reviewerSaAnswer\": \"1\"", "Khi chọn approved_with_edit, bắt buộc nhập finalSaAnswer");
         assertRejected(saQuestion, SA + "\"decision\": \"approved_with_edit\", \"reviewerSaKind\": \"number\","
