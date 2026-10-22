@@ -314,7 +314,7 @@ Thứ tự: `question_text`, `statement_a`, `statement_b`, `statement_c`, `state
 | `explanation` | chuỗi | Lời giải cho từng ý. Không trống; lỗi LaTeX chỉ là cảnh báo |
 | `label_a` .. `label_d` | chuỗi `T` hoặc `F` | Sau khi trim, không phân biệt hoa thường; giá trị khác là lỗi chặn. Không bắt buộc số ý Đúng hay số ý Sai: 4 nhãn giống nhau chỉ cảnh báo `label: 4 ý cùng nhãn T` (hoặc `F`) trong `answerWarnings` |
 
-- Ý không ghi nhãn ở đầu. Nếu ý mở đầu bằng `a)`, `a.`, `(a)` hoặc `a:` (không phân biệt hoa thường, cho phép khoảng trắng) và chữ cái khớp đúng vị trí của ý, backend bỏ tiền tố đó một lần trước khi lưu và ghi cảnh báo, ví dụ `statement_a: đã bỏ tiền tố "a)" ở đầu ý`, vào `answerWarnings`. Chữ cái không khớp vị trí (ví dụ `statement_b` mở đầu bằng `a)`) thì giữ nguyên. `raw_llm_output` vẫn giữ bản gốc.
+- Ý không ghi nhãn ở đầu. Nếu ý mở đầu bằng `a)`, `a.`, `(a)` hoặc `a:` (không phân biệt hoa thường, cho phép khoảng trắng) và chữ cái khớp đúng vị trí của ý, backend bỏ tiền tố đó một lần trước khi lưu và ghi cảnh báo, ví dụ `statement_a: đã bỏ tiền tố "a)" ở đầu ý`, vào `answerWarnings`. Chữ cái không khớp vị trí (ví dụ `statement_b` mở đầu bằng `a)`) thì giữ nguyên. Dạng `a.` chỉ bị bỏ khi ký tự ngay sau dấu chấm không phải chữ cái: `a.b = 0` giữ nguyên, `a. Điều kiện` và `d.  $x = 2$` bị bỏ. `raw_llm_output` vẫn giữ bản gốc.
 - Mức mục tiêu của 4 ý (`targetStatementDifficulties`) đi trong prompt, không nằm trong JSON; backend lưu ở `generated_question_statement.llm_difficulty`. Mức cấp câu để NULL.
 - JSON giải mã lỗi (ví dụ khóa trùng) thì không lưu ý nào.
 

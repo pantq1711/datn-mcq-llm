@@ -69,7 +69,6 @@ public class TeacherReviewService {
 
     // V4, GĐ2 (câu Trả lời ngắn). Các thông điệp chỉ nói về dữ liệu giáo viên gửi, không nhắc đáp số hay QC của LLM.
     static final String TYPE_MISMATCH_MESSAGE = "Dữ liệu đánh giá không khớp dạng câu hỏi.";
-    static final String SA_FIELD_NOT_APPLICABLE = "Trường %s không áp dụng cho câu trả lời ngắn.";
     static final String REVIEWER_SA_UNREADABLE_MESSAGE = "Đáp số giáo viên nhập không đọc được thành một số.";
     static final String FINAL_SA_INVALID_PREFIX = "Đáp số cuối không hợp lệ: ";
     static final String LEADING_ZERO_HINT_PREFIX = "Đáp số có chữ số 0 thừa ở đầu, hãy nhập ";
@@ -199,6 +198,7 @@ public class TeacherReviewService {
         if (actualType != claimedType) {
             throw new IllegalArgumentException(TYPE_MISMATCH_MESSAGE);
         }
+        rejectForeignFields(req, actualType);
         if (actualType == QuestionType.SA) {
             validateShortAnswerRequest(req);
         } else if (actualType == QuestionType.TF) {
@@ -401,6 +401,29 @@ public class TeacherReviewService {
     /**
      * Dạng câu client đang chấm: questionType nếu có; không có thì là sa khi body có trường sa, còn lại là mcq.
      */
+    /**
+     * Quy tắc chung cho trường thừa (lượt cuối sau GĐ4), áp cho mọi dạng và cả khi body có questionType: trường thuộc
+     * dạng câu khác mà khác null thì 400 {@link #TYPE_MISMATCH_MESSAGE}; mang giá trị null thì bỏ qua.
+     * Trường riêng của mcq: reviewerAnswer, finalOption, editedOptionA..D; của sa: reviewerSaKind, reviewerSaAnswer,
+     * finalSaAnswer; của tf: statements. difficultyLabel cấp câu là của mcq và sa (tf chấm mức theo từng ý).
+     */
+    static void rejectForeignFields(SubmitReviewRequest req, QuestionType type) {
+        boolean mcqFields = req.reviewerAnswer() != null || req.finalOption() != null
+                || req.editedOptionA() != null || req.editedOptionB() != null
+                || req.editedOptionC() != null || req.editedOptionD() != null;
+        boolean saFields = req.reviewerSaKind() != null || req.reviewerSaAnswer() != null
+                || req.finalSaAnswer() != null;
+        boolean tfFields = req.statements() != null;
+        boolean foreign = switch (type) {
+            case MCQ -> saFields || tfFields;
+            case SA -> mcqFields || tfFields;
+            case TF -> mcqFields || saFields || req.difficultyLabel() != null;
+        };
+        if (foreign) {
+            throw new IllegalArgumentException(TYPE_MISMATCH_MESSAGE);
+        }
+    }
+
     static QuestionType claimedType(SubmitReviewRequest req) {
         if (req == null) {
             throw new IllegalArgumentException("Body đánh giá không được rỗng");
@@ -419,18 +442,13 @@ public class TeacherReviewService {
 
     /**
      * Kiểm tra body chấm câu Trả lời ngắn (bản sửa 1 mục 8, quyết định A và E): đáp số chấm mù chỉ cần phân tích
-     * được (LENIENT), đáp số cuối vào ngân hàng phải viết chuẩn (STRICT).
+     * được (LENIENT), đáp số cuối vào ngân hàng phải viết chuẩn (STRICT). Trường của dạng khác đã kiểm ở
+     * {@link #rejectForeignFields}.
      */
     static void validateShortAnswerRequest(SubmitReviewRequest req) {
         if (req.editedExplanation() != null) {
             throw new IllegalArgumentException(EDITED_EXPLANATION_NOT_ACCEPTED_MESSAGE);
         }
-        rejectIfPresent("reviewerAnswer", req.reviewerAnswer());
-        rejectIfPresent("finalOption", req.finalOption());
-        rejectIfPresent("editedOptionA", req.editedOptionA());
-        rejectIfPresent("editedOptionB", req.editedOptionB());
-        rejectIfPresent("editedOptionC", req.editedOptionC());
-        rejectIfPresent("editedOptionD", req.editedOptionD());
         if (req.formatOk() == null) {
             throw new IllegalArgumentException("Phải chọn đánh giá định dạng (formatOk)");
         }
@@ -482,12 +500,6 @@ public class TeacherReviewService {
                 }
                 requireStrictFinalAnswer(req.finalSaAnswer());
             }
-        }
-    }
-
-    private static void rejectIfPresent(String field, Object value) {
-        if (value != null) {
-            throw new IllegalArgumentException(SA_FIELD_NOT_APPLICABLE.formatted(field));
         }
     }
 
@@ -676,29 +688,18 @@ public class TeacherReviewService {
         return teacherReviewStatementRepository.countByReviewIdAndLabelCorrectTrue(reviewId);
     }
 
-    static final String TF_FIELD_NOT_APPLICABLE = "Trường %s không áp dụng cho câu đúng/sai.";
     static final String TF_NEED_FOUR_MESSAGE = "Phải gửi đủ 4 ý a, b, c, d (mỗi ý một lần)";
 
     /**
      * Kiểm tra body chấm câu Đúng/Sai (GĐ3): đủ 4 ý a-d, mỗi ý có reviewerLabel (T, F, undecidable) và difficultyLabel;
      * có undecidable thì không được approved_as_is; approved_as_is: finalLabel bỏ trống hoặc trùng reviewerLabel;
      * approved_with_edit: bắt buộc finalLabel cho cả 4 ý; rejected: finalLabel phải trống và có lý do.
-     * Các thông điệp chỉ nói về dữ liệu giáo viên gửi.
+     * Các thông điệp chỉ nói về dữ liệu giáo viên gửi. Trường của dạng khác đã kiểm ở {@link #rejectForeignFields}.
      */
     static void validateTrueFalseRequest(SubmitReviewRequest req) {
         if (req.editedExplanation() != null) {
             throw new IllegalArgumentException(EDITED_EXPLANATION_NOT_ACCEPTED_MESSAGE);
         }
-        rejectIfPresentTf("reviewerAnswer", req.reviewerAnswer());
-        rejectIfPresentTf("finalOption", req.finalOption());
-        rejectIfPresentTf("difficultyLabel", req.difficultyLabel());
-        rejectIfPresentTf("editedOptionA", req.editedOptionA());
-        rejectIfPresentTf("editedOptionB", req.editedOptionB());
-        rejectIfPresentTf("editedOptionC", req.editedOptionC());
-        rejectIfPresentTf("editedOptionD", req.editedOptionD());
-        rejectIfPresentTf("reviewerSaKind", req.reviewerSaKind());
-        rejectIfPresentTf("reviewerSaAnswer", req.reviewerSaAnswer());
-        rejectIfPresentTf("finalSaAnswer", req.finalSaAnswer());
         if (req.formatOk() == null) {
             throw new IllegalArgumentException("Phải chọn đánh giá định dạng (formatOk)");
         }
@@ -748,12 +749,6 @@ public class TeacherReviewService {
                 }
                 validateRejectReasons(req);
             }
-        }
-    }
-
-    private static void rejectIfPresentTf(String field, Object value) {
-        if (value != null) {
-            throw new IllegalArgumentException(TF_FIELD_NOT_APPLICABLE.formatted(field));
         }
     }
 

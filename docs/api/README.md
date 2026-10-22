@@ -90,7 +90,8 @@ POST /api/catalog/templates
 - `qcReport`: `resultingStatus, formatPassed, formatErrors, answerCheckPassed, judgeAnswer, judgeModel, solverReasoning,
   answerCheckStatus, dedupStatus, dedup`, cộng các trường chỉ có khi khác rỗng:
   - `answerWarnings` (`sa`, `tf`): cảnh báo không chặn, ví dụ `answer: phân số chưa tối giản`, `label: 4 ý cùng nhãn T`,
-    `statement_a: đã bỏ tiền tố "a)" ở đầu ý`;
+    `statement_a: đã bỏ tiền tố "a)" ở đầu ý` (quy tắc bỏ tiền tố ở mục 4.3 của `enums.md`; dạng `a.` chỉ bỏ khi ký tự
+    ngay sau dấu chấm không phải chữ cái, nên `a.b = 0` giữ nguyên còn `a. Điều kiện` thì bỏ);
   - `saJudgeKind`, `saJudgeAnswer` (`sa`): loại đáp số Solver trả (`number`, `ambiguous`, `unparseable`) và chuỗi gốc;
   - `tfJudgements` (`tf`): `[{key, judgeLabel}]`, nhãn Solver cho 4 ý (`T`, `F`, `undecidable`).
 - `dedupStatus`: `NOT_RUN` (format lỗi), `NO_DUPLICATE`, `DUPLICATE`, `ERROR`. `dedup` gồm `status, similarity,
@@ -224,10 +225,18 @@ Quy tắc chung cho cả ba dạng:
 - Nên gửi `questionType`; khác dạng thật của câu thì 400 `Dữ liệu đánh giá không khớp dạng câu hỏi.`. Khi không gửi
   `questionType`, backend suy dạng từ body: có `statements` (khác null) là `tf`, có trường SA (khác null) là `sa`, còn lại là
   `mcq`; dạng suy ra khác dạng thật cũng trả 400 như trên.
-- Trường của `mcq` gửi cho câu `sa`/`tf`, và trường SA gửi cho câu `tf`, trả 400, ví dụ
-  `Trường finalOption không áp dụng cho câu trả lời ngắn.` Hiện backend CHƯA chặn trường thừa trong hai trường hợp: câu
-  `mcq` có gửi `"questionType": "mcq"` thì trường SA và `statements` bị bỏ qua; câu `sa` có gửi `"questionType": "sa"` thì `statements` bị bỏ qua.
-  Frontend không gửi các trường này.
+- Trường thừa, một quy tắc cho cả ba dạng (kể cả khi body có `questionType`): trường thuộc dạng câu khác mà khác null
+  trả 400 `Dữ liệu đánh giá không khớp dạng câu hỏi.`; trường đó mang giá trị `null` thì bị bỏ qua. Trường riêng của từng dạng:
+
+  | Dạng | Trường riêng |
+  |---|---|
+  | `mcq` | `reviewerAnswer`, `finalOption`, `editedOptionA..D` |
+  | `sa` | `reviewerSaKind`, `reviewerSaAnswer`, `finalSaAnswer` |
+  | `tf` | `statements` (kể cả danh sách rỗng `[]`) |
+  | `mcq` và `sa` | `difficultyLabel` cấp câu (câu `tf` chấm mức theo từng ý) |
+
+  Ví dụ câu `mcq` gửi `"statements": []`, câu `sa` gửi `"finalOption": "A"`, câu `tf` gửi `"difficultyLabel": "easy"` đều trả
+  400 như trên; gửi `"finalSaAnswer": null` cho câu `mcq` thì được chấp nhận.
 - Request có `editedExplanation` khác null trả 400 với thông điệp trung tính (bước chấm không nhận sửa lời giải).
 - Duyệt production chỉ nhận câu `qc_passed` hoặc `in_bank`; câu khác trả 400 với thông báo chung, không nêu trạng thái.
 - Câu `duplicate` hoặc `format_failed` (cả hai purpose) trả 404 `{"error": "Không tìm thấy câu hỏi"}`, giống câu không tồn tại.
