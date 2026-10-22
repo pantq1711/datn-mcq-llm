@@ -21,7 +21,8 @@ import java.util.List;
  * body   := '\frac{' value '}{' value '}' ( '·'? sqrt )?  |  term ( '/' plain )?
  * term   := number ( '·'? sqrt )?  |  sqrt
  * plain  := number | sqrt                      (mẫu số dạng "a/b" không có hệ số trước căn, tránh "1/2√3" mơ hồ)
- * number := DIGITS ( (',' | '.') DIGITS )?     ('.' theo sau đúng 3 chữ số: có thể là phân cách hàng nghìn, lỗi)
+ * number := DIGITS ( (',' | '.') DIGITS )?     ('.' theo sau đúng 3 chữ số: có thể là phân cách hàng nghìn, lỗi;
+ *                                               miễn khi phần nguyên là 0, ví dụ 0.125 và -0.125)
  * sqrt   := '\sqrt{' DIGITS '}' | '√{' DIGITS '}' | '√' DIGITS   (1 &lt;= số dưới căn &lt;= 10^12)
  * </pre>
  *
@@ -108,6 +109,18 @@ public final class ShortAnswerValue {
         } catch (ParseFailure ex) {
             return failure(ex.getMessage());
         }
+    }
+
+    private static final java.util.regex.Pattern LEADING_ZEROS =
+            java.util.regex.Pattern.compile("(?<![0-9.,])0+(?=[0-9])");
+
+    /**
+     * Gợi ý cách viết lại khi có chữ số 0 thừa ở đầu (quyết định 3 sau GĐ2): bỏ các số 0 đứng đầu phần nguyên của
+     * mỗi số, giữ nguyên phần còn lại. Chỉ biến đổi chuỗi người dùng nhập, không dùng dữ liệu nào khác.
+     * Ví dụ "05" thành "5", "-007,5" thành "-7,5", "\frac{05}{2}" thành "\frac{5}{2}".
+     */
+    public static String withoutLeadingZeros(String raw) {
+        return raw == null ? null : LEADING_ZEROS.matcher(raw.strip()).replaceAll("");
     }
 
     private static ParseResult failure(String message) {
@@ -281,7 +294,8 @@ public final class ShortAnswerValue {
                 if (frac.isEmpty()) {
                     throw new ParseFailure(MSG_UNPARSEABLE);
                 }
-                if (sep == '.' && frac.length() == 3) {
+                // Phần nguyên là 0 (kể cả -0) thì không thể là phân cách hàng nghìn: 0.125 là thập phân.
+                if (sep == '.' && frac.length() == 3 && !intPart.equals("0")) {
                     throw new ParseFailure(MSG_THOUSANDS);
                 }
                 return rational(new BigInteger(intPart + frac), BigInteger.TEN.pow(frac.length()));

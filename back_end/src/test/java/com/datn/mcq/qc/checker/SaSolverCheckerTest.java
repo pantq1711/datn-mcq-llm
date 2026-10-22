@@ -77,6 +77,12 @@ class SaSolverCheckerTest {
         assertFalse(out.passed());
         assertEquals(SaJudgeKind.AMBIGUOUS, out.judgeKind());
         assertNull(out.judgeAnswer());
+        // Quyết định 2 sau GĐ2: không phân biệt hoa thường, sau khi trim.
+        for (String variant : new String[] {"Ambiguous", " AMBIGUOUS ", "aMbIgUoUs"}) {
+            AnswerSolverChecker.SaSolverOutcome v = compare(judge(variant));
+            assertEquals(SaJudgeKind.AMBIGUOUS, v.judgeKind(), variant);
+            assertNull(v.judgeAnswer());
+        }
     }
 
     @Test

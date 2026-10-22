@@ -92,6 +92,32 @@ class McqApiSnapshotTest {
         return expected;
     }
 
+    /**
+     * Quyết định 4 sau GĐ2: body mcq có trường SA mang giá trị null không bị chặn; chỉ chặn khi khác null.
+     */
+    @Test
+    void truongSaNullTrongBodyMcqKhongBiChan() throws Exception {
+        int run = insert("INSERT INTO experiment_run (subject_id, strategy, model_name, temperature, prompt_text,"
+                + " purpose) VALUES ((SELECT subject_id FROM question_template WHERE id = ?), 'few-shot-structured',"
+                + " 'm', 0.7, 'p', 'production')", template);
+        String insertMcq = "INSERT INTO generated_question (template_id, run_id, question_text, option_a, option_b,"
+                + " option_c, option_d, correct_option, raw_llm_output, parse_success, status, created_at)"
+                + " VALUES (?, ?, ?, '$1$', '$2$', '$3$', '$4$', 'B', '{}', TRUE, 'qc_passed', now())";
+        int q1 = insert(insertMcq, template, run, "Tính $1+1$");
+        int q2 = insert(insertMcq, template, run, "Tính $2+2$");
+        String withNulls = "{\"reviewerId\": " + teacher + ", \"reviewerAnswer\": \"B\", \"formatOk\": true,"
+                + " \"difficultyLabel\": \"easy\", \"decision\": \"approved_as_is\", \"questionType\": null,"
+                + " \"reviewerSaKind\": null, \"reviewerSaAnswer\": null, \"finalSaAnswer\": null, \"statements\": null}";
+        mockMvc.perform(post("/api/reviews/questions/" + q1).contentType(MediaType.APPLICATION_JSON).content(withNulls))
+                .andExpect(status().isOk());
+        String withValue = "{\"reviewerId\": " + teacher + ", \"reviewerAnswer\": \"B\", \"formatOk\": true,"
+                + " \"difficultyLabel\": \"easy\", \"decision\": \"approved_as_is\", \"reviewerSaAnswer\": \"2\"}";
+        mockMvc.perform(post("/api/reviews/questions/" + q2).contentType(MediaType.APPLICATION_JSON).content(withValue))
+                .andExpect(status().isBadRequest());
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM teacher_review WHERE question_id = ?",
+                Integer.class, q2));
+    }
+
     @Test
     void apiMcqChiThemQuestionType() throws Exception {
         String generated = "{\"question_text\": \"Kết quả của $\\\\sqrt{(-5)^2}$ là:\", \"option_a\": \"$-5$\","

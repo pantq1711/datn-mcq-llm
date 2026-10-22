@@ -12,7 +12,11 @@ import com.datn.mcq.experiment.entity.ExperimentRun;
 import com.datn.mcq.experiment.service.ExperimentService;
 import com.datn.mcq.generation.dto.ParsedMcqDto;
 import com.datn.mcq.generation.dto.ParsedSaDto;
+import com.datn.mcq.generation.dto.ParsedTfDto;
+import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.generation.service.TrueFalseQuestionStore;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
+import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.parser.McqJsonParser;
@@ -24,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
@@ -46,7 +51,8 @@ public class GenerationJobProcessor {
             Double temperature,
             String prompt,
             boolean validateLatex,
-            QuestionType questionType
+            QuestionType questionType,
+            List<Difficulty> targetStatementDifficulties
     ) {}
 
     private final GenerationJobRepository generationJobRepository;
@@ -54,18 +60,21 @@ public class GenerationJobProcessor {
     private final CatalogService catalogService;
     private final ExperimentService experimentService;
     private final PromptBuilder promptBuilder;
+    private final TrueFalseQuestionStore trueFalseQuestionStore;
 
     public GenerationJobProcessor(
             GenerationJobRepository generationJobRepository,
             GeneratedQuestionRepository generatedQuestionRepository,
             CatalogService catalogService,
             ExperimentService experimentService,
-            PromptBuilder promptBuilder) {
+            PromptBuilder promptBuilder,
+            TrueFalseQuestionStore trueFalseQuestionStore) {
         this.generationJobRepository = generationJobRepository;
         this.generatedQuestionRepository = generatedQuestionRepository;
         this.catalogService = catalogService;
         this.experimentService = experimentService;
         this.promptBuilder = promptBuilder;
+        this.trueFalseQuestionStore = trueFalseQuestionStore;
     }
 
     @Transactional
@@ -87,7 +96,16 @@ public class GenerationJobProcessor {
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
 
         QuestionType questionType = job.getQuestionType() != null ? job.getQuestionType() : QuestionType.MCQ;
-        String prompt = questionType == QuestionType.SA
+        List<Difficulty> statementLevels = GenerationService.splitLevels(job.getTargetStatementDifficulties());
+        String prompt = questionType == QuestionType.TF
+                ? TfPromptDraftV0.buildGenerationPrompt(
+                        subject.getName(),
+                        tpl.getGradeLevel(),
+                        tpl.getTopic(),
+                        tpl.getLearningOutcome(),
+                        tpl.getSourceQuestion(),
+                        statementLevels)
+                : questionType == QuestionType.SA
                 ? SaPromptDraftV0.buildGenerationPrompt(
                         subject.getName(),
                         tpl.getGradeLevel(),
@@ -116,8 +134,21 @@ public class GenerationJobProcessor {
                 run.getTemperature(),
                 prompt,
                 isMath,
-                questionType
+                questionType,
+                statementLevels
         ));
+    }
+
+    /** Lưu câu Đúng/Sai sinh từ job (câu và 4 ý) và đánh dấu job done, trong cùng transaction ngắn (GĐ3). */
+    @Transactional
+    public GeneratedQuestion saveTrueFalseFromJob(
+            ClaimedJobContext ctx,
+            LlmCallResult llmResult,
+            ParsedTfDto parsed) {
+        GeneratedQuestion saved = trueFalseQuestionStore.save(ctx.templateId(), ctx.runId(),
+                ctx.targetStatementDifficulties(), llmResult, parsed, ctx.attempt());
+        markJobDone(ctx, llmResult, saved.getId(), parsed.parseError());
+        return saved;
     }
 
     @Transactional

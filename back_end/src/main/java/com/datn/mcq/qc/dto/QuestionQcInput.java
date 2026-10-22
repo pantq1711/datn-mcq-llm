@@ -3,6 +3,8 @@ package com.datn.mcq.qc.dto;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionType;
 
+import java.util.List;
+
 /**
  * Nội dung một câu đưa vào pipeline QC.
  *
@@ -11,6 +13,8 @@ import com.datn.mcq.enums.QuestionType;
  * @param questionType     dạng câu (V4); null được coi là mcq
  * @param saAnswer         đáp số câu Trả lời ngắn đúng như LLM viết (chỉ với sa)
  * @param saAnswerIsString trường answer trong JSON là chuỗi (chỉ có nghĩa với sa)
+ * @param statements       (tf) 4 ý theo thứ tự a-d; rỗng với mcq/sa
+ * @param statementLabels  (tf) 4 nhãn đúng như LLM viết (đã trim) theo thứ tự a-d; rỗng với mcq/sa
  */
 public record QuestionQcInput(
         Integer questionId,
@@ -27,10 +31,16 @@ public record QuestionQcInput(
         String parseError,
         QuestionType questionType,
         String saAnswer,
-        boolean saAnswerIsString
+        boolean saAnswerIsString,
+        List<String> statements,
+        List<String> statementLabels
 ) {
     public QuestionQcInput {
         questionType = questionType != null ? questionType : QuestionType.MCQ;
+        statements = statements == null ? List.of()
+                : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(statements));
+        statementLabels = statementLabels == null ? List.of()
+                : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(statementLabels));
     }
 
     /** Câu trắc nghiệm 4 phương án (chữ ký trước V4). */
@@ -48,7 +58,7 @@ public record QuestionQcInput(
             boolean runAnswerCheck,
             String parseError) {
         this(questionId, parseSuccess, questionText, optionA, optionB, optionC, optionD, correctOption,
-                explanation, validateLatex, runAnswerCheck, parseError, QuestionType.MCQ, null, true);
+                explanation, validateLatex, runAnswerCheck, parseError, QuestionType.MCQ, null, true, null, null);
     }
 
     /** Câu trắc nghiệm 4 phương án, không có thông tin lỗi parse (chữ ký trước V4). */
@@ -80,6 +90,23 @@ public record QuestionQcInput(
             boolean runAnswerCheck,
             String parseError) {
         return new QuestionQcInput(questionId, parseSuccess, questionText, null, null, null, null, null,
-                explanation, validateLatex, runAnswerCheck, parseError, QuestionType.SA, saAnswer, saAnswerIsString);
+                explanation, validateLatex, runAnswerCheck, parseError, QuestionType.SA, saAnswer, saAnswerIsString,
+                null, null);
+    }
+
+    /** Câu Đúng/Sai (V4, GĐ3): đề dẫn, 4 ý và 4 nhãn theo thứ tự a-d. */
+    public static QuestionQcInput trueFalse(
+            Integer questionId,
+            boolean parseSuccess,
+            String questionText,
+            List<String> statements,
+            List<String> statementLabels,
+            String explanation,
+            boolean validateLatex,
+            boolean runAnswerCheck,
+            String parseError) {
+        return new QuestionQcInput(questionId, parseSuccess, questionText, null, null, null, null, null,
+                explanation, validateLatex, runAnswerCheck, parseError, QuestionType.TF, null, true,
+                statements, statementLabels);
     }
 }

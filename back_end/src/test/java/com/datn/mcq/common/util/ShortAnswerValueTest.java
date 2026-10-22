@@ -73,7 +73,11 @@ class ShortAnswerValueTest {
                 Arguments.of("b13", "\\frac{\\sqrt{8}}{\\sqrt{2}}", "2", "2"),
                 Arguments.of("b14", "\\sqrt{1000000000000}", "1000000", "1000000"),
                 Arguments.of("b15", "123456789012345678901234567890", "123456789012345678901234567890",
-                        "123456789012345678901234567890"));
+                        "123456789012345678901234567890"),
+                // Quyết định ngày 22/10 (sau GĐ2): phần nguyên là 0 hoặc -0 thì dấu chấm là dấu thập phân.
+                Arguments.of("b16", "0.125", "\\frac{1}{8}", "1/8"),
+                Arguments.of("b17", "-0.125", "-0,125", "-1/8"),
+                Arguments.of("b18", "$0.250$", "0,25", "1/4"));
     }
 
     @ParameterizedTest(name = "dòng {0}: {1} = {2}")
@@ -163,8 +167,10 @@ class ShortAnswerValueTest {
                 Arguments.of("n3", "350.000", ShortAnswerValue.MSG_THOUSANDS),
                 Arguments.of("n4", "1.500.000", ShortAnswerValue.MSG_THOUSANDS),
                 Arguments.of("n5", "$2.000$", ShortAnswerValue.MSG_THOUSANDS),
-                // áp đúng nguyên văn quy tắc đã duyệt, kể cả khi phần nguyên là 0 (xem báo cáo GĐ2)
-                Arguments.of("n6", "0.125", ShortAnswerValue.MSG_THOUSANDS),
+                // phần nguyên khác 0 vẫn mơ hồ (0.125 được miễn, xem dòng b16)
+                Arguments.of("n6", "1.125", ShortAnswerValue.MSG_THOUSANDS),
+                Arguments.of("n6b", "-1.125", ShortAnswerValue.MSG_THOUSANDS),
+                Arguments.of("n6c", "10.125", ShortAnswerValue.MSG_THOUSANDS),
                 // dấu + đứng đầu không được nhận (quyết định C)
                 Arguments.of("n7", "+5", u),
                 Arguments.of("n8", "", u),
@@ -230,6 +236,21 @@ class ShortAnswerValueTest {
             assertEquals(expectedKey, r.value().canonicalKey());
             assertEquals(warn ? List.of(ShortAnswerValue.WARN_UNREDUCED_FRACTION) : List.of(), r.warnings(),
                     "cảnh báo cho " + raw + " (" + mode + ")");
+        }
+    }
+
+    /** Gợi ý cách sửa khi đáp số có chữ số 0 thừa ở đầu (quyết định 3 sau GĐ2). */
+    @Test
+    void goiYBoChuSo0ThuaODau() {
+        assertEquals("5", ShortAnswerValue.withoutLeadingZeros("05"));
+        assertEquals("-5", ShortAnswerValue.withoutLeadingZeros(" -05 "));
+        assertEquals("7,5", ShortAnswerValue.withoutLeadingZeros("007,5"));
+        assertEquals("0,05", ShortAnswerValue.withoutLeadingZeros("0,05"));
+        assertEquals("\\frac{5}{2}", ShortAnswerValue.withoutLeadingZeros("\\frac{05}{2}"));
+        assertEquals("2\\sqrt{12}", ShortAnswerValue.withoutLeadingZeros("2\\sqrt{012}"));
+        assertEquals("100", ShortAnswerValue.withoutLeadingZeros("100"));
+        for (String raw : new String[] {"05", "-05", "007,5", "\\frac{05}{2}", "2\\sqrt{012}"}) {
+            assertTrue(parse(ShortAnswerValue.withoutLeadingZeros(raw), Mode.STRICT).ok(), raw);
         }
     }
 

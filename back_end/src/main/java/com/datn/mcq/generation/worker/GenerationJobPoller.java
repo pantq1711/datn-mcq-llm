@@ -3,9 +3,12 @@ package com.datn.mcq.generation.worker;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.generation.dto.ParsedMcqDto;
 import com.datn.mcq.generation.dto.ParsedSaDto;
+import com.datn.mcq.generation.dto.ParsedTfDto;
 import com.datn.mcq.generation.parser.SaJsonParser;
+import com.datn.mcq.generation.parser.TfJsonParser;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
+import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.parser.McqJsonParser;
 import com.datn.mcq.generation.service.DedupScopeResolver;
@@ -71,6 +74,7 @@ public class GenerationJobPoller {
         }
         GenerationJobProcessor.ClaimedJobContext ctx = claimedOpt.get();
         boolean shortAnswer = ctx.questionType() == QuestionType.SA;
+        boolean trueFalse = ctx.questionType() == QuestionType.TF;
         LlmCallResult llmResult;
         try {
             llmResult = shortAnswer
@@ -78,6 +82,11 @@ public class GenerationJobPoller {
                     ? llmClient.callJsonModeWithSchema(
                             ctx.prompt(), ctx.modelName(), ctx.temperature(),
                             SaPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON)
+                    : trueFalse
+                    // GĐ3: câu tf gọi JSON mode kèm schema TF (đề dẫn, 4 ý, lời giải, 4 nhãn).
+                    ? llmClient.callJsonModeWithSchema(
+                            ctx.prompt(), ctx.modelName(), ctx.temperature(),
+                            TfPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON)
                     : llmClient.generateMcq(
                             ctx.prompt(),
                             ctx.modelName(),
@@ -94,6 +103,17 @@ public class GenerationJobPoller {
                     null,
                     ex.getMessage()
             );
+        }
+
+        if (trueFalse) {
+            ParsedTfDto parsedTf = TfJsonParser.parse(llmResult.rawText());
+            GeneratedQuestion savedTf = processor.saveTrueFalseFromJob(ctx, llmResult, parsedTf);
+            QcPipelineReport tfReport = qcOrchestrator.evaluateAndSave(
+                    GenerationService.trueFalseQcInput(savedTf.getId(), parsedTf, ctx.validateLatex(), runAnswerCheck),
+                    dedupScopeResolver.resolve(ctx.runId()));
+            processor.updateQuestionStatus(savedTf.getId(), tfReport.resultingStatus());
+            return new ProcessedJobSummary(true, ctx.jobId(), savedTf.getId(), "done",
+                    tfReport.resultingStatus().getDbValue(), parsedTf.parseError());
         }
 
         if (shortAnswer) {

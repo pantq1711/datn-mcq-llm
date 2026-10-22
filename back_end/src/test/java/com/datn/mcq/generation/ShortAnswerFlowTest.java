@@ -306,6 +306,35 @@ class ShortAnswerFlowTest {
         assertEquals(1, getJson("/api/bank-items").size());
     }
 
+    /** Hồi quy SA (GĐ3): bộ key của API câu sa giữ như cuối GĐ2, không có trường TF. */
+    @Test
+    void snapshotKeyApiSa() throws Exception {
+        JsonNode resp = generateSa(saJson(STEM, "-0,75"), true);
+        assertEquals(Set.of("id", "templateId", "runId", "questionText", "optionA", "optionB", "optionC", "optionD",
+                "parseSuccess", "status", "tokenCount", "latencyMs", "createdAt", "questionType"),
+                fieldNames(resp.get("question")));
+        assertEquals(Set.of("resultingStatus", "formatPassed", "formatErrors", "answerCheckPassed", "judgeAnswer",
+                "judgeModel", "solverReasoning", "answerCheckStatus", "dedupStatus", "dedup", "saJudgeKind",
+                "saJudgeAnswer"), fieldNames(resp.get("qcReport")));
+        int id = resp.get("question").get("id").asInt();
+        assertEquals(Set.of("id", "templateId", "reviewPurpose", "subjectName", "gradeLevel", "topic", "questionText",
+                "createdAt", "questionType"), fieldNames(getJson("/api/reviews/questions/" + id)));
+        String submit = "{\"reviewerId\": " + teacher.getId() + ", \"questionType\": \"sa\", \"formatOk\": true,"
+                + " \"difficultyLabel\": \"medium\", \"decision\": \"approved_as_is\", \"reviewerSaKind\": \"number\","
+                + " \"reviewerSaAnswer\": \"-0,75\"}";
+        JsonNode submitted = objectMapper.readTree(mockMvcBody(mockMvc.perform(post("/api/reviews/questions/" + id)
+                .contentType(MediaType.APPLICATION_JSON).content(submit)).andExpect(status().isOk())));
+        assertEquals(Set.of("reviewId", "questionId", "reviewPurpose", "reviewerAnswer", "formatOk", "difficultyLabel",
+                "decision", "finalOption", "edited", "editDistance", "questionStatus", "bankItemId", "reviewedAt",
+                "reviewerSaKind", "reviewerSaAnswer", "finalSaAnswer"), fieldNames(submitted));
+    }
+
+    private static Set<String> fieldNames(JsonNode node) {
+        Set<String> names = new java.util.HashSet<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
+    }
+
     // ---------- Solver theo bảng mục 7 ----------
 
     @Test
@@ -404,9 +433,11 @@ class ShortAnswerFlowTest {
                 + " \"rawLlmOutputOverride\": " + SimpleJson.quote(saJson(STEM, "1")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Câu trả lời ngắn luôn sinh với strategy zero-shot."));
+        // GĐ3: tf đã được hỗ trợ; thiếu mức của 4 ý thì 400 (xem TrueFalseFlowTest.requestSaiChoCauTf).
         postGenerate("\"questionType\": \"tf\", \"runAnswerCheck\": false")
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Dạng câu tf chưa được hỗ trợ."));
+                .andExpect(jsonPath("$.error").value(
+                        "Câu đúng/sai phải có targetStatementDifficulties gồm đúng 4 mức (ý a, b, c, d)."));
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM experiment_run", Integer.class));
     }
 

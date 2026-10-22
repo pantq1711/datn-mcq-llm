@@ -25,6 +25,25 @@ public enum TruthChoice implements DbEnum {
         return dbValue;
     }
 
+    /** Nhãn Solver viết: sau trim, không phân biệt hoa thường; giá trị khác hoặc null trả null. */
+    public static TruthChoice fromJudge(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String v = raw.strip();
+        for (TruthChoice c : values()) {
+            if (c.dbValue.equalsIgnoreCase(v)) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    /** Nhãn giáo viên hoặc Solver có khớp nhãn LLM không ("undecidable" không bao giờ khớp). */
+    public boolean matches(TruthValue llmLabel) {
+        return llmLabel != null && this != UNDECIDABLE && dbValue.equals(llmLabel.getDbValue());
+    }
+
     @Converter(autoApply = true)
     public static class Conv extends DbEnumConverter<TruthChoice> {
         public Conv() {

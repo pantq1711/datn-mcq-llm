@@ -19,6 +19,7 @@ import java.util.List;
  * @param reviewerSaAnswer (sa) đáp số giáo viên nhập khi chọn number; chỉ cần phân tích được (LENIENT)
  * @param finalSaAnswer    (sa) đáp số cuối khi duyệt; viết chuẩn (STRICT). approved_as_is: bỏ trống hoặc trùng
  *                         reviewerSaAnswer
+ * @param statements       (tf, GĐ3) đánh giá đủ 4 ý a-d; xem {@link StatementReviewInput}
  */
 public record SubmitReviewRequest(
         Integer reviewerId,
@@ -39,7 +40,8 @@ public record SubmitReviewRequest(
         QuestionType questionType,
         SaAnswerKind reviewerSaKind,
         String reviewerSaAnswer,
-        String finalSaAnswer
+        String finalSaAnswer,
+        List<StatementReviewInput> statements
 ) {
     /** Chữ ký trước V4 (câu mcq). */
     public SubmitReviewRequest(
@@ -60,6 +62,6 @@ public record SubmitReviewRequest(
             String otherReasonDetail) {
         this(reviewerId, reviewPurpose, reviewerAnswer, formatOk, difficultyLabel, decision, finalOption,
                 editedQuestionText, editedOptionA, editedOptionB, editedOptionC, editedOptionD, editedExplanation,
-                reasonCodes, otherReasonDetail, null, null, null, null);
+                reasonCodes, otherReasonDetail, null, null, null, null, null);
     }
 }

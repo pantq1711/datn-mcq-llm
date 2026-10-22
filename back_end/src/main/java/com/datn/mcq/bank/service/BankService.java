@@ -1,6 +1,7 @@
 package com.datn.mcq.bank.service;
 
 import com.datn.mcq.bank.dto.BankItemDto;
+import com.datn.mcq.bank.dto.BankStatementInput;
 import com.datn.mcq.bank.entity.BankItem;
 import com.datn.mcq.bank.entity.BankItemStatement;
 import com.datn.mcq.bank.repository.BankItemRepository;
@@ -113,6 +114,50 @@ public class BankService {
         item.setDifficulty(difficulty);
         item.setCreatedAt(LocalDateTime.now());
         return bankItemRepository.save(item);
+    }
+
+    /**
+     * Chép câu Đúng/Sai vào ngân hàng (GĐ3): bank_item (không có phương án, đáp số và mức độ cấp câu) cùng 4 dòng
+     * bank_item_statement là bản cuối giáo viên chốt (nội dung, nhãn cuối, mức độ của từng ý). Duyệt lại thì cập nhật
+     * dòng cũ và thay 4 ý. Chạy trong transaction của nơi gọi nên rollback cùng teacher_review.
+     */
+    @Transactional
+    public BankItem createOrUpdateTrueFalseFromReview(
+            Integer sourceQuestionId,
+            Integer reviewId,
+            String questionText,
+            String explanation,
+            List<BankStatementInput> statements) {
+        if (statements == null || statements.size() != 4) {
+            throw new IllegalArgumentException("Câu đúng/sai vào ngân hàng phải có đủ 4 ý");
+        }
+        BankItem item = bankItemRepository.findBySourceQuestionId(sourceQuestionId)
+                .orElseGet(BankItem::new);
+        item.setQuestionType(QuestionType.TF);
+        item.setSourceQuestionId(sourceQuestionId);
+        item.setReviewId(reviewId);
+        item.setQuestionText(questionText);
+        item.setOptionA(null);
+        item.setOptionB(null);
+        item.setOptionC(null);
+        item.setOptionD(null);
+        item.setCorrectOption(null);
+        item.setSaAnswer(null);
+        item.setExplanation(explanation);
+        item.setDifficulty(null);
+        item.setCreatedAt(LocalDateTime.now());
+        BankItem saved = bankItemRepository.saveAndFlush(item);
+
+        bankItemStatementRepository.deleteByBankItemId(saved.getId());
+        for (BankStatementInput s : statements) {
+            BankItemStatement row = new BankItemStatement(saved.getId(), s.key());
+            row.setStatementText(s.text());
+            row.setLabel(s.label());
+            row.setDifficulty(s.difficulty());
+            bankItemStatementRepository.save(row);
+        }
+        bankItemStatementRepository.flush();
+        return saved;
     }
 
     @Transactional

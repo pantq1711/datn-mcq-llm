@@ -12,9 +12,17 @@ import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.experiment.entity.ExperimentRun;
 import com.datn.mcq.experiment.service.ExperimentService;
 import com.datn.mcq.generation.dto.ParsedMcqDto;
+import com.datn.mcq.enums.DbEnum;
 import com.datn.mcq.generation.dto.ParsedSaDto;
+import com.datn.mcq.generation.dto.ParsedTfDto;
+import com.datn.mcq.generation.dto.StatementTextDto;
+import com.datn.mcq.generation.entity.GeneratedQuestionStatement;
 import com.datn.mcq.generation.parser.SaJsonParser;
+import com.datn.mcq.generation.parser.TfJsonParser;
+import com.datn.mcq.generation.repository.GeneratedQuestionStatementRepository;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
+import com.datn.mcq.llm.prompt.TfPromptDraftV0;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.parser.McqJsonParser;
@@ -50,32 +58,72 @@ public class GenerationService {
             Double temperature,
             Boolean runAnswerCheck,
             String rawLlmOutputOverride,
-            QuestionType questionType
+            QuestionType questionType,
+            List<Difficulty> targetStatementDifficulties
     ) {
         /** Chữ ký trước V4 (mcq). */
         public SyncGenerationRequest(Integer templateId, Strategy strategy, Difficulty targetDifficulty,
                                      String modelName, Double temperature, Boolean runAnswerCheck,
                                      String rawLlmOutputOverride) {
             this(templateId, strategy, targetDifficulty, modelName, temperature, runAnswerCheck, rawLlmOutputOverride,
-                    null);
+                    null, null);
         }
     }
 
     static final String SA_STRATEGY_MESSAGE = "Câu trả lời ngắn luôn sinh với strategy zero-shot.";
+    static final String TF_STRATEGY_MESSAGE = "Câu đúng/sai luôn sinh với strategy zero-shot.";
+    static final String TF_LEVELS_MESSAGE =
+            "Câu đúng/sai phải có targetStatementDifficulties gồm đúng 4 mức (ý a, b, c, d).";
 
-    /** Dạng câu được yêu cầu; tf chưa hỗ trợ ở GĐ2. */
+    /** Dạng câu được yêu cầu; bỏ trống là mcq. */
     static QuestionType requireSupportedType(QuestionType requested) {
-        QuestionType type = requested != null ? requested : QuestionType.MCQ;
-        if (type == QuestionType.TF) {
-            throw new IllegalArgumentException("Dạng câu tf chưa được hỗ trợ.");
-        }
-        return type;
+        return requested != null ? requested : QuestionType.MCQ;
     }
 
     static void requireZeroShotForShortAnswer(QuestionType type, Strategy strategy) {
-        if (type == QuestionType.SA && strategy != null && strategy != Strategy.ZERO_SHOT) {
+        if (strategy == null || strategy == Strategy.ZERO_SHOT) {
+            return;
+        }
+        if (type == QuestionType.SA) {
             throw new IllegalArgumentException(SA_STRATEGY_MESSAGE);
         }
+        if (type == QuestionType.TF) {
+            throw new IllegalArgumentException(TF_STRATEGY_MESSAGE);
+        }
+    }
+
+    /**
+     * Mức mục tiêu (GĐ3): câu tf bắt buộc đúng 4 mức cho 4 ý và không nhận targetDifficulty cấp câu; dạng khác không
+     * nhận targetStatementDifficulties (chỉ chặn khi khác null).
+     */
+    static void validateTargetDifficulties(QuestionType type, Difficulty targetDifficulty,
+                                           List<Difficulty> statementDifficulties) {
+        if (type == QuestionType.TF) {
+            if (statementDifficulties == null || statementDifficulties.size() != 4
+                    || statementDifficulties.stream().anyMatch(java.util.Objects::isNull)) {
+                throw new IllegalArgumentException(TF_LEVELS_MESSAGE);
+            }
+            if (targetDifficulty != null) {
+                throw new IllegalArgumentException(
+                        "targetDifficulty không áp dụng cho câu đúng/sai; dùng targetStatementDifficulties.");
+            }
+        } else if (statementDifficulties != null) {
+            throw new IllegalArgumentException("targetStatementDifficulties chỉ áp dụng cho câu đúng/sai.");
+        }
+    }
+
+    /** Mức 4 ý lưu ở generation_job.target_statement_difficulties, ví dụ "easy,easy,medium,hard". */
+    public static String joinLevels(List<Difficulty> levels) {
+        return String.join(",", levels.stream().map(Difficulty::getDbValue).toList());
+    }
+
+    public static List<Difficulty> splitLevels(String joined) {
+        if (joined == null || joined.isBlank()) {
+            return null;
+        }
+        return java.util.Arrays.stream(joined.split(","))
+                .map(v -> DbEnum.fromDbValue(Difficulty.class, v))
+                .toList();
     }
 
     public record GeneratedQuestionSummaryDto(
@@ -92,10 +140,25 @@ public class GenerationService {
             Integer tokenCount,
             Double latencyMs,
             LocalDateTime createdAt,
-            QuestionType questionType
+            QuestionType questionType,
+            @JsonInclude(JsonInclude.Include.NON_NULL) List<StatementTextDto> statements
     ) {
         /** Không kèm đáp án (correct_option, sa_answer), giống trước V4. */
         public static GeneratedQuestionSummaryDto fromEntity(GeneratedQuestion gq) {
+            return fromEntity(gq, List.of());
+        }
+
+        /**
+         * Câu tf kèm 4 ý (vị trí và nội dung, không kèm nhãn); mcq/sa hoặc tf giải mã lỗi (không có ý) thì không có
+         * key statements.
+         */
+        public static GeneratedQuestionSummaryDto fromEntity(GeneratedQuestion gq,
+                                                             List<GeneratedQuestionStatement> statements) {
+            List<StatementTextDto> texts = gq.getQuestionType() == QuestionType.TF && statements != null
+                    && !statements.isEmpty()
+                    ? statements.stream().map(s -> new StatementTextDto(s.getStatementKey(), s.getStatementText()))
+                            .toList()
+                    : null;
             return new GeneratedQuestionSummaryDto(
                     gq.getId(),
                     gq.getTemplateId(),
@@ -110,7 +173,8 @@ public class GenerationService {
                     gq.getTokenCount(),
                     gq.getLatencyMs(),
                     gq.getCreatedAt(),
-                    gq.getQuestionType()
+                    gq.getQuestionType(),
+                    texts
             );
         }
     }
@@ -128,6 +192,8 @@ public class GenerationService {
     private final LlmClient llmClient;
     private final QcOrchestrator qcOrchestrator;
     private final DedupScopeResolver dedupScopeResolver;
+    private final TrueFalseQuestionStore trueFalseQuestionStore;
+    private final GeneratedQuestionStatementRepository statementRepository;
 
     public GenerationService(
             GeneratedQuestionRepository generatedQuestionRepository,
@@ -137,7 +203,9 @@ public class GenerationService {
             PromptBuilder promptBuilder,
             LlmClient llmClient,
             QcOrchestrator qcOrchestrator,
-            DedupScopeResolver dedupScopeResolver) {
+            DedupScopeResolver dedupScopeResolver,
+            TrueFalseQuestionStore trueFalseQuestionStore,
+            GeneratedQuestionStatementRepository statementRepository) {
         this.generatedQuestionRepository = generatedQuestionRepository;
         this.generationJobRepository = generationJobRepository;
         this.catalogService = catalogService;
@@ -146,6 +214,8 @@ public class GenerationService {
         this.llmClient = llmClient;
         this.qcOrchestrator = qcOrchestrator;
         this.dedupScopeResolver = dedupScopeResolver;
+        this.trueFalseQuestionStore = trueFalseQuestionStore;
+        this.statementRepository = statementRepository;
     }
 
     /**
@@ -158,10 +228,14 @@ public class GenerationService {
         }
         QuestionType questionType = requireSupportedType(req.questionType());
         requireZeroShotForShortAnswer(questionType, req.strategy());
+        validateTargetDifficulties(questionType, req.targetDifficulty(), req.targetStatementDifficulties());
         QuestionTemplate tpl = catalogService.getTemplateById(req.templateId());
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
         if (questionType == QuestionType.SA) {
             return generateShortAnswerSync(req, tpl, subject);
+        }
+        if (questionType == QuestionType.TF) {
+            return generateTrueFalseSync(req, tpl, subject);
         }
 
         Strategy strategy = req.strategy() != null ? req.strategy() : Strategy.FEW_SHOT_STRUCTURED;
@@ -274,6 +348,96 @@ public class GenerationService {
         return new SyncGenerationResponse(GeneratedQuestionSummaryDto.fromEntity(updated), qcReport);
     }
 
+    /**
+     * Sinh đồng bộ 1 câu Đúng/Sai (GĐ3). Run: production, zero-shot, prompt_version tf-v0-draft. Gọi LLM ở JSON mode
+     * kèm schema TF ngoài transaction DB; lưu câu và 4 ý trong một transaction; rồi chạy QC.
+     */
+    private SyncGenerationResponse generateTrueFalseSync(
+            SyncGenerationRequest req, QuestionTemplate tpl, Subject subject) {
+        List<Difficulty> levels = req.targetStatementDifficulties();
+        Double temperature = req.temperature() != null ? req.temperature() : 0.7;
+        String model = (req.modelName() != null && !req.modelName().isBlank())
+                ? req.modelName().trim()
+                : llmClient.getDefaultModel();
+        String prompt = TfPromptDraftV0.buildGenerationPrompt(
+                subject.getName(),
+                tpl.getGradeLevel(),
+                tpl.getTopic(),
+                tpl.getLearningOutcome(),
+                tpl.getSourceQuestion(),
+                levels
+        );
+
+        LlmCallResult llmResult;
+        if (req.rawLlmOutputOverride() != null && !req.rawLlmOutputOverride().isBlank()) {
+            llmResult = new LlmCallResult(req.rawLlmOutputOverride(), 0, 0.0, 0.0, model);
+        } else {
+            llmResult = llmClient.callJsonModeWithSchema(
+                    prompt, model, temperature, TfPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON);
+        }
+
+        ParsedTfDto parsed = TfJsonParser.parse(llmResult.rawText());
+        ExperimentRun run = experimentService.createRun(
+                subject.getId(),
+                Purpose.PRODUCTION,
+                Strategy.ZERO_SHOT,
+                llmResult.modelName(),
+                temperature,
+                TfPromptDraftV0.PROMPT_VERSION,
+                prompt,
+                1,
+                QuestionType.TF
+        );
+
+        GeneratedQuestion saved = trueFalseQuestionStore.save(tpl.getId(), run.getId(), levels, llmResult, parsed, 1);
+        boolean runAnswerCheck = req.runAnswerCheck() != null ? req.runAnswerCheck() : true;
+        QcPipelineReport qcReport = qcOrchestrator.evaluateAndSave(
+                trueFalseQcInput(saved.getId(), parsed, GenerationJobProcessor.isMathSubject(subject.getName()),
+                        runAnswerCheck),
+                dedupScopeResolver.resolve(run.getId()));
+        GeneratedQuestion updated = updateStatusAndDifficulty(saved.getId(), qcReport.resultingStatus(), null);
+        return new SyncGenerationResponse(
+                GeneratedQuestionSummaryDto.fromEntity(updated, getStatements(saved.getId())), qcReport);
+    }
+
+    /** Đầu vào QC của câu tf vừa giải mã (dùng chung cho generate-sync và worker). */
+    public static QuestionQcInput trueFalseQcInput(
+            Integer questionId, ParsedTfDto parsed, boolean validateLatex, boolean runAnswerCheck) {
+        return QuestionQcInput.trueFalse(
+                questionId,
+                parsed.parseSuccess(),
+                parsed.questionText(),
+                parsed.statements(),
+                parsed.labels(),
+                parsed.explanation(),
+                validateLatex,
+                runAnswerCheck,
+                parsed.parseError()
+        );
+    }
+
+    /** 4 ý của một câu tf theo thứ tự a-d (rỗng với mcq/sa hoặc khi giải mã lỗi). */
+    @Transactional(readOnly = true)
+    public List<GeneratedQuestionStatement> getStatements(Integer questionId) {
+        return statementRepository.findByQuestionIdOrderByPositionAsc(questionId);
+    }
+
+    /**
+     * Mức độ cuối của 4 ý khi câu tf vào ngân hàng (GĐ3): chép từ mức giáo viên chấm. Chạy trong transaction của nơi
+     * gọi (duyệt production), nên rollback cùng nhau.
+     */
+    @Transactional
+    public void updateStatementFinalDifficulties(Integer questionId, List<Difficulty> finalDifficulties) {
+        List<GeneratedQuestionStatement> statements = statementRepository.findByQuestionIdOrderByPositionAsc(questionId);
+        if (statements.size() != 4 || finalDifficulties == null || finalDifficulties.size() != 4) {
+            throw new IllegalStateException("Câu đúng/sai id=" + questionId + " không có đủ 4 ý");
+        }
+        for (int i = 0; i < 4; i++) {
+            statements.get(i).setFinalDifficulty(finalDifficulties.get(i));
+        }
+        statementRepository.saveAll(statements);
+    }
+
     /** Đầu vào QC của câu sa vừa giải mã (dùng chung cho generate-sync và worker). */
     public static QuestionQcInput shortAnswerQcInput(
             Integer questionId, ParsedSaDto parsed, boolean validateLatex, boolean runAnswerCheck) {
@@ -357,12 +521,13 @@ public class GenerationService {
             Difficulty targetDifficulty,
             String modelName,
             int count) {
-        return enqueueJobs(templateId, strategy, targetDifficulty, modelName, count, null);
+        return enqueueJobs(templateId, strategy, targetDifficulty, modelName, count, null, null);
     }
 
     /**
-     * Tạo job sinh câu (V4: theo dạng câu). sa: run production, zero-shot, prompt_version sa-v0-draft;
-     * tf chưa hỗ trợ.
+     * Tạo job sinh câu (V4: theo dạng câu). sa: run production, zero-shot, prompt_version sa-v0-draft.
+     * tf (GĐ3): run production, zero-shot, prompt_version tf-v0-draft; bắt buộc 4 mức của 4 ý, ghi vào
+     * target_statement_difficulties; target_difficulty cấp câu để NULL.
      */
     @Transactional
     public List<GenerationJob> enqueueJobs(
@@ -371,42 +536,44 @@ public class GenerationService {
             Difficulty targetDifficulty,
             String modelName,
             int count,
-            QuestionType requestedType) {
+            QuestionType requestedType,
+            List<Difficulty> targetStatementDifficulties) {
         if (templateId == null) {
             throw new IllegalArgumentException("Phải truyền templateId");
         }
         QuestionType questionType = requireSupportedType(requestedType);
         requireZeroShotForShortAnswer(questionType, strategy);
+        validateTargetDifficulties(questionType, targetDifficulty, targetStatementDifficulties);
         int numJobs = Math.max(1, Math.min(count, 50));
         QuestionTemplate tpl = catalogService.getTemplateById(templateId);
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
+        boolean trueFalse = questionType == QuestionType.TF;
         boolean shortAnswer = questionType == QuestionType.SA;
-        Strategy chosenStrategy = shortAnswer ? Strategy.ZERO_SHOT
+        Strategy chosenStrategy = shortAnswer || trueFalse ? Strategy.ZERO_SHOT
                 : strategy != null ? strategy : Strategy.FEW_SHOT_STRUCTURED;
-        Difficulty chosenDiff = targetDifficulty != null ? targetDifficulty : Difficulty.EASY;
-        String prompt = shortAnswer
-                ? SaPromptDraftV0.buildGenerationPrompt(
-                        subject.getName(),
-                        tpl.getGradeLevel(),
-                        tpl.getTopic(),
-                        tpl.getLearningOutcome(),
-                        tpl.getSourceQuestion(),
-                        chosenDiff)
-                : promptBuilder.buildGenerationPrompt(
-                        subject.getName(),
-                        tpl.getGradeLevel(),
-                        tpl.getTopic(),
-                        tpl.getLearningOutcome(),
-                        tpl.getSourceQuestion(),
-                        chosenStrategy,
-                        chosenDiff);
+        Difficulty chosenDiff = trueFalse ? null : targetDifficulty != null ? targetDifficulty : Difficulty.EASY;
+        String prompt;
+        String promptVersion;
+        if (trueFalse) {
+            prompt = TfPromptDraftV0.buildGenerationPrompt(subject.getName(), tpl.getGradeLevel(), tpl.getTopic(),
+                    tpl.getLearningOutcome(), tpl.getSourceQuestion(), targetStatementDifficulties);
+            promptVersion = TfPromptDraftV0.PROMPT_VERSION;
+        } else if (shortAnswer) {
+            prompt = SaPromptDraftV0.buildGenerationPrompt(subject.getName(), tpl.getGradeLevel(), tpl.getTopic(),
+                    tpl.getLearningOutcome(), tpl.getSourceQuestion(), chosenDiff);
+            promptVersion = SaPromptDraftV0.PROMPT_VERSION;
+        } else {
+            prompt = promptBuilder.buildGenerationPrompt(subject.getName(), tpl.getGradeLevel(), tpl.getTopic(),
+                    tpl.getLearningOutcome(), tpl.getSourceQuestion(), chosenStrategy, chosenDiff);
+            promptVersion = "async-queue-v1";
+        }
         ExperimentRun run = experimentService.createRun(
                 subject.getId(),
                 Purpose.PRODUCTION,
                 chosenStrategy,
                 modelName != null && !modelName.isBlank() ? modelName : llmClient.getDefaultModel(),
                 0.7,
-                shortAnswer ? SaPromptDraftV0.PROMPT_VERSION : "async-queue-v1",
+                promptVersion,
                 prompt,
                 numJobs,
                 questionType
@@ -420,6 +587,7 @@ public class GenerationService {
             job.setRunId(run.getId());
             job.setTemplateId(tpl.getId());
             job.setTargetDifficulty(chosenDiff);
+            job.setTargetStatementDifficulties(trueFalse ? joinLevels(targetStatementDifficulties) : null);
             job.setStatus(JobStatus.PENDING);
             job.setAttempt(0);
             // Giãn cách mỗi job 13 giây để tránh đụng trần 5 RPM trên Free Tier
