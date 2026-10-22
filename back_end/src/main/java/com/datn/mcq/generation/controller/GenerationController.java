@@ -1,6 +1,7 @@
 package com.datn.mcq.generation.controller;
 
 import com.datn.mcq.enums.Difficulty;
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
@@ -18,12 +19,14 @@ import java.util.List;
 @RequestMapping("/api/generation")
 public class GenerationController {
 
+    /** @param questionType dạng câu (V4); bỏ trống là mcq. */
     public record EnqueueJobsRequest(
             Integer templateId,
             Strategy strategy,
             Difficulty targetDifficulty,
             String modelName,
-            Integer count
+            Integer count,
+            QuestionType questionType
     ) {}
 
     private final GenerationService generationService;
@@ -50,7 +53,8 @@ public class GenerationController {
                 request.strategy(),
                 request.targetDifficulty(),
                 request.modelName(),
-                count
+                count,
+                request.questionType()
         );
     }
 

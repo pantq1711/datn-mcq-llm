@@ -1,6 +1,11 @@
 package com.datn.mcq.generation.worker;
 
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.generation.dto.ParsedMcqDto;
+import com.datn.mcq.generation.dto.ParsedSaDto;
+import com.datn.mcq.generation.parser.SaJsonParser;
+import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.parser.McqJsonParser;
 import com.datn.mcq.generation.service.DedupScopeResolver;
@@ -65,14 +70,20 @@ public class GenerationJobPoller {
             return new ProcessedJobSummary(false, null, null, "idle", null, null);
         }
         GenerationJobProcessor.ClaimedJobContext ctx = claimedOpt.get();
+        boolean shortAnswer = ctx.questionType() == QuestionType.SA;
         LlmCallResult llmResult;
         try {
-            llmResult = llmClient.generateMcq(
-                    ctx.prompt(),
-                    ctx.modelName(),
-                    ctx.strategy(),
-                    ctx.temperature()
-            );
+            llmResult = shortAnswer
+                    // V4: câu sa gọi JSON mode kèm schema SA (propertyOrdering: lời giải trước đáp số).
+                    ? llmClient.callJsonModeWithSchema(
+                            ctx.prompt(), ctx.modelName(), ctx.temperature(),
+                            SaPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON)
+                    : llmClient.generateMcq(
+                            ctx.prompt(),
+                            ctx.modelName(),
+                            ctx.strategy(),
+                            ctx.temperature()
+                    );
         } catch (RuntimeException ex) {
             var failedJob = processor.recordJobFailure(ctx.jobId(), ex.getMessage(), maxAttempts);
             return new ProcessedJobSummary(
@@ -83,6 +94,17 @@ public class GenerationJobPoller {
                     null,
                     ex.getMessage()
             );
+        }
+
+        if (shortAnswer) {
+            ParsedSaDto parsedSa = SaJsonParser.parse(llmResult.rawText());
+            GeneratedQuestion savedSa = processor.saveShortAnswerFromJob(ctx, llmResult, parsedSa);
+            QcPipelineReport saReport = qcOrchestrator.evaluateAndSave(
+                    GenerationService.shortAnswerQcInput(savedSa.getId(), parsedSa, ctx.validateLatex(), runAnswerCheck),
+                    dedupScopeResolver.resolve(ctx.runId()));
+            processor.updateQuestionStatus(savedSa.getId(), saReport.resultingStatus());
+            return new ProcessedJobSummary(true, ctx.jobId(), savedSa.getId(), "done",
+                    saReport.resultingStatus().getDbValue(), parsedSa.parseError());
         }
 
         ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText());

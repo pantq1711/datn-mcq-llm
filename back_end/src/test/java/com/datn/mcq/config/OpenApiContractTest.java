@@ -14,7 +14,11 @@ import org.springframework.web.context.WebApplicationContext;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,7 +41,10 @@ class OpenApiContractTest {
             "similarityScore", "similarity_score", "comparedToQuestionId", "thresholdUsed",
             "strategy", "difficultyJudgeModel",
             // Quyết định 21/10 mục 2: API chấm không trả status, latexValid, latexErrors (cả hai purpose).
-            "status", "latexValid", "latexErrors", "dedupStatus", "answerCheckStatus");
+            "status", "latexValid", "latexErrors", "dedupStatus", "answerCheckStatus",
+            // GĐ2 (V4): đáp số SA của LLM, kết quả Solver SA và cảnh báo định dạng đáp số.
+            "saAnswer", "sa_answer", "judgeSaKind", "judge_sa_kind", "judgeSaAnswer", "judge_sa_answer",
+            "answerWarnings", "qcReport");
 
     @Autowired
     private WebApplicationContext webApplicationContext;
@@ -60,11 +67,48 @@ class OpenApiContractTest {
     void reviewFormSchemasNeverExposeAnswerKeyLlmDifficultyOrQcScores() throws Exception {
         JsonNode schemas = objectMapper.readTree(apiDocs()).path("components").path("schemas");
         for (String dto : List.of("BlindQuestionReviewDto", "ReviewQuestionListItemDto", "SubmitReviewResponse")) {
-            JsonNode properties = schemas.path(dto).path("properties");
-            assertFalse(properties.isMissingNode(), "Thiếu schema " + dto);
-            for (String field : FORBIDDEN_IN_REVIEW_FORM) {
-                assertFalse(properties.has(field), dto + " không được có trường " + field);
+            assertFalse(schemas.path(dto).path("properties").isMissingNode(), "Thiếu schema " + dto);
+            // GĐ2: quét cả schema lồng nhau (qua $ref, items, allOf/anyOf/oneOf), không chỉ thuộc tính cấp ngoài.
+            for (String schemaName : reachableSchemas(schemas, dto)) {
+                JsonNode properties = schemas.path(schemaName).path("properties");
+                for (String field : FORBIDDEN_IN_REVIEW_FORM) {
+                    assertFalse(properties.has(field),
+                            dto + " (qua schema " + schemaName + ") không được có trường " + field);
+                }
             }
+        }
+    }
+
+    /** Form chấm phải cho frontend biết dạng câu (mcq, tf, sa) để hiển thị đúng form. */
+    @Test
+    void reviewFormDeclaresQuestionType() throws Exception {
+        JsonNode schemas = objectMapper.readTree(apiDocs()).path("components").path("schemas");
+        for (String dto : List.of("BlindQuestionReviewDto", "ReviewQuestionListItemDto")) {
+            assertTrue(schemas.path(dto).path("properties").has("questionType"), dto + " thiếu questionType");
+        }
+    }
+
+    private static Set<String> reachableSchemas(JsonNode schemas, String root) {
+        Set<String> seen = new LinkedHashSet<>();
+        Deque<String> todo = new ArrayDeque<>(List.of(root));
+        while (!todo.isEmpty()) {
+            String name = todo.pop();
+            if (seen.add(name)) {
+                collectRefs(schemas.path(name), todo);
+            }
+        }
+        return seen;
+    }
+
+    private static void collectRefs(JsonNode node, Deque<String> todo) {
+        if (node.isObject()) {
+            JsonNode ref = node.get("$ref");
+            if (ref != null && ref.isTextual() && ref.asText().startsWith("#/components/schemas/")) {
+                todo.push(ref.asText().substring("#/components/schemas/".length()));
+            }
+            node.elements().forEachRemaining(child -> collectRefs(child, todo));
+        } else if (node.isArray()) {
+            node.elements().forEachRemaining(child -> collectRefs(child, todo));
         }
     }
 

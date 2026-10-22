@@ -5,6 +5,7 @@ import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.catalog.entity.QuestionTemplate;
 import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.service.CatalogService;
+import com.datn.mcq.common.util.ShortAnswerValue;
 import com.datn.mcq.common.util.TextDistanceUtils;
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.Option;
@@ -13,6 +14,7 @@ import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.ReasonCode;
 import com.datn.mcq.enums.ReviewDecision;
+import com.datn.mcq.enums.SaAnswerKind;
 import com.datn.mcq.experiment.entity.ExperimentRun;
 import com.datn.mcq.experiment.service.ExperimentService;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
@@ -29,6 +31,8 @@ import com.datn.mcq.review.repository.TeacherReviewReasonRepository;
 import com.datn.mcq.review.repository.TeacherReviewRepository;
 import com.datn.mcq.user.entity.UserAccount;
 import com.datn.mcq.user.service.UserService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +56,14 @@ public class TeacherReviewService {
 
     static final String NOT_READY_FOR_BANK_MESSAGE =
             "Câu hỏi chưa đủ điều kiện để duyệt vào ngân hàng câu hỏi.";
+
+    // V4, GĐ2 (câu Trả lời ngắn). Các thông điệp chỉ nói về dữ liệu giáo viên gửi, không nhắc đáp số hay QC của LLM.
+    static final String TYPE_MISMATCH_MESSAGE = "Dữ liệu đánh giá không khớp dạng câu hỏi.";
+    static final String SA_FIELD_NOT_APPLICABLE = "Trường %s không áp dụng cho câu trả lời ngắn.";
+    static final String REVIEWER_SA_UNREADABLE_MESSAGE = "Đáp số giáo viên nhập không đọc được thành một số.";
+    static final String FINAL_SA_INVALID_PREFIX = "Đáp số cuối không hợp lệ: ";
+
+    private static final Logger LOG = LoggerFactory.getLogger(TeacherReviewService.class);
 
     /** Thông điệp trung tính khi request gửi editedExplanation (quyết định 2 ngày 22/10). */
     static final String EDITED_EXPLANATION_NOT_ACCEPTED_MESSAGE =
@@ -116,7 +128,8 @@ public class TeacherReviewService {
                     tpl.getGradeLevel(),
                     tpl.getTopic(),
                     gq.getQuestionText(),
-                    gq.getCreatedAt()
+                    gq.getCreatedAt(),
+                    gq.getQuestionType()
             ));
         }
         return result;
@@ -141,17 +154,32 @@ public class TeacherReviewService {
                 gq.getOptionB(),
                 gq.getOptionC(),
                 gq.getOptionD(),
-                gq.getCreatedAt()
+                gq.getCreatedAt(),
+                gq.getQuestionType()
         );
     }
 
     @Transactional
     public SubmitReviewResponse submitReview(Integer questionId, SubmitReviewRequest req) {
-        validateSubmitRequest(req);
+        // V4: dạng câu client đang chấm. Body mcq (không có trường sa, không ghi questionType) đi đúng đường kiểm tra
+        // cũ, trước khi tải câu hỏi, để thứ tự lỗi 400/404 của mcq không đổi.
+        QuestionType claimedType = claimedType(req);
+        if (claimedType == QuestionType.MCQ) {
+            validateSubmitRequest(req);
+        } else if (claimedType == QuestionType.TF) {
+            throw new IllegalArgumentException("Dạng câu tf chưa được hỗ trợ.");
+        }
 
         // Câu duplicate/format_failed: 404 như câu không tồn tại, trước mọi thao tác ghi (không ghi đè trạng thái cuối).
         GeneratedQuestion gq = loadReviewableQuestion(questionId);
-        validateReasonCodesForType(req.reasonCodes(), gq.getQuestionType());
+        QuestionType actualType = gq.getQuestionType() != null ? gq.getQuestionType() : QuestionType.MCQ;
+        if (actualType != claimedType) {
+            throw new IllegalArgumentException(TYPE_MISMATCH_MESSAGE);
+        }
+        if (actualType == QuestionType.SA) {
+            validateShortAnswerRequest(req);
+        }
+        validateReasonCodesForType(req.reasonCodes(), actualType);
         QuestionTemplate tpl = catalogService.getTemplateById(gq.getTemplateId());
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
         ExperimentRun run = experimentService.getById(gq.getRunId());
@@ -177,6 +205,10 @@ public class TeacherReviewService {
                 throw new IllegalStateException(
                         "Người chấm đã nộp đánh giá cho câu hỏi thực nghiệm này, không thể gửi lại hoặc ghi đè.");
             }
+        }
+
+        if (actualType == QuestionType.SA) {
+            return submitShortAnswer(gq, req, subject, actualPurpose, reviewerId);
         }
 
         AnswerChoice reviewerAnswer = req.reviewerAnswer();
@@ -336,6 +368,264 @@ public class TeacherReviewService {
                 bankItemId,
                 savedReview.getReviewedAt()
         );
+    }
+
+    /**
+     * Dạng câu client đang chấm: questionType nếu có; không có thì là sa khi body có trường sa, còn lại là mcq.
+     */
+    static QuestionType claimedType(SubmitReviewRequest req) {
+        if (req == null) {
+            throw new IllegalArgumentException("Body đánh giá không được rỗng");
+        }
+        if (req.questionType() != null) {
+            return req.questionType();
+        }
+        if (req.reviewerSaKind() != null || req.reviewerSaAnswer() != null || req.finalSaAnswer() != null) {
+            return QuestionType.SA;
+        }
+        return QuestionType.MCQ;
+    }
+
+    /**
+     * Kiểm tra body chấm câu Trả lời ngắn (bản sửa 1 mục 8, quyết định A và E): đáp số chấm mù chỉ cần phân tích
+     * được (LENIENT), đáp số cuối vào ngân hàng phải viết chuẩn (STRICT).
+     */
+    static void validateShortAnswerRequest(SubmitReviewRequest req) {
+        if (req.editedExplanation() != null) {
+            throw new IllegalArgumentException(EDITED_EXPLANATION_NOT_ACCEPTED_MESSAGE);
+        }
+        rejectIfPresent("reviewerAnswer", req.reviewerAnswer());
+        rejectIfPresent("finalOption", req.finalOption());
+        rejectIfPresent("editedOptionA", req.editedOptionA());
+        rejectIfPresent("editedOptionB", req.editedOptionB());
+        rejectIfPresent("editedOptionC", req.editedOptionC());
+        rejectIfPresent("editedOptionD", req.editedOptionD());
+        if (req.formatOk() == null) {
+            throw new IllegalArgumentException("Phải chọn đánh giá định dạng (formatOk)");
+        }
+        if (req.difficultyLabel() == null) {
+            throw new IllegalArgumentException("Phải chọn mức độ khó (difficultyLabel)");
+        }
+        if (req.decision() == null) {
+            throw new IllegalArgumentException("Phải chọn kết luận (decision)");
+        }
+        if (req.reviewerSaKind() == null) {
+            throw new IllegalArgumentException("Phải chọn reviewerSaKind (number, ambiguous)");
+        }
+        boolean hasAnswer = req.reviewerSaAnswer() != null && !req.reviewerSaAnswer().isBlank();
+        if (req.reviewerSaKind() == SaAnswerKind.NUMBER) {
+            if (!hasAnswer) {
+                throw new IllegalArgumentException("Khi chọn 'number', phải nhập reviewerSaAnswer");
+            }
+            if (!ShortAnswerValue.parse(req.reviewerSaAnswer(), ShortAnswerValue.Mode.LENIENT).ok()) {
+                throw new IllegalArgumentException(REVIEWER_SA_UNREADABLE_MESSAGE);
+            }
+        } else {
+            if (hasAnswer) {
+                throw new IllegalArgumentException("Khi chọn 'ambiguous', reviewerSaAnswer phải để trống");
+            }
+            if (req.decision() == ReviewDecision.APPROVED_AS_IS) {
+                throw new IllegalArgumentException(
+                        "Khi reviewerSaKind là 'ambiguous', không được chọn 'approved_as_is'");
+            }
+        }
+
+        switch (req.decision()) {
+            case REJECTED -> {
+                if (req.finalSaAnswer() != null) {
+                    throw new IllegalArgumentException("Khi chọn 'rejected', finalSaAnswer phải để trống (null)");
+                }
+                validateRejectReasons(req);
+            }
+            case APPROVED_AS_IS -> {
+                String reviewer = req.reviewerSaAnswer().trim();
+                if (req.finalSaAnswer() != null && !req.finalSaAnswer().trim().equals(reviewer)) {
+                    throw new IllegalArgumentException(
+                            "Khi chọn approved_as_is, finalSaAnswer phải trùng reviewerSaAnswer");
+                }
+                requireStrictFinalAnswer(reviewer);
+            }
+            case APPROVED_WITH_EDIT -> {
+                if (req.finalSaAnswer() == null || req.finalSaAnswer().isBlank()) {
+                    throw new IllegalArgumentException("Khi chọn approved_with_edit, bắt buộc nhập finalSaAnswer");
+                }
+                requireStrictFinalAnswer(req.finalSaAnswer());
+            }
+        }
+    }
+
+    private static void rejectIfPresent(String field, Object value) {
+        if (value != null) {
+            throw new IllegalArgumentException(SA_FIELD_NOT_APPLICABLE.formatted(field));
+        }
+    }
+
+    /** Quyết định E: đáp số cuối (vào ngân hàng) dùng chế độ STRICT. */
+    private static void requireStrictFinalAnswer(String finalAnswer) {
+        ShortAnswerValue.ParseResult parsed = ShortAnswerValue.parse(finalAnswer, ShortAnswerValue.Mode.STRICT);
+        if (!parsed.ok()) {
+            throw new IllegalArgumentException(FINAL_SA_INVALID_PREFIX + parsed.error());
+        }
+    }
+
+    /** rejected: ít nhất một lý do; mã other có chi tiết (giống mcq). */
+    private static void validateRejectReasons(SubmitReviewRequest req) {
+        if (req.reasonCodes() == null || req.reasonCodes().isEmpty()) {
+            throw new IllegalArgumentException("Khi chọn 'rejected', phải có ít nhất 1 lý do trong reasonCodes");
+        }
+        if (req.reasonCodes().contains(ReasonCode.OTHER)
+                && (req.otherReasonDetail() == null || req.otherReasonDetail().trim().isEmpty())) {
+            throw new IllegalArgumentException("Khi chọn lý do 'other', bắt buộc nhập chi tiết (otherReasonDetail)");
+        }
+    }
+
+    /**
+     * Nộp đánh giá câu Trả lời ngắn (V4, GĐ2). Gọi trong transaction của {@link #submitReview}, sau khi đã kiểm
+     * request, purpose và người chấm. answer_correct do server tính theo giá trị (LENIENT): ambiguous là FALSE;
+     * NULL chỉ khi đáp số LLM đã lưu không còn phân tích được (quyết định A).
+     */
+    private SubmitReviewResponse submitShortAnswer(
+            GeneratedQuestion gq,
+            SubmitReviewRequest req,
+            Subject subject,
+            Purpose actualPurpose,
+            Integer reviewerId) {
+        SaAnswerKind kind = req.reviewerSaKind();
+        ReviewDecision decision = req.decision();
+        String reviewerAnswer = kind == SaAnswerKind.NUMBER ? req.reviewerSaAnswer().trim() : null;
+
+        Boolean answerCorrect;
+        if (kind == SaAnswerKind.AMBIGUOUS) {
+            answerCorrect = Boolean.FALSE;
+        } else {
+            ShortAnswerValue.ParseResult llm = ShortAnswerValue.parse(gq.getSaAnswer(), ShortAnswerValue.Mode.LENIENT);
+            if (llm.ok()) {
+                ShortAnswerValue mine = ShortAnswerValue.parse(reviewerAnswer, ShortAnswerValue.Mode.LENIENT).value();
+                answerCorrect = mine.sameValue(llm.value());
+            } else {
+                // Chỉ xảy ra khi bộ phân tích đổi sau khi câu đã qua format; đếm riêng khi phân tích (answer_correct NULL).
+                LOG.warn("Đáp số LLM của câu sa id={} không còn phân tích được ({}); answer_correct = NULL",
+                        gq.getId(), llm.error());
+                answerCorrect = null;
+            }
+        }
+
+        String finalAnswer = null;
+        boolean edited = false;
+        Integer editDistance = null;
+        String savedEditedQ = null;
+        if (decision == ReviewDecision.APPROVED_AS_IS) {
+            finalAnswer = reviewerAnswer;
+        } else if (decision == ReviewDecision.APPROVED_WITH_EDIT) {
+            finalAnswer = req.finalSaAnswer().trim();
+            String effQ = fallback(req.editedQuestionText(), gq.getQuestionText());
+            if (effQ.isBlank()) {
+                throw new IllegalArgumentException("Nội dung câu hỏi sau khi sửa không được để trống");
+            }
+            // edit_distance của câu sa chỉ tính trên đề; đổi đáp số không tính (như đổi đáp án mcq).
+            int dist = TextDistanceUtils.levenshteinDistance(gq.getQuestionText(), effQ);
+            if (dist > 0) {
+                edited = true;
+                editDistance = dist;
+                savedEditedQ = effQ;
+            }
+        }
+        if (finalAnswer != null && GenerationJobProcessor.isMathSubject(subject.getName())) {
+            List<String> latexErrors = new ArrayList<>();
+            if (savedEditedQ != null) {
+                appendFieldErrors("question_text", savedEditedQ, latexErrors);
+            }
+            appendFieldErrors("final_sa_answer", finalAnswer, latexErrors);
+            if (!latexErrors.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Bản sửa còn lỗi định dạng công thức LaTeX: " + String.join("; ", latexErrors));
+            }
+        }
+
+        TeacherReview review = teacherReviewRepository
+                .findByQuestionIdAndReviewerId(gq.getId(), reviewerId)
+                .orElseGet(TeacherReview::new);
+        review.setQuestionType(QuestionType.SA);
+        review.setQuestionId(gq.getId());
+        review.setReviewerId(reviewerId);
+        review.setReviewPurpose(actualPurpose);
+        review.setReviewerAnswer(null);
+        review.setReviewerSaKind(kind);
+        review.setReviewerSaAnswer(reviewerAnswer);
+        review.setAnswerCorrect(answerCorrect);
+        review.setFormatOk(req.formatOk());
+        review.setDifficultyLabel(req.difficultyLabel());
+        review.setDecision(decision);
+        review.setFinalOption(null);
+        review.setFinalSaAnswer(finalAnswer);
+        review.setEdited(edited);
+        review.setEditedQuestionText(savedEditedQ);
+        review.setEditedOptionA(null);
+        review.setEditedOptionB(null);
+        review.setEditedOptionC(null);
+        review.setEditedOptionD(null);
+        review.setEditedExplanation(null);
+        review.setEditDistance(editDistance);
+        review.setReviewedAt(LocalDateTime.now());
+        TeacherReview savedReview = teacherReviewRepository.save(review);
+        saveReasons(savedReview.getId(), req);
+
+        Integer bankItemId = null;
+        QuestionStatus resultingQuestionStatus = null;
+        if (actualPurpose == Purpose.PRODUCTION) {
+            resultingQuestionStatus = gq.getStatus();
+            if (decision == ReviewDecision.APPROVED_AS_IS || decision == ReviewDecision.APPROVED_WITH_EDIT) {
+                if (gq.getStatus() != QuestionStatus.QC_PASSED && gq.getStatus() != QuestionStatus.IN_BANK) {
+                    throw new IllegalArgumentException(NOT_READY_FOR_BANK_MESSAGE);
+                }
+                GeneratedQuestion updatedGq = generationService.updateStatusAndDifficulty(
+                        gq.getId(), QuestionStatus.IN_BANK, req.difficultyLabel());
+                resultingQuestionStatus = updatedGq.getStatus();
+                BankItem item = bankService.createOrUpdateShortAnswerFromReview(
+                        gq.getId(),
+                        savedReview.getId(),
+                        edited ? savedEditedQ : gq.getQuestionText(),
+                        finalAnswer,
+                        explanationForBank(subject.getName(), gq.getExplanation()),
+                        req.difficultyLabel());
+                bankItemId = item.getId();
+            } else if (decision == ReviewDecision.REJECTED) {
+                GeneratedQuestion updatedGq = generationService.updateStatusAndDifficulty(
+                        gq.getId(), QuestionStatus.REJECTED, req.difficultyLabel());
+                resultingQuestionStatus = updatedGq.getStatus();
+                bankService.removeBankItemIfUnused(gq.getId());
+            }
+        }
+
+        return new SubmitReviewResponse(
+                savedReview.getId(),
+                gq.getId(),
+                actualPurpose,
+                null,
+                req.formatOk(),
+                req.difficultyLabel(),
+                decision,
+                null,
+                edited,
+                editDistance,
+                resultingQuestionStatus,
+                bankItemId,
+                savedReview.getReviewedAt(),
+                kind,
+                reviewerAnswer,
+                finalAnswer
+        );
+    }
+
+    /** Ghi lại lý do từ chối của một lần nộp (xóa lý do cũ của review đó trước). */
+    private void saveReasons(Integer reviewId, SubmitReviewRequest req) {
+        teacherReviewReasonRepository.deleteByReviewId(reviewId);
+        if (req.decision() == ReviewDecision.REJECTED && req.reasonCodes() != null) {
+            for (ReasonCode code : new LinkedHashSet<>(req.reasonCodes())) {
+                String detail = (code == ReasonCode.OTHER) ? req.otherReasonDetail().trim() : null;
+                teacherReviewReasonRepository.save(new TeacherReviewReason(reviewId, code, detail));
+            }
+        }
     }
 
     public static void validateSubmitRequest(SubmitReviewRequest req) {

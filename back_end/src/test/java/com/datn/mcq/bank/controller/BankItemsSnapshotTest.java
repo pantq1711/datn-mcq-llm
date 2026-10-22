@@ -153,6 +153,23 @@ class BankItemsSnapshotTest {
         assertTrue(mcq.get("createdAt").asText().startsWith("2026-10-22T10:00"), mcq.get("createdAt").asText());
     }
 
+    /** GĐ2: tham số lọc tùy chọn ?questionType=; không truyền thì trả mọi dạng như trước. */
+    @Test
+    void locTheoDangCau() throws Exception {
+        for (String[] c : new String[][] {{"mcq", String.valueOf(mcqItem)}, {"sa", String.valueOf(saItem)},
+                {"tf", String.valueOf(tfItem)}}) {
+            String body = mockMvc.perform(get("/api/bank-items").param("questionType", c[0]))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            JsonNode items = objectMapper.readTree(body);
+            assertEquals(1, items.size(), "lọc " + c[0]);
+            assertEquals(Integer.parseInt(c[1]), items.get(0).get("id").asInt());
+            assertEquals(c[0], items.get(0).get("questionType").asText());
+        }
+        assertEquals(3, items().size());
+        mockMvc.perform(get("/api/bank-items").param("questionType", "essay")).andExpect(status().isBadRequest());
+    }
+
     @Test
     void saCoSaAnswerTfCoStatementsTheoThuTu() throws Exception {
         JsonNode items = items();

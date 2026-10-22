@@ -2,6 +2,8 @@ package com.datn.mcq.qc.orchestrator;
 
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
+import com.datn.mcq.enums.QuestionType;
+import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.AnswerCheckStatus;
@@ -53,10 +55,14 @@ public class QcOrchestrator {
      */
     public QcPipelineReport evaluateAndSave(QuestionQcInput input, DedupScope scope) {
         FormatChecker.FormatCheckOutcome formatOutcome = formatChecker.check(input);
+        List<String> answerWarnings = formatOutcome.answerWarnings();
         upsertCheckResult(
                 input.questionId(),
+                input.questionType(),
                 CheckType.FORMAT,
                 formatOutcome.passed(),
+                null,
+                null,
                 null,
                 null
         );
@@ -73,6 +79,9 @@ public class QcOrchestrator {
                     null,
                     AnswerCheckStatus.NOT_RUN,
                     DedupStatus.NOT_RUN,
+                    null,
+                    answerWarnings,
+                    null,
                     null
             );
         }
@@ -94,7 +103,10 @@ public class QcOrchestrator {
                     reason,
                     AnswerCheckStatus.NOT_RUN,
                     dedupStatus,
-                    dedupOutcome
+                    dedupOutcome,
+                    answerWarnings,
+                    null,
+                    null
             );
         }
 
@@ -103,6 +115,8 @@ public class QcOrchestrator {
         AnswerChoice judgeAnswer = null;
         String judgeModel = null;
         String solverReasoning;
+        SaJudgeKind saJudgeKind = null;
+        String saJudgeAnswer = null;
 
         if (!input.runAnswerCheck()) {
             answerCheckStatus = AnswerCheckStatus.NOT_RUN;
@@ -111,6 +125,36 @@ public class QcOrchestrator {
             // Thiếu API key là lỗi cấu hình, không phải một lần kiểm tra thành công.
             answerCheckStatus = AnswerCheckStatus.NOT_RUN;
             solverReasoning = "answer_check không chạy: chưa cấu hình API key cho Solver";
+        } else if (input.questionType() == QuestionType.SA) {
+            // V4, bản sửa 1 mục 7: so đáp số theo giá trị; ambiguous và không phân tích được là INCONSISTENT
+            // (có ghi dòng); lỗi gọi hoặc phản hồi hỏng là ERROR (không ghi dòng).
+            try {
+                AnswerSolverChecker.SaSolverOutcome sa = answerSolverChecker.checkShortAnswer(
+                        input.questionText(), input.saAnswer());
+                upsertCheckResult(
+                        input.questionId(),
+                        QuestionType.SA,
+                        CheckType.ANSWER_CHECK,
+                        sa.passed(),
+                        null,
+                        sa.judgeModel(),
+                        sa.judgeKind(),
+                        sa.judgeAnswer()
+                );
+                answerCheckPassed = sa.passed();
+                judgeModel = sa.judgeModel();
+                solverReasoning = sa.reasoning();
+                saJudgeKind = sa.judgeKind();
+                saJudgeAnswer = sa.judgeAnswer();
+                answerCheckStatus = sa.passed() ? AnswerCheckStatus.CONSISTENT : AnswerCheckStatus.INCONSISTENT;
+            } catch (RuntimeException ex) {
+                answerCheckStatus = AnswerCheckStatus.ERROR;
+                answerCheckPassed = null;
+                judgeModel = null;
+                saJudgeKind = null;
+                saJudgeAnswer = null;
+                solverReasoning = "Không hoàn tất answer_check: " + ex.getMessage();
+            }
         } else {
             try {
                 AnswerSolverChecker.SolverCheckOutcome solverOutcome = answerSolverChecker.check(
@@ -128,10 +172,13 @@ public class QcOrchestrator {
 
                 upsertCheckResult(
                         input.questionId(),
+                        QuestionType.MCQ,
                         CheckType.ANSWER_CHECK,
                         solverOutcome.passed(),
                         solverOutcome.judgeAnswer(),
-                        solverOutcome.judgeModel()
+                        solverOutcome.judgeModel(),
+                        null,
+                        null
                 );
                 answerCheckStatus = solverOutcome.passed()
                         ? AnswerCheckStatus.CONSISTENT
@@ -158,7 +205,10 @@ public class QcOrchestrator {
                 solverReasoning,
                 answerCheckStatus,
                 dedupStatus,
-                dedupOutcome
+                dedupOutcome,
+                answerWarnings,
+                saJudgeKind,
+                saJudgeAnswer
         );
     }
 
@@ -174,7 +224,9 @@ public class QcOrchestrator {
                     input.optionA(),
                     input.optionB(),
                     input.optionC(),
-                    input.optionD()
+                    input.optionD(),
+                    input.questionType(),
+                    input.saAnswer()
             ), scope);
             return outcome != null ? outcome : DedupOutcome.error("DedupService không trả kết quả");
         } catch (RuntimeException ex) {
@@ -182,6 +234,7 @@ public class QcOrchestrator {
         }
     }
 
+    /** Ghi kết quả một bước QC của câu mcq (chữ ký trước V4). */
     @Transactional
     public QualityCheckResult upsertCheckResult(
             Integer questionId,
@@ -189,18 +242,40 @@ public class QcOrchestrator {
             boolean passed,
             AnswerChoice judgeAnswer,
             String judgeModel) {
+        return upsertCheckResult(questionId, QuestionType.MCQ, checkType, passed, judgeAnswer, judgeModel, null, null);
+    }
+
+    /**
+     * Ghi kết quả một bước QC (V4). question_type phải bằng dạng của câu (khóa ngoại kép). Kết quả Solver chỉ ghi
+     * cho answer_check: judgeAnswer với mcq, judgeSaKind/judgeSaAnswer với sa.
+     */
+    @Transactional
+    public QualityCheckResult upsertCheckResult(
+            Integer questionId,
+            QuestionType questionType,
+            CheckType checkType,
+            boolean passed,
+            AnswerChoice judgeAnswer,
+            String judgeModel,
+            SaJudgeKind judgeSaKind,
+            String judgeSaAnswer) {
         QualityCheckResult qcr = qualityCheckResultRepository
                 .findByQuestionIdAndCheckType(questionId, checkType)
                 .orElseGet(QualityCheckResult::new);
         qcr.setQuestionId(questionId);
+        qcr.setQuestionType(questionType != null ? questionType : QuestionType.MCQ);
         qcr.setCheckType(checkType);
         qcr.setPassed(passed);
         if (checkType == CheckType.ANSWER_CHECK) {
             qcr.setJudgeAnswer(judgeAnswer);
             qcr.setJudgeModel(judgeModel);
+            qcr.setJudgeSaKind(judgeSaKind);
+            qcr.setJudgeSaAnswer(judgeSaAnswer);
         } else {
             qcr.setJudgeAnswer(null);
             qcr.setJudgeModel(null);
+            qcr.setJudgeSaKind(null);
+            qcr.setJudgeSaAnswer(null);
         }
         qcr.setCheckedAt(LocalDateTime.now());
         return qualityCheckResultRepository.save(qcr);

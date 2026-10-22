@@ -1,6 +1,7 @@
 package com.datn.mcq.review.dto;
 
 import com.datn.mcq.enums.Purpose;
+import com.datn.mcq.enums.QuestionType;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.LocalDateTime;
@@ -18,6 +19,7 @@ public record ReviewQuestionListItemDto(
         Integer gradeLevel,
         String topic,
         String questionText,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        QuestionType questionType
 ) {
 }
