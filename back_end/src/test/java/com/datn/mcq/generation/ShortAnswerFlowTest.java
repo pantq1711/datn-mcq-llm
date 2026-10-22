@@ -238,7 +238,7 @@ class ShortAnswerFlowTest {
         assertEquals("sa", run.get("question_type"));
         assertEquals("production", run.get("purpose"));
         assertEquals("zero-shot", run.get("strategy"));
-        assertEquals("sa-v0-draft", run.get("prompt_version"));
+        assertEquals("sa-v1-draft", run.get("prompt_version"));
         assertEquals(List.of("sa", "sa", "sa"), jdbc.queryForList(
                 "SELECT question_type FROM quality_check_result WHERE question_id = ? ORDER BY check_type",
                 String.class, questionId));
@@ -393,6 +393,13 @@ class ShortAnswerFlowTest {
         JsonNode resp = generateSa(saJson("Tính $1 : 2$.", "2/4"), true);
         assertEquals("qc_passed", resp.get("question").get("status").asText());
         assertEquals("[\"answer: phân số chưa tối giản\"]", resp.get("qcReport").get("answerWarnings").toString());
+        // V5 (Q8): cảnh báo được lưu ở dòng format; các dòng khác để NULL.
+        int id = resp.get("question").get("id").asInt();
+        assertEquals(objectMapper.readTree("[\"answer: phân số chưa tối giản\"]"), objectMapper.readTree(
+                jdbc.queryForObject("SELECT warnings::text FROM quality_check_result WHERE question_id = ?"
+                        + " AND check_type = 'format'", String.class, id)));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type <> 'format' AND warnings IS NOT NULL", Integer.class, id));
     }
 
     // ---------- dedup ----------
@@ -475,7 +482,7 @@ class ShortAnswerFlowTest {
         Map<String, Object> run = jdbc.queryForMap("SELECT * FROM experiment_run");
         assertEquals("sa", run.get("question_type"));
         assertEquals("zero-shot", run.get("strategy"));
-        assertEquals("sa-v0-draft", run.get("prompt_version"));
+        assertEquals("sa-v1-draft", run.get("prompt_version"));
         assertEquals("sa", getJson("/api/generation/jobs").get(0).get("questionType").asText());
 
         FakeGeneratorClient generator = new FakeGeneratorClient();

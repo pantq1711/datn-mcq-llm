@@ -48,7 +48,7 @@ public class GenerationService {
 
     /**
      * @param questionType dạng câu (V4); bỏ trống là mcq. sa luôn sinh với strategy zero-shot, purpose production,
-     *                     prompt_version sa-v0-draft (quyết định 2 ngày 22/10); tf chưa hỗ trợ (GĐ3).
+     *                     prompt_version sa-v1-draft (quyết định 2 ngày 22/10); tf chưa hỗ trợ (GĐ3).
      */
     public record SyncGenerationRequest(
             Integer templateId,
@@ -194,6 +194,7 @@ public class GenerationService {
     private final DedupScopeResolver dedupScopeResolver;
     private final TrueFalseQuestionStore trueFalseQuestionStore;
     private final GeneratedQuestionStatementRepository statementRepository;
+    private final PreviousQuestionLookup previousQuestionLookup;
 
     public GenerationService(
             GeneratedQuestionRepository generatedQuestionRepository,
@@ -205,7 +206,8 @@ public class GenerationService {
             QcOrchestrator qcOrchestrator,
             DedupScopeResolver dedupScopeResolver,
             TrueFalseQuestionStore trueFalseQuestionStore,
-            GeneratedQuestionStatementRepository statementRepository) {
+            GeneratedQuestionStatementRepository statementRepository,
+            PreviousQuestionLookup previousQuestionLookup) {
         this.generatedQuestionRepository = generatedQuestionRepository;
         this.generationJobRepository = generationJobRepository;
         this.catalogService = catalogService;
@@ -216,6 +218,7 @@ public class GenerationService {
         this.dedupScopeResolver = dedupScopeResolver;
         this.trueFalseQuestionStore = trueFalseQuestionStore;
         this.statementRepository = statementRepository;
+        this.previousQuestionLookup = previousQuestionLookup;
     }
 
     /**
@@ -298,7 +301,7 @@ public class GenerationService {
     }
 
     /**
-     * Sinh đồng bộ 1 câu Trả lời ngắn (V4, GĐ2). Run: production, zero-shot, prompt_version sa-v0-draft.
+     * Sinh đồng bộ 1 câu Trả lời ngắn (V4, GĐ2). Run: production, zero-shot, prompt_version sa-v1-draft.
      * Gọi LLM ở JSON mode kèm schema SA (lời giải trước đáp số) ngoài transaction DB, rồi chạy QC như mcq.
      */
     private SyncGenerationResponse generateShortAnswerSync(
@@ -316,13 +319,17 @@ public class GenerationService {
                 tpl.getSourceQuestion(),
                 targetDiff
         );
+        // Độ đa dạng (Q1-Q3 ngày 22/10): prompt gửi model có thêm các câu đã sinh; run lưu prompt gốc.
+        String sentPrompt = SaPromptDraftV0.buildGenerationPrompt(subject.getName(), tpl.getGradeLevel(),
+                tpl.getTopic(), tpl.getLearningOutcome(), tpl.getSourceQuestion(), targetDiff,
+                previousQuestionLookup.recent(tpl.getId(), QuestionType.SA));
 
         LlmCallResult llmResult;
         if (req.rawLlmOutputOverride() != null && !req.rawLlmOutputOverride().isBlank()) {
             llmResult = new LlmCallResult(req.rawLlmOutputOverride(), 0, 0.0, 0.0, model);
         } else {
             llmResult = llmClient.callJsonModeWithSchema(
-                    prompt, model, temperature, SaPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON);
+                    sentPrompt, model, temperature, SaPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON);
         }
 
         ParsedSaDto parsed = SaJsonParser.parse(llmResult.rawText());
@@ -349,7 +356,7 @@ public class GenerationService {
     }
 
     /**
-     * Sinh đồng bộ 1 câu Đúng/Sai (GĐ3). Run: production, zero-shot, prompt_version tf-v0-draft. Gọi LLM ở JSON mode
+     * Sinh đồng bộ 1 câu Đúng/Sai (GĐ3). Run: production, zero-shot, prompt_version tf-v1-draft. Gọi LLM ở JSON mode
      * kèm schema TF ngoài transaction DB; lưu câu và 4 ý trong một transaction; rồi chạy QC.
      */
     private SyncGenerationResponse generateTrueFalseSync(
@@ -367,13 +374,17 @@ public class GenerationService {
                 tpl.getSourceQuestion(),
                 levels
         );
+        // Độ đa dạng (Q1-Q3 ngày 22/10): prompt gửi model có thêm các câu đã sinh; run lưu prompt gốc.
+        String sentPrompt = TfPromptDraftV0.buildGenerationPrompt(subject.getName(), tpl.getGradeLevel(),
+                tpl.getTopic(), tpl.getLearningOutcome(), tpl.getSourceQuestion(), levels,
+                previousQuestionLookup.recent(tpl.getId(), QuestionType.TF));
 
         LlmCallResult llmResult;
         if (req.rawLlmOutputOverride() != null && !req.rawLlmOutputOverride().isBlank()) {
             llmResult = new LlmCallResult(req.rawLlmOutputOverride(), 0, 0.0, 0.0, model);
         } else {
             llmResult = llmClient.callJsonModeWithSchema(
-                    prompt, model, temperature, TfPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON);
+                    sentPrompt, model, temperature, TfPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON);
         }
 
         ParsedTfDto parsed = TfJsonParser.parse(llmResult.rawText());
@@ -526,8 +537,8 @@ public class GenerationService {
     }
 
     /**
-     * Tạo job sinh câu (V4: theo dạng câu). sa: run production, zero-shot, prompt_version sa-v0-draft.
-     * tf (GĐ3): run production, zero-shot, prompt_version tf-v0-draft; bắt buộc 4 mức của 4 ý, ghi vào
+     * Tạo job sinh câu (V4: theo dạng câu). sa: run production, zero-shot, prompt_version sa-v1-draft.
+     * tf (GĐ3): run production, zero-shot, prompt_version tf-v1-draft; bắt buộc 4 mức của 4 ý, ghi vào
      * target_statement_difficulties; target_difficulty cấp câu để NULL.
      */
     @Transactional

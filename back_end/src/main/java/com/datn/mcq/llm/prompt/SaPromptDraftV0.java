@@ -2,8 +2,10 @@ package com.datn.mcq.llm.prompt;
 
 import com.datn.mcq.enums.Difficulty;
 
+import java.util.List;
+
 /**
- * BẢN NHÁP v0 – CHỜ THÀNH VIÊN PHỤ TRÁCH PROMPT DUYỆT – KHÔNG DÙNG CHO THỰC NGHIỆM C1/C2/C3.
+ * BẢN NHÁP v1 (sa-v1-draft, thêm yêu cầu đa dạng ngày 22/10) – CHỜ THÀNH VIÊN PHỤ TRÁCH PROMPT DUYỆT – KHÔNG DÙNG CHO THỰC NGHIỆM C1/C2/C3.
  *
  * <p>Prompt sinh câu Trả lời ngắn và prompt Solver cho câu Trả lời ngắn (bản sửa 1 thiết kế, mục 10). Không sửa
  * {@link PromptBuilder}; chỉ dùng lại {@link PromptBuilder#ESCAPE_HINT}. Nhãn bản nháp nằm ở Javadoc và ở
@@ -15,7 +17,7 @@ import com.datn.mcq.enums.Difficulty;
  */
 public final class SaPromptDraftV0 {
 
-    public static final String PROMPT_VERSION = "sa-v0-draft";
+    public static final String PROMPT_VERSION = "sa-v1-draft";
 
     public static final String GENERATION_RESPONSE_SCHEMA_JSON = """
             {"type":"OBJECT","properties":{
@@ -33,8 +35,14 @@ public final class SaPromptDraftV0 {
             },"required":["reasoning","judge_answer"],"propertyOrdering":["reasoning","judge_answer"]}
             """;
 
+    /** Câu dặn đi kèm câu nguồn: câu nguồn chỉ định hướng dạng bài và kiến thức, phải tạo bài toán mới. */
+    static final String NEW_PROBLEM_RULE = "Câu hỏi nguồn chỉ để định hướng dạng bài và kiến thức cần kiểm tra. "
+            + "BẮT BUỘC tạo một bài toán MỚI với số liệu, biểu thức hoặc ngữ cảnh khác câu hỏi nguồn; "
+            + "không chép lại phương trình, biểu thức hay số liệu của câu hỏi nguồn.";
+
     private SaPromptDraftV0() {}
 
+    /** Prompt gốc, không có danh sách câu đã sinh (lưu ở experiment_run.prompt_text). */
     public static String buildGenerationPrompt(
             String subjectName,
             Integer gradeLevel,
@@ -42,6 +50,22 @@ public final class SaPromptDraftV0 {
             String learningOutcome,
             String sourceQuestion,
             Difficulty targetDifficulty) {
+        return buildGenerationPrompt(subjectName, gradeLevel, topic, learningOutcome, sourceQuestion, targetDifficulty,
+                List.of());
+    }
+
+    /**
+     * Prompt gửi model: prompt gốc cộng danh sách đề đã sinh trước đó (tối đa {@link PreviousQuestion#MAX_ITEMS}),
+     * đặt sau câu hỏi nguồn, kèm yêu cầu không lặp lại bài toán hay số liệu.
+     */
+    public static String buildGenerationPrompt(
+            String subjectName,
+            Integer gradeLevel,
+            String topic,
+            String learningOutcome,
+            String sourceQuestion,
+            Difficulty targetDifficulty,
+            List<PreviousQuestion> previous) {
         StringBuilder sb = new StringBuilder();
         sb.append("Bạn là giáo viên Toán THCS biên soạn 1 câu hỏi TRẢ LỜI NGẮN cho đề kiểm tra.\n");
         sb.append("Môn học: ").append(subjectName != null ? subjectName : "Toán").append("\n");
@@ -59,7 +83,10 @@ public final class SaPromptDraftV0 {
         }
         if (sourceQuestion != null && !sourceQuestion.isBlank()) {
             sb.append("Câu hỏi nguồn / ngữ liệu tham khảo: ").append(sourceQuestion).append("\n");
+            // Độ đa dạng (yêu cầu ngày 22/10): câu nguồn chỉ định hướng, không được chép lại số liệu.
+            sb.append(NEW_PROBLEM_RULE).append("\n");
         }
+        sb.append(PreviousQuestion.section(previous, false));
         sb.append("""
 
                 Quy tắc đáp số:

@@ -61,6 +61,19 @@ class SaPromptDraftV0Test {
     }
 
     @Test
+    void cauNguonChiLaDinhHuongBatBuocTaoBaiMoi() {
+        String p = SaPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, "Giải $2x - 6 = 0$.", Difficulty.EASY);
+        for (String part : List.of("chỉ để định hướng dạng bài và kiến thức", "BẮT BUỘC tạo một bài toán MỚI",
+                "số liệu, biểu thức hoặc ngữ cảnh khác câu hỏi nguồn",
+                "không chép lại phương trình, biểu thức hay số liệu của câu hỏi nguồn")) {
+            assertTrue(p.contains(part), "Prompt thiếu: " + part);
+        }
+        assertTrue(p.indexOf("Giải $2x - 6 = 0$.") < p.indexOf("BẮT BUỘC tạo một bài toán MỚI"));
+        String noSource = SaPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, null, Difficulty.EASY);
+        assertFalse(noSource.contains("câu hỏi nguồn"), "không có câu nguồn thì không nhắc câu nguồn");
+    }
+
+    @Test
     void promptSolverKhongKemDapSoNguoiSoan() {
         String p = SaPromptDraftV0.buildSolverPrompt("Tính $1 + 1$.");
         for (String part : List.of("Tính $1 + 1$.", "\"reasoning\"", "\"judge_answer\"", "ambiguous", "làm tròn")) {
@@ -70,7 +83,7 @@ class SaPromptDraftV0Test {
 
     @Test
     void phienBanPromptVaPromptMcqKhongDoi() {
-        assertEquals("sa-v0-draft", SaPromptDraftV0.PROMPT_VERSION);
+        assertEquals("sa-v1-draft", SaPromptDraftV0.PROMPT_VERSION);
         String mcq = new PromptBuilder().buildGenerationPrompt("Toán", 8, null, null, null, Strategy.ZERO_SHOT,
                 Difficulty.EASY);
         assertTrue(mcq.startsWith("Bạn là giáo viên THCS biên soạn câu hỏi trắc nghiệm 4 lựa chọn."));

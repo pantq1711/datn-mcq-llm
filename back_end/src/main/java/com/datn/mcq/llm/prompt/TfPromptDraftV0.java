@@ -5,7 +5,7 @@ import com.datn.mcq.enums.Difficulty;
 import java.util.List;
 
 /**
- * BẢN NHÁP v0 – CHỜ THÀNH VIÊN PHỤ TRÁCH PROMPT DUYỆT – KHÔNG DÙNG CHO THỰC NGHIỆM C1/C2/C3.
+ * BẢN NHÁP v1 (tf-v1-draft, thêm yêu cầu đa dạng ngày 22/10) – CHỜ THÀNH VIÊN PHỤ TRÁCH PROMPT DUYỆT – KHÔNG DÙNG CHO THỰC NGHIỆM C1/C2/C3.
  *
  * <p>Prompt sinh câu Đúng/Sai và prompt Solver cho câu Đúng/Sai (thiết kế bản sửa 1, mục 10; GĐ3). Không sửa
  * {@link PromptBuilder}; chỉ dùng lại {@link PromptBuilder#ESCAPE_HINT}. Nhãn bản nháp nằm ở Javadoc và ở
@@ -16,7 +16,7 @@ import java.util.List;
  */
 public final class TfPromptDraftV0 {
 
-    public static final String PROMPT_VERSION = "tf-v0-draft";
+    public static final String PROMPT_VERSION = "tf-v1-draft";
 
     public static final String GENERATION_RESPONSE_SCHEMA_JSON = """
             {"type":"OBJECT","properties":{
@@ -54,6 +54,11 @@ public final class TfPromptDraftV0 {
 
     private static final List<String> KEYS = List.of("a", "b", "c", "d");
 
+    /** Câu dặn đi kèm câu nguồn: câu nguồn chỉ định hướng dạng bài và kiến thức, phải tạo bài toán mới. */
+    static final String NEW_PROBLEM_RULE = "Câu hỏi nguồn chỉ để định hướng dạng bài và kiến thức cần kiểm tra. "
+            + "BẮT BUỘC tạo một bài toán MỚI với số liệu, biểu thức hoặc ngữ cảnh khác câu hỏi nguồn; "
+            + "không chép lại phương trình, biểu thức hay số liệu của câu hỏi nguồn vào đề dẫn hay các ý.";
+
     private TfPromptDraftV0() {}
 
     /** @param statementDifficulties mức mục tiêu của 4 ý theo thứ tự a-d */
@@ -64,6 +69,22 @@ public final class TfPromptDraftV0 {
             String learningOutcome,
             String sourceQuestion,
             List<Difficulty> statementDifficulties) {
+        return buildGenerationPrompt(subjectName, gradeLevel, topic, learningOutcome, sourceQuestion,
+                statementDifficulties, List.of());
+    }
+
+    /**
+     * Prompt gửi model: prompt gốc cộng danh sách đề dẫn và 4 ý của các câu đã sinh trước đó (tối đa
+     * {@link PreviousQuestion#MAX_ITEMS}), đặt sau câu hỏi nguồn, kèm yêu cầu không lặp lại bài toán hay số liệu.
+     */
+    public static String buildGenerationPrompt(
+            String subjectName,
+            Integer gradeLevel,
+            String topic,
+            String learningOutcome,
+            String sourceQuestion,
+            List<Difficulty> statementDifficulties,
+            List<PreviousQuestion> previous) {
         StringBuilder sb = new StringBuilder();
         sb.append("Bạn là giáo viên Toán THCS biên soạn 1 câu hỏi ĐÚNG/SAI: một đề dẫn chung và đúng 4 ý a, b, c, d.\n");
         sb.append("Môn học: ").append(subjectName != null ? subjectName : "Toán").append("\n");
@@ -78,7 +99,10 @@ public final class TfPromptDraftV0 {
         }
         if (sourceQuestion != null && !sourceQuestion.isBlank()) {
             sb.append("Câu hỏi nguồn / ngữ liệu tham khảo: ").append(sourceQuestion).append("\n");
+            // Độ đa dạng (yêu cầu ngày 22/10): câu nguồn chỉ định hướng, không được chép lại số liệu.
+            sb.append(NEW_PROBLEM_RULE).append("\n");
         }
+        sb.append(PreviousQuestion.section(previous, true));
         if (statementDifficulties != null && statementDifficulties.size() == 4) {
             StringBuilder levels = new StringBuilder();
             for (int i = 0; i < 4; i++) {
