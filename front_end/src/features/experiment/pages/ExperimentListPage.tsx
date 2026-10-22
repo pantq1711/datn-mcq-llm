@@ -1,9 +1,10 @@
-import { Button, Card, Col, Form, Input, Row, Select, Space, Table, Tag, Typography, } from "antd";
+import { message, Button, Card, Col, Form, Input, Row, Select, Space, Table, Tag, Typography, } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { BarChartOutlined, FilterOutlined, ReloadOutlined } from "@ant-design/icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
+import { getCatalogSubjects } from "../services/experimentApi";
+import type { SubjectOption } from "../types/experiment.types";
 import "./ExperimentListPage.css";
 import type { ExperimentRun } from "../types/experiment.types";
 
@@ -15,13 +16,6 @@ interface ExperimentFilterValues {
     strategy?: string;
     sourceKeyword?: string;
 }
-
-const subjectOptions = [
-    { label: "Toán học", value: 1 },
-    { label: "Vật lý", value: 2 },
-    { label: "Hóa học", value: 3 },
-    { label: "Sinh học", value: 4 },
-];
 
 const modelOptions = [
     { label: "GPT-4o-mini", value: "gpt-4o-mini" },
@@ -230,6 +224,28 @@ export default function ExperimentListPage() {
     const [filteredExperiments, setFilteredExperiments] =
         useState<ExperimentRun[]>(mockExperiments);
 
+    const [subjectOptions, setSubjectOptions] = useState<SubjectOption[]>([]);
+    const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
+    useEffect(() => {
+        const fetchSubjects = async () => {
+            setLoadingSubjects(true);
+            try {
+                const subjects = await getCatalogSubjects();
+                const options = subjects.map((s) => ({
+                    label: s.name,
+                    value: s.id,
+                }));
+                setSubjectOptions(options);
+            } catch (error) {
+                console.error("Lỗi khi tải danh sách môn học:", error);
+                message.error("Không thể tải danh sách môn học");
+            } finally {
+                setLoadingSubjects(false);
+            }
+        };
+        fetchSubjects();
+    }, []);
+
     const handleFilter = (values: ExperimentFilterValues) => {
         let results = [...mockExperiments];
 
@@ -296,6 +312,7 @@ export default function ExperimentListPage() {
                                 <Select
                                     allowClear
                                     placeholder="Chọn môn học"
+                                    loading={loadingSubjects}
                                     options={subjectOptions}
                                 />
                             </Form.Item>

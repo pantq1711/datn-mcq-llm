@@ -2,19 +2,9 @@ import { Alert, Col, Empty, Row, Skeleton, Space, Tag, Typography } from "antd";
 import { ClockCircleOutlined, FileTextOutlined, BookOutlined } from "@ant-design/icons";
 
 import "./ExamPreview.css";
+import type { ExamPreviewData } from "../types/exam.types";
 
 const { Title } = Typography;
-
-export interface ExamPreviewData {
-    title: string;
-    subject: string;
-    questionCount: number;
-    duration: number;
-    easyCount: number;
-    mediumCount: number;
-    hardCount: number;
-    instructions?: string;
-}
 
 interface ExamPreviewProps {
     exam?: ExamPreviewData | null;

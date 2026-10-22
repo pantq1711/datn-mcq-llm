@@ -1,28 +1,10 @@
-import {
-    Button,
-    Space,
-    Table,
-    Tag,
-    Tooltip,
-    Typography,
-} from "antd";
+import { Button, Space, Table, Tag, Tooltip, Typography, } from "antd";
 import type { TableColumnsType, TablePaginationConfig } from "antd";
 import { EyeOutlined } from "@ant-design/icons";
 import "./QuestionTable.css";
+import type { QuestionDifficulty, QuestionStatus, QuestionTableItem } from "../types/questionBank.types";
 
 const { Text } = Typography;
-
-export type QuestionDifficulty = "EASY" | "MEDIUM" | "HARD";
-export type QuestionStatus = "APPROVED" | "EDITED";
-
-export interface QuestionTableItem {
-    id: number;
-    questionText: string;
-    subject: string;
-    difficulty: QuestionDifficulty;
-    status: QuestionStatus;
-    createdAt: string;
-}
 
 interface QuestionTableProps {
     data: QuestionTableItem[];
@@ -35,26 +17,26 @@ interface QuestionTableProps {
 }
 
 const difficultyMap = {
-    EASY: {
+    easy: {
         label: "Dễ",
         color: "green",
     },
-    MEDIUM: {
+    medium: {
         label: "Trung bình",
         color: "orange",
     },
-    HARD: {
+    hard: {
         label: "Khó",
         color: "red",
     },
 } as const;
 
 const statusMap = {
-    APPROVED: {
+    approved: {
         label: "Đã duyệt",
         color: "green",
     },
-    EDITED: {
+    edited: {
         label: "Đã chỉnh sửa",
         color: "blue",
     },

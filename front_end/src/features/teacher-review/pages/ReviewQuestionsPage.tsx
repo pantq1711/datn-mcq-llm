@@ -13,9 +13,9 @@ const reviewQuestions: ReviewQuestion[] = [
         question:
             "Một vật chuyển động thẳng đều với vận tốc 5 m/s. Trong 4 giây, vật đi được quãng đường bao nhiêu?",
         subject: "Vật lý",
-        qualityStatus: "PASSED",
-        reviewStatus: "PENDING",
-        difficulty: "MEDIUM",
+        qualityStatus: "qc_passed",
+        reviewStatus: "pending",
+        difficulty: "medium",
         createdAt: "05/10/2026 14:30",
     },
     {
@@ -23,9 +23,9 @@ const reviewQuestions: ReviewQuestion[] = [
         question:
             "Hành tinh nào nằm gần Mặt Trời nhất trong hệ Mặt Trời?",
         subject: "Vật lý",
-        qualityStatus: "PASSED",
-        reviewStatus: "PENDING",
-        difficulty: "EASY",
+        qualityStatus: "qc_passed",
+        reviewStatus: "pending",
+        difficulty: "easy",
         createdAt: "05/10/2026 14:18",
     },
     {
@@ -33,9 +33,9 @@ const reviewQuestions: ReviewQuestion[] = [
         question:
             "Cơ quan nào giữ vai trò bơm máu đi khắp cơ thể người?",
         subject: "Sinh học",
-        qualityStatus: "FAILED",
-        reviewStatus: "PENDING",
-        difficulty: "EASY",
+        qualityStatus: "format_failed",
+        reviewStatus: "pending",
+        difficulty: "easy",
         createdAt: "05/10/2026 13:52",
     },
 ];
@@ -43,7 +43,7 @@ const reviewQuestions: ReviewQuestion[] = [
 const getQualityStatusTag = (
     status: ReviewQuestion["qualityStatus"],
 ) => {
-    if (status === "PASSED") {
+    if (status === "qc_passed") {
         return <Tag color="success">Đạt QC</Tag>;
     }
 
@@ -54,16 +54,16 @@ const getReviewStatusTag = (
     status: ReviewQuestion["reviewStatus"],
 ) => {
     switch (status) {
-        case "PENDING":
+        case "pending":
             return <Tag color="processing">Chờ duyệt</Tag>;
 
-        case "APPROVED":
+        case "approved_as_is":
             return <Tag color="success">Đã duyệt</Tag>;
 
-        case "EDITED":
+        case "approved_with_edit":
             return <Tag color="warning">Đã chỉnh sửa</Tag>;
 
-        case "REJECTED":
+        case "rejected":
             return <Tag color="error">Từ chối</Tag>;
 
         default:
@@ -75,13 +75,13 @@ const getDifficultyTag = (
     difficulty: ReviewQuestion["difficulty"],
 ) => {
     switch (difficulty) {
-        case "EASY":
+        case "easy":
             return <Tag>Dễ</Tag>;
 
-        case "MEDIUM":
+        case "medium":
             return <Tag color="blue">Trung bình</Tag>;
 
-        case "HARD":
+        case "hard":
             return <Tag color="purple">Khó</Tag>;
 
         default:
@@ -175,8 +175,8 @@ export default function ReviewQuestionsPage() {
                         placeholder="Trạng thái QC"
                         allowClear
                         options={[
-                            { label: "Đạt QC", value: "PASSED" },
-                            { label: "Không đạt QC", value: "FAILED" },
+                            { label: "Đạt QC", value: "qc_passed" },
+                            { label: "Không đạt QC", value: "format_failed" },
                         ]}
                     />
 
@@ -185,10 +185,10 @@ export default function ReviewQuestionsPage() {
                         placeholder="Trạng thái duyệt"
                         allowClear
                         options={[
-                            { label: "Chờ duyệt", value: "PENDING" },
-                            { label: "Đã duyệt", value: "APPROVED" },
-                            { label: "Đã chỉnh sửa", value: "EDITED" },
-                            { label: "Từ chối", value: "REJECTED" },
+                            { label: "Chờ duyệt", value: "pending" },
+                            { label: "Đã duyệt", value: "approved_as_is" },
+                            { label: "Đã chỉnh sửa", value: "approved_with_edit" },
+                            { label: "Từ chối", value: "rejected" },
                         ]}
                     />
 
@@ -218,9 +218,17 @@ export default function ReviewQuestionsPage() {
                         showTotal: (total) => `Tổng ${total} câu hỏi`,
                     }}
                     scroll={{ x: 1000 }}
+                    rowClassName={(record) =>
+                        record.qualityStatus === "qc_passed"
+                            ? "review-row-clickable"
+                            : "review-row-disabled"
+                    }
                     onRow={(record) => ({
                         onClick: () => {
-                            navigate(`/review/${record.id}`);
+                            // Chỉ cho phép chuyển trang khi đạt QC
+                            if (record.qualityStatus === "qc_passed") {
+                                navigate(`/review/${record.id}`);
+                            }
                         },
                     })}
                 />

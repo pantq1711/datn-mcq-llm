@@ -1,30 +1,13 @@
 import { useRef, useState } from "react";
 import { Alert, Button, Checkbox, Col, Form, Input, InputNumber, Row, Select, Space, Typography, } from "antd";
 import { ClearOutlined, PlayCircleOutlined, } from "@ant-design/icons";
-
+import type { ExamSubjectOption, ExamGenerationValues } from "../types/exam.types";
 import "./ExamGenerationForm.css";
-
-export interface ExamGenerationValues {
-    title: string;
-    subjectId?: number;
-    questionCount?: number;
-    duration?: number;
-    examCodeCount?: number;
-    easyCount?: number;
-    mediumCount?: number;
-    hardCount?: number;
-    shuffleQuestions: boolean;
-    shuffleOptions: boolean;
-}
-
-export interface ExamSubjectOption {
-    label: string;
-    value: number;
-}
 
 interface ExamGenerationFormProps {
     subjects: ExamSubjectOption[];
     loading?: boolean;
+    loadingSubjects?: boolean;
     initialValues?: Partial<ExamGenerationValues>;
     onGenerate?: (values: ExamGenerationValues) => void;
     onReset?: () => void;
@@ -45,6 +28,7 @@ const defaultValues: ExamGenerationValues = {
 export default function ExamGenerationForm({
     subjects,
     loading = false,
+    loadingSubjects = false,
     initialValues,
     onGenerate,
     onReset,
@@ -245,8 +229,10 @@ export default function ExamGenerationForm({
                         <Select
                             size="large"
                             placeholder="Chọn môn học"
+                            loading={loadingSubjects}
                             options={subjects}
                         />
+
                     </Form.Item>
                 </Col>
 

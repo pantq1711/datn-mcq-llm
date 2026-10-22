@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { Alert, Button, Card, Col, Drawer, Form, Input, Row, Select, Space, Statistic, Table, Tag, Typography, } from "antd";
+import { useState, useEffect } from "react";
+import { message, Alert, Button, Card, Col, Drawer, Form, Input, Row, Select, Space, Statistic, Table, Tag, Typography, } from "antd";
+import { getCatalogSubjects } from "../services/generationApi";
+import type { SubjectOption } from "../types/generation.types";
 import { EyeOutlined, FilterOutlined, ReloadOutlined, } from "@ant-design/icons";
 
 import GenerationResult from "../components/GenerationResult";
@@ -45,25 +47,6 @@ interface GenerationFilterValues {
     model?: string;
     status?: GenerationStatus;
 }
-
-const subjectOptions = [
-    {
-        label: "Toán học",
-        value: "MATH",
-    },
-    {
-        label: "Vật lý",
-        value: "PHYSICS",
-    },
-    {
-        label: "Hóa học",
-        value: "CHEMISTRY",
-    },
-    {
-        label: "Sinh học",
-        value: "BIOLOGY",
-    },
-];
 
 const strategyOptions = [
     {
@@ -189,7 +172,6 @@ const mockGenerationHistory: GenerationHistoryItem[] = [
     },
 ];
 
-// Thêm các hàm helper này vào trước phần generationColumns
 const getSourceColor = (type: SourceType) => {
     switch (type) {
         case "PDF":
@@ -317,6 +299,31 @@ export default function GenerationHistoryPage() {
     const [selectedGeneration, setSelectedGeneration] =
         useState<GenerationHistoryItem | null>(null);
 
+    const [subjectOptions, setSubjectOptions] = useState<SubjectOption[]>([]);
+    const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
+
+    useEffect(() => {
+        const fetchSubjects = async () => {
+            setLoadingSubjects(true);
+            try {
+                const subjects = await getCatalogSubjects();
+                // Map sang options cho Select
+                const options = subjects.map((s) => ({
+                    label: s.name,
+                    value: s.code || s.id, // dùng code hoặc id tương thích với filter
+                }));
+                setSubjectOptions(options);
+            } catch (error) {
+                console.error("Lỗi khi tải danh sách môn học:", error);
+                message.error("Không thể tải danh sách môn học");
+            } finally {
+                setLoadingSubjects(false);
+            }
+        };
+        fetchSubjects();
+    }, []);
+
+
     const handleFilter = (values: GenerationFilterValues) => {
         console.log("Generation history filters:", values);
     };
@@ -408,6 +415,7 @@ export default function GenerationHistoryPage() {
                                     <Select
                                         allowClear
                                         placeholder="Chọn môn"
+                                        loading={loadingSubjects}
                                         options={subjectOptions}
                                     />
                                 </Form.Item>

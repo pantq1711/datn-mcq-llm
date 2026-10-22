@@ -51,3 +51,52 @@ export interface GenerationStatusResponse {
     currentQuestion?: number;
     errorMessage?: string;
 }
+
+export interface Subject {
+    id: number;
+    code: string;
+    name: string;
+    description?: string;
+}
+
+export interface SubjectOption {
+    label: string;
+    value: string | number;
+}
+
+export interface GenerateQuestionPayload {
+    subjectId?: number;
+    templateId?: number;
+    lessonContent: string;
+    selectedSegments: Array<{
+        id: string;
+        text: string;
+        startOffset: number;
+        endOffset: number;
+    }>;
+    questionCount: number;
+    questionMatrix: Array<{
+        topicId: string;
+        topicName: string;
+        cognitiveLevel: "BIET" | "HIEU" | "VAN_DUNG";
+        questionCount: number;
+    }>;
+}
+
+
+export interface QuestionTemplate {
+    id: number;
+    subjectId: number;
+    subjectName?: string;
+    sourceQuestion: string;
+    version?: number;
+    isActive?: boolean;
+}
+
+export interface TemplateOption {
+    id: number;
+    label: string;
+    sourceQuestion: string;
+    subject: string;
+    version?: number;
+}

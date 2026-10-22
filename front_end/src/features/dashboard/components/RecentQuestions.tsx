@@ -11,6 +11,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import "./RecentQuestions.css";
+import type { ReviewDecisions } from "../../teacher-review/types/review.types";
 
 const { Text } = Typography;
 
@@ -18,7 +19,7 @@ interface RecentQuestion {
     id: number;
     question: string;
     subject: string;
-    reviewStatus: "PENDING" | "APPROVED" | "EDITED" | "REJECTED";
+    reviewStatus: "pending" | ReviewDecisions;
     createdAt: string;
 }
 
@@ -28,7 +29,7 @@ const recentQuestions: RecentQuestion[] = [
         question:
             "Một vật chuyển động thẳng đều với vận tốc 5 m/s. Trong 4 giây, vật đi được quãng đường bao nhiêu?",
         subject: "Vật lý",
-        reviewStatus: "PENDING",
+        reviewStatus: "pending",
         createdAt: "05/10/2026 14:30",
     },
     {
@@ -36,7 +37,7 @@ const recentQuestions: RecentQuestion[] = [
         question:
             "Hành tinh nào nằm gần Mặt Trời nhất trong hệ Mặt Trời?",
         subject: "Vật lý",
-        reviewStatus: "PENDING",
+        reviewStatus: "pending",
         createdAt: "05/10/2026 14:18",
     },
     {
@@ -44,7 +45,7 @@ const recentQuestions: RecentQuestion[] = [
         question:
             "Cơ quan nào giữ vai trò bơm máu đi khắp cơ thể người?",
         subject: "Sinh học",
-        reviewStatus: "APPROVED",
+        reviewStatus: "approved_as_is",
         createdAt: "05/10/2026 13:52",
     },
     {
@@ -52,7 +53,7 @@ const recentQuestions: RecentQuestion[] = [
         question:
             "Phản ứng giữa axit và bazơ tạo ra sản phẩm chính nào?",
         subject: "Hóa học",
-        reviewStatus: "EDITED",
+        reviewStatus: "approved_with_edit",
         createdAt: "05/10/2026 13:35",
     },
     {
@@ -60,7 +61,7 @@ const recentQuestions: RecentQuestion[] = [
         question:
             "Nghiệm của phương trình bậc hai được xác định dựa trên đại lượng nào?",
         subject: "Toán",
-        reviewStatus: "REJECTED",
+        reviewStatus: "rejected",
         createdAt: "05/10/2026 13:10",
     },
 ];
@@ -69,16 +70,16 @@ const getReviewStatusTag = (
     status: RecentQuestion["reviewStatus"],
 ) => {
     switch (status) {
-        case "PENDING":
+        case "pending":
             return <Tag color="processing">Chờ duyệt</Tag>;
 
-        case "APPROVED":
+        case "approved_as_is":
             return <Tag color="success">Đã duyệt</Tag>;
 
-        case "EDITED":
+        case "approved_with_edit":
             return <Tag color="warning">Đã chỉnh sửa</Tag>;
 
-        case "REJECTED":
+        case "rejected":
             return <Tag color="error">Từ chối</Tag>;
 
         default:

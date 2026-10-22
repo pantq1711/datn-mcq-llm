@@ -1,30 +1,13 @@
-import { useState } from "react";
-import { Card, Typography } from "antd";
+import { useEffect, useState } from "react";
+import { Card, message, Typography } from "antd";
 import QuestionDetail from "../components/QuestionDetail";
-import QuestionFilters, { type QuestionFilterValues, } from "../components/QuestionFilters";
-import QuestionTable, { type QuestionTableItem, } from "../components/QuestionTable";
+import QuestionFilters from "../components/QuestionFilters";
+import QuestionTable from "../components/QuestionTable";
 import "./QuestionBankPage.css";
+import type { SubjectOption, BankItemDetail, QuestionTableItem, QuestionFilterValues } from "../types/questionBank.types";
+import { getCatalogSubjects, getBankItems, getBankItemDetail } from "../services/questionBankApi";
 
 const { Title } = Typography;
-
-const subjectOptions = [
-    {
-        label: "Toán học",
-        value: 1,
-    },
-    {
-        label: "Vật lý",
-        value: 2,
-    },
-    {
-        label: "Hóa học",
-        value: 3,
-    },
-    {
-        label: "Sinh học",
-        value: 4,
-    },
-];
 
 const initialFilters: QuestionFilterValues = {
     keyword: "",
@@ -33,66 +16,116 @@ const initialFilters: QuestionFilterValues = {
     status: null,
 };
 
-const mockQuestions: QuestionTableItem[] = [
-    {
-        id: 1,
-        questionText:
-            "Phản ứng hóa học nào sau đây là phản ứng oxi hóa - khử?",
-        subject: "Hóa học",
-        difficulty: "MEDIUM",
-        status: "APPROVED",
-        createdAt: "06/10/2026",
-    },
-    {
-        id: 2,
-        questionText:
-            "Định luật II Newton được biểu diễn bằng công thức nào?",
-        subject: "Vật lý",
-        difficulty: "EASY",
-        status: "APPROVED",
-        createdAt: "05/10/2026",
-    },
-    {
-        id: 3,
-        questionText:
-            "Hàm số nào sau đây đồng biến trên khoảng xác định của nó?",
-        subject: "Toán học",
-        difficulty: "HARD",
-        status: "EDITED",
-        createdAt: "04/10/2026",
-    },
-];
-
 export default function QuestionBankPage() {
     const [filters, setFilters] =
         useState<QuestionFilterValues>(initialFilters);
 
-    const [selectedQuestion, setSelectedQuestion] =
-        useState<QuestionTableItem | null>(null);
+    const [selectedQuestion, setSelectedQuestion] = useState<BankItemDetail | null>(null);
+
+    const [subjectOptions, setSubjectOptions] = useState<SubjectOption[]>([]);
+    const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
+
+    const [questions, setQuestions] = useState<QuestionTableItem[]>([]);
+    const [totalQuestions, setTotalQuestions] = useState<number>(0);
+    const [page, setPage] = useState<number>(1);
+    const [pageSize, setPageSize] = useState<number>(10);
+    const [loadingTable, setLoadingTable] = useState<boolean>(false);
+
+    const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
+    const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
+
+    useEffect(() => {
+        const fetchSubjects = async () => {
+            setLoadingSubjects(true);
+            try {
+                const subjects = await getCatalogSubjects();
+                // Map dữ liệu API về format { label, value } cho antd Select
+                const options = subjects.map((s) => ({
+                    label: s.name,
+                    value: s.id,
+                }));
+                setSubjectOptions(options);
+            } catch (error) {
+                console.error("Lỗi khi tải danh sách môn học:", error);
+                message.error("Không thể tải danh sách môn học");
+            } finally {
+                setLoadingSubjects(false);
+            }
+        };
+        fetchSubjects();
+    }, []);
+
+    const fetchQuestions = async (currentPage = page, currentPageSize = pageSize, currentFilters = filters) => {
+        setLoadingTable(true);
+        try {
+            const res = await getBankItems({
+                page: currentPage,
+                pageSize: currentPageSize,
+                ...currentFilters,
+            });
+            setQuestions(res.items || []);
+            setTotalQuestions(res.total || 0);
+        } catch (error) {
+            console.error("Lỗi khi tải danh sách câu hỏi ngân hàng:", error);
+            message.error("Không thể tải danh sách câu hỏi.");
+        } finally {
+            setLoadingTable(false);
+        }
+    };
+
+    // Gọi khi lần đầu mở trang hoặc khi phân trang thay đổi
+    useEffect(() => {
+        fetchQuestions(page, pageSize);
+    }, [page, pageSize]);
+
 
     const handleFilter = () => {
-        console.log("Apply filters:", filters);
-
-        // TODO:
-        // Gọi API lấy danh sách câu hỏi theo filters.
+        setPage(1); // Reset về trang 1 khi lọc
+        fetchQuestions(1, pageSize, filters);
     };
 
     const handleReset = () => {
         setFilters(initialFilters);
-
-        // TODO:
-        // Gọi lại API để lấy toàn bộ câu hỏi.
+        setPage(1);
+        fetchQuestions(1, pageSize, initialFilters);
     };
 
-    const handleViewQuestion = (question: QuestionTableItem) => {
-        setSelectedQuestion(question);
+    const handleViewQuestion = async (questionItem: QuestionTableItem) => {
+        setIsDetailOpen(true);
+        setLoadingDetail(true);
+        try {
+            const detail = await getBankItemDetail(questionItem.id);
+            setSelectedQuestion(detail);
+        } catch (error) {
+            console.error("Lỗi khi tải chi tiết câu hỏi:", error);
+            message.error("Không thể tải chi tiết câu hỏi.");
+            // Fallback: nếu API chi tiết lỗi, hiển thị tạm thông tin đã có từ bảng
+            setSelectedQuestion({
+                id: questionItem.id,
+                questionText: questionItem.questionText,
+                optionA: "Không có dữ liệu",
+                optionB: "Không có dữ liệu",
+                optionC: "Không có dữ liệu",
+                optionD: "Không có dữ liệu",
+                correctOption: "A",
+                subject: questionItem.subject,
+                difficulty: questionItem.difficulty,
+                status: questionItem.status,
+                createdAt: questionItem.createdAt,
+            });
+        } finally {
+            setLoadingDetail(false);
+        }
     };
 
-    const handlePageChange = (page: number, pageSize: number) => {
-        console.log("Page:", page, "Page size:", pageSize);
+    const handleCloseDetail = () => {
+        setIsDetailOpen(false);
+        setSelectedQuestion(null);
+    };
 
-        // TODO:
-        // Gọi API với page, pageSize và filters.
+    const handlePageChange = (newPage: number, newPageSize: number) => {
+        setPage(newPage);
+        setPageSize(newPageSize);
     };
 
     return (
@@ -108,6 +141,7 @@ export default function QuestionBankPage() {
                     <QuestionFilters
                         value={filters}
                         subjects={subjectOptions}
+                        loadingSubjects={loadingSubjects}
                         onChange={setFilters}
                         onFilter={handleFilter}
                         onReset={handleReset}
@@ -118,10 +152,11 @@ export default function QuestionBankPage() {
             <div className="question-bank-page-table">
                 <Card>
                     <QuestionTable
-                        data={mockQuestions}
-                        total={mockQuestions.length}
-                        page={1}
-                        pageSize={10}
+                        data={questions}
+                        total={totalQuestions}
+                        page={page}
+                        pageSize={pageSize}
+                        loading={loadingTable}
                         onPageChange={handlePageChange}
                         onView={handleViewQuestion}
                     />
@@ -129,24 +164,10 @@ export default function QuestionBankPage() {
             </div>
 
             <QuestionDetail
-                open={selectedQuestion !== null}
-                question={
-                    selectedQuestion
-                        ? {
-                            ...selectedQuestion,
-                            optionA: "Phương án A",
-                            optionB: "Phương án B",
-                            optionC: "Phương án C",
-                            optionD: "Phương án D",
-                            correctOption: "A",
-                            subject: selectedQuestion.subject,
-                            difficulty: selectedQuestion.difficulty,
-                            status: selectedQuestion.status,
-                            createdAt: selectedQuestion.createdAt,
-                        }
-                        : null
-                }
-                onClose={() => setSelectedQuestion(null)}
+                open={isDetailOpen}
+                loading={loadingDetail}
+                question={selectedQuestion}
+                onClose={handleCloseDetail}
             />
         </div>
     );

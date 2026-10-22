@@ -61,3 +61,16 @@ export interface CreateExperimentPayload {
     contentSource: ContentSource;
     selectedSegments: SelectedSegment[];
 }
+
+export interface Subject {
+    id: number;
+    code: string;
+    name: string;
+    description?: string;
+}
+
+export interface SubjectOption {
+    label: string;
+    value: number;
+}
+

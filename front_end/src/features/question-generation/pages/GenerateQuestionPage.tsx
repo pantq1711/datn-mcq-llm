@@ -1,38 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-    Alert,
-    Button,
-    Card,
-    Input,
-    InputNumber,
-    Modal,
-    Table,
-    Typography,
-    message,
-} from "antd";
+import { Select, Alert, Button, Card, Input, InputNumber, Modal, Table, Typography, message, } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import {
-    DeleteOutlined,
-    HistoryOutlined,
-    PlusOutlined,
-    ThunderboltOutlined,
-} from "@ant-design/icons";
+import { DeleteOutlined, HistoryOutlined, PlusOutlined, ThunderboltOutlined, } from "@ant-design/icons";
 
 import LessonContentInput from "../components/LessonContentInput";
 import TextSegmentSelector from "../components/TextSegmentSelector";
 import GenerationProgress from "../components/GenerationProgress";
 import GenerationResult from "../components/GenerationResult";
+import TemplateSelector from "../components/TemplateSelector";
 
-import {
-    createGenerationTask,
-    getGenerationStatus,
-    getGenerationResult,
-} from "../services/generationApi";
-import type {
-    GenerationResultItem,
-    GenerationStatus,
-} from "../types/generation.types";
+import { getCatalogTemplates, getCatalogSubjects, createGenerationTask, getGenerationStatus, getGenerationResult, } from "../services/generationApi";
+import type { TemplateOption, SubjectOption, GenerationResultItem, GenerationStatus, } from "../types/generation.types";
 
 import "./GenerateQuestionPage.css";
 
@@ -99,6 +78,66 @@ export default function GenerateQuestionPage() {
     const [topicDrafts, setTopicDrafts] = useState<MatrixTopic[]>(initialTopics);
 
     const isRunning = generationStatus === "RUNNING";
+
+    const [selectedSubjectId, setSelectedSubjectId] = useState<number | undefined>();
+    const [subjectOptions, setSubjectOptions] = useState<SubjectOption[]>([]);
+    const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
+
+    const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+    const [templateOptions, setTemplateOptions] = useState<TemplateOption[]>([]);
+    const [loadingTemplates, setLoadingTemplates] = useState<boolean>(false);
+
+
+    useEffect(() => {
+        const fetchSubjects = async () => {
+            setLoadingSubjects(true);
+            try {
+                const subjects = await getCatalogSubjects();
+                const options = subjects.map((s) => ({
+                    label: s.name,
+                    value: s.id,
+                }));
+                setSubjectOptions(options);
+            } catch (error) {
+                console.error("Lỗi khi tải danh sách môn học:", error);
+                message.error("Không thể tải danh sách môn học");
+            } finally {
+                setLoadingSubjects(false);
+            }
+        };
+
+        fetchSubjects();
+    }, []);
+
+    useEffect(() => {
+        const fetchTemplates = async () => {
+            setLoadingTemplates(true);
+            try {
+                const templates = await getCatalogTemplates(selectedSubjectId);
+                const options: TemplateOption[] = templates.map((t) => ({
+                    id: t.id,
+                    label: `Mẫu #${t.id}`,
+                    subject: t.subjectName || "Môn học",
+                    version: t.version,
+                    sourceQuestion: t.sourceQuestion,
+                }));
+                setTemplateOptions(options);
+
+                // Nếu môn học thay đổi mà template đang chọn không thuộc môn mới thì reset
+                if (selectedTemplateId && !options.some(o => o.id === selectedTemplateId)) {
+                    setSelectedTemplateId(null);
+                }
+            } catch (error) {
+                console.error("Lỗi khi tải câu hỏi mẫu:", error);
+                message.error("Không thể tải danh sách câu hỏi mẫu.");
+            } finally {
+                setLoadingTemplates(false);
+            }
+        };
+
+        fetchTemplates();
+    }, [selectedSubjectId]);
+
 
     const totalByTopic = (topicId: string) =>
         cognitiveLevels.reduce(
@@ -230,7 +269,7 @@ export default function GenerateQuestionPage() {
                     value={matrixCounts[row.key][topic.id] ?? 0}
                     onChange={(value) => updateMatrixCell(row.key, topic.id, value)}
                     className="generate-question-page-matrix-number"
-                    aria-label={`${row.label} - ${topic.name}`}
+                    aria-label={`${row.label} ${topic.name}`}
                 />
             ),
         })),
@@ -372,6 +411,33 @@ export default function GenerateQuestionPage() {
                     title="1. Nội dung bài học"
                     className="generate-question-page-card"
                 >
+                    <div className="generate-question-subject-wrapper">
+                        <Text strong className="generate-question-subject-label">
+                            Môn học:
+                        </Text>
+                        <Select
+                            placeholder="Chọn môn học"
+                            allowClear
+                            loading={loadingSubjects}
+                            options={subjectOptions}
+                            value={selectedSubjectId}
+                            onChange={(value) => setSelectedSubjectId(value)}
+                            className="generate-question-subject-select"
+                            size="large"
+                            disabled={isRunning}
+                        />
+                    </div>
+
+                    <div style={{ marginTop: 10, marginBottom: 20 }}>
+                        <TemplateSelector
+                            value={selectedTemplateId}
+                            options={templateOptions}
+                            loading={loadingTemplates}
+                            disabled={isRunning}
+                            onChange={setSelectedTemplateId}
+                        />
+                    </div>
+
                     <LessonContentInput
                         value={lessonContent}
                         onChange={(content) => {
@@ -415,7 +481,6 @@ export default function GenerateQuestionPage() {
                     }
                     className="generate-question-page-card"
                 >
-
                     <div className="generate-question-page-matrix-table">
                         <Table<MatrixTableRow>
                             rowKey="key"

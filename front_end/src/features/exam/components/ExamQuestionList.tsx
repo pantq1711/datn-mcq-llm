@@ -2,21 +2,9 @@ import { Button, Empty, List, Skeleton, Space, Tag, Tooltip, Typography } from "
 import { DeleteOutlined } from "@ant-design/icons";
 
 import "./ExamQuestionList.css";
+import type { ExamQuestionDifficulty, ExamQuestionItem } from "../types/exam.types";
 
 const { Text, Paragraph } = Typography;
-
-export type ExamQuestionDifficulty = "EASY" | "MEDIUM" | "HARD";
-
-export interface ExamQuestionItem {
-    id: number;
-    questionText: string;
-    optionA: string;
-    optionB: string;
-    optionC: string;
-    optionD: string;
-    correctOption: "A" | "B" | "C" | "D";
-    difficulty?: ExamQuestionDifficulty;
-}
 
 interface ExamQuestionListProps {
     questions: ExamQuestionItem[];
@@ -31,15 +19,15 @@ const difficultyConfig: Record<
         color: string;
     }
 > = {
-    EASY: {
+    easy: {
         label: "Biết",
         color: "green",
     },
-    MEDIUM: {
+    medium: {
         label: "Hiểu",
         color: "orange",
     },
-    HARD: {
+    hard: {
         label: "Vận dụng",
         color: "red",
     },

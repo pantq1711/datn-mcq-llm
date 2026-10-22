@@ -1,7 +1,9 @@
 import { useState } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { Card, Typography, Input, Alert } from "antd";
+import { Card, Typography, Input, Alert, Button, Space, message } from "antd";
+import { ThunderboltOutlined } from "@ant-design/icons";
+import { seedDemoMathQuestions } from "../../teacher-review/services/teacherReviewApi";
 
 const { Title, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -41,6 +43,21 @@ export function validateLatex(
 }
 
 export default function TestKaTeX() {
+    const [seeding, setSeeding] = useState<boolean>(false);
+
+    const handleSeedMath = async () => {
+        setSeeding(true);
+        try {
+            const res = await seedDemoMathQuestions();
+            message.success(res.message || "Đã khởi tạo dữ liệu câu hỏi Toán mẫu thành công!");
+        } catch (error) {
+            console.error("Lỗi khi seed dữ liệu Toán:", error);
+            message.error("Không thể khởi tạo dữ liệu mẫu Toán.");
+        } finally {
+            setSeeding(false);
+        }
+    };
+
     // State lưu giá trị input người dùng nhập vào
     const [inputLatex, setInputLatex] = useState(
         String.raw`\frac{-1}{2} + \frac{3}{4}`
@@ -75,7 +92,19 @@ export default function TestKaTeX() {
 
     return (
         <div style={{ padding: "24px", margin: "0 auto" }}>
-            <Card title="Trang Kiểm tra & Render KaTeX Tương Tác">
+            <Card
+                title="Trang Kiểm tra & Render KaTeX Tương Tác"
+                extra={
+                    <Button
+                        type="primary"
+                        icon={<ThunderboltOutlined />}
+                        loading={seeding}
+                        onClick={handleSeedMath}
+                    >
+                        Tạo câu hỏi Toán mẫu (Seed Demo Math)
+                    </Button>
+                }
+            >
                 <Paragraph>
                     <Title level={5}>Nhập biểu thức LaTeX của bạn:</Title>
                     <TextArea

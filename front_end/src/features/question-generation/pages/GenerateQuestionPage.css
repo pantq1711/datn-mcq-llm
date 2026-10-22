@@ -26,7 +26,7 @@
 
 .generate-question-page-content {
     width: 100%;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
 }
 
 .generate-question-page-card {
@@ -35,11 +35,31 @@
 }
 
 .generate-question-page-card .ant-card-body {
-    padding-top: 0;
+    padding-top: 12px;
 }
 
 .generate-question-page-result {
     width: 100%;
+}
+
+/* Phần chọn môn học cải tiến */
+.generate-question-subject-wrapper {
+    margin-bottom: 20px;
+    max-width: 380px;
+}
+
+.generate-question-subject-label {
+    display: block;
+    margin-bottom: 8px;
+}
+
+.generate-question-subject-select {
+    width: 100%;
+}
+
+.generate-question-page-description {
+    display: block;
+    margin-bottom: 12px;
 }
 
 /* Tiêu đề và bảng ma trận */
@@ -127,11 +147,8 @@
 
 .generate-question-page-matrix-table .ant-table-thead>tr>th {
     background-color: #f0f5ff !important;
-    /* Màu nền nhẹ (Ví dụ: xanh nhạt Ant Design Geekblue-1) */
     color: #1d39c4 !important;
-    /* Màu chữ tiêu đề */
     font-weight: 600;
-    /* Độ đậm chữ */
 }
 
 .generate-question-page-matrix-table .ant-table-bordered .ant-table-container,

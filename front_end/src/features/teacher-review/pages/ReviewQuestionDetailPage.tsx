@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { Alert, Button, Card, Col, Radio, Row, Space, Tag, Typography } from "antd";
+import { useEffect, useState } from "react";
+import { Spin, message, Alert, Button, Card, Col, Radio, Row, Space, Tag, Typography } from "antd";
 import { ArrowLeftOutlined, SaveOutlined } from "@ant-design/icons";
-import { useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 
-import type { CorrectAnswer, Difficulty, FormatStatus, QuestionDraft, ReviewDecisions } from "../types/review.types";
+import { getReviewQuestionDetail, submitQuestionReview } from "../services/teacherReviewApi";
+import type { ReviewQuestionDetail, CorrectAnswer, Difficulty, FormatStatus, QuestionDraft, ReviewDecisions, SubmitReviewPayload } from "../types/review.types";
 
 import CorrectAnswerSelector from "../components/CorrectAnswerSelector";
 import QuestionEditor from "../components/QuestionEditor";
@@ -13,26 +14,94 @@ import QuestionExplanationCard from "../components/QuestionExplanationCard";
 
 import "./ReviewQuestionDetailPage.css";
 
-const INITIAL_QUESTION: QuestionDraft = {
-    questionText:
-        "Một vật chuyển động thẳng đều với vận tốc 5 m/s. Trong 4 giây, vật đi được quãng đường bao nhiêu?",
-    optionA: "10 m",
-    optionB: "20 m",
-    optionC: "25 m",
-    optionD: "40 m",
-    correctAnswer: null,
-    explanation: "Áp dụng công thức chuyển động thẳng đều: s = v * t = 5 * 4 = 20 (mét). Do đó đáp án chính xác là phương án B.",
-};
-
 export default function ReviewQuestionDetailPage() {
+    const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+
+    const [initialQuestion, setInitialQuestion] = useState<QuestionDraft | null>(null);
+    const [question, setQuestion] = useState<QuestionDraft | null>(null);
+    const [questionDetail, setQuestionDetail] = useState<ReviewQuestionDetail | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const [submitting, setSubmitting] = useState<boolean>(false);
+
+    useEffect(() => {
+        if (!id) return;
+
+        const fetchDetail = async () => {
+            setCorrectAnswer(null);
+            setDecision(null);
+            setSelectedReasons([]);
+            setOtherReason("");
+            setLoading(true);
+            try {
+                const data = await getReviewQuestionDetail(id);
+                setQuestionDetail(data);
+
+                const draft: QuestionDraft = {
+                    questionText: data.questionText,
+                    optionA: data.optionA,
+                    optionB: data.optionB,
+                    optionC: data.optionC,
+                    optionD: data.optionD,
+                    correctAnswer: null, // Đáp án do giáo viên tự chọn
+                    explanation: data.explanation || "",
+                };
+
+                setInitialQuestion(draft);
+                setQuestion({
+                    questionText: data.questionText,
+                    optionA: data.optionA,
+                    optionB: data.optionB,
+                    optionC: data.optionC,
+                    optionD: data.optionD,
+                    correctAnswer: null, // Giữ null để giáo viên tự chọn
+                    explanation: data.explanation || "",
+                });
+
+
+                // Nếu có sẵn trạng thái format hoặc gợi ý độ khó từ QC/LLM:
+                if (data.formatStatus) setFormatStatus(data.formatStatus);
+                if (data.llmDifficulty) {
+                    const diffUpper = data.llmDifficulty.toUpperCase() as Difficulty;
+                    setDifficulty(diffUpper);
+                }
+
+            } catch (err) {
+                console.error("Lỗi khi tải chi tiết câu hỏi:", err);
+                message.error("Không thể tải thông tin câu hỏi cần duyệt.");
+            } finally {
+                setLoading(false);
+            }
+
+            if (error) {
+                return (
+                    <div style={{ padding: 40, textAlign: "center" }}>
+                        <Alert
+                            type="error"
+                            message="Lỗi tải dữ liệu"
+                            description={error}
+                            showIcon
+                            style={{ marginBottom: 16, display: "inline-block" }}
+                        />
+                        <div>
+                            <Button type="primary" onClick={handleBackToList}>
+                                Quay lại danh sách
+                            </Button>
+                        </div>
+                    </div>
+                );
+            }
+
+        };
+
+        fetchDetail();
+    }, [id]);
 
     const handleBackToList = () => {
         navigate("/review");
     };
-
-    const [question, setQuestion] =
-        useState<QuestionDraft>(INITIAL_QUESTION);
 
     const [correctAnswer, setCorrectAnswer] =
         useState<CorrectAnswer | null>(null);
@@ -63,20 +132,29 @@ export default function ReviewQuestionDetailPage() {
         decision !== null;
 
     const isRejectionValid =
-        decision === "REJECT" || forceReject
+        decision === "rejected" || forceReject
             ? selectedReasons.length > 0 || otherReason.trim().length > 0
             : true;
 
-    const hasQuestionChanged =
-        question.questionText !== INITIAL_QUESTION.questionText ||
-        question.optionA !== INITIAL_QUESTION.optionA ||
-        question.optionB !== INITIAL_QUESTION.optionB ||
-        question.optionC !== INITIAL_QUESTION.optionC ||
-        question.optionD !== INITIAL_QUESTION.optionD ||
-        question.correctAnswer !== INITIAL_QUESTION.correctAnswer;
+    const hasQuestionChanged = initialQuestion && question
+        ? question.questionText !== initialQuestion.questionText ||
+        question.optionA !== initialQuestion.optionA ||
+        question.optionB !== initialQuestion.optionB ||
+        question.optionC !== initialQuestion.optionC ||
+        question.optionD !== initialQuestion.optionD ||
+        question.correctAnswer !== initialQuestion.correctAnswer
+        : false;
+
+    if (loading || !question) {
+        return (
+            <div style={{ textAlign: "center", padding: "80px 0" }}>
+                <Spin size="large" tip="Đang tải câu hỏi..." />
+            </div>
+        );
+    }
 
     const isEditValid =
-        decision === "EDIT" && !forceReject ? hasQuestionChanged : true;
+        decision === "approved_with_edit" && !forceReject ? hasQuestionChanged : true;
 
     const isSaveDisabled = !isBasicInfoComplete || !isRejectionValid || !isEditValid;
 
@@ -89,7 +167,7 @@ export default function ReviewQuestionDetailPage() {
             value === "NONE" ||
             value === "MULTIPLE"
         ) {
-            setDecision("REJECT");
+            setDecision("rejected");
             return;
         }
 
@@ -100,7 +178,7 @@ export default function ReviewQuestionDetailPage() {
         value: ReviewDecisions,
     ) => {
         if (forceReject) {
-            setDecision("REJECT");
+            setDecision("rejected");
             return;
         }
 
@@ -119,21 +197,60 @@ export default function ReviewQuestionDetailPage() {
         setDifficulty(value);
     };
 
-    const handleSubmit = () => {
-        if (isSaveDisabled) return;
+    const handleSubmit = async () => {
+        if (isSaveDisabled || !id || !question) return;
 
-        const payload = {
-            question,
-            correctAnswer,
-            formatStatus,
-            difficulty,
-            decision,
-            selectedReasons,
-            otherReason,
+        // 1. Map decision sang giá trị DB
+        let backendDecision: SubmitReviewPayload["decision"] = "approved_as_is";
+        if (decision === "rejected" || forceReject) {
+            backendDecision = "rejected";
+        } else if (decision === "approved_with_edit") {
+            backendDecision = "approved_with_edit";
+        }
+
+        // 2. Map reviewerAnswer ('NONE' -> 'none', 'MULTIPLE' -> 'multiple')
+        const backendReviewerAnswer = (correctAnswer?.toLowerCase() ?? "none") as SubmitReviewPayload["reviewerAnswer"];
+
+        // 3. Chuẩn bị payload
+        const payload: SubmitReviewPayload = {
+            reviewerAnswer: backendReviewerAnswer,
+            formatOk: formatStatus === "qc_passed" || formatStatus === ("qc_passed" as any),
+            difficultyLabel: (difficulty?.toLowerCase() ?? "medium") as "easy" | "medium" | "hard",
+            decision: backendDecision,
+            finalOption: backendDecision === "rejected" ? null : (correctAnswer as "A" | "B" | "C" | "D"),
         };
 
-        console.log("Review result:", payload);
+        // Nếu là sửa câu hỏi
+        if (backendDecision === "approved_with_edit") {
+            payload.editedQuestionText = question.questionText;
+            payload.editedOptionA = question.optionA;
+            payload.editedOptionB = question.optionB;
+            payload.editedOptionC = question.optionC;
+            payload.editedOptionD = question.optionD;
+        }
+
+        // Nếu từ chối
+        if (backendDecision === "rejected") {
+            payload.reasons = selectedReasons.map((code) => ({
+                reasonCode: code,
+                detail: code === "other" ? otherReason : undefined,
+            }));
+        }
+
+        // 4. Gọi API
+        setSubmitting(true);
+        try {
+            await submitQuestionReview(id, payload);
+            message.success("Đã lưu đánh giá câu hỏi thành công!");
+            navigate("/review"); // Quay lại danh sách câu hỏi cần duyệt
+        } catch (err) {
+            console.error("Lỗi khi lưu đánh giá:", err);
+            message.error("Không thể lưu đánh giá. Vui lòng thử lại.");
+        } finally {
+            setSubmitting(false);
+        }
     };
+
 
     return (
         <div className="review-question-detail-page">
@@ -149,12 +266,10 @@ export default function ReviewQuestionDetailPage() {
 
                 <div className="review-page-heading">
                     <div>
-                        <Typography.Title
-                            level={2}
-                            className="review-page-title"
-                        >
-                            Đánh giá câu hỏi
+                        <Typography.Title level={2} className="review-page-title">
+                            Đánh giá câu hỏi #{id} {questionDetail?.subject && `- Môn ${questionDetail.subject}`}
                         </Typography.Title>
+
                     </div>
 
                     <Tag color="processing">
@@ -208,7 +323,6 @@ export default function ReviewQuestionDetailPage() {
                             </div>
 
                             <QuestionExplanationCard
-                                correctAnswer={question.correctAnswer}
                                 explanation={question.explanation}
                             />
                         </Card>
@@ -244,6 +358,11 @@ export default function ReviewQuestionDetailPage() {
 
                                 <Typography.Text type="secondary">
                                     Kiểm tra định dạng của câu hỏi và các phương án.
+                                    {questionDetail?.formatStatus && (
+                                        <Tag color={questionDetail.formatStatus === "qc_passed" ? "success" : "error"} style={{ marginLeft: 8 }}>
+                                            QC tự động: {questionDetail.formatStatus === "qc_passed" ? "Đạt chuẩn" : "Chưa đạt"}
+                                        </Tag>
+                                    )}
                                 </Typography.Text>
                             </div>
 
@@ -274,6 +393,11 @@ export default function ReviewQuestionDetailPage() {
                                 <Typography.Text type="secondary">
                                     Đánh giá mức độ khó của câu hỏi.
                                 </Typography.Text>
+                                {questionDetail?.llmDifficulty && (
+                                    <Tag color="blue" style={{ marginLeft: 8 }}>
+                                        AI gợi ý: {questionDetail.llmDifficulty}
+                                    </Tag>
+                                )}
                             </div>
 
                             <Radio.Group
@@ -285,9 +409,9 @@ export default function ReviewQuestionDetailPage() {
                                 }
                             >
                                 <Space direction="vertical" size={12}>
-                                    <Radio value="EASY">Biết</Radio>
-                                    <Radio value="MEDIUM">Hiểu</Radio>
-                                    <Radio value="HARD">Vận dụng</Radio>
+                                    <Radio value="easy">Biết</Radio>
+                                    <Radio value="medium">Hiểu</Radio>
+                                    <Radio value="hard">Vận dụng</Radio>
                                 </Space>
                             </Radio.Group>
                         </Card>
@@ -327,7 +451,7 @@ export default function ReviewQuestionDetailPage() {
                             />
                         </Card>
 
-                        {decision === "EDIT" && !forceReject && (
+                        {decision === "approved_with_edit" && !forceReject && (
                             <Card className="review-card">
                                 <div className="section-heading">
                                     <Typography.Title
@@ -349,7 +473,7 @@ export default function ReviewQuestionDetailPage() {
                             </Card>
                         )}
 
-                        {(decision === "REJECT" || forceReject) && (
+                        {(decision === "rejected" || forceReject) && (
                             <Card className="review-card">
                                 <div className="section-heading">
                                     <Typography.Title
@@ -384,7 +508,8 @@ export default function ReviewQuestionDetailPage() {
                 <Button
                     type="primary"
                     icon={<SaveOutlined />}
-                    disabled={isSaveDisabled}
+                    loading={submitting}
+                    disabled={isSaveDisabled || submitting}
                     onClick={handleSubmit}
                 >
                     Lưu đánh giá

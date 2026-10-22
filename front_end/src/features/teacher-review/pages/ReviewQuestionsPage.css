@@ -43,7 +43,6 @@
 }
 
 .review-question-table .ant-table-tbody>tr {
-    cursor: pointer;
     transition: background-color 0.2s ease;
 }
 
@@ -53,6 +52,14 @@
 
 .review-question-table .ant-table-tbody>tr:hover>td {
     background-color: #f0f0f0 !important;
+}
+
+.review-row-clickable {
+    cursor: pointer;
+}
+
+.review-row-disabled {
+    opacity: 0.6;
 }
 
 @media (max-width: 768px) {

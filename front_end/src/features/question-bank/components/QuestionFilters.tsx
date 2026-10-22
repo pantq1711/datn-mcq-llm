@@ -1,33 +1,7 @@
-import {
-    Button,
-    Col,
-    Form,
-    Input,
-    Row,
-    Select,
-    Space,
-} from "antd";
-import {
-    FilterOutlined,
-    ReloadOutlined,
-} from "@ant-design/icons";
+import { Button, Col, Form, Input, Row, Select, Space } from "antd";
+import { FilterOutlined, ReloadOutlined } from "@ant-design/icons";
+import type { SubjectOption, QuestionFilterValues } from "../types/questionBank.types";
 import "./QuestionFilters.css";
-
-export type QuestionDifficulty = "EASY" | "MEDIUM" | "HARD";
-
-export type QuestionStatus = "APPROVED" | "EDITED";
-
-export interface QuestionFilterValues {
-    keyword: string;
-    subjectId: number | null;
-    difficulty: QuestionDifficulty | null;
-    status: QuestionStatus | null;
-}
-
-interface SubjectOption {
-    label: string;
-    value: number;
-}
 
 interface QuestionFiltersProps {
     value: QuestionFilterValues;
@@ -35,31 +9,32 @@ interface QuestionFiltersProps {
     onChange: (values: QuestionFilterValues) => void;
     onFilter: () => void;
     onReset: () => void;
+    loadingSubjects?: boolean
 }
 
 const difficultyOptions = [
     {
         label: "Dễ",
-        value: "EASY",
+        value: "easy",
     },
     {
         label: "Trung bình",
-        value: "MEDIUM",
+        value: "medium",
     },
     {
         label: "Khó",
-        value: "HARD",
+        value: "hard",
     },
 ];
 
 const statusOptions = [
     {
         label: "Đã duyệt",
-        value: "APPROVED",
+        value: "approved",
     },
     {
         label: "Đã chỉnh sửa",
-        value: "EDITED",
+        value: "edited",
     },
 ];
 
@@ -69,6 +44,7 @@ export default function QuestionFilters({
     onChange,
     onFilter,
     onReset,
+    loadingSubjects = false,
 }: QuestionFiltersProps) {
     const updateField = <K extends keyof QuestionFilterValues>(
         field: K,
@@ -110,18 +86,14 @@ export default function QuestionFilters({
                     <Col xs={24} sm={12} lg={5}>
                         <Form.Item label="Môn học">
                             <Select
-                                value={value.subjectId ?? undefined}
-                                onChange={(subjectId) =>
-                                    updateField(
-                                        "subjectId",
-                                        subjectId ?? null,
-                                    )
-                                }
-                                placeholder="Tất cả môn học"
-                                options={subjects}
+                                placeholder="Chọn môn học"
                                 allowClear
-                                className="question-filters-select"
+                                loading={loadingSubjects}
+                                value={value.subjectId}
+                                onChange={(val) => onChange({ ...value, subjectId: val })}
+                                options={subjects}
                             />
+
                         </Form.Item>
                     </Col>
 

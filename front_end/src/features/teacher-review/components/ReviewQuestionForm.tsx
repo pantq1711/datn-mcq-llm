@@ -44,9 +44,9 @@ interface ReviewQuestionFormProps {
 }
 
 const difficultyOptions = [
-    { value: "EASY", label: "Dễ" },
-    { value: "MEDIUM", label: "Trung bình" },
-    { value: "HARD", label: "Khó" },
+    { value: "easy", label: "Dễ" },
+    { value: "medium", label: "Trung bình" },
+    { value: "hard", label: "Khó" },
 ];
 
 export default function ReviewQuestionForm({
@@ -190,7 +190,7 @@ export default function ReviewQuestionForm({
             />
 
             {/* 5. Edit */}
-            {decision === "EDIT" && !forceReject && (
+            {decision === "approved_with_edit" && !forceReject && (
                 <QuestionEditor
                     value={question}
                     onChange={onQuestionChange}
@@ -198,7 +198,7 @@ export default function ReviewQuestionForm({
             )}
 
             {/* 6. Rejection */}
-            {(decision === "REJECT" || forceReject) && (
+            {(decision === "rejected" || forceReject) && (
                 <RejectionReasonSelector
                     selectedReasons={selectedReasons}
                     otherReason={otherReason}

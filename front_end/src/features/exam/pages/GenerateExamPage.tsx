@@ -1,115 +1,72 @@
-import { useState } from "react";
-import {
-    Button,
-    Card,
-    Col,
-    Empty,
-    Modal,
-    Row,
-    Tabs,
-    Typography,
-} from "antd";
+import { useEffect, useState } from "react";
+import { Button, Card, Col, Empty, Modal, Row, Tabs, Typography, message } from "antd";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
-import ExamGenerationForm, {
-    type ExamGenerationValues,
-} from "../components/ExamGenerationForm";
-import ExamPreview, {
-    type ExamPreviewData,
-} from "../components/ExamPreview";
-import ExamQuestionList, {
-    type ExamQuestionItem,
-} from "../components/ExamQuestionList";
+import ExamGenerationForm from "../components/ExamGenerationForm";
+import ExamPreview from "../components/ExamPreview";
+import ExamQuestionList from "../components/ExamQuestionList";
 
 import "./GenerateExamPage.css";
+import type { ExamSubjectOption, GeneratedExamCode, ExamPreviewData, ExamQuestionItem, ExamGenerationValues } from "../types/exam.types";
+import { getCatalogSubjects, generateExam } from "../services/examApi";
 
 const { Title, Text } = Typography;
-
-interface GeneratedExamCode {
-    id: string;
-    code: string;
-    title: string;
-    preview: ExamPreviewData;
-    questions: ExamQuestionItem[];
-}
-
-/*
- * Dữ liệu mẫu để thể hiện bố cục trang.
- * Khi tích hợp API, thay initialGeneratedExamCodes bằng dữ liệu trả về từ backend.
- */
-const initialPreview: ExamPreviewData = {
-    title: "Đề thi giữa kỳ Hóa học",
-    subject: "Hóa học",
-    questionCount: 20,
-    duration: 30,
-    easyCount: 5,
-    mediumCount: 10,
-    hardCount: 5,
-    instructions:
-        "Thí sinh chọn một đáp án đúng cho mỗi câu hỏi. " +
-        "Thời gian làm bài là 30 phút.",
-};
-
-const initialQuestions: ExamQuestionItem[] = [
-    {
-        id: 1,
-        questionText:
-            "Phản ứng nào sau đây là phản ứng oxi hóa - khử?",
-        optionA: "Zn + 2HCl → ZnCl₂ + H₂",
-        optionB: "NaOH + HCl → NaCl + H₂O",
-        optionC: "AgNO₃ + NaCl → AgCl + NaNO₃",
-        optionD: "CaCO₃ → CaO + CO₂",
-        correctOption: "A",
-        difficulty: "MEDIUM",
-    },
-    {
-        id: 2,
-        questionText:
-            "Chất nào sau đây có tính oxi hóa mạnh nhất?",
-        optionA: "H₂",
-        optionB: "O₂",
-        optionC: "Na",
-        optionD: "Cl₂",
-        correctOption: "D",
-        difficulty: "EASY",
-    },
-];
-
-const initialGeneratedExamCodes: GeneratedExamCode[] = ["101", "102", "103", "104"].map(
-    (code) => ({
-        id: `exam-${code}`,
-        code,
-        title: initialPreview.title,
-        preview: { ...initialPreview },
-        questions: initialQuestions.map((question) => ({ ...question })),
-    }),
-);
 
 export default function GenerateExamPage() {
     const navigate = useNavigate();
 
-    const [generatedExamCodes, setGeneratedExamCodes] = useState<
-        GeneratedExamCode[]
-    >(initialGeneratedExamCodes);
+    const [generatedExamCodes, setGeneratedExamCodes] = useState<GeneratedExamCode[]>([]);
+    const [generating, setGenerating] = useState<boolean>(false);
     const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
     const [activeDetailTab, setActiveDetailTab] = useState("preview");
 
     const selectedExam =
         generatedExamCodes.find((exam) => exam.id === selectedExamId) ?? null;
 
-    const subjectOptions = [
-        { label: "Toán học", value: 1 },
-        { label: "Vật lý", value: 2 },
-        { label: "Hóa học", value: 3 },
-        { label: "Sinh học", value: 4 },
-    ];
+    const [subjectOptions, setSubjectOptions] = useState<ExamSubjectOption[]>([]);
+    const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
 
-    const handleGenerateExam = (values: ExamGenerationValues) => {
-        console.log("Generate exam:", values);
+    useEffect(() => {
+        const fetchSubjects = async () => {
+            setLoadingSubjects(true);
+            try {
+                const subjects = await getCatalogSubjects();
+                const options = subjects.map((s) => ({
+                    label: s.name,
+                    value: s.id,
+                }));
+                setSubjectOptions(options);
+            } catch (error) {
+                console.error("Lỗi khi tải danh sách môn học:", error);
+                message.error("Không thể tải danh sách môn học");
+            } finally {
+                setLoadingSubjects(false);
+            }
+        };
 
-        // TODO: gọi API tạo nhiều mã đề.
-        // Khi API hoàn tất, cập nhật generatedExamCodes bằng danh sách kết quả.
+        fetchSubjects();
+    }, []);
+
+
+    const handleGenerateExam = async (values: ExamGenerationValues) => {
+        setGenerating(true);
+        try {
+            const result = await generateExam(values);
+            setGeneratedExamCodes(result);
+            message.success(`Đã tạo thành công ${result.length} mã đề thi từ ngân hàng câu hỏi!`);
+
+            // Tự động mở xem trước mã đề đầu tiên nếu có
+            if (result.length > 0) {
+                setSelectedExamId(result[0].id);
+            }
+        } catch (error: any) {
+            console.error("Lỗi khi sinh đề thi:", error);
+            const errMsg = error?.response?.data?.message || "Không thể sinh đề thi. Vui lòng kiểm tra số lượng câu hỏi trong ngân hàng.";
+            message.error(errMsg);
+        } finally {
+            setGenerating(false);
+        }
     };
 
     const handleOpenExam = (examId: string) => {
@@ -172,6 +129,8 @@ export default function GenerateExamPage() {
                 <Card title="Thiết lập đề thi">
                     <ExamGenerationForm
                         subjects={subjectOptions}
+                        loadingSubjects={loadingSubjects}
+                        loading={generating}
                         onGenerate={handleGenerateExam}
                     />
                 </Card>
