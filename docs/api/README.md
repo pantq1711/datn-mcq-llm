@@ -125,8 +125,13 @@ Backend kiểm tra cú pháp bề mặt, không bảo đảm KaTeX render đư�
 
 | Mức | Trường hợp | Hệ quả |
 |---|---|---|
-| Lỗi | Ký tự điều khiển, số dấu `$` lẻ, ngoặc `{}` không cân bằng, lệnh nằm ngoài `$...$`, thiếu đối số `\frac`/`\sqrt`, `\left`/`\right` hoặc `\begin`/`\end` không khớp | Câu sinh ra thành `format_failed`; bản sửa của giáo viên bị từ chối (400) |
-| Cảnh báo | Lệnh nằm ngoài danh sách cho phép, ví dụ `\widehat`, `\alpha`; môi trường ngoài danh sách (ví dụ `array`) khi cấu trúc cân bằng | Không ảnh hưởng trạng thái, không trả về API |
+| Lỗi | Ký tự điều khiển, số dấu `$` lẻ, ngoặc `{}` không cân bằng, lệnh nằm ngoài `$...$`, thiếu đối số `\frac`/`\sqrt`, `\left`/`\right` hoặc `\begin`/`\end` không khớp, ở đề hoặc 4 phương án | Câu sinh ra thành `format_failed`; bản sửa của giáo viên bị từ chối (400) |
+| Cảnh báo | Lệnh nằm ngoài danh sách cho phép, ví dụ `\widehat`, `\alpha`; môi trường ngoài danh sách (ví dụ `array`) khi cấu trúc cân bằng; mọi lỗi định dạng trong `explanation` | Không ảnh hưởng trạng thái, không trả về API. Lời giải còn lỗi nghiêm trọng được lưu `explanation = null` khi vào ngân hàng |
+
+Trước khi kiểm tra, backend đổi chuỗi `\n` theo nghĩa đen (dấu `\` rồi chữ `n`, do model viết `\\n` trong JSON)
+thành ký tự xuống dòng ở 6 trường văn bản, chỉ khi nằm ngoài `$...$`/`$$...$$`. Trong công thức giữ nguyên (`\neq`, `\nu`...);
+ngoài công thức, `\neq`, `\ne`, `\notin`, `\not`, `\nu`, `\nabla`, `\neg`, `\ni` cũng giữ nguyên để vẫn bị báo "lệnh nằm ngoài $...$".
+`raw_llm_output` lưu nguyên bản gốc.
 
 Gợi ý render phía frontend: tách chuỗi theo `$$...$$` và `$...$` (bỏ qua `\$`), render từng đoạn công thức bằng KaTeX
 (`displayMode` cho `$$`), để `throwOnError: false` hoặc bắt lỗi từng đoạn và hiện chuỗi gốc khi không render được.
