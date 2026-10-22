@@ -31,7 +31,8 @@ class NegationMarkerTest {
             "Biểu thức nào không thể rút gọn được nữa?                | không thể",
             "Chọn phát biểu sai:                                      | phát biểu sai",
             "Tìm nhận định sai trong các nhận định sau:               | nhận định sai",
-            "Chọn khẳng định sai:                                     | khẳng định sai"
+            "Chọn khẳng định sai:                                     | khẳng định sai",
+            "Khẳng định nào sau đây là sai?                           | sai"
     })
     void eachDecidedPhraseIsDetectedOnItsOwn(String stem, String expectedMarker) {
         assertEquals(List.of(expectedMarker), McqTextNormalizer.negationMarkers(stem.strip()));
@@ -54,6 +55,7 @@ class NegationMarkerTest {
             "Với $x$ khác $0$, rút gọn biểu thức",
             "Nghiệm của phương trình $\\text{không} = 1$ là:", // nằm trong công thức
             "Tính khônggian và chưabiết",                 // dính chữ cái: không phải ranh giới từ
+            "Giá trị saiz của biểu thức là:",             // "sai" dính chữ cái: không khớp
             "Chọn phát biểu đúng:",
             "Khẳng định nào đúng?"
     })
