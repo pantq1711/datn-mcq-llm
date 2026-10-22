@@ -75,7 +75,7 @@ class OpenApiContractTest {
     }
 
     /**
-     * V4 (22/10): backend chưa có xác thực/phân quyền (Q-6), nên không được có endpoint công khai nào
+     * Quy tắc QC-RERUN (22/10): backend chưa có xác thực/phân quyền (Q-6), nên không được có endpoint công khai nào
      * kích hoạt chạy lại QC (gọi Solver tính phí cho câu tùy ý).
      */
     @Test

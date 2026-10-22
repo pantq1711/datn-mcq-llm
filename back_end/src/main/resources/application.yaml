@@ -42,3 +42,9 @@ app:
     enabled: ${WORKER_ENABLED:false}
     poll-delay-ms: ${WORKER_POLL_DELAY_MS:15000}
     max-attempts: ${WORKER_MAX_ATTEMPTS:3}
+  # Bảng điểm cho phần tạo đề sau này (V4); luồng sinh câu không dùng. Giá trị mặc định nằm ở ExamScoringProperties.
+  exam:
+    scoring:
+      mcq-per-question: 0.25                      # 12 câu MCQ = 3 điểm
+      sa-per-question: 0.5
+      tf-by-correct-count: [0, 0.1, 0.25, 0.5, 1.0] # chỉ số = số ý đúng (0..4) của một câu Đúng/Sai

@@ -2,6 +2,7 @@ package com.datn.mcq.bank.entity;
 
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
+import com.datn.mcq.enums.QuestionType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -25,28 +26,38 @@ public class BankItem {
     @Column(name = "review_id", nullable = false, unique = true)
     private Integer reviewId;
 
+    /** Dạng câu (V4); khóa ngoại kép tới generated_question và teacher_review theo (id, question_type). */
+    @Column(name = "question_type", nullable = false, length = 10, updatable = false)
+    private QuestionType questionType = QuestionType.MCQ;
+
     @Column(name = "question_text", nullable = false, columnDefinition = "TEXT")
     private String questionText;
 
-    @Column(name = "option_a", nullable = false, columnDefinition = "TEXT")
+    // option_a..d, correct_option: bắt buộc với mcq, NULL với tf/sa (CHECK chk_bi_type_content, V4).
+    @Column(name = "option_a", columnDefinition = "TEXT")
     private String optionA;
 
-    @Column(name = "option_b", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "option_b", columnDefinition = "TEXT")
     private String optionB;
 
-    @Column(name = "option_c", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "option_c", columnDefinition = "TEXT")
     private String optionC;
 
-    @Column(name = "option_d", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "option_d", columnDefinition = "TEXT")
     private String optionD;
 
-    @Column(name = "correct_option", nullable = false, length = 1)
+    @Column(name = "correct_option", length = 1)
     private Option correctOption;
+
+    /** Đáp số cuối của câu sa (bản giáo viên chốt); NULL với mcq và tf. */
+    @Column(name = "sa_answer", columnDefinition = "TEXT")
+    private String saAnswer;
 
     @Column(name = "explanation", columnDefinition = "TEXT")
     private String explanation;
 
-    @Column(name = "difficulty", nullable = false, length = 10)
+    /** Bắt buộc với mcq và sa; tf để NULL (mức độ ở bank_item_statement). */
+    @Column(name = "difficulty", length = 10)
     private Difficulty difficulty;
 
     @Column(name = "created_at", nullable = false)
@@ -148,6 +159,22 @@ public class BankItem {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public QuestionType getQuestionType() {
+        return questionType;
+    }
+
+    public void setQuestionType(QuestionType questionType) {
+        this.questionType = questionType;
+    }
+
+    public String getSaAnswer() {
+        return saAnswer;
+    }
+
+    public void setSaAnswer(String saAnswer) {
+        this.saAnswer = saAnswer;
     }
 }
 
