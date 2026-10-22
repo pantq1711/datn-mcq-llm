@@ -45,7 +45,7 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 | POST | `/api/reviews/demo/seed-math` | Tạo 5 câu demo; đi qua format và dedup, không chạy answer_check, nên giữ `generated` |
 | GET | `/api/bank-items` | Ngân hàng câu hỏi đã duyệt |
 
-Chạy lại QC cho câu `generated` (V4) đã có ở tầng service (`QcRerunService`) nhưng CHƯA có endpoint: backend chưa có
+Chạy lại QC cho câu `generated` (quy tắc QC-RERUN, quyết định 6 ngày 22/10) đã có ở tầng service (`QcRerunService`) nhưng CHƯA có endpoint: backend chưa có
 xác thực và phân quyền (Q-6), nên không mở đường công khai có thể gọi Solver tính phí cho câu tùy ý.
 
 ### Tạo template

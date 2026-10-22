@@ -10,6 +10,7 @@ import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.Purpose;
 import com.datn.mcq.enums.QuestionStatus;
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.ReasonCode;
 import com.datn.mcq.enums.ReviewDecision;
 import com.datn.mcq.experiment.entity.ExperimentRun;
@@ -150,6 +151,7 @@ public class TeacherReviewService {
 
         // Câu duplicate/format_failed: 404 như câu không tồn tại, trước mọi thao tác ghi (không ghi đè trạng thái cuối).
         GeneratedQuestion gq = loadReviewableQuestion(questionId);
+        validateReasonCodesForType(req.reasonCodes(), gq.getQuestionType());
         QuestionTemplate tpl = catalogService.getTemplateById(gq.getTemplateId());
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
         ExperimentRun run = experimentService.getById(gq.getRunId());
@@ -372,6 +374,24 @@ public class TeacherReviewService {
             if (req.reasonCodes().contains(ReasonCode.OTHER)
                     && (req.otherReasonDetail() == null || req.otherReasonDetail().trim().isEmpty())) {
                 throw new IllegalArgumentException("Khi chọn lý do 'other', bắt buộc nhập chi tiết (otherReasonDetail)");
+            }
+        }
+    }
+
+    /**
+     * Mã lý do phải dùng được cho dạng câu (quyết định 3 ngày 22/10): statement_undecidable chỉ cho tf,
+     * answer_ambiguous chỉ cho sa, mã riêng mcq không dùng cho tf/sa. Trước V4, hai mã mới không có trong enum
+     * nên request mcq chứa chúng bị từ chối 400 khi đọc JSON; kiểm tra này giữ mã 400 đó cho mcq.
+     */
+    static void validateReasonCodesForType(List<ReasonCode> reasonCodes, QuestionType questionType) {
+        if (reasonCodes == null) {
+            return;
+        }
+        QuestionType type = questionType != null ? questionType : QuestionType.MCQ;
+        for (ReasonCode code : reasonCodes) {
+            if (code != null && !code.allowedFor(type)) {
+                throw new IllegalArgumentException(
+                        "Mã lý do '" + code.getDbValue() + "' không áp dụng cho dạng câu này.");
             }
         }
     }

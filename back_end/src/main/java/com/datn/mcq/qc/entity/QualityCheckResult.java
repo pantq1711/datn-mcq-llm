@@ -2,6 +2,8 @@ package com.datn.mcq.qc.entity;
 
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
+import com.datn.mcq.enums.QuestionType;
+import com.datn.mcq.enums.SaJudgeKind;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -42,6 +44,18 @@ public class QualityCheckResult {
 
     @Column(name = "judge_model", length = 100)
     private String judgeModel;
+
+    /** Dạng câu (V4); khóa ngoại kép tới generated_question(id, question_type). */
+    @Column(name = "question_type", nullable = false, length = 10, updatable = false)
+    private QuestionType questionType = QuestionType.MCQ;
+
+    /** Chỉ với answer_check của câu sa. */
+    @Column(name = "judge_sa_kind", length = 20)
+    private SaJudgeKind judgeSaKind;
+
+    /** Chuỗi gốc Solver trả với câu sa (kind number hoặc unparseable). */
+    @Column(name = "judge_sa_answer", columnDefinition = "TEXT")
+    private String judgeSaAnswer;
 
     @Column(name = "checked_at")
     private LocalDateTime checkedAt;
@@ -126,6 +140,30 @@ public class QualityCheckResult {
 
     public void setCheckedAt(LocalDateTime checkedAt) {
         this.checkedAt = checkedAt;
+    }
+
+    public QuestionType getQuestionType() {
+        return questionType;
+    }
+
+    public void setQuestionType(QuestionType questionType) {
+        this.questionType = questionType;
+    }
+
+    public SaJudgeKind getJudgeSaKind() {
+        return judgeSaKind;
+    }
+
+    public void setJudgeSaKind(SaJudgeKind judgeSaKind) {
+        this.judgeSaKind = judgeSaKind;
+    }
+
+    public String getJudgeSaAnswer() {
+        return judgeSaAnswer;
+    }
+
+    public void setJudgeSaAnswer(String judgeSaAnswer) {
+        this.judgeSaAnswer = judgeSaAnswer;
     }
 }
 

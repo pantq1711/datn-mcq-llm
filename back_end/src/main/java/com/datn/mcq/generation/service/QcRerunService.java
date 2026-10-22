@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import java.util.Optional;
 
 /**
- * V4 (quyết định 6 ngày 22/10): chạy lại QC cho một câu ở trạng thái generated.
+ * Quy tắc QC-RERUN (quyết định 6 ngày 22/10): chạy lại QC cho một câu ở trạng thái generated.
  *
  * <p>Đi qua đúng pipeline format -> dedup -> answer_check (Solver chỉ chạy khi dedup kết luận không trùng),
  * trạng thái mới lấy từ báo cáo pipeline, không ép. Trước khi chạy, kết quả dedup và answer_check cũ bị xóa

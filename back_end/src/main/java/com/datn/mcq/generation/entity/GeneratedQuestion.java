@@ -3,6 +3,7 @@ package com.datn.mcq.generation.entity;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionStatus;
+import com.datn.mcq.enums.QuestionType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -25,6 +26,14 @@ public class GeneratedQuestion {
 
     @Column(name = "run_id", nullable = false)
     private Integer runId;
+
+    /** Dạng câu (V4). Không đổi sau khi tạo: khóa ngoại kép của bảng con trỏ tới (id, question_type). */
+    @Column(name = "question_type", nullable = false, length = 10, updatable = false)
+    private QuestionType questionType = QuestionType.MCQ;
+
+    /** Đáp số câu Trả lời ngắn đúng như LLM viết (đã trim); NULL với mcq và tf (V4). */
+    @Column(name = "sa_answer", columnDefinition = "TEXT")
+    private String saAnswer;
 
     @Column(name = "question_text", columnDefinition = "TEXT")
     private String questionText;
@@ -259,6 +268,22 @@ public class GeneratedQuestion {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public QuestionType getQuestionType() {
+        return questionType;
+    }
+
+    public void setQuestionType(QuestionType questionType) {
+        this.questionType = questionType;
+    }
+
+    public String getSaAnswer() {
+        return saAnswer;
+    }
+
+    public void setSaAnswer(String saAnswer) {
+        this.saAnswer = saAnswer;
     }
 }
 
