@@ -12,7 +12,7 @@ export interface QuestionDetailData {
     optionB: string;
     optionC: string;
     optionD: string;
-    correctOption: "A" | "B" | "C" | "D";
+    correct_option: "A" | "B" | "C" | "D";
     subject: string;
     difficulty: "easy" | "medium" | "hard";
     status: QuestionStatus;
@@ -149,7 +149,7 @@ export default function QuestionDetail({
                                 { key: "D", label: "D", content: question.optionD },
                             ].map((option) => {
                                 const isCorrect =
-                                    option.key === question.correctOption;
+                                    option.key === question.correct_option;
 
                                 return (
                                     <div

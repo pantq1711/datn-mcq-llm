@@ -107,7 +107,7 @@ export default function QuestionBankPage() {
                 optionB: "Không có dữ liệu",
                 optionC: "Không có dữ liệu",
                 optionD: "Không có dữ liệu",
-                correctOption: "A",
+                correct_option: "A",
                 subject: questionItem.subject,
                 difficulty: questionItem.difficulty,
                 status: questionItem.status,

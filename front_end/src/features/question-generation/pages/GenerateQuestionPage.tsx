@@ -8,7 +8,7 @@ import LessonContentInput from "../components/LessonContentInput";
 import TextSegmentSelector from "../components/TextSegmentSelector";
 import GenerationProgress from "../components/GenerationProgress";
 import GenerationResult from "../components/GenerationResult";
-import TemplateSelector from "../components/TemplateSelector";
+// import TemplateSelector from "../components/TemplateSelector";
 
 import { getCatalogTemplates, getCatalogSubjects, createGenerationTask, getGenerationStatus, getGenerationResult, } from "../services/generationApi";
 import type { TemplateOption, SubjectOption, GenerationResultItem, GenerationStatus, } from "../types/generation.types";
@@ -83,9 +83,9 @@ export default function GenerateQuestionPage() {
     const [subjectOptions, setSubjectOptions] = useState<SubjectOption[]>([]);
     const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
 
-    const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
-    const [templateOptions, setTemplateOptions] = useState<TemplateOption[]>([]);
-    const [loadingTemplates, setLoadingTemplates] = useState<boolean>(false);
+    // const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+    // const [templateOptions, setTemplateOptions] = useState<TemplateOption[]>([]);
+    // const [loadingTemplates, setLoadingTemplates] = useState<boolean>(false);
 
 
     useEffect(() => {
@@ -109,34 +109,34 @@ export default function GenerateQuestionPage() {
         fetchSubjects();
     }, []);
 
-    useEffect(() => {
-        const fetchTemplates = async () => {
-            setLoadingTemplates(true);
-            try {
-                const templates = await getCatalogTemplates(selectedSubjectId);
-                const options: TemplateOption[] = templates.map((t) => ({
-                    id: t.id,
-                    label: `Mẫu #${t.id}`,
-                    subject: t.subjectName || "Môn học",
-                    version: t.version,
-                    sourceQuestion: t.sourceQuestion,
-                }));
-                setTemplateOptions(options);
+    // useEffect(() => {
+    //     const fetchTemplates = async () => {
+    //         setLoadingTemplates(true);
+    //         try {
+    //             const templates = await getCatalogTemplates(selectedSubjectId);
+    //             const options: TemplateOption[] = templates.map((t) => ({
+    //                 id: t.id,
+    //                 label: `Mẫu #${t.id}`,
+    //                 subject: t.subjectName || "Môn học",
+    //                 version: t.version,
+    //                 sourceQuestion: t.sourceQuestion,
+    //             }));
+    //             setTemplateOptions(options);
 
-                // Nếu môn học thay đổi mà template đang chọn không thuộc môn mới thì reset
-                if (selectedTemplateId && !options.some(o => o.id === selectedTemplateId)) {
-                    setSelectedTemplateId(null);
-                }
-            } catch (error) {
-                console.error("Lỗi khi tải câu hỏi mẫu:", error);
-                message.error("Không thể tải danh sách câu hỏi mẫu.");
-            } finally {
-                setLoadingTemplates(false);
-            }
-        };
+    //             // Nếu môn học thay đổi mà template đang chọn không thuộc môn mới thì reset
+    //             if (selectedTemplateId && !options.some(o => o.id === selectedTemplateId)) {
+    //                 setSelectedTemplateId(null);
+    //             }
+    //         } catch (error) {
+    //             console.error("Lỗi khi tải câu hỏi mẫu:", error);
+    //             message.error("Không thể tải danh sách câu hỏi mẫu.");
+    //         } finally {
+    //             setLoadingTemplates(false);
+    //         }
+    //     };
 
-        fetchTemplates();
-    }, [selectedSubjectId]);
+    //     fetchTemplates();
+    // }, [selectedSubjectId]);
 
 
     const totalByTopic = (topicId: string) =>
@@ -428,7 +428,7 @@ export default function GenerateQuestionPage() {
                         />
                     </div>
 
-                    <div style={{ marginTop: 10, marginBottom: 20 }}>
+                    {/* <div style={{ marginTop: 10, marginBottom: 20 }}>
                         <TemplateSelector
                             value={selectedTemplateId}
                             options={templateOptions}
@@ -436,7 +436,7 @@ export default function GenerateQuestionPage() {
                             disabled={isRunning}
                             onChange={setSelectedTemplateId}
                         />
-                    </div>
+                    </div> */}
 
                     <LessonContentInput
                         value={lessonContent}
