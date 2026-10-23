@@ -48,7 +48,8 @@ export interface BankItemDetail {
     optionB: string;
     optionC: string;
     optionD: string;
-    correctOption: "A" | "B" | "C" | "D";
+    correct_option: "A" | "B" | "C" | "D";
+    explanation?: string;
     subject: string;
     difficulty: "easy" | "medium" | "hard";
     status: "approved" | "edited";

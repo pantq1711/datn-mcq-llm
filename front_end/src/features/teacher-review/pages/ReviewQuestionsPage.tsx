@@ -38,7 +38,23 @@ const reviewQuestions: ReviewQuestion[] = [
         difficulty: "easy",
         createdAt: "05/10/2026 13:52",
     },
+    {
+        // Thêm câu hỏi này để kiểm tra logic: có reviewStatus là "approved_as_is" (khác pending) -> sẽ bị ẩn đi
+        id: 104,
+        question:
+            "Lực hấp dẫn phụ thuộc vào yếu tố nào sau đây?",
+        subject: "Vật lý",
+        qualityStatus: "qc_passed",
+        reviewStatus: "approved_as_is",
+        difficulty: "hard",
+        createdAt: "04/10/2026 10:00",
+    },
 ];
+
+// Lọc sẵn danh sách chỉ lấy những câu có reviewStatus là "pending" để kiểm tra logic
+const pendingReviewQuestions = reviewQuestions.filter(
+    (item) => item.reviewStatus === "pending"
+);
 
 const getQualityStatusTag = (
     status: ReviewQuestion["qualityStatus"],
@@ -211,7 +227,7 @@ export default function ReviewQuestionsPage() {
                     className="review-question-table"
                     rowKey="id"
                     columns={columns}
-                    dataSource={reviewQuestions}
+                    dataSource={pendingReviewQuestions}
                     pagination={{
                         pageSize: 10,
                         showSizeChanger: true,
@@ -225,8 +241,8 @@ export default function ReviewQuestionsPage() {
                     }
                     onRow={(record) => ({
                         onClick: () => {
-                            // Chỉ cho phép chuyển trang khi đạt QC
-                            if (record.qualityStatus === "qc_passed") {
+                            // Chỉ cho phép chuyển trang khi đạt QC và trạng thái pending
+                            if (record.qualityStatus === "qc_passed" && record.reviewStatus === "pending") {
                                 navigate(`/review/${record.id}`);
                             }
                         },
