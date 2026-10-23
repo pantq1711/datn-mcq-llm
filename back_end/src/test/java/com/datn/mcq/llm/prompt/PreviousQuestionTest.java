@@ -86,6 +86,6 @@ class PreviousQuestionTest {
     @Test
     void phienBanPromptV1() {
         assertEquals("sa-v1-draft", SaPromptDraftV0.PROMPT_VERSION);
-        assertEquals("tf-v1-draft", TfPromptDraftV0.PROMPT_VERSION);
+        assertEquals("tf-v2-draft", TfPromptDraftV0.PROMPT_VERSION);
     }
 }

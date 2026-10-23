@@ -76,7 +76,8 @@ public class FormatChecker {
             validateFieldLatex("explanation", input.explanation(), warnings, warnings);
         }
 
-        return new FormatCheckOutcome(errors.isEmpty(), errors, warnings);
+        // Ngày 23/10: cảnh báo từ bước giải mã ở chế độ sửa (đã sửa escape LaTeX, đã tự đóng $).
+        return new FormatCheckOutcome(errors.isEmpty(), errors, warnings, input.parseWarnings());
     }
 
     /**
@@ -95,6 +96,7 @@ public class FormatChecker {
                     + (detail != null && !detail.isBlank() ? ": " + detail : ""));
             return new FormatCheckOutcome(false, errors, warnings);
         }
+        answerWarnings.addAll(input.parseWarnings());
         checkNonBlank("question_text", input.questionText(), errors);
         checkNonBlank("explanation", input.explanation(), errors);
         String answer = input.saAnswer();

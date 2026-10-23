@@ -11,6 +11,7 @@ import com.datn.mcq.generation.worker.GenerationJobPoller;
 import com.datn.mcq.generation.worker.GenerationJobProcessor;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
+import com.datn.mcq.llm.prompt.McqProductionSchema;
 import com.datn.mcq.llm.prompt.PreviousQuestion;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
@@ -49,6 +50,7 @@ class PreviousQuestionsPromptTest {
 
     static final class CapturingLlm extends LlmClient {
         final List<String> prompts = new ArrayList<>();
+        final List<String> schemas = new ArrayList<>();
         int calls;
 
         CapturingLlm() {
@@ -62,6 +64,10 @@ class PreviousQuestionsPromptTest {
 
         @Override
         public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
+            throw new UnsupportedOperationException("MCQ production phải gọi kèm schema (ngày 23/10)");
+        }
+
+        private LlmCallResult mcq(String prompt, String modelName) {
             prompts.add(prompt);
             calls++;
             return new LlmCallResult("{\"question_text\": \"Tính $" + calls + " + 1$\", \"option_a\": \"$1$\","
@@ -71,6 +77,10 @@ class PreviousQuestionsPromptTest {
 
         @Override
         public LlmCallResult callJsonModeWithSchema(String prompt, String modelName, Double temperature, String schema) {
+            schemas.add(schema);
+            if (McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON.equals(schema)) {
+                return mcq(prompt, modelName);
+            }
             prompts.add(prompt);
             calls++;
             if (SaPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON.equals(schema)) {
@@ -126,6 +136,7 @@ class PreviousQuestionsPromptTest {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
         TestDataCleaner.cleanAll(dataSource, jdbc, "PreviousQuestionsPromptTest.setUp");
         LLM.prompts.clear();
+        LLM.schemas.clear();
         LLM.calls = 0;
         subject = insert("INSERT INTO subject (name) VALUES ('Toán')");
         template = insert("INSERT INTO question_template (subject_id, source_question, is_active, grade_level, topic)"
@@ -227,7 +238,7 @@ class PreviousQuestionsPromptTest {
                 sent);
         Map<String, Object> run = jdbc.queryForMap("SELECT * FROM experiment_run WHERE id = (SELECT max(id)"
                 + " FROM experiment_run)");
-        assertEquals("tf-v1-draft", run.get("prompt_version"));
+        assertEquals("tf-v2-draft", run.get("prompt_version"));
         assertFalse(((String) run.get("prompt_text")).contains(PreviousQuestion.HEADER));
     }
 
@@ -241,6 +252,8 @@ class PreviousQuestionsPromptTest {
                 .andExpect(status().isOk());
         assertFalse(LLM.prompts.get(0).contains(PreviousQuestion.HEADER));
         assertFalse(LLM.prompts.get(0).contains("Đề MCQ cũ"));
+        // Ngày 23/10: generate-sync MCQ (run production) gọi JSON mode kèm schema MCQ, như sa/tf.
+        assertEquals(List.of(McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON), LLM.schemas);
     }
 
     // ---------- job ----------

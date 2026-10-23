@@ -72,6 +72,13 @@ public class QcSummaryService {
         this.statementRepository = statementRepository;
     }
 
+    /** Lý do bước format không qua đã lưu (V8); rỗng khi câu qua format hoặc chưa có dòng format. */
+    @Transactional(readOnly = true)
+    public List<String> formatErrors(Integer questionId) {
+        return JsonStringArray.read(resultRepository.findByQuestionIdAndCheckType(questionId, CheckType.FORMAT)
+                .map(QualityCheckResult::getErrors).orElse(null));
+    }
+
     @Transactional(readOnly = true)
     public QcSummary summarize(Integer questionId) {
         Optional<QualityCheckResult> format = resultRepository.findByQuestionIdAndCheckType(questionId, CheckType.FORMAT);

@@ -260,7 +260,7 @@ class TrueFalseFlowTest {
         assertEquals("tf", run.get("question_type"));
         assertEquals("production", run.get("purpose"));
         assertEquals("zero-shot", run.get("strategy"));
-        assertEquals("tf-v1-draft", run.get("prompt_version"));
+        assertEquals("tf-v2-draft", run.get("prompt_version"));
         assertEquals(List.of("tf", "tf", "tf"), jdbc.queryForList("SELECT question_type FROM quality_check_result"
                 + " WHERE question_id = ? ORDER BY check_type", String.class, id));
         Map<String, Object> answerCheck = jdbc.queryForMap("SELECT * FROM quality_check_result WHERE question_id = ?"
@@ -389,6 +389,11 @@ class TrueFalseFlowTest {
         assertFalse(resp.get("question").has("statements"), "parse lỗi thì không có ý nào");
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM generated_question_statement", Integer.class));
         assertEquals(0, SOLVER.calls);
+        // V8 (ngày 23/10): lỗi giải mã JSON được lưu ở cột errors của dòng format.
+        String errors = jdbc.queryForObject("SELECT errors::text FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type = 'format'", String.class, resp.get("question").get("id").asInt());
+        assertTrue(errors != null && errors.contains("Không giải mã được JSON hợp lệ") && errors.contains("label_a"),
+                String.valueOf(errors));
     }
 
     @Test
@@ -539,7 +544,7 @@ class TrueFalseFlowTest {
         assertTrue(jobs.get(0).get("targetDifficulty").isNull());
         Map<String, Object> run = jdbc.queryForMap("SELECT * FROM experiment_run");
         assertEquals("tf", run.get("question_type"));
-        assertEquals("tf-v1-draft", run.get("prompt_version"));
+        assertEquals("tf-v2-draft", run.get("prompt_version"));
 
         FakeGeneratorClient generator = new FakeGeneratorClient();
         GenerationJobPoller poller = new GenerationJobPoller(jobProcessor, generator, qcOrchestrator,
@@ -555,5 +560,23 @@ class TrueFalseFlowTest {
         QcRerunService.QcRerunResult rerun = qcRerunService.rerun(summary.questionId());
         assertEquals("qc_passed", rerun.resultingStatus().getDbValue());
         assertEquals(4, jdbc.queryForObject("SELECT count(*) FROM answer_check_statement", Integer.class));
+    }
+
+    /** Ngày 23/10: lý do format_failed lưu ở errors (V8); sync chạy chế độ sửa (tự đóng $ ở cuối ý). */
+    @Test
+    void loiFormatLuuOErrorsVaSyncTuDongDoLa() throws Exception {
+        JsonNode dup = generateTf(tfJson(STEM, List.of("Ý một", "Ý hai", "Ý một", "Ý bốn"),
+                List.of("T", "T", "F", "F")), false);
+        assertEquals("format_failed", dup.get("question").get("status").asText());
+        assertEquals("[\"4 ý a, b, c, d có nội dung trùng lặp nhau\"]", objectMapper.readTree(jdbc.queryForObject(
+                "SELECT errors::text FROM quality_check_result WHERE question_id = ? AND check_type = 'format'",
+                String.class, dup.get("question").get("id").asInt())).toString());
+
+        JsonNode fixed = generateTf(tfJson("Cho $R = x^2$.", List.of(STATEMENTS.get(0), STATEMENTS.get(1),
+                STATEMENTS.get(2), "Giá trị của $R$ tại $x = 3$ bằng $9."), List.of("T", "T", "F", "F")), false);
+        assertTrue(fixed.get("qcReport").get("formatPassed").asBoolean(), fixed.toString());
+        assertEquals("[\"statement_d: đã tự đóng $\"]", fixed.get("qcReport").get("answerWarnings").toString());
+        assertNull(jdbc.queryForObject("SELECT errors::text FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type = 'format'", String.class, fixed.get("question").get("id").asInt()));
     }
 }

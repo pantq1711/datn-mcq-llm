@@ -4,6 +4,7 @@ import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.service.CatalogService;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.ExamStatus;
+import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.exam.dto.ExamBuildDtos.BuildExamRequest;
 import com.datn.mcq.exam.dto.ExamBuildDtos.BuildResultDto;
@@ -19,9 +20,11 @@ import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
+import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.matrix.entity.ExamMatrix;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
+import com.datn.mcq.qc.service.QcSummaryService;
 import com.datn.mcq.user.entity.UserAccount;
 import com.datn.mcq.user.service.UserService;
 import org.springframework.stereotype.Service;
@@ -67,16 +70,19 @@ public class ExamBuildService {
     private final GenerationService generationService;
     private final CatalogService catalogService;
     private final UserService userService;
+    private final QcSummaryService qcSummaryService;
 
     public ExamBuildService(ExamRepository examRepository, ExamSlotRepository slotRepository,
                             MatrixService matrixService, GenerationService generationService,
-                            CatalogService catalogService, UserService userService) {
+                            CatalogService catalogService, UserService userService,
+                            QcSummaryService qcSummaryService) {
         this.examRepository = examRepository;
         this.slotRepository = slotRepository;
         this.matrixService = matrixService;
         this.generationService = generationService;
         this.catalogService = catalogService;
         this.userService = userService;
+        this.qcSummaryService = qcSummaryService;
     }
 
     @Transactional
@@ -147,7 +153,8 @@ public class ExamBuildService {
                     slot.setAttempts(1);
                     slot.setState(ExamSlot.GENERATING);
                     generationService.enqueueMatrixJob(run.getId(), cell.getTemplateId(), spec, slot.getId(),
-                            start.plusSeconds(JOB_SPACING_SECONDS * jobs));
+                            start.plusSeconds(JOB_SPACING_SECONDS * jobs),
+                            MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount()));
                     jobs++;
                 }
             }
@@ -294,9 +301,32 @@ public class ExamBuildService {
             slot.setRunId(generationService.createMatrixRun(subject.getId(), spec, 1).getId());
         }
         generationService.enqueueMatrixJob(slot.getRunId(), cell.getTemplateId(), spec, slot.getId(),
-                LocalDateTime.now());
+                LocalDateTime.now(), promptNote(slot, cell));
         slot.setAttempts(slot.getAttempts() + 1);
         slot.setState(ExamSlot.GENERATING);
+    }
+
+    /**
+     * Ghi chú cho job sinh lại (ngày 23/10, mục 5 và 8): dòng "câu thứ k/n" của chỗ, cộng lý do lần sinh trước bị loại
+     * nếu lần trước format_failed (đọc từ quality_check_result.errors, V8). Gọi trước khi xếp hàng job mới.
+     */
+    String promptNote(ExamSlot slot, ExamMatrixCell cell) {
+        List<String> lines = new ArrayList<>();
+        String slotLine = MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount());
+        if (slotLine != null) {
+            lines.add(slotLine);
+        }
+        Optional<GenerationJob> previous = generationService.latestJobForSlot(slot.getId());
+        if (previous.isPresent() && previous.get().getQuestionId() != null) {
+            GeneratedQuestion q = generationService.getQuestionById(previous.get().getQuestionId());
+            if (q.getStatus() == QuestionStatus.FORMAT_FAILED) {
+                String hint = MatrixPromptDraftV0.retryHint(qcSummaryService.formatErrors(q.getId()));
+                if (hint != null) {
+                    lines.add(hint);
+                }
+            }
+        }
+        return lines.isEmpty() ? null : String.join("\n", lines);
     }
 
     // ---------- tiện ích ----------

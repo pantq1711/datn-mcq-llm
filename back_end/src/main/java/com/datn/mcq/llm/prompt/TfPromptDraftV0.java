@@ -5,7 +5,7 @@ import com.datn.mcq.enums.Difficulty;
 import java.util.List;
 
 /**
- * BẢN NHÁP v1 (tf-v1-draft, thêm yêu cầu đa dạng ngày 22/10) – CHỜ THÀNH VIÊN PHỤ TRÁCH PROMPT DUYỆT – KHÔNG DÙNG CHO THỰC NGHIỆM C1/C2/C3.
+ * BẢN NHÁP v2 (tf-v2-draft: v1 thêm yêu cầu đa dạng ngày 22/10; v2 thêm quy tắc ý bám đề dẫn và đóng $ ngày 23/10) – CHỜ THÀNH VIÊN PHỤ TRÁCH PROMPT DUYỆT – KHÔNG DÙNG CHO THỰC NGHIỆM C1/C2/C3.
  *
  * <p>Prompt sinh câu Đúng/Sai và prompt Solver cho câu Đúng/Sai (thiết kế bản sửa 1, mục 10; GĐ3). Không sửa
  * {@link PromptBuilder}; chỉ dùng lại {@link PromptBuilder#ESCAPE_HINT}. Nhãn bản nháp nằm ở Javadoc và ở
@@ -16,7 +16,7 @@ import java.util.List;
  */
 public final class TfPromptDraftV0 {
 
-    public static final String PROMPT_VERSION = "tf-v1-draft";
+    public static final String PROMPT_VERSION = "tf-v2-draft";
 
     public static final String GENERATION_RESPONSE_SCHEMA_JSON = """
             {"type":"OBJECT","properties":{
@@ -124,6 +124,9 @@ public final class TfPromptDraftV0 {
             - Mỗi ý là một khẳng định (không phải câu hỏi), xác định được chắc chắn là Đúng hoặc Sai.
             - Các ý có thể nối tiếp nhau (điều kiện xác định, rút gọn, tính giá trị...), nhưng mỗi ý phải tự kết \
             luận được khi đã có đề dẫn. Không ghi "a)", "b)" ở đầu nội dung ý.
+            - Mỗi ý a–d phải nói về chính đối tượng trong đề dẫn (biểu thức, hình, số liệu đã cho), không nêu kiến \
+            thức chung tách rời đề dẫn.
+            - Mọi công thức mở bằng $ phải đóng bằng $ trước dấu câu.
             - Không bắt buộc số ý Đúng hay số ý Sai.
             """;
 

@@ -10,6 +10,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -79,8 +80,8 @@ class MatrixPromptDraftV0Test {
 
     @Test
     void phienBanVaThongSoOLuuDuoc() {
-        assertEquals("matrix-mcq-v0-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
-        assertEquals("matrix-tf-v0-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-mcq-v1-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
+        assertEquals("matrix-tf-v1-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion("sa-v1-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion(null));
@@ -88,5 +89,49 @@ class MatrixPromptDraftV0Test {
             MatrixCellSpec s = spec(type, "Tứ giác \"có ngoặc\"", "Nội dung\ncó xuống dòng");
             assertEquals(s, MatrixCellSpec.fromJson(s.toJson()), type.name());
         }
+    }
+
+    /** Ngày 23/10 (mục 9): phương án nhiễu phải sai về giá trị, không tương đương đáp án. */
+    @Test
+    void mcqPhuongAnNhieuPhaiSaiVeGiaTri() {
+        String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.MCQ, "Hằng đẳng thức", "Phân tích"));
+        assertTrue(p.contains("Mỗi phương án nhiễu phải SAI về giá trị, không được là biểu thức tương đương với đáp án"
+                + " đúng"), p);
+        assertTrue(p.contains("$3(x^2 - 4x)$ khi đáp án là $3x(x - 4)$"), p);
+        assertFalse(MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.SA, "Tứ giác", null))
+                .contains("phương án nhiễu"));
+    }
+
+    /** Ngày 23/10 (mục 6): phần TF của prompt ma trận dùng chung quy tắc ý với TfPromptDraftV0. */
+    @Test
+    void tfMaTranCoQuyTacYBamDeDan() {
+        String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.TF, "Đa thức", null));
+        assertTrue(p.contains("phải nói về chính đối tượng trong đề dẫn"), p);
+        assertTrue(p.contains("phải đóng bằng $ trước dấu câu"), p);
+    }
+
+    /** Ngày 23/10 (mục 5, 8): ghi chú riêng của job (câu thứ k/n, lý do lần sinh trước bị loại) chèn vào prompt. */
+    @Test
+    void ghiChuCuaJobDuocChenVaoPrompt() {
+        MatrixCellSpec s = spec(QuestionType.MCQ, "Đa thức", null);
+        String note = "Đây là câu thứ 2/4 của ô này.";
+        String p = MatrixPromptDraftV0.buildGenerationPrompt(s, List.of(), note);
+        assertTrue(p.contains("\n" + note + "\n"), p);
+        assertTrue(p.indexOf(note) < p.indexOf("đủ 7 trường"), "ghi chú đứng trước yêu cầu đầu ra");
+        assertEquals(MatrixPromptDraftV0.buildGenerationPrompt(s, List.of()),
+                MatrixPromptDraftV0.buildGenerationPrompt(s, List.of(), null));
+        assertEquals("Đây là câu thứ 2/4 của ô này: dạng hỏi phải khác các câu còn lại của ô (không chỉ đổi số liệu);"
+                + " nếu yêu cầu cần đạt có nhiều ý, mỗi câu kiểm tra một ý khác.", MatrixPromptDraftV0.slotLine(2, 4));
+        assertNull(MatrixPromptDraftV0.slotLine(1, 1));
+    }
+
+    @Test
+    void lyDoLanSinhTruocToiDa300KyTu() {
+        assertEquals("Lần sinh trước bị loại vì: question_text: số dấu $ lẻ. Tránh lặp lại lỗi này.",
+                MatrixPromptDraftV0.retryHint(List.of("question_text: số dấu $ lẻ")));
+        String longHint = MatrixPromptDraftV0.retryHint(List.of("x".repeat(500), "y"));
+        assertEquals(300, longHint.length());
+        assertTrue(longHint.endsWith("…. Tránh lặp lại lỗi này."), longHint);
+        assertNull(MatrixPromptDraftV0.retryHint(List.of()));
     }
 }

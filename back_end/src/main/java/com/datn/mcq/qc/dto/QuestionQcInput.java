@@ -81,6 +81,13 @@ public record QuestionQcInput(
                 explanation, validateLatex, runAnswerCheck, null);
     }
 
+    /** Bản sao kèm cảnh báo từ bước giải mã (ngày 23/10: áp cho cả mcq và sa). */
+    public QuestionQcInput withParseWarnings(List<String> warnings) {
+        return new QuestionQcInput(questionId, parseSuccess, questionText, optionA, optionB, optionC, optionD,
+                correctOption, explanation, validateLatex, runAnswerCheck, parseError, questionType, saAnswer,
+                saAnswerIsString, statements, statementLabels, warnings);
+    }
+
     /** Câu Trả lời ngắn (V4): không có phương án và correct_option. */
     public static QuestionQcInput shortAnswer(
             Integer questionId,

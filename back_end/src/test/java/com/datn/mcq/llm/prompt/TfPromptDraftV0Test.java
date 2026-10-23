@@ -78,6 +78,19 @@ class TfPromptDraftV0Test {
                 "\"reasoning_a\"", "\"judge_d\"")) {
             assertTrue(p.contains(part), "Prompt Solver thiếu: " + part);
         }
-        assertEquals("tf-v1-draft", TfPromptDraftV0.PROMPT_VERSION);
+        assertEquals("tf-v2-draft", TfPromptDraftV0.PROMPT_VERSION);
+    }
+
+    /** Ngày 23/10 (mục 6): ý bám đối tượng trong đề dẫn; mọi "$" mở phải đóng trước dấu câu. */
+    @Test
+    void quyTacYBamDeDanVaDongDoLa() {
+        String p = TfPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, null,
+                List.of(Difficulty.EASY, Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD));
+        for (String part : List.of(
+                "Mỗi ý a–d phải nói về chính đối tượng trong đề dẫn (biểu thức, hình, số liệu đã cho), không nêu kiến"
+                        + " thức chung tách rời đề dẫn",
+                "Mọi công thức mở bằng $ phải đóng bằng $ trước dấu câu")) {
+            assertTrue(p.contains(part), "Prompt thiếu: " + part);
+        }
     }
 }

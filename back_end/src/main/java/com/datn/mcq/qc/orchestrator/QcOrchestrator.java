@@ -94,7 +94,9 @@ public class QcOrchestrator {
                 null,
                 null,
                 null,
-                formatOutcome.answerWarnings()
+                formatOutcome.answerWarnings(),
+                // V8 (ngày 23/10): lý do format không qua (kể cả lỗi giải mã JSON) lưu ở cột errors; NULL khi qua.
+                formatOutcome.passed() ? null : formatOutcome.errors()
         );
         // V5 (Q8 ngày 22/10): cảnh báo lưu ở cột warnings của dòng format; báo cáo đọc lại từ chính cột đó.
         List<String> answerWarnings = readWarnings(formatRow.getWarnings());
@@ -340,6 +342,26 @@ public class QcOrchestrator {
             SaJudgeKind judgeSaKind,
             String judgeSaAnswer,
             List<String> warnings) {
+        return upsertCheckResult(questionId, questionType, checkType, passed, judgeAnswer, judgeModel, judgeSaKind,
+                judgeSaAnswer, warnings, null);
+    }
+
+    /**
+     * Như trên, kèm lý do không qua (V8): chỉ ghi vào dòng format khi passed = false (rỗng thì NULL); dòng khác và dòng
+     * format đã qua luôn NULL.
+     */
+    @Transactional
+    public QualityCheckResult upsertCheckResult(
+            Integer questionId,
+            QuestionType questionType,
+            CheckType checkType,
+            boolean passed,
+            AnswerChoice judgeAnswer,
+            String judgeModel,
+            SaJudgeKind judgeSaKind,
+            String judgeSaAnswer,
+            List<String> warnings,
+            List<String> errors) {
         QualityCheckResult qcr = qualityCheckResultRepository
                 .findByQuestionIdAndCheckType(questionId, checkType)
                 .orElseGet(QualityCheckResult::new);
@@ -359,6 +381,7 @@ public class QcOrchestrator {
             qcr.setJudgeSaAnswer(null);
         }
         qcr.setWarnings(checkType == CheckType.FORMAT ? writeWarnings(warnings) : null);
+        qcr.setErrors(checkType == CheckType.FORMAT && !passed ? JsonStringArray.write(errors) : null);
         qcr.setCheckedAt(LocalDateTime.now());
         return qualityCheckResultRepository.save(qcr);
     }
