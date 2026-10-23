@@ -42,6 +42,9 @@ app:
     enabled: ${WORKER_ENABLED:false}
     poll-delay-ms: ${WORKER_POLL_DELAY_MS:15000}
     max-attempts: ${WORKER_MAX_ATTEMPTS:3}
+    # Job running quá ngưỡng này (giây) được trả về pending khi khởi động và mỗi stale-check-ms (chỉ khi worker bật).
+    stale-after-seconds: ${WORKER_STALE_AFTER_SECONDS:300}
+    stale-check-ms: ${WORKER_STALE_CHECK_MS:120000}
   # Xuất đề ra Word (GET /api/exams/{id}/export/docx) cần pandoc; mặc định tìm "pandoc" trên PATH.
   export:
     pandoc-path: ${PANDOC_PATH:pandoc}

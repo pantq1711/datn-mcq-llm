@@ -13,8 +13,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 /**
- * Chuyển Markdown sang docx bằng pandoc ("-f markdown+tex_math_dollars -t docx"), để công thức $...$ thành Equation
- * gốc của Word (OMML). Chạy trong một thư mục tạm riêng, giới hạn {@value #TIMEOUT_SECONDS} giây, xóa thư mục khi xong.
+ * Chuyển Markdown sang docx bằng pandoc ("-f markdown+tex_math_dollars -t docx --reference-doc"), để công thức $...$
+ * thành Equation gốc của Word (OMML). Chạy trong một thư mục tạm riêng, giới hạn {@value #TIMEOUT_SECONDS} giây, xóa thư mục khi xong.
  * Không cài pandoc; máy chủ không có pandoc thì ném {@link DocumentExportException} 503.
  *
  * <p>Đường dẫn pandoc: {@code app.export.pandoc-path} (mặc định "pandoc", tìm trên PATH).
@@ -23,6 +23,7 @@ import java.util.stream.Stream;
 public class PandocRunner {
 
     static final String TEMP_PREFIX = "exam-export-";
+    static final String REFERENCE_DOC_RESOURCE = "/export/reference.docx";
     static final long TIMEOUT_SECONDS = 30;
     static final String NOT_INSTALLED_MESSAGE = "Máy chủ chưa cài pandoc nên chưa xuất được file Word. Cài pandoc theo "
             + "hướng dẫn trong docs/api/README.md (mục 7.6 Xuất đề ra Word) rồi khởi động lại backend, hoặc đặt PANDOC_PATH.";
@@ -42,11 +43,12 @@ public class PandocRunner {
         }
         try {
             Files.writeString(dir.resolve("exam.md"), markdown, StandardCharsets.UTF_8);
+            copyReferenceDoc(dir.resolve("reference.docx"));
             Path log = dir.resolve("pandoc.log");
             Process process;
             try {
                 process = new ProcessBuilder(pandocPath, "exam.md", "-f", "markdown+tex_math_dollars", "-t", "docx",
-                        "-o", "exam.docx")
+                        "--reference-doc=reference.docx", "-o", "exam.docx")
                         .directory(dir.toFile())
                         .redirectErrorStream(true)
                         .redirectOutput(log.toFile())
@@ -72,6 +74,20 @@ public class PandocRunner {
             throw new DocumentExportException(503, "Xuất đề bị ngắt, hãy thử lại.");
         } finally {
             deleteQuietly(dir);
+        }
+    }
+
+    /**
+     * File mẫu --reference-doc ({@value #REFERENCE_DOC_RESOURCE}): reference.docx mặc định của pandoc, thêm
+     * compatibilityMode = 15 trong settings.xml (Word không mở ở Compatibility Mode, lệnh Convert Equations của MathType
+     * chạy được) và font Normal Times New Roman 13. Cách tạo ghi ở docs/api/README.md mục 7.6.
+     */
+    private static void copyReferenceDoc(Path target) throws IOException {
+        try (var in = PandocRunner.class.getResourceAsStream(REFERENCE_DOC_RESOURCE)) {
+            if (in == null) {
+                throw new IllegalStateException("Thiếu file mẫu " + REFERENCE_DOC_RESOURCE + " trong resources");
+            }
+            Files.copy(in, target);
         }
     }
 

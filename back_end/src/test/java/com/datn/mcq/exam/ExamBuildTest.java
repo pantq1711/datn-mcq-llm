@@ -103,6 +103,8 @@ class ExamBuildTest {
         int escapeMcq;
         /** Số câu mcq tiếp theo quên đóng "$" ở cuối option_a (được tự đóng). */
         int unclosedMcq;
+        /** Số câu mcq tiếp theo có lệnh LaTeX nằm ngoài $...$ trong lời giải (lỗi LaTeX của lời giải). */
+        int rawLatexExplanationMcq;
         /** null: theo mẫu nhãn bắt buộc trong prompt (không có mẫu thì T,F,T,F). */
         String[] tfLabels;
         static String lastTfLabels = "T,F,T,F";
@@ -133,7 +135,11 @@ class ExamBuildTest {
                         + " \"correct_option\": \"B\", \"explanation\": \"Số mũ của x.\"}", 10, 1.0, 0.0, modelName);
             }
             String explanation = "Số mũ của x.";
-            if (escapeMcq > 0) {
+            if (rawLatexExplanationMcq > 0) {
+                rawLatexExplanationMcq--;
+                // JSON thoát đúng; sau giải mã là \frac{5x + 3}{y} nằm ngoài $...$.
+                explanation = "Ta có \\\\frac{5x + 3}{y} khi $y \\\\neq 0$.";
+            } else if (escapeMcq > 0) {
                 escapeMcq--;
                 explanation = "Số mũ của x, góc $90^\\circ$.";
             }
@@ -911,6 +917,30 @@ class ExamBuildTest {
         assertEquals(expected, jdbc.queryForList("SELECT final_label FROM teacher_review_statement ORDER BY position",
                 String.class));
         assertNotEquals(List.of(required.split("")), expected);
+    }
+
+    /** Đợt A bổ sung 4 (đề 2, chỗ 20): lời giải có lệnh LaTeX ngoài $...$ vẫn còn sau khi Giữ và khi xem đề. */
+    @Test
+    void loiGiaiCoLatexNgoaiCongThucVanConSauKhiGiu() throws Exception {
+        generator.rawLatexExplanationMcq = 1;
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        String expected = "Ta có \\frac{5x + 3}{y} khi $y \\neq 0$.";
+        int questionId = jdbc.queryForObject("SELECT generated_question_id FROM exam_slot WHERE id = ?", Integer.class,
+                slot);
+        assertEquals(expected, jdbc.queryForObject("SELECT explanation FROM generated_question WHERE id = ?",
+                String.class, questionId));
+        assertEquals(Boolean.TRUE, jdbc.queryForObject("SELECT passed FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type = 'format'", Boolean.class, questionId), "lỗi LaTeX của lời giải không làm hỏng format");
+
+        JsonNode kept = json(action(examId, slot, "keep").andExpect(status().isOk()));
+        assertEquals(expected, kept.get("explanation").asText(), "Giữ trả lời giải");
+        assertEquals(expected, jdbc.queryForObject("SELECT explanation FROM bank_item WHERE id = ?", String.class,
+                kept.get("bankItemId").asInt()), "bank_item giữ lời giải");
+        JsonNode item = json(mockMvc.perform(get("/api/exams/" + examId)).andExpect(status().isOk()))
+                .get("parts").get(0).get("items").get(0);
+        assertEquals(kept.get("bankItemId").asInt(), item.get("bankItemId").asInt(), "câu đã Giữ hiển thị bản ngân hàng");
+        assertEquals(expected, item.get("explanation").asText(), "xem đề trả lời giải của câu đã Giữ");
     }
 
     @Test

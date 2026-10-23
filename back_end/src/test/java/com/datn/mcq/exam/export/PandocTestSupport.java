@@ -48,13 +48,36 @@ public final class PandocTestSupport {
 
     /** Nội dung word/document.xml trong file docx; ném lỗi nếu không phải zip hợp lệ hoặc thiếu mục này. */
     public static String documentXml(byte[] docx) throws IOException {
+        return entry(docx, "word/document.xml");
+    }
+
+    /** Nội dung một mục (ví dụ word/settings.xml) trong file docx; ném lỗi nếu thiếu. */
+    public static String entry(byte[] docx, String name) throws IOException {
         try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(docx))) {
             for (ZipEntry e = zip.getNextEntry(); e != null; e = zip.getNextEntry()) {
-                if (e.getName().equals("word/document.xml")) {
+                if (e.getName().equals(name)) {
                     return new String(zip.readAllBytes(), StandardCharsets.UTF_8);
                 }
             }
         }
-        throw new IOException("docx không có word/document.xml");
+        throw new IOException("docx không có " + name);
+    }
+
+    /** Khai báo chế độ tương thích Word 2013+ (không mở ở Compatibility Mode). */
+    public static boolean hasCompatibilityMode15(String settingsXml) {
+        return settingsXml.matches("(?s).*<w:compat>\\s*<w:compatSetting w:name=\"compatibilityMode\""
+                + " w:uri=\"http://schemas.microsoft.com/office/word\" w:val=\"15\"\\s*/>\\s*</w:compat>.*");
+    }
+
+    /** Kiểu Normal dùng Times New Roman cỡ 13 (sz = 26 nửa điểm). */
+    public static boolean normalIsTimesNewRoman13(String stylesXml) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "(?s)<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\">(.*?)</w:style>").matcher(stylesXml);
+        if (!m.find()) {
+            return false;
+        }
+        String normal = m.group(1);
+        return normal.contains("w:ascii=\"Times New Roman\"") && normal.contains("w:hAnsi=\"Times New Roman\"")
+                && normal.contains("<w:sz w:val=\"26\"");
     }
 }

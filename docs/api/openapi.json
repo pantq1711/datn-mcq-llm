@@ -1035,6 +1035,10 @@
           "lastError" : {
             "type" : "string"
           },
+          "startedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
           "tokenCount" : {
             "type" : "integer",
             "format" : "int32"

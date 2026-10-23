@@ -44,7 +44,7 @@ không lặp lại bài toán hay số liệu; xem `enums.md` mục 3, "Độ đ
 | POST | `/api/catalog/templates` | Tạo template cho môn đã tồn tại (không tạo môn) |
 | POST | `/api/generation/generate-sync` | Sinh 1 câu (mọi dạng) và chạy QC ngay. Gọi Gemini, có thể tốn phí |
 | POST | `/api/generation/jobs/enqueue` | Tạo job sinh câu bất đồng bộ (tối đa 50, mọi dạng) |
-| POST | `/api/generation/jobs/process-next?runAnswerCheck=true` | Xử lý ngay 1 job đến hạn. Gọi Gemini |
+| POST | `/api/generation/jobs/process-next?runAnswerCheck=true` | Xử lý ngay 1 job đến hạn (khóa `FOR UPDATE SKIP LOCKED`, không nhận trùng với worker). Gọi Gemini |
 | GET | `/api/generation/jobs` | Danh sách job |
 | GET | `/api/reviews/questions` | Danh sách câu để chấm, mọi dạng (không có tham số lọc trạng thái) |
 | GET | `/api/reviews/questions/{id}` | Form chấm một câu |
@@ -649,8 +649,15 @@ GET /api/exams/12/export/docx   → 200, file MT2610231200001.docx (Content-Disp
 - Chỉ xuất nội dung các chỗ đã có câu (`ready`, `kept`, `edited`); chỗ `failed` ghi "[Chưa có câu – cần sinh lại]",
   chỗ đang sinh ghi "[Chưa có câu – đang sinh]"; ở ĐÁP ÁN và LỜI GIẢI các chỗ này ghi "—". Xuất đề cũng đối soát như
   xem đề (7.4).
-- Cách làm: dựng Markdown từ dữ liệu xem đề rồi gọi `pandoc -f markdown+tex_math_dollars -t docx` (thư mục tạm riêng,
-  tối đa 30 giây, xóa khi xong). Công thức `$...$` thành Equation gốc của Word (OMML), sửa được trong Word.
+- Cách làm: dựng Markdown từ dữ liệu xem đề rồi gọi `pandoc -f markdown+tex_math_dollars -t docx
+  --reference-doc=reference.docx` (thư mục tạm riêng, tối đa 30 giây, xóa khi xong). Công thức `$...$` thành Equation
+  gốc của Word (OMML), sửa được trong Word.
+- File mẫu `back_end/src/main/resources/export/reference.docx` (chép ra thư mục tạm mỗi lần xuất): là `reference.docx`
+  mặc định của pandoc (`pandoc -o reference.docx --print-default-data-file reference.docx`), thêm vào `word/settings.xml`
+  khai báo `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word"
+  w:val="15"/></w:compat>` (trước `<w:rsids>`) để Word không mở file ở Compatibility Mode (lệnh Convert Equations của
+  MathType mới chạy), và đặt font mặc định cùng kiểu Normal là Times New Roman 13 trong `word/styles.xml`. Tiêu đề
+  (Heading) vẫn dùng font theo theme của pandoc.
 - Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; pandoc báo lỗi
   trả 500.
 - **Cài pandoc** (backend không tự cài):

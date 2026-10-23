@@ -352,8 +352,7 @@ public class TeacherReviewService {
                 String finalB = edited ? savedEditedB : gq.getOptionB();
                 String finalC = edited ? savedEditedC : gq.getOptionC();
                 String finalD = edited ? savedEditedD : gq.getOptionD();
-                // Ngân hàng giữ lời giải LLM (quyết định 21/10 mục 3), trừ khi lời giải còn lỗi định dạng
-                // LaTeX nghiêm trọng thì lưu NULL (việc 2 ngày 22/10).
+                // Ngân hàng giữ lời giải LLM (quyết định 21/10 mục 3), kể cả khi lời giải còn lỗi LaTeX (đợt A, 23/10).
                 String finalExp = explanationForBank(subject.getName(), gq.getExplanation());
 
                 GeneratedQuestion updatedGq = generationService.updateStatusAndDifficulty(
@@ -1006,10 +1005,6 @@ public class TeacherReviewService {
         return errors;
     }
 
-    /**
-     * Lời giải chép vào bank_item (việc 2 ngày 22/10): với môn Toán, lời giải còn lỗi định dạng LaTeX nghiêm trọng
-     * thì trả null; lời giải hợp lệ hoặc chỉ có cảnh báo được giữ nguyên. Môn khác không kiểm LaTeX.
-     */
     static final String KEEP_NOT_ALLOWED_MESSAGE = "Câu hỏi này không thể đưa vào ngân hàng.";
 
     /**
@@ -1129,11 +1124,13 @@ public class TeacherReviewService {
         throw new IllegalStateException("Dạng câu không hỗ trợ: " + type);
     }
 
+    /**
+     * Lời giải chép vào bank_item: luôn giữ nguyên lời giải LLM (đợt A bổ sung 4, ngày 23/10). Lỗi LaTeX trong lời giải
+     * chỉ là cảnh báo ở bước format, không làm mất lời giải. Thay quy tắc việc 2 ngày 22/10 (lưu NULL khi lời giải còn
+     * lỗi LaTeX nghiêm trọng), là nguyên nhân câu Giữ ở đề 2 chỗ 20 mất lời giải.
+     */
     static String explanationForBank(String subjectName, String explanation) {
-        if (explanation == null || explanation.isBlank() || !GenerationJobProcessor.isMathSubject(subjectName)) {
-            return explanation;
-        }
-        return LatexFormatValidator.check(explanation).hasErrors() ? null : explanation;
+        return explanation;
     }
 
     private static boolean isReviewable(GeneratedQuestion gq) {

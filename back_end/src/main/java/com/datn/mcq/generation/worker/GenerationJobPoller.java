@@ -20,6 +20,8 @@ import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -36,6 +38,8 @@ import java.util.Optional;
  */
 @Component
 public class GenerationJobPoller {
+
+    private static final Logger LOG = LoggerFactory.getLogger(GenerationJobPoller.class);
 
     public record ProcessedJobSummary(
             boolean processed,
@@ -115,6 +119,22 @@ public class GenerationJobPoller {
             );
         }
 
+        // Đợt A (ngày 23/10): lỗi ở phần sau lời gọi LLM (giải mã, lưu câu, QC) đi cùng đường thử lại/failed như lỗi
+        // gọi LLM, không để job kẹt ở running.
+        try {
+            return saveAndCheck(ctx, llmResult, runAnswerCheck, production);
+        } catch (RuntimeException ex) {
+            String error = "Lỗi sau lời gọi LLM: " + ex.getMessage();
+            LOG.warn("Job {}: {}", ctx.jobId(), error, ex);
+            var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
+            return new ProcessedJobSummary(true, ctx.jobId(), null, failedJob.getStatus().getDbValue(), null, error);
+        }
+    }
+
+    private ProcessedJobSummary saveAndCheck(GenerationJobProcessor.ClaimedJobContext ctx, LlmCallResult llmResult,
+                                             boolean runAnswerCheck, boolean production) {
+        boolean shortAnswer = ctx.questionType() == QuestionType.SA;
+        boolean trueFalse = ctx.questionType() == QuestionType.TF;
         if (trueFalse) {
             ParsedTfDto parsedTf = TfJsonParser.parse(llmResult.rawText(), production);
             // Ngày 23/10: job tf theo ma trận có mẫu nhãn bắt buộc; nhãn khác mẫu chỉ cảnh báo (bật "cần xem kỹ").
