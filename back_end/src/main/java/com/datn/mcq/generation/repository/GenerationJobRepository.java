@@ -14,6 +14,9 @@ public interface GenerationJobRepository extends JpaRepository<GenerationJob, In
 
     List<GenerationJob> findAllByOrderByIdDesc();
 
+    /** V7: job mới nhất của một chỗ trong đề. */
+    Optional<GenerationJob> findFirstByExamSlotIdOrderByIdDesc(Integer examSlotId);
+
     @Query("""
             SELECT j FROM GenerationJob j
             WHERE j.status = :status

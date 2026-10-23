@@ -188,15 +188,54 @@ class DedupCheckerTrueFalseTest {
     }
 
     /**
-     * Ca biên theo đúng quy tắc đã duyệt (đề dẫn giống/cosine >= tau và >= 3/4 ý cosine >= tau): các cặp dưới KHÔNG
-     * trùng. 4-8: đề dẫn 4 thiếu câu "Xét tính đúng sai..." nên cosine đề dẫn 0.71. 6-4: đề dẫn 0.72 và ý c chỉ 0.78
-     * ($x = 3$ so với $x = -3$). 8-10 và 2-10: đề dẫn giống nhưng a, c chỉ 0.88. Chờ quyết định có nới quy tắc.
+     * Quyết định 4 (sau phần A): bỏ câu chỉ dẫn chung khỏi đề dẫn trước khi so. Đề dẫn 4 và 8 khi đó giống nhau, ý a, c, d
+     * giống hệt nên trùng theo ý.
      */
     @Test
-    void duLieuThat_caBienTheoQuyTacDaDuyet() {
-        assertEquals(DedupStatus.NO_DUPLICATE, check(candidate(TF8), candidate(TF4)).status(), "4-8");
+    void duLieuThat_cau8TrungCau4SauKhiBoCauChiDan() {
+        DedupOutcome out = check(candidate(TF8), candidate(TF4));
+        assertEquals(DedupStatus.DUPLICATE, out.status());
+        assertEquals(DedupOutcome.Layer.TF_STATEMENTS, out.layer());
+        assertEquals(4, out.comparedToQuestionId());
+    }
+
+    /**
+     * Ca biên chấp nhận (quyết định 4): 6-4 chỉ 2 ý >= tau (ý c 0.78: $x = 3$ so với $x = -3$). 8-10 và 2-10: đề dẫn
+     * giống nhưng ý a, c chỉ 0.88. Không hạ ngưỡng.
+     */
+    @Test
+    void duLieuThat_caBienKhongTrung() {
         assertEquals(DedupStatus.NO_DUPLICATE, check(candidate(TF6), candidate(TF4)).status(), "6-4");
         assertEquals(DedupStatus.NO_DUPLICATE, check(candidate(TF10), candidate(TF8)).status(), "8-10");
         assertEquals(DedupStatus.NO_DUPLICATE, check(candidate(TF10), candidate(TF2)).status(), "2-10");
+    }
+
+    @Test
+    void boCauChiDanTruocKhiSoDeDan() {
+        String bare = "Cho phương trình bậc nhất một ẩn $2x - 6 = 0$.";
+        for (String phrase : McqTextNormalizer.TF_INSTRUCTION_PHRASES) {
+            String stem = bare + " " + phrase + ":";
+            assertEquals(bare, McqTextNormalizer.stripTfInstruction(stem), phrase);
+            assertEquals(bare, McqTextNormalizer.stripTfInstruction(bare + " " + phrase.toUpperCase() + "?"), phrase);
+            assertEquals(bare, McqTextNormalizer.stripTfInstruction(bare + "  " + phrase.replace(" ", "  ")), phrase);
+        }
+        assertEquals("Cho $P = x$.", McqTextNormalizer.stripTfInstruction("Cho $P = x$."), "không có cụm thì giữ");
+        assertEquals("Xét tính đúng sai của các khẳng định sau về $P$:",
+                McqTextNormalizer.stripTfInstruction("Xét tính đúng sai của các khẳng định sau về $P$:"),
+                "cụm không đứng trọn vẹn (còn chữ phía sau trước dấu câu) thì giữ");
+    }
+
+    @Test
+    void chuSaiTrongCauChiDanKhongTinhLaPhuDinh() {
+        String tail = " Xét tính đúng sai của các khẳng định sau:";
+        String stem = "Cho phương trình $2x - 6 = 0$, học sinh được dùng máy tính cầm tay." + tail;
+        String negated = "Cho phương trình $2x - 6 = 0$, học sinh không được dùng máy tính cầm tay." + tail;
+        String control = "Cho phương trình $2x - 6 = 0$, học sinh vẫn được dùng máy tính cầm tay." + tail;
+        List<String> statements = List.of(TF8.get(1), TF8.get(2), TF8.get(3), "Ý khác hẳn về đồ thị hàm số $y = x$.");
+        // Trước quyết định 4, cả hai đề dẫn đều "có phủ định" (chữ sai) nên chốt chặn không tách được.
+        assertEquals(DedupStatus.NO_DUPLICATE, check(DedupCandidate.trueFalse(2, negated, statements),
+                DedupCandidate.trueFalse(1, stem, TF8.subList(1, 5))).status());
+        assertEquals(DedupStatus.DUPLICATE, check(DedupCandidate.trueFalse(2, control, statements),
+                DedupCandidate.trueFalse(1, stem, TF8.subList(1, 5))).status(), "bỏ chữ không thì trùng");
     }
 }

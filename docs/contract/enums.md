@@ -245,7 +245,7 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - `τ = 0.90` là hằng số tạm, CHƯA hiệu chỉnh trên gold set; chưa có precision/recall.
   - Phạm vi so: experiment chỉ trong cùng run; production trong các run production cùng môn. Không bao giờ so chéo experiment và production. Ứng viên là câu `qc_passed`, `in_bank` và câu cùng run đã có dòng dedup `passed = true`.
   - Dedup báo trùng: dòng dedup `passed = false` kèm `compared_to_question_id`, trạng thái `duplicate`. Dedup lỗi hoặc thiếu phạm vi: không ghi dòng dedup, giữ `generated`.
-  - Câu `tf` có thêm tầng (c) `TF_STATEMENTS` (quyết định Q6-Q7 ngày 22/10), xét sau (a) và (b): trùng khi đề dẫn giống nhau sau chuẩn hóa (hoặc cosine đề dẫn `>= τ` VÀ đề dẫn qua chốt chặn số liệu và phủ định) VÀ ít nhất 3/4 ý ghép được thành cặp có cosine `>= τ`. Ghép không phụ thuộc thứ tự, mỗi ý ghép tối đa với một ý của câu kia; KHÔNG áp chốt chặn số liệu hay phủ định ở mức ý. `similarity_score` là giá trị nhỏ nhất trong cosine đề dẫn và cosine các cặp ý đã ghép, nên vẫn `>= τ`. Ca biên đã biết: chữ `sai` trong "Xét tính đúng sai…" tính là phủ định, nên chốt chặn phủ định ở đề dẫn không phân biệt hai đề dẫn cùng có cụm đó.
+  - Câu `tf` có thêm tầng (c) `TF_STATEMENTS` (quyết định Q6-Q7 ngày 22/10), xét sau (a) và (b): trùng khi đề dẫn giống nhau sau chuẩn hóa (hoặc cosine đề dẫn `>= τ` VÀ đề dẫn qua chốt chặn số liệu và phủ định) VÀ ít nhất 3/4 ý ghép được thành cặp có cosine `>= τ`. Ghép không phụ thuộc thứ tự, mỗi ý ghép tối đa với một ý của câu kia; KHÔNG áp chốt chặn số liệu hay phủ định ở mức ý. `similarity_score` là giá trị nhỏ nhất trong cosine đề dẫn và cosine các cặp ý đã ghép, nên vẫn `>= τ`. Với câu `tf`, ở cả ba tầng, đề dẫn được bỏ câu chỉ dẫn chung trước khi so (quyết định 4 ngày 22/10; danh sách tường minh `McqTextNormalizer.TF_INSTRUCTION_PHRASES`, ví dụ "Xét tính đúng sai của các khẳng định sau", "Các khẳng định sau đây là đúng hay sai"; cụm phải đứng trọn vẹn, ngay sau là `:`, `?`, `.` hoặc hết chuỗi), nên chữ `sai` trong cụm đó không bị tính là phủ định.
 - `duplicate` là trạng thái cuối: câu không vào vòng chấm (production và experiment), không được nộp đánh giá, không bị ghi đè trạng thái; bản ghi được giữ để truy vết và thống kê. Người chấm không được biết câu nào bị loại vì trùng.
 - Vòng chấm (quyết định 21/10 mục 5 và quyết định 22/10): danh sách `production` chỉ gồm câu `qc_passed` (mọi lần nộp production đều chuyển câu sang `in_bank` hoặc `rejected`, nên đó là câu chưa được chấm). Danh sách `experiment` loại `duplicate` và `format_failed`, giữ câu `generated` (kể cả khi `answer_check` lệch hoặc không chạy) và `qc_passed`, không lọc theo kết quả `answer_check`. Chi tiết và nộp đánh giá cho câu `duplicate` hoặc `format_failed` trả 404 `Không tìm thấy câu hỏi`, giống hệt câu không tồn tại.
 - Định dạng (việc 1 và 2 ngày 22/10): sau khi giải mã JSON, chuỗi `\n` theo nghĩa đen nằm ngoài `$...$`/`$$...$$` ở các trường văn bản được đổi thành ký tự xuống dòng (trong công thức giữ nguyên; `raw_llm_output` giữ bản gốc). Lỗi LaTeX ở `question_text` và 4 phương án làm câu `format_failed`; lỗi LaTeX ở `explanation` chỉ là cảnh báo. Khi chép vào `bank_item`, lời giải còn lỗi định dạng nghiêm trọng được lưu `explanation = NULL`.
@@ -262,6 +262,20 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - Đáp số `sa` lưu `TEXT` đúng chuỗi được viết (đã trim), DB không kiểm định dạng; phân tích và so theo giá trị làm trong Java.
   - `teacher_review.answer_correct`: `mcq` như cũ; `sa` NULL chỉ khi đáp số LLM đã lưu không còn phân tích được, `ambiguous` luôn FALSE; `tf` NULL, đúng/sai tính theo từng ý ở `teacher_review_statement.label_correct` (`undecidable` luôn FALSE).
   - `answer_check` của `sa`: `judge_sa_kind` bắt buộc, `judge_sa_answer` có khi kind là `number` hoặc `unparseable`. Của `tf`: nhãn từng ý ở `answer_check_statement`, xóa dây chuyền theo dòng `answer_check`.
+
+- Tạo đề theo ma trận (V6-V7, chế độ giáo viên, quyết định 22/10):
+  - `exam_matrix_cell.part`: `I` (chỉ `mcq`), `II` (chỉ `tf`), `III` (chỉ `sa`); `difficulty` cho `mcq`/`sa`,
+    `statement_difficulties` (`"easy,easy,medium,hard"`, theo ý a-d) cho `tf`. Mỗi ô một `question_template`.
+  - `exam.mode`: `manual` (mọi đề cũ) hoặc `teacher` (tạo theo ma trận, bắt buộc có `matrix_id`).
+  - `exam_slot.state`: `pending`, `generating`, `ready`, `failed`, `kept`, `edited`. `ready`/`kept`/`edited` phải có câu;
+    `kept`/`edited` phải có `bank_item_id`.
+  - `exam_slot_action.action`: `keep`, `edit`, `replace` (`edit_distance` chỉ với `edit`).
+  - `teacher_review.review_mode`: `blind` (mặc định, mọi dữ liệu cũ) hoặc `assisted` (Giữ/Sửa ở chế độ giáo viên). Đánh
+    giá `assisted` bị loại khỏi mọi chỉ số chấm mù (`answer_correct`, duyệt không sửa).
+  - Run sinh câu theo ô: `purpose = 'production'`, `strategy = 'zero-shot'`, `prompt_version` `matrix-mcq-v0-draft`,
+    `matrix-tf-v0-draft` hoặc `matrix-sa-v0-draft`; `hyperparams` là thông số ô (chủ đề, nội dung, yêu cầu cần đạt, mức).
+    Không thuộc thực nghiệm C1/C2/C3.
+  - `generation_job.exam_slot_id`: job sinh câu cho một chỗ trong đề; job thường để NULL.
 
 ## 4. JSON mà LLM phải trả
 

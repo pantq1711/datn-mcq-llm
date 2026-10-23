@@ -1,6 +1,6 @@
 package com.datn.mcq.qc.orchestrator;
 
-import com.datn.mcq.common.util.SimpleJson;
+import com.datn.mcq.common.util.JsonStringArray;
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.QuestionType;
@@ -365,29 +365,12 @@ public class QcOrchestrator {
 
     /** Mảng JSON các chuỗi; null khi không có cảnh báo. */
     static String writeWarnings(List<String> warnings) {
-        if (warnings == null || warnings.isEmpty()) {
-            return null;
-        }
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < warnings.size(); i++) {
-            sb.append(i > 0 ? "," : "").append(SimpleJson.quote(warnings.get(i)));
-        }
-        return sb.append("]").toString();
+        return JsonStringArray.write(warnings);
     }
 
     /** Đọc lại cột warnings (mảng JSON chuỗi); null hoặc rỗng thì danh sách rỗng. */
-    static List<String> readWarnings(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        Object parsed = SimpleJson.parseObject("{\"w\":" + json + "}").get("w");
-        List<String> out = new ArrayList<>();
-        if (parsed instanceof List<?> items) {
-            for (Object item : items) {
-                out.add(String.valueOf(item));
-            }
-        }
-        return List.copyOf(out);
+    public static List<String> readWarnings(String json) {
+        return JsonStringArray.read(json);
     }
 
     /**

@@ -37,7 +37,45 @@ public class Exam {
     @Column(name = "status", nullable = false, length = 20)
     private ExamStatus status = ExamStatus.DRAFT;
 
+    /** V7: ma trận dùng để tạo đề (đề ở chế độ giáo viên); null với đề cũ. */
+    @Column(name = "matrix_id")
+    private Integer matrixId;
+
+    /** V7: 'manual' (đề cũ) hoặc 'teacher' (tạo theo ma trận, không chấm mù). */
+    @Column(name = "mode", nullable = false, length = 20)
+    private String mode = MODE_MANUAL;
+
+    @Column(name = "created_at", nullable = false)
+    private java.time.LocalDateTime createdAt = java.time.LocalDateTime.now();
+
+    public static final String MODE_MANUAL = "manual";
+    public static final String MODE_TEACHER = "teacher";
+
     public Exam() {}
+
+    public Integer getMatrixId() {
+        return matrixId;
+    }
+
+    public void setMatrixId(Integer matrixId) {
+        this.matrixId = matrixId;
+    }
+
+    public String getMode() {
+        return mode;
+    }
+
+    public void setMode(String mode) {
+        this.mode = mode;
+    }
+
+    public java.time.LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(java.time.LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
 
     public Integer getId() {
         return id;

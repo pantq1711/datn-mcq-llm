@@ -77,6 +77,25 @@ public class ExperimentService {
         return experimentRunRepository.save(run);
     }
 
+    /** Như {@link #createRun}, kèm hyperparams (JSON) — dùng cho run sinh câu theo ô ma trận (V7). */
+    @Transactional
+    public ExperimentRun createRun(
+            Integer subjectId,
+            Purpose purpose,
+            Strategy strategy,
+            String modelName,
+            Double temperature,
+            String promptVersion,
+            String promptText,
+            Integer numQuestionsRequested,
+            QuestionType questionType,
+            String hyperparams) {
+        ExperimentRun run = createRun(subjectId, purpose, strategy, modelName, temperature, promptVersion, promptText,
+                numQuestionsRequested, questionType);
+        run.setHyperparams(hyperparams);
+        return experimentRunRepository.save(run);
+    }
+
     @Transactional
     public ExperimentRun getOrCreateDemoRun(Integer subjectId, String promptText) {
         return experimentRunRepository.findFirstBySubjectIdAndPromptVersionOrderByIdAsc(

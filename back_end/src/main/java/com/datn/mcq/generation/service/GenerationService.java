@@ -20,6 +20,8 @@ import com.datn.mcq.generation.entity.GeneratedQuestionStatement;
 import com.datn.mcq.generation.parser.SaJsonParser;
 import com.datn.mcq.generation.parser.TfJsonParser;
 import com.datn.mcq.generation.repository.GeneratedQuestionStatementRepository;
+import com.datn.mcq.llm.prompt.MatrixCellSpec;
+import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -524,6 +526,52 @@ public class GenerationService {
         gq.setStatus(QuestionStatus.GENERATED);
         gq.setCreatedAt(LocalDateTime.now());
         return generatedQuestionRepository.save(gq);
+    }
+
+    /**
+     * V7 (phần C mục 2): run production, zero-shot cho một ô ma trận. prompt_text là prompt gốc của ô, prompt_version
+     * "matrix-&lt;dạng&gt;-v0-draft", hyperparams là thông số ô để worker dựng lại prompt.
+     */
+    @Transactional
+    public ExperimentRun createMatrixRun(Integer subjectId, MatrixCellSpec spec, int numQuestions) {
+        return experimentService.createRun(
+                subjectId,
+                Purpose.PRODUCTION,
+                Strategy.ZERO_SHOT,
+                llmClient.getDefaultModel(),
+                0.7,
+                MatrixPromptDraftV0.promptVersion(spec.questionType()),
+                MatrixPromptDraftV0.buildGenerationPrompt(spec),
+                numQuestions,
+                spec.questionType(),
+                spec.toJson());
+    }
+
+    /** V7: một job sinh câu cho một chỗ trong đề, thuộc run của ô. */
+    @Transactional
+    public GenerationJob enqueueMatrixJob(Integer runId, Integer templateId, MatrixCellSpec spec, Integer examSlotId,
+                                          LocalDateTime nextRunAt) {
+        LocalDateTime now = LocalDateTime.now();
+        GenerationJob job = new GenerationJob();
+        job.setQuestionType(spec.questionType());
+        job.setRunId(runId);
+        job.setTemplateId(templateId);
+        job.setTargetDifficulty(spec.questionType() == QuestionType.TF ? null : spec.difficulty());
+        job.setTargetStatementDifficulties(spec.questionType() == QuestionType.TF
+                ? joinLevels(spec.statementDifficulties()) : null);
+        job.setExamSlotId(examSlotId);
+        job.setStatus(JobStatus.PENDING);
+        job.setAttempt(0);
+        job.setNextRunAt(nextRunAt != null ? nextRunAt : now);
+        job.setCreatedAt(now);
+        job.setUpdatedAt(now);
+        return generationJobRepository.save(job);
+    }
+
+    /** V7: job mới nhất của một chỗ trong đề. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<GenerationJob> latestJobForSlot(Integer examSlotId) {
+        return generationJobRepository.findFirstByExamSlotIdOrderByIdDesc(examSlotId);
     }
 
     @Transactional

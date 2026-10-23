@@ -36,14 +36,16 @@ com.datn.mcq
 │   └── dto/
 ├── review/                 label_assignment, teacher_review, teacher_review_reason
 ├── bank/                   bank_item
-├── exam/                   exam, exam_question
+├── matrix/                 exam_matrix, exam_matrix_cell (V6: ma trận đề, mỗi ô một question_template)
+├── exam/                   exam, exam_question, exam_slot, exam_slot_action (V7: tạo đề theo ma trận)
 └── goldset/                dedup_gold_pair, dedup_gold_label
 ```
 
 ## Hướng phụ thuộc (không được tạo vòng)
 
 ```
-exam        ──► bank, catalog, user
+exam        ──► matrix, generation, qc, review, bank, catalog, user   (V7: tạo đề theo ma trận)
+matrix      ──► catalog
 review      ──► generation, qc, bank, user
 generation  ──► qc, llm
 experiment  ──► generation, catalog
@@ -61,4 +63,5 @@ Quy tắc:
 6. Không tự sửa (sanitize) công thức LaTeX bị hỏng: `LatexFormatValidator` chỉ phát hiện lỗi định dạng để đánh dấu `format_failed` hoặc yêu cầu sinh lại, giữ nguyên dữ liệu thô để đánh giá khách quan chiến lược prompting.
 7. `llm` chỉ gọi dịch vụ ngoài, không biết đến entity của dự án.
 8. Quy tắc DB không tự chặn được (xem `docs/contract/enums.md`, mục "Quy tắc đi kèm") đặt trong service của module `review`, `exam`, `goldset`.
-9. DTO trả về form chấm của module `review` không chứa `correct_option`, `llm_difficulty`, kết quả QC.
+9. DTO trả về form chấm của module `review` không chứa `correct_option`, `llm_difficulty`, kết quả QC. Ngoại lệ có chủ đích: API xem đề của module `exam` ở chế độ giáo viên (`/api/exams/**`) có đáp án, lời giải và cờ từ kết quả QC (quyết định 22/10 trong `docs/ai-development-rules.md`).
+10. `generation` không biết `exam`/`matrix`: run sinh câu theo ô mang thông số ô ở `experiment_run.hyperparams` (`MatrixCellSpec`), worker dựng prompt từ đó; `exam` đối soát kết quả qua `GenerationService.latestJobForSlot`. Ngoại lệ đọc chéo bảng: `ExamSlotRepository.findBankCandidates` là truy vấn native **chỉ đọc** trên `bank_item`, `bank_item_statement`, `generated_question`, `question_template`, `exam_matrix_cell`, `exam_question` để chọn câu ngân hàng khớp ô.
