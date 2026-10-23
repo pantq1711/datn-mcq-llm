@@ -6,6 +6,7 @@ import com.datn.mcq.catalog.service.CatalogService;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.enums.QuestionStatus;
+import com.datn.mcq.enums.Purpose;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.experiment.entity.ExperimentRun;
@@ -55,7 +56,8 @@ public class GenerationJobProcessor {
             String prompt,
             boolean validateLatex,
             QuestionType questionType,
-            List<Difficulty> targetStatementDifficulties
+            List<Difficulty> targetStatementDifficulties,
+            Purpose purpose
     ) {}
 
     private final GenerationJobRepository generationJobRepository;
@@ -107,7 +109,7 @@ public class GenerationJobProcessor {
         boolean matrix = MatrixPromptDraftV0.isMatrixVersion(run.getPromptVersion()) && run.getHyperparams() != null;
         String prompt = matrix
                 ? MatrixPromptDraftV0.buildGenerationPrompt(MatrixCellSpec.fromJson(run.getHyperparams()),
-                        previousQuestionLookup.recentForMatrix(tpl.getId(), questionType))
+                        previousQuestionLookup.recentForMatrix(tpl.getId(), questionType), job.getPromptNote())
                 : questionType == QuestionType.TF
                 ? TfPromptDraftV0.buildGenerationPrompt(
                         subject.getName(),
@@ -148,7 +150,8 @@ public class GenerationJobProcessor {
                 prompt,
                 isMath,
                 questionType,
-                statementLevels
+                statementLevels,
+                run.getPurpose()
         ));
     }
 

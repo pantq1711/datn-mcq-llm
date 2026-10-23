@@ -21,6 +21,7 @@ import com.datn.mcq.generation.parser.SaJsonParser;
 import com.datn.mcq.generation.parser.TfJsonParser;
 import com.datn.mcq.generation.repository.GeneratedQuestionStatementRepository;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
+import com.datn.mcq.llm.prompt.McqProductionSchema;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
@@ -264,10 +265,12 @@ public class GenerationService {
         if (req.rawLlmOutputOverride() != null && !req.rawLlmOutputOverride().isBlank()) {
             llmResult = new LlmCallResult(req.rawLlmOutputOverride(), 0, 0.0, 0.0, model);
         } else {
-            llmResult = llmClient.generateMcq(prompt, model, strategy, temperature);
+            // Ngày 23/10: run production gọi JSON mode kèm schema MCQ (như sa/tf); strategy vẫn quyết định prompt.
+            llmResult = llmClient.callJsonModeWithSchema(
+                    prompt, model, temperature, McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON);
         }
 
-        ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText());
+        ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText(), true);
         ExperimentRun run = experimentService.createRun(
                 subject.getId(),
                 Purpose.PRODUCTION,
@@ -297,7 +300,7 @@ public class GenerationService {
                 validateLatex,
                 runAnswerCheck,
                 parsed.parseError()
-        ), dedupScopeResolver.resolve(run.getId()));
+        ).withParseWarnings(parsed.parseWarnings()), dedupScopeResolver.resolve(run.getId()));
         GeneratedQuestion updated = updateStatusAndDifficulty(saved.getId(), qcReport.resultingStatus(), null);
         return new SyncGenerationResponse(GeneratedQuestionSummaryDto.fromEntity(updated), qcReport);
     }
@@ -334,7 +337,7 @@ public class GenerationService {
                     sentPrompt, model, temperature, SaPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON);
         }
 
-        ParsedSaDto parsed = SaJsonParser.parse(llmResult.rawText());
+        ParsedSaDto parsed = SaJsonParser.parse(llmResult.rawText(), true);
         ExperimentRun run = experimentService.createRun(
                 subject.getId(),
                 Purpose.PRODUCTION,
@@ -358,7 +361,7 @@ public class GenerationService {
     }
 
     /**
-     * Sinh đồng bộ 1 câu Đúng/Sai (GĐ3). Run: production, zero-shot, prompt_version tf-v1-draft. Gọi LLM ở JSON mode
+     * Sinh đồng bộ 1 câu Đúng/Sai (GĐ3). Run: production, zero-shot, prompt_version tf-v2-draft. Gọi LLM ở JSON mode
      * kèm schema TF ngoài transaction DB; lưu câu và 4 ý trong một transaction; rồi chạy QC.
      */
     private SyncGenerationResponse generateTrueFalseSync(
@@ -389,7 +392,7 @@ public class GenerationService {
                     sentPrompt, model, temperature, TfPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON);
         }
 
-        ParsedTfDto parsed = TfJsonParser.parse(llmResult.rawText());
+        ParsedTfDto parsed = TfJsonParser.parse(llmResult.rawText(), true);
         ExperimentRun run = experimentService.createRun(
                 subject.getId(),
                 Purpose.PRODUCTION,
@@ -465,7 +468,7 @@ public class GenerationService {
                 validateLatex,
                 runAnswerCheck,
                 parsed.parseError()
-        );
+        ).withParseWarnings(parsed.parseWarnings());
     }
 
     /**
@@ -550,7 +553,7 @@ public class GenerationService {
     /** V7: một job sinh câu cho một chỗ trong đề, thuộc run của ô. */
     @Transactional
     public GenerationJob enqueueMatrixJob(Integer runId, Integer templateId, MatrixCellSpec spec, Integer examSlotId,
-                                          LocalDateTime nextRunAt) {
+                                          LocalDateTime nextRunAt, String promptNote) {
         LocalDateTime now = LocalDateTime.now();
         GenerationJob job = new GenerationJob();
         job.setQuestionType(spec.questionType());
@@ -560,6 +563,7 @@ public class GenerationService {
         job.setTargetStatementDifficulties(spec.questionType() == QuestionType.TF
                 ? joinLevels(spec.statementDifficulties()) : null);
         job.setExamSlotId(examSlotId);
+        job.setPromptNote(promptNote == null || promptNote.isBlank() ? null : promptNote);
         job.setStatus(JobStatus.PENDING);
         job.setAttempt(0);
         job.setNextRunAt(nextRunAt != null ? nextRunAt : now);
@@ -586,7 +590,7 @@ public class GenerationService {
 
     /**
      * Tạo job sinh câu (V4: theo dạng câu). sa: run production, zero-shot, prompt_version sa-v1-draft.
-     * tf (GĐ3): run production, zero-shot, prompt_version tf-v1-draft; bắt buộc 4 mức của 4 ý, ghi vào
+     * tf (GĐ3): run production, zero-shot, prompt_version tf-v2-draft; bắt buộc 4 mức của 4 ý, ghi vào
      * target_statement_difficulties; target_difficulty cấp câu để NULL.
      */
     @Transactional

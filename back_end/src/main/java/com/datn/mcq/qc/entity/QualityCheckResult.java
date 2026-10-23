@@ -67,7 +67,20 @@ public class QualityCheckResult {
     @Column(name = "warnings", columnDefinition = "jsonb")
     private String warnings;
 
+    /** V8: lý do bước format không qua, dạng mảng JSON; chỉ dòng format có passed = FALSE; NULL khi passed. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "errors", columnDefinition = "jsonb")
+    private String errors;
+
     public QualityCheckResult() {}
+
+    public String getErrors() {
+        return errors;
+    }
+
+    public void setErrors(String errors) {
+        this.errors = errors;
+    }
 
     public String getWarnings() {
         return warnings;

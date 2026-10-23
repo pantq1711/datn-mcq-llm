@@ -9,6 +9,7 @@ import com.datn.mcq.generation.worker.GenerationJobPoller;
 import com.datn.mcq.generation.worker.GenerationJobProcessor;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
+import com.datn.mcq.llm.prompt.McqProductionSchema;
 import com.datn.mcq.llm.prompt.PromptBuilder;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
@@ -89,7 +90,10 @@ class ExamBuildTest {
     /** LLM sinh câu giả: mỗi lần một câu khác số liệu; {@code sameMcq} thì mọi câu mcq giống hệt nhau. */
     static final class FakeGenerator extends LlmClient {
         final List<String> prompts = new ArrayList<>();
+        final List<String> mcqPrompts = new ArrayList<>();
         boolean sameMcq;
+        /** Số câu mcq đầu tiên trả về có "$" lẻ ở giữa câu (format_failed). */
+        int brokenMcq;
         String[] tfLabels = {"T", "F", "T", "F"};
         int n;
 
@@ -104,8 +108,19 @@ class ExamBuildTest {
 
         @Override
         public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
+            throw new UnsupportedOperationException("MCQ production phải gọi kèm schema (ngày 23/10)");
+        }
+
+        private LlmCallResult mcq(String prompt, String modelName) {
             prompts.add(prompt);
+            mcqPrompts.add(prompt);
             int k = sameMcq ? 1 : ++n;
+            if (brokenMcq > 0) {
+                brokenMcq--;
+                return new LlmCallResult("{\"question_text\": \"Biết $x = " + k + " thì bậc của đơn thức $2x^3$ là:\","
+                        + " \"option_a\": \"$1$\", \"option_b\": \"$3$\", \"option_c\": \"$0$\", \"option_d\": \"$2$\","
+                        + " \"correct_option\": \"B\", \"explanation\": \"Số mũ của x.\"}", 10, 1.0, 0.0, modelName);
+            }
             return new LlmCallResult("{\"question_text\": \"Bậc của đơn thức $" + (k + 1) + "x^" + k + "$ là:\","
                     + " \"option_a\": \"$" + (k + 1) + "$\", \"option_b\": \"$" + k + "$\", \"option_c\": \"$0$\","
                     + " \"option_d\": \"$" + (k + 2) + "$\", \"correct_option\": \"B\", \"explanation\": \"Số mũ của x.\"}",
@@ -114,6 +129,9 @@ class ExamBuildTest {
 
         @Override
         public LlmCallResult callJsonModeWithSchema(String prompt, String modelName, Double temperature, String schema) {
+            if (McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON.equals(schema)) {
+                return mcq(prompt, modelName);
+            }
             prompts.add(prompt);
             int k = ++n;
             if (SaPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON.equals(schema)) {
@@ -262,7 +280,7 @@ class ExamBuildTest {
                 + " AND bank_item_id IS NOT NULL", Integer.class, examId));
         List<Map<String, Object>> runs = jdbc.queryForList("SELECT * FROM experiment_run WHERE prompt_version LIKE"
                 + " 'matrix-%' ORDER BY id");
-        assertEquals(List.of("matrix-mcq-v0-draft", "matrix-tf-v0-draft", "matrix-sa-v0-draft"),
+        assertEquals(List.of("matrix-mcq-v1-draft", "matrix-tf-v1-draft", "matrix-sa-v1-draft"),
                 runs.stream().map(r -> r.get("prompt_version")).toList());
         for (Map<String, Object> run : runs) {
             assertEquals("production", run.get("purpose"));
@@ -290,7 +308,7 @@ class ExamBuildTest {
         assertEquals("qc_passed", jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
                 String.class, mcqSlots.get(1).get("questionId").asInt()));
 
-        String mcqPrompt = generator.prompts.stream().filter(p -> p.contains("TRẮC NGHIỆM")).findFirst().orElseThrow();
+        String mcqPrompt = generator.mcqPrompts.get(0);
         assertTrue(mcqPrompt.contains("Chủ đề: Đa thức") && mcqPrompt.contains("Nội dung: Đơn thức, đa thức")
                 && mcqPrompt.contains("Nhận biết được đơn thức, đa thức."), mcqPrompt);
         assertFalse(mcqPrompt.contains("Câu hỏi nguồn"));
@@ -553,5 +571,68 @@ class ExamBuildTest {
         int other = build("{\"matrixId\": " + matrixId + "}").get("examId").asInt();
         action(other, slotId(examId, "mcq", 1), "keep").andExpect(status().isNotFound());
         action(examId, 999999, "replace").andExpect(status().isNotFound());
+    }
+
+    // ---------- ngày 23/10: đa dạng trong ô, lý do lỗi format, sinh lại chỗ hỏng ----------
+
+    @Test
+    void moiChoTrongOBietCauThuKVaCauDaSinhCuaO() throws Exception {
+        build("{\"matrixId\": " + matrixId + "}");
+        processAll();
+        assertEquals(2, generator.mcqPrompts.size());
+        String first = generator.mcqPrompts.get(0);
+        String second = generator.mcqPrompts.get(1);
+        assertTrue(first.contains("Đây là câu thứ 1/2 của ô này"), first);
+        assertTrue(second.contains("Đây là câu thứ 2/2 của ô này"), second);
+        String firstQuestion = jdbc.queryForObject("SELECT question_text FROM generated_question WHERE question_type ="
+                + " 'mcq' ORDER BY id LIMIT 1", String.class);
+        assertTrue(second.contains("1. " + firstQuestion), "prompt dựng lúc worker nhận job, có câu của chỗ trước");
+        assertFalse(first.contains(com.datn.mcq.llm.prompt.PreviousQuestion.HEADER), "chỗ đầu chưa có câu nào");
+        String saPrompt = generator.prompts.stream().filter(p -> p.contains("TRẢ LỜI NGẮN")).findFirst().orElseThrow();
+        assertFalse(saPrompt.contains("Đây là câu thứ"), "ô chỉ 1 câu thì không có dòng k/n");
+    }
+
+    @Test
+    void sinhLaiSauFormatFailedCoLyDoTrongPromptVaCotErrors() throws Exception {
+        generator.brokenMcq = 1;
+        int examId = build("{\"matrixId\": " + matrixId + "}").get("examId").asInt();
+        processAll();
+        int broken = jdbc.queryForObject("SELECT id FROM generated_question WHERE status = 'format_failed'",
+                Integer.class);
+        String errors = jdbc.queryForObject("SELECT errors::text FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type = 'format'", String.class, broken);
+        assertNotNull(errors, "lý do format_failed được lưu ở cột errors (V8)");
+        assertTrue(errors.contains("question_text"), errors);
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM quality_check_result WHERE passed = TRUE"
+                + " AND errors IS NOT NULL", Integer.class), "dòng passed thì errors NULL");
+
+        int before = generator.mcqPrompts.size();
+        progress(examId);
+        processAll();
+        String retry = generator.mcqPrompts.get(before);
+        int at = retry.indexOf("Lần sinh trước bị loại vì: ");
+        assertTrue(at >= 0, retry);
+        String line = retry.substring(at, retry.indexOf('\n', at));
+        assertTrue(line.endsWith("Tránh lặp lại lỗi này."), line);
+        assertTrue(line.length() <= 300, "tối đa 300 ký tự: " + line.length());
+        assertTrue(line.contains("question_text"), line);
+    }
+
+    @Test
+    void doiCauKhacDungDuocChoChoHong() throws Exception {
+        generator.sameMcq = true;
+        int examId = build("{\"matrixId\": " + matrixId + "}").get("examId").asInt();
+        for (int round = 0; round < 4; round++) {
+            processAll();
+            progress(examId);
+        }
+        int failed = jdbc.queryForObject("SELECT id FROM exam_slot WHERE exam_id = ? AND state = 'failed'",
+                Integer.class, examId);
+        generator.sameMcq = false;
+        JsonNode replaced = json(action(examId, failed, "replace").andExpect(status().isOk()));
+        assertEquals("generating", replaced.get("state").asText());
+        assertEquals(1, jdbc.queryForObject("SELECT attempts FROM exam_slot WHERE id = ?", Integer.class, failed));
+        processAll();
+        assertEquals("ready", progress(examId).get("status").asText());
     }
 }

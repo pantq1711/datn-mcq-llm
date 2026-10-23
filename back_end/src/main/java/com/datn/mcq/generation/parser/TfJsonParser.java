@@ -29,29 +29,37 @@ public final class TfJsonParser {
 
     private TfJsonParser() {}
 
+    /** Giải mã chặt (không sửa escape hay "$"; vẫn bỏ tiền tố nhãn ở đầu ý). */
     public static ParsedTfDto parse(String rawLlmOutput) {
+        return parse(rawLlmOutput, false);
+    }
+
+    /** @param repair true (run production): sửa escape LaTeX và tự đóng "$" ({@link LlmOutputRepair}) */
+    public static ParsedTfDto parse(String rawLlmOutput, boolean repair) {
         if (rawLlmOutput == null || rawLlmOutput.isBlank()) {
             return new ParsedTfDto(false, null, null, null, null, "Phản hồi LLM rỗng");
         }
+        List<String> warnings = new ArrayList<>();
         Map<String, Object> obj;
         try {
-            obj = SimpleJson.parseObject(SimpleJson.stripMarkdownFence(rawLlmOutput));
+            obj = SimpleJson.parseObject(LlmOutputRepair.repairJson(SimpleJson.stripMarkdownFence(rawLlmOutput),
+                    repair, warnings));
         } catch (IllegalArgumentException ex) {
             return new ParsedTfDto(false, null, null, null, null, ex.getMessage());
         }
         List<String> statements = new ArrayList<>(4);
         List<String> labels = new ArrayList<>(4);
-        List<String> warnings = new ArrayList<>();
         for (String key : KEYS) {
-            statements.add(stripLabelPrefix(key, asText(obj.get("statement_" + key)), warnings));
+            statements.add(stripLabelPrefix(key, LlmOutputRepair.textField("statement_" + key,
+                    obj.get("statement_" + key), repair, true, warnings), warnings));
             Object label = obj.get("label_" + key);
             labels.add(label != null ? String.valueOf(label).trim() : null);
         }
         return new ParsedTfDto(
                 true,
-                asText(obj.get("question_text")),
+                LlmOutputRepair.textField("question_text", obj.get("question_text"), repair, true, warnings),
                 statements,
-                asText(obj.get("explanation")),
+                LlmOutputRepair.textField("explanation", obj.get("explanation"), repair, true, warnings),
                 labels,
                 null,
                 warnings);
@@ -82,12 +90,5 @@ public final class TfJsonParser {
     /** Cảnh báo khi đã bỏ tiền tố, ví dụ {@code statement_a: đã bỏ tiền tố "a)" ở đầu ý}. */
     public static String prefixWarning(String key, String prefix) {
         return "statement_" + key + ": đã bỏ tiền tố \"" + prefix.trim() + "\" ở đầu ý";
-    }
-
-    private static String asText(Object val) {
-        if (val == null) {
-            return null;
-        }
-        return McqJsonParser.normalizeLiteralNewlines(String.valueOf(val)).trim();
     }
 }

@@ -31,7 +31,7 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 
 Dạng câu (`questionType`): `mcq` (trắc nghiệm 4 phương án, mặc định khi bỏ trống), `tf` (Đúng/Sai: đề dẫn và đúng 4 ý
 a-d), `sa` (Trả lời ngắn: đề và một đáp số). Câu `tf` và `sa` chỉ sinh cho `production`, chiến lược `zero-shot`, prompt
-bản nháp (`tf-v1-draft`, `sa-v1-draft`; run trước ngày 22/10 là `v0`). Thực nghiệm C1/C2/C3 chỉ dùng `mcq`.
+bản nháp (`tf-v2-draft`, `sa-v1-draft`; run cũ là `v0`, `tf-v1-draft`). Thực nghiệm C1/C2/C3 chỉ dùng `mcq`.
 Khi sinh câu `tf`/`sa` (sync và job), prompt gửi model kèm tối đa 10 câu gần nhất cùng template và cùng dạng để model
 không lặp lại bài toán hay số liệu; xem `enums.md` mục 3, "Độ đa dạng".
 
@@ -455,6 +455,13 @@ Mức độ dùng `easy`, `medium`, `hard` (`Difficulty`).
 
 ## 6. Định dạng công thức toán
 
+**Sửa đầu ra LLM ở run production (ngày 23/10).** Trước khi giải mã JSON, dấu `\` của lệnh LaTeX chưa nhân đôi trong
+chuỗi được nhân đôi (ví dụ `"$75^\circ$"` một dấu gạch); sau khi giải mã, trường có `$` lẻ mà phần sau `$` cuối trông
+như công thức được tự đóng `$` ở cuối trường, trước dấu câu. Mỗi lần sửa ghi cảnh báo vào `answerWarnings`/`warnings`
+(`json: đã sửa 1 escape LaTeX (\circ)`, `statement_b: đã tự đóng $`). `$` lẻ ở giữa câu vẫn là lỗi format. MCQ
+production gọi Gemini kèm schema JSON như `sa`/`tf`. Lý do format không qua (kể cả lỗi giải mã JSON) lưu ở
+`quality_check_result.errors` (V8). Run `experiment` không áp dụng; chi tiết ở `enums.md` mục 3.
+
 Các trường văn bản (`questionText`, `optionA`..`optionD`, `statements[].text`, đáp số `sa`, `explanation`) là văn bản tiếng
 Việt xen công thức LaTeX:
 
@@ -540,11 +547,15 @@ POST /api/exams/build
 - Mỗi ô lấy câu ngân hàng khớp ô trước: cùng môn, cùng dạng, cùng mức (`tf`: cùng 4 mức theo thứ tự), cùng chủ đề của
   template gốc (so sau trim, không phân biệt hoa thường); nếu câu ngân hàng được sinh từ một ô ma trận thì còn phải cùng
   nội dung. Câu chưa nằm trong đề nào được ưu tiên; không lấy trùng câu trong cùng một đề.
-- Phần thiếu: mỗi ô một run production, zero-shot, `prompt_version` `matrix-mcq-v0-draft` / `matrix-tf-v0-draft` /
-  `matrix-sa-v0-draft` (prompt nháp `MatrixPromptDraftV0`: sinh từ chủ đề, nội dung, yêu cầu cần đạt, không có câu
+- Phần thiếu: mỗi ô một run production, zero-shot, `prompt_version` `matrix-mcq-v1-draft` / `matrix-tf-v1-draft` /
+  `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`; prompt nháp `MatrixPromptDraftV0`: sinh từ chủ đề, nội dung, yêu cầu cần đạt, không có câu
   mẫu; quy tắc đa dạng và danh sách tối đa 10 câu đã sinh của ô; chủ đề hình học như Tứ giác dặn câu phải làm được
   không cần hình vẽ). Mỗi chỗ một job, giãn cách 13 giây. Job chạy bằng worker (`app.worker.enabled=true`) hoặc
   `POST /api/generation/jobs/process-next`. Một đề 18 câu khi ngân hàng còn trống mất khoảng 7-8 phút trên Free Tier.
+- Mỗi job của một chỗ có ghi chú riêng trong prompt (`generation_job.prompt_note`, V8): "Đây là câu thứ k/n của ô
+  này" (dạng hỏi khác các câu còn lại, phủ các ý khác nhau của yêu cầu cần đạt) khi ô có từ 2 câu; khi sinh lại sau
+  một lần `format_failed`, thêm "Lần sinh trước bị loại vì: <lỗi>. Tránh lặp lại lỗi này." (tối đa 300 ký tự). Prompt
+  dựng lúc worker nhận job nên có cả câu đã sinh của các chỗ trước trong cùng ô.
 - Mỗi lần gọi tiến độ, xem đề hoặc thao tác, backend đối soát các job đã xong:
   - câu `qc_passed`: chỗ đó có câu;
   - câu lệch Solver (trạng thái `generated`): sinh lại 1 lần; vẫn lệch thì dùng câu đó, kèm cờ "cần xem kỹ";
@@ -601,7 +612,7 @@ POST /api/exams/12/slots/104/replace  {"teacherId": 1}   → câu với "state":
   - câu lệch Solver cũng Giữ được, vì giáo viên đã thấy cờ;
   - câu lấy từ ngân hàng thì chỉ đánh dấu `kept`, không tạo đánh giá mới;
   - Giữ lần hai trả 409 `Câu hỏi này đã được giữ.`; chỗ chưa có câu trả 409.
-- **Đổi câu khác:** bỏ câu hiện tại khỏi chỗ (câu cũ giữ nguyên trạng thái; câu đã Giữ vẫn ở ngân hàng) và sinh lại đúng
+- **Đổi câu khác** (dùng được cả cho chỗ `failed`, khi đó đặt lại số lần thử): bỏ câu hiện tại khỏi chỗ (câu cũ giữ nguyên trạng thái; câu đã Giữ vẫn ở ngân hàng) và sinh lại đúng
   ô qua hàng đợi; prompt liệt kê các câu đã sinh của ô, kể cả câu vừa bị đổi. Chỗ đang sinh trả 409.
 - Chỗ không thuộc đề trong đường dẫn trả 404.
 - Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại khỏi chỉ số

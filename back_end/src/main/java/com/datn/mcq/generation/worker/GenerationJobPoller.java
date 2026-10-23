@@ -1,5 +1,6 @@
 package com.datn.mcq.generation.worker;
 
+import com.datn.mcq.enums.Purpose;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.generation.dto.ParsedMcqDto;
 import com.datn.mcq.generation.dto.ParsedSaDto;
@@ -7,6 +8,7 @@ import com.datn.mcq.generation.dto.ParsedTfDto;
 import com.datn.mcq.generation.parser.SaJsonParser;
 import com.datn.mcq.generation.parser.TfJsonParser;
 import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.llm.prompt.McqProductionSchema;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
@@ -75,6 +77,8 @@ public class GenerationJobPoller {
         GenerationJobProcessor.ClaimedJobContext ctx = claimedOpt.get();
         boolean shortAnswer = ctx.questionType() == QuestionType.SA;
         boolean trueFalse = ctx.questionType() == QuestionType.TF;
+        // Chế độ sửa đầu ra (escape LaTeX, tự đóng $) và schema MCQ chỉ cho run production; experiment giữ nguyên.
+        boolean production = ctx.purpose() != Purpose.EXPERIMENT;
         LlmCallResult llmResult;
         try {
             llmResult = shortAnswer
@@ -87,6 +91,11 @@ public class GenerationJobPoller {
                     ? llmClient.callJsonModeWithSchema(
                             ctx.prompt(), ctx.modelName(), ctx.temperature(),
                             TfPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON)
+                    // Ngày 23/10: run production gọi MCQ kèm schema; run experiment (C1/C2/C3) giữ cấu hình theo strategy.
+                    : production
+                    ? llmClient.callJsonModeWithSchema(
+                            ctx.prompt(), ctx.modelName(), ctx.temperature(),
+                            McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON)
                     : llmClient.generateMcq(
                             ctx.prompt(),
                             ctx.modelName(),
@@ -106,7 +115,7 @@ public class GenerationJobPoller {
         }
 
         if (trueFalse) {
-            ParsedTfDto parsedTf = TfJsonParser.parse(llmResult.rawText());
+            ParsedTfDto parsedTf = TfJsonParser.parse(llmResult.rawText(), production);
             GeneratedQuestion savedTf = processor.saveTrueFalseFromJob(ctx, llmResult, parsedTf);
             QcPipelineReport tfReport = qcOrchestrator.evaluateAndSave(
                     GenerationService.trueFalseQcInput(savedTf.getId(), parsedTf, ctx.validateLatex(), runAnswerCheck),
@@ -117,7 +126,7 @@ public class GenerationJobPoller {
         }
 
         if (shortAnswer) {
-            ParsedSaDto parsedSa = SaJsonParser.parse(llmResult.rawText());
+            ParsedSaDto parsedSa = SaJsonParser.parse(llmResult.rawText(), production);
             GeneratedQuestion savedSa = processor.saveShortAnswerFromJob(ctx, llmResult, parsedSa);
             QcPipelineReport saReport = qcOrchestrator.evaluateAndSave(
                     GenerationService.shortAnswerQcInput(savedSa.getId(), parsedSa, ctx.validateLatex(), runAnswerCheck),
@@ -127,7 +136,7 @@ public class GenerationJobPoller {
                     saReport.resultingStatus().getDbValue(), parsedSa.parseError());
         }
 
-        ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText());
+        ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText(), production);
         GeneratedQuestion savedQuestion = processor.saveGeneratedQuestionFromJob(ctx, llmResult, parsed);
 
         QcPipelineReport qcReport = qcOrchestrator.evaluateAndSave(new QuestionQcInput(
@@ -143,7 +152,7 @@ public class GenerationJobPoller {
                 ctx.validateLatex(),
                 runAnswerCheck,
                 parsed.parseError()
-        ), dedupScopeResolver.resolve(ctx.runId()));
+        ).withParseWarnings(parsed.parseWarnings()), dedupScopeResolver.resolve(ctx.runId()));
         processor.updateQuestionStatus(savedQuestion.getId(), qcReport.resultingStatus());
 
         return new ProcessedJobSummary(

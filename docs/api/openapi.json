@@ -1030,6 +1030,9 @@
           "examSlotId" : {
             "type" : "integer",
             "format" : "int32"
+          },
+          "promptNote" : {
+            "type" : "string"
           }
         }
       },

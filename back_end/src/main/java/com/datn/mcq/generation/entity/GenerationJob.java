@@ -77,7 +77,20 @@ public class GenerationJob {
     @Column(name = "exam_slot_id")
     private Integer examSlotId;
 
+    /** V8: ghi chú thêm vào prompt của job (ô ma trận: câu thứ k/n, lý do lần sinh trước bị loại); null với job thường. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Column(name = "prompt_note", columnDefinition = "TEXT")
+    private String promptNote;
+
     public GenerationJob() {}
+
+    public String getPromptNote() {
+        return promptNote;
+    }
+
+    public void setPromptNote(String promptNote) {
+        this.promptNote = promptNote;
+    }
 
     public Integer getExamSlotId() {
         return examSlotId;
