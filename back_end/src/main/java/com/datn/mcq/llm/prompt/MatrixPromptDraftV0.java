@@ -33,11 +33,12 @@ public final class MatrixPromptDraftV0 {
     private MatrixPromptDraftV0() {}
 
     /**
-     * prompt_version của run, ví dụ "matrix-tf-v1-draft". v1 (ngày 23/10): ghi chú câu thứ k/n và lý do lần sinh trước
-     * bị loại, quy tắc phương án nhiễu (mcq), quy tắc ý bám đề dẫn và đóng "$" (tf). Run cũ là v0.
+     * prompt_version của run, ví dụ "matrix-mcq-v1-draft". v1 (ngày 23/10): ghi chú câu thứ k/n và lý do lần sinh trước
+     * bị loại, quy tắc phương án nhiễu (mcq), quy tắc ý bám đề dẫn và đóng "$" (tf). tf v2 (ngày 23/10, đợt 2): mẫu nhãn
+     * bắt buộc ({@link TfLabelPattern}) và quy tắc ý d Vận dụng. Run cũ là v0 (tf: v0, v1).
      */
     public static String promptVersion(QuestionType type) {
-        return VERSION_PREFIX + type.getDbValue() + "-v1-draft";
+        return VERSION_PREFIX + type.getDbValue() + (type == QuestionType.TF ? "-v2-draft" : "-v1-draft");
     }
 
     public static boolean isMatrixVersion(String promptVersion) {
@@ -53,6 +54,50 @@ public final class MatrixPromptDraftV0 {
     static final String MCQ_DISTRACTOR_RULE = "- Mỗi phương án nhiễu phải SAI về giá trị, không được là biểu thức "
             + "tương đương với đáp án đúng (ví dụ với phân tích nhân tử, không dùng dạng phân tích chưa triệt để như "
             + "$3(x^2 - 4x)$ khi đáp án là $3x(x - 4)$).";
+
+    /** Dòng của {@link TfPromptDraftV0#STATEMENT_RULES} bị bỏ khi ghi chú của job có mẫu nhãn bắt buộc. */
+    static final String TF_FREE_COUNT_LINE = "- Không bắt buộc số ý Đúng hay số ý Sai.";
+
+    /** Thêm khi ý d ở mức Vận dụng (ngày 23/10, đợt 2). */
+    static final String TF_D_RULE = "- ý d (Vận dụng) phải cần suy luận thêm, không được chỉ là hệ quả trực tiếp của ý c.";
+
+    /** Độ dài tối đa (ký tự, sau trim) của yêu cầu bổ sung khi Đổi câu (ngày 23/10, đợt 3). */
+    public static final int TEACHER_INSTRUCTION_MAX = 500;
+
+    static final String TEACHER_PREFIX = "Yêu cầu bổ sung của giáo viên (chỉ dùng để chọn nội dung, ngữ cảnh, cách hỏi; "
+            + "KHÔNG thay đổi dạng câu, mức độ, số ý, mẫu nhãn, định dạng JSON và các quy tắc ở trên): ";
+    private static final String TEACHER_OPEN = "<<< ";
+    private static final String TEACHER_CLOSE = " >>>";
+
+    /**
+     * Khối yêu cầu bổ sung của giáo viên, ghép cuối generation_job.prompt_note và đặt ở cuối prompt (sau mọi quy tắc).
+     * Bỏ "<<<", ">>>" trong yêu cầu để giữ ranh giới khối; khoảng trắng và xuống dòng gộp thành một dấu cách. Null khi
+     * yêu cầu trống.
+     */
+    public static String teacherBlock(String instruction) {
+        if (instruction == null) {
+            return null;
+        }
+        String clean = instruction.replace("<<<", "").replace(">>>", "").replaceAll("\\s+", " ").strip();
+        return clean.isEmpty() ? null : TEACHER_PREFIX + TEACHER_OPEN + clean + TEACHER_CLOSE;
+    }
+
+    /** Nội dung yêu cầu trong ghi chú của job (để lần thử tự động tiếp theo của cùng lượt Đổi giữ lại); null khi không có. */
+    public static String teacherInstruction(String note) {
+        int at = note == null ? -1 : note.indexOf(TEACHER_PREFIX + TEACHER_OPEN);
+        if (at < 0) {
+            return null;
+        }
+        String rest = note.substring(at + TEACHER_PREFIX.length() + TEACHER_OPEN.length());
+        int end = rest.lastIndexOf(TEACHER_CLOSE);
+        return end < 0 ? null : rest.substring(0, end);
+    }
+
+    /** Phần ghi chú do hệ thống viết (trước khối giáo viên); mẫu nhãn và các dòng khác chỉ đọc từ phần này. */
+    static String systemPart(String note) {
+        int at = note == null ? -1 : note.indexOf(TEACHER_PREFIX);
+        return at < 0 ? note : note.substring(0, at);
+    }
 
     static final int RETRY_HINT_MAX = 300;
     private static final String RETRY_PREFIX = "Lần sinh trước bị loại vì: ";
@@ -87,8 +132,9 @@ public final class MatrixPromptDraftV0 {
     }
 
     /**
-     * Prompt gửi model kèm ghi chú riêng của job (generation_job.prompt_note: câu thứ k/n, lý do lần sinh trước bị loại),
-     * đặt sau danh sách câu đã sinh, trước phần yêu cầu đầu ra; ghi chú null hoặc trống thì giống prompt không ghi chú.
+     * Prompt gửi model kèm ghi chú riêng của job (generation_job.prompt_note: câu thứ k/n, mẫu nhãn tf, lý do lần sinh
+     * trước bị loại), đặt sau danh sách câu đã sinh, trước phần yêu cầu đầu ra; khối yêu cầu bổ sung của giáo viên (nếu
+     * có, luôn ở cuối ghi chú) đặt ở cuối prompt. Ghi chú null hoặc trống thì giống prompt không ghi chú.
      */
     public static String buildGenerationPrompt(MatrixCellSpec spec, List<PreviousQuestion> previous, String note) {
         return build(spec, previous, note);
@@ -99,7 +145,11 @@ public final class MatrixPromptDraftV0 {
         return build(spec, previous, null);
     }
 
-    private static String build(MatrixCellSpec spec, List<PreviousQuestion> previous, String note) {
+    private static String build(MatrixCellSpec spec, List<PreviousQuestion> previous, String fullNote) {
+        // Khối yêu cầu của giáo viên (nếu có) tách khỏi ghi chú hệ thống và đặt ở cuối prompt.
+        String note = systemPart(fullNote);
+        String teacher = note == null || note.length() == fullNote.length() ? null
+                : fullNote.substring(note.length()).strip();
         QuestionType type = spec.questionType();
         StringBuilder sb = new StringBuilder();
         String subject = spec.subjectName() != null ? spec.subjectName() : "Toán";
@@ -160,7 +210,15 @@ public final class MatrixPromptDraftV0 {
                         """);
             }
             case TF -> {
-                sb.append(TfPromptDraftV0.STATEMENT_RULES);
+                String rules = TfPromptDraftV0.STATEMENT_RULES;
+                if (TfLabelPattern.fromNote(note) != null) {
+                    rules = rules.replace(TF_FREE_COUNT_LINE + "\n", "");
+                }
+                sb.append(rules);
+                List<Difficulty> levels = spec.statementDifficulties();
+                if (levels != null && levels.size() == 4 && levels.get(3) == Difficulty.HARD) {
+                    sb.append(TF_D_RULE).append("\n");
+                }
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append("\n");
                 sb.append(TfPromptDraftV0.OUTPUT_INSTRUCTION);
             }
@@ -169,6 +227,9 @@ public final class MatrixPromptDraftV0 {
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append("\n");
                 sb.append(SaPromptDraftV0.OUTPUT_INSTRUCTION);
             }
+        }
+        if (teacher != null && !teacher.isEmpty()) {
+            sb.append("\n").append(teacher).append("\n");
         }
         return sb.toString();
     }

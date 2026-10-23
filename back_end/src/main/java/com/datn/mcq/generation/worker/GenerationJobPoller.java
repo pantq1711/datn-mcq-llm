@@ -10,6 +10,7 @@ import com.datn.mcq.generation.parser.TfJsonParser;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.llm.prompt.McqProductionSchema;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
+import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.parser.McqJsonParser;
@@ -116,6 +117,12 @@ public class GenerationJobPoller {
 
         if (trueFalse) {
             ParsedTfDto parsedTf = TfJsonParser.parse(llmResult.rawText(), production);
+            // Ngày 23/10: job tf theo ma trận có mẫu nhãn bắt buộc; nhãn khác mẫu chỉ cảnh báo (bật "cần xem kỹ").
+            String mismatch = parsedTf.parseSuccess()
+                    ? TfLabelPattern.mismatchWarning(ctx.tfLabelPattern(), parsedTf.labels()) : null;
+            if (mismatch != null) {
+                parsedTf = parsedTf.withParseWarning(mismatch);
+            }
             GeneratedQuestion savedTf = processor.saveTrueFalseFromJob(ctx, llmResult, parsedTf);
             QcPipelineReport tfReport = qcOrchestrator.evaluateAndSave(
                     GenerationService.trueFalseQcInput(savedTf.getId(), parsedTf, ctx.validateLatex(), runAnswerCheck),

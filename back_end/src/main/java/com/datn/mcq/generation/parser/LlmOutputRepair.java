@@ -16,6 +16,12 @@ public final class LlmOutputRepair {
 
     private LlmOutputRepair() {}
 
+    /**
+     * Tiền tố cảnh báo đã sửa escape LaTeX. Cảnh báo này vẫn lưu ở warnings (V5) nhưng không bật "cần xem kỹ"
+     * (ngày 23/10, đợt 2): sửa escape không đổi nghĩa công thức.
+     */
+    public static final String ESCAPE_WARNING_PREFIX = "json: đã sửa ";
+
     /** Lệnh LaTeX bắt đầu bằng chữ n được coi là lệnh (không phải xuống dòng "\n"). */
     public static final List<String> N_COMMANDS =
             List.of("neq", "ne", "neg", "nu", "not", "ni", "nabla", "nleq", "ngeq", "nparallel");
@@ -38,7 +44,7 @@ public final class LlmOutputRepair {
             if (commands.isEmpty()) {
                 return null;
             }
-            return "json: đã sửa " + commands.size() + " escape LaTeX ("
+            return ESCAPE_WARNING_PREFIX + commands.size() + " escape LaTeX ("
                     + String.join(", ", new LinkedHashSet<>(commands)) + ")";
         }
     }

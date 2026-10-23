@@ -4,6 +4,7 @@ import com.datn.mcq.common.util.JsonStringArray;
 import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
+import com.datn.mcq.generation.parser.LlmOutputRepair;
 import com.datn.mcq.qc.entity.QualityCheckResult;
 import com.datn.mcq.qc.repository.AnswerCheckStatementRepository;
 import com.datn.mcq.qc.repository.QualityCheckResultRepository;
@@ -57,7 +58,10 @@ public class QcSummaryService {
                 reasons.add(DEDUP_NOT_RUN);
             }
             for (String w : warnings) {
-                reasons.add(WARNING_PREFIX + w);
+                // Ngày 23/10: cảnh báo đã sửa escape LaTeX không bật cờ; "đã tự đóng $" và các cảnh báo khác vẫn bật.
+                if (!w.startsWith(LlmOutputRepair.ESCAPE_WARNING_PREFIX)) {
+                    reasons.add(WARNING_PREFIX + w);
+                }
             }
             return reasons;
         }

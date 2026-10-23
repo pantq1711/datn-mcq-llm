@@ -203,7 +203,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/SlotActionRequest"
+                "$ref" : "#/components/schemas/ReplaceRequest"
               }
             }
           }
@@ -521,6 +521,34 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ProgressDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exams/{examId}/export/docx" : {
+      "get" : {
+        "tags" : [ "exam-controller" ],
+        "operationId" : "exportDocx",
+        "parameters" : [ {
+          "name" : "examId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "byte"
                 }
               }
             }
@@ -1263,12 +1291,15 @@
           }
         }
       },
-      "SlotActionRequest" : {
+      "ReplaceRequest" : {
         "type" : "object",
         "properties" : {
           "teacherId" : {
             "type" : "integer",
             "format" : "int32"
+          },
+          "instruction" : {
+            "type" : "string"
           }
         }
       },
@@ -1374,6 +1405,15 @@
           "difficulty" : {
             "type" : "string",
             "enum" : [ "easy", "medium", "hard" ]
+          }
+        }
+      },
+      "SlotActionRequest" : {
+        "type" : "object",
+        "properties" : {
+          "teacherId" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },

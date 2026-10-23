@@ -27,6 +27,13 @@ public record ParsedTfDto(
         parseWarnings = parseWarnings == null ? List.of() : List.copyOf(parseWarnings);
     }
 
+    /** Bản sao có thêm một cảnh báo ở cuối {@code parseWarnings}. */
+    public ParsedTfDto withParseWarning(String warning) {
+        List<String> all = new java.util.ArrayList<>(parseWarnings);
+        all.add(warning);
+        return new ParsedTfDto(parseSuccess, questionText, statements, explanation, labels, parseError, all);
+    }
+
     /** Không có cảnh báo giải mã. */
     public ParsedTfDto(boolean parseSuccess, String questionText, List<String> statements, String explanation,
                        List<String> labels, String parseError) {
