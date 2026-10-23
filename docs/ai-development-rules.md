@@ -268,6 +268,8 @@ Xác nhận: không chạy lệnh thuộc M-27 / không gọi API tính phí / k
 - v1 (2026-10-21): bản đầu, tổng hợp từ audit repository.
 - 2026-10-22: thêm "Quyết định ngày 22/10/2026 – chế độ giáo viên" (ngoại lệ của M-6 và quyết định 21/10 mục 2 cho
   luồng tạo đề theo ma trận); ghi chú ở M-6, M-9. Không đổi số phiên bản tài liệu.
+- 2026-10-23: thêm "Quyết định ngày 23/10/2026 – bỏ thí nghiệm C1/C2/C3, chương thử nghiệm mới" (bỏ thí nghiệm so sánh
+  C1/C2/C3; giáo viên dùng thử và khảo sát qua chế độ giáo viên; 4 thử nghiệm mới). Không đổi số phiên bản tài liệu.
 ## Quyết định ngày 21/10/2026 (thay thế các comment xung đột trong V1__init_schema.sql)
 
 Không sửa file V1 (đã chạy, sửa sẽ lệch checksum Flyway). Khi comment trong V1 mâu thuẫn với mục này, mục này thắng.
@@ -292,3 +294,22 @@ Theo ưu tiên của giảng viên hướng dẫn (trải nghiệm giáo viên t
 2. Không đổi: form chấm mù `/api/reviews/**` của cả production và experiment (M-6, M-7, quyết định 21/10 mục 2); thực nghiệm C1/C2/C3; experiment không dùng chế độ giáo viên.
 3. Giữ/Sửa ở chế độ giáo viên tạo `teacher_review` production với `review_mode = 'assisted'` và `bank_item` trong cùng transaction (M-9 vẫn giữ). Đánh giá `assisted` bị loại khỏi mọi chỉ số chấm mù (`answer_correct`, tỉ lệ duyệt không sửa); thống kê giữ/sửa/đổi lấy riêng từ `exam_slot_action`.
 4. Câu vẫn lệch Solver sau 1 lần sinh lại được đưa vào đề kèm cờ "cần xem kỹ". Giáo viên được Giữ câu này vào ngân hàng sau khi đã thấy cờ; đây là ngoại lệ có chủ đích so với form chấm mù (duyệt production ở đó chỉ nhận câu `qc_passed`/`in_bank`).
+
+## Quyết định ngày 23/10/2026 – bỏ thí nghiệm C1/C2/C3, chương thử nghiệm mới
+
+Thay thế các nội dung về thí nghiệm so sánh C1/C2/C3 ở các mục trên (quyết định 21/10, quyết định 22/10 mục 2) và ở
+README ("Phần thực nghiệm so sánh 3 cách sinh"). Không đổi code trong quyết định này.
+
+1. **Bỏ thí nghiệm so sánh C1/C2/C3** (các câu hỏi nghiên cứu cũ về so sánh 3 cách prompting). Form chấm mù
+   `/api/reviews/**` và chế độ `experiment` vẫn giữ trong code như một chức năng thực nghiệm, nhưng không dùng khi mời
+   giáo viên.
+2. **Giáo viên dùng thử và khảo sát đều qua chế độ giáo viên** (`/api/exams/**`: có đáp án, lời giải, cờ "cần xem kỹ").
+   - Tính đúng đáp án trong thực nghiệm do nhóm tự kiểm tra hoặc tính toán, **không** suy ra từ việc giáo viên Giữ câu.
+   - Giới hạn phải ghi trong báo cáo: giáo viên đánh giá khi đã thấy đáp án và lời giải của hệ thống, nên có thể thiên
+     về chấp nhận. Tỉ lệ Giữ/Sửa/Đổi (`exam_slot_action`) chỉ phản ánh mức chấp nhận, không phải độ đúng.
+3. **Chương thử nghiệm mới** gồm 4 phần:
+   1. Solver bắt lỗi: chạy Solver trên các câu đúng và trên bản lỗi do nhóm tự tạo từ các câu đó, đo khả năng phát hiện
+      lỗi và báo động giả.
+   2. Ngưỡng dedup: so cách dùng 3-gram với embedding trên khoảng 150 cặp câu do nhóm tự gán nhãn trùng/không trùng.
+   3. So sánh với cách dùng hiện tại: hệ thống so với các prompt mẫu mà cộng đồng giáo viên đang dùng trên Gemini.
+   4. Khảo sát giáo viên dùng thử (theo mục 2, kèm giới hạn đã nêu).
