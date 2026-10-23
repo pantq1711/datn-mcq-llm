@@ -5,6 +5,7 @@ import com.datn.mcq.exam.entity.ExamSlot;
 import com.datn.mcq.exam.entity.ExamSlotAction;
 import com.datn.mcq.exam.repository.ExamSlotActionRepository;
 import com.datn.mcq.exam.repository.ExamSlotRepository;
+import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.matrix.service.MatrixService;
 import com.datn.mcq.review.service.TeacherReviewService;
 import com.datn.mcq.user.service.UserService;
@@ -73,25 +74,46 @@ public class ExamActionService {
     /**
      * Đổi câu khác: bỏ câu hiện tại khỏi chỗ (câu cũ giữ nguyên trạng thái để truy vết; câu đã Giữ vẫn ở ngân hàng) và
      * sinh lại đúng ô. Prompt sinh lại liệt kê các câu đã sinh của ô (gồm câu vừa bị đổi) để model không lặp lại.
+     *
+     * @param instruction yêu cầu bổ sung của giáo viên (tùy chọn, trim, tối đa
+     *                    {@value MatrixPromptDraftV0#TEACHER_INSTRUCTION_MAX} ký tự): ghép vào cuối prompt_note của
+     *                    job sinh lại và các lần thử tự động của cùng lượt Đổi, lưu ở nhật ký exam_slot_action (V9)
      */
     @Transactional
-    public ExamItemDto replace(Integer examId, Integer slotId, Integer teacherId) {
+    public ExamItemDto replace(Integer examId, Integer slotId, Integer teacherId, String instruction) {
+        String cleanInstruction = normalizeInstruction(instruction);
         buildService.reconcile(examId);
         ExamSlot slot = loadSlot(examId, slotId);
         if (ExamSlot.GENERATING.equals(slot.getState()) || ExamSlot.PENDING.equals(slot.getState())) {
             throw new IllegalStateException(GENERATING_MESSAGE);
         }
         Integer actorId = actor(teacherId);
-        actionRepository.save(new ExamSlotAction(slot.getId(), ExamSlotAction.REPLACE, slot.getGeneratedQuestionId(),
-                slot.getBankItemId(), null, actorId));
+        ExamSlotAction log = new ExamSlotAction(slot.getId(), ExamSlotAction.REPLACE, slot.getGeneratedQuestionId(),
+                slot.getBankItemId(), null, actorId);
+        log.setInstruction(cleanInstruction);
+        actionRepository.save(log);
         slot.setBankItemId(null);
         slot.setGeneratedQuestionId(null);
         slot.setFallbackQuestionId(null);
         slot.setAttempts(0);
         slot.setSolverRetries(0);
-        buildService.enqueueRetry(slot);
+        buildService.enqueueReplace(slot, cleanInstruction);
         slotRepository.save(slot);
         return viewService.item(slot, matrixService.getCell(slot.getCellId()));
+    }
+
+    /** Trim; trống thì null; dài hơn giới hạn thì 400. */
+    static String normalizeInstruction(String instruction) {
+        if (instruction == null || instruction.isBlank()) {
+            return null;
+        }
+        String s = instruction.strip();
+        int length = s.codePointCount(0, s.length());
+        if (length > MatrixPromptDraftV0.TEACHER_INSTRUCTION_MAX) {
+            throw new IllegalArgumentException("instruction dài tối đa " + MatrixPromptDraftV0.TEACHER_INSTRUCTION_MAX
+                    + " ký tự (hiện " + length + ")");
+        }
+        return s;
     }
 
     private ExamSlot loadSlot(Integer examId, Integer slotId) {

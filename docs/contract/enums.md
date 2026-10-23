@@ -273,13 +273,15 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - `exam.mode`: `manual` (mọi đề cũ) hoặc `teacher` (tạo theo ma trận, bắt buộc có `matrix_id`).
   - `exam_slot.state`: `pending`, `generating`, `ready`, `failed`, `kept`, `edited`. `ready`/`kept`/`edited` phải có câu;
     `kept`/`edited` phải có `bank_item_id`.
-  - `exam_slot_action.action`: `keep`, `edit`, `replace` (`edit_distance` chỉ với `edit`).
+  - `exam_slot_action.action`: `keep`, `edit`, `replace` (`edit_distance` chỉ với `edit`). `instruction` (V9): yêu cầu bổ sung của giáo viên khi Đổi câu, 1–500 ký tự, chỉ dòng `replace`; NULL khi không có.
   - `teacher_review.review_mode`: `blind` (mặc định, mọi dữ liệu cũ) hoặc `assisted` (Giữ/Sửa ở chế độ giáo viên). Đánh
     giá `assisted` bị loại khỏi mọi chỉ số chấm mù (`answer_correct`, duyệt không sửa).
   - Run sinh câu theo ô: `purpose = 'production'`, `strategy = 'zero-shot'`, `prompt_version` `matrix-mcq-v1-draft`,
-    `matrix-tf-v1-draft` hoặc `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`); `hyperparams` là thông số ô (chủ đề, nội dung, yêu cầu cần đạt, mức).
+    `matrix-tf-v2-draft` hoặc `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`; `tf` có thêm `v1`); `hyperparams` là thông số ô (chủ đề, nội dung, yêu cầu cần đạt, mức).
     Không thuộc thực nghiệm C1/C2/C3.
   - `generation_job.exam_slot_id`: job sinh câu cho một chỗ trong đề; job thường để NULL.
+  - Câu `tf` trong đề theo ma trận (ngày 23/10, đợt 2): mỗi job có một mẫu nhãn bắt buộc chọn ngẫu nhiên trong 14 mẫu có 1–3 ý Đúng, khác mẫu của job `tf` gần nhất cùng đề; lưu ở `generation_job.prompt_note` dạng `Mẫu nhãn bắt buộc (T,F,F,T): ý a phải Đúng, ý b phải Sai, ...` (truy vấn: `prompt_note LIKE '%Mẫu nhãn bắt buộc (%'`). Nhãn trả về khác mẫu thì thêm cảnh báo `label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)` vào `warnings`, câu vẫn được dùng nhưng gắn cờ "cần xem kỹ". Chỉ luồng ma trận (run `production`).
+  - Cờ "cần xem kỹ" bỏ qua cảnh báo `json: đã sửa ... escape LaTeX` (vẫn lưu ở `warnings`); cảnh báo `<trường>: đã tự đóng $` và các cảnh báo khác vẫn bật cờ.
 
 ## 4. JSON mà LLM phải trả
 

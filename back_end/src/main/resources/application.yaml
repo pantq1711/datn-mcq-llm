@@ -42,6 +42,9 @@ app:
     enabled: ${WORKER_ENABLED:false}
     poll-delay-ms: ${WORKER_POLL_DELAY_MS:15000}
     max-attempts: ${WORKER_MAX_ATTEMPTS:3}
+  # Xuất đề ra Word (GET /api/exams/{id}/export/docx) cần pandoc; mặc định tìm "pandoc" trên PATH.
+  export:
+    pandoc-path: ${PANDOC_PATH:pandoc}
   # Bảng điểm cho phần tạo đề sau này (V4); luồng sinh câu không dùng. Giá trị mặc định nằm ở ExamScoringProperties.
   exam:
     scoring:

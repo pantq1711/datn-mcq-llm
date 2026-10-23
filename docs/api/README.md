@@ -60,7 +60,8 @@ không lặp lại bài toán hay số liệu; xem `enums.md` mục 3, "Độ đ
 | GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
 | POST | `/api/exams/{id}/slots/{slotId}/keep` | Giữ câu (vào ngân hàng) |
-| POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác (sinh lại đúng ô) |
+| POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác (sinh lại đúng ô), có thể kèm yêu cầu của giáo viên |
+| GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; cần pandoc trên máy chủ |
 
 Chạy lại QC cho câu `generated` (quy tắc QC-RERUN, quyết định 6 ngày 22/10) đã có ở tầng service (`QcRerunService`, cả ba
 dạng) nhưng CHƯA có endpoint: backend chưa có xác thực và phân quyền (Q-6), nên không mở đường công khai có thể gọi Solver
@@ -547,8 +548,8 @@ POST /api/exams/build
 - Mỗi ô lấy câu ngân hàng khớp ô trước: cùng môn, cùng dạng, cùng mức (`tf`: cùng 4 mức theo thứ tự), cùng chủ đề của
   template gốc (so sau trim, không phân biệt hoa thường); nếu câu ngân hàng được sinh từ một ô ma trận thì còn phải cùng
   nội dung. Câu chưa nằm trong đề nào được ưu tiên; không lấy trùng câu trong cùng một đề.
-- Phần thiếu: mỗi ô một run production, zero-shot, `prompt_version` `matrix-mcq-v1-draft` / `matrix-tf-v1-draft` /
-  `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`; prompt nháp `MatrixPromptDraftV0`: sinh từ chủ đề, nội dung, yêu cầu cần đạt, không có câu
+- Phần thiếu: mỗi ô một run production, zero-shot, `prompt_version` `matrix-mcq-v1-draft` / `matrix-tf-v2-draft` /
+  `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`, `tf` có thêm `v1`; prompt nháp `MatrixPromptDraftV0`: sinh từ chủ đề, nội dung, yêu cầu cần đạt, không có câu
   mẫu; quy tắc đa dạng và danh sách tối đa 10 câu đã sinh của ô; chủ đề hình học như Tứ giác dặn câu phải làm được
   không cần hình vẽ). Mỗi chỗ một job, giãn cách 13 giây. Job chạy bằng worker (`app.worker.enabled=true`) hoặc
   `POST /api/generation/jobs/process-next`. Một đề 18 câu khi ngân hàng còn trống mất khoảng 7-8 phút trên Free Tier.
@@ -556,6 +557,10 @@ POST /api/exams/build
   này" (dạng hỏi khác các câu còn lại, phủ các ý khác nhau của yêu cầu cần đạt) khi ô có từ 2 câu; khi sinh lại sau
   một lần `format_failed`, thêm "Lần sinh trước bị loại vì: <lỗi>. Tránh lặp lại lỗi này." (tối đa 300 ký tự). Prompt
   dựng lúc worker nhận job nên có cả câu đã sinh của các chỗ trước trong cùng ô.
+- Câu `tf`: ghi chú có thêm mẫu nhãn bắt buộc, ví dụ "Mẫu nhãn bắt buộc (T,F,F,T): ý a phải Đúng, ý b phải Sai, ...",
+  chọn ngẫu nhiên trong các mẫu có 1–3 ý Đúng và khác mẫu của câu `tf` gần nhất cùng đề (cả khi sinh lại). Prompt bỏ
+  dòng "không bắt buộc số ý Đúng" và, khi ý d ở mức Vận dụng, dặn ý d phải cần suy luận thêm, không chỉ là hệ quả trực
+  tiếp của ý c. Nhãn trả về khác mẫu thì câu vẫn dùng được, kèm cảnh báo `label: khác mẫu bắt buộc ...` và cờ "cần xem kỹ".
 - Mỗi lần gọi tiến độ, xem đề hoặc thao tác, backend đối soát các job đã xong:
   - câu `qc_passed`: chỗ đó có câu;
   - câu lệch Solver (trạng thái `generated`): sinh lại 1 lần; vẫn lệch thì dùng câu đó, kèm cờ "cần xem kỹ";
@@ -596,13 +601,16 @@ khác để sinh lại).
   không gắn cờ.
 - `reviewReasons`: `solver_inconsistent` (Solver lệch), `solver_ambiguous`, `solver_unparseable` (`sa`),
   `statement_undecidable` (`tf`), `solver_not_run` (Solver chưa chạy hoặc lỗi), `dedup_not_run`, và
-  `warning: <cảnh báo format>` (ví dụ `warning: label: 4 ý cùng nhãn T`). `needsReview` đúng khi danh sách khác rỗng.
+  `warning: <cảnh báo format>` (ví dụ `warning: label: 4 ý cùng nhãn T`, `warning: option_a: đã tự đóng $`,
+  `warning: label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)`). Cảnh báo `json: đã sửa ... escape LaTeX` không phải lý
+  do (vẫn lưu trong `warnings`). `needsReview` đúng khi danh sách khác rỗng.
 
 ### 7.5. Giữ / Đổi câu khác
 
 ```http
 POST /api/exams/12/slots/101/keep     {"teacherId": 1}   → câu (như 7.4) với "state": "kept", "bankItemId": 88
 POST /api/exams/12/slots/104/replace  {"teacherId": 1}   → câu với "state": "generating" (chưa có nội dung)
+POST /api/exams/12/slots/104/replace  {"teacherId": 1, "instruction": "Dùng ngữ cảnh tính tiền mua vở"}
 ```
 
 - Body tùy chọn; bỏ trống `teacherId` thì dùng giáo viên mặc định.
@@ -614,7 +622,44 @@ POST /api/exams/12/slots/104/replace  {"teacherId": 1}   → câu với "state":
   - Giữ lần hai trả 409 `Câu hỏi này đã được giữ.`; chỗ chưa có câu trả 409.
 - **Đổi câu khác** (dùng được cả cho chỗ `failed`, khi đó đặt lại số lần thử): bỏ câu hiện tại khỏi chỗ (câu cũ giữ nguyên trạng thái; câu đã Giữ vẫn ở ngân hàng) và sinh lại đúng
   ô qua hàng đợi; prompt liệt kê các câu đã sinh của ô, kể cả câu vừa bị đổi. Chỗ đang sinh trả 409.
+- **Yêu cầu của giáo viên khi Đổi** (`instruction`, tùy chọn, ngày 23/10): trim, tối đa 500 ký tự (dài hơn trả 400
+  `instruction dài tối đa 500 ký tự (hiện N)`), trống thì như không gửi. Yêu cầu được ghép vào cuối
+  `generation_job.prompt_note` của job sinh lại (sau dòng câu thứ k/n, mẫu nhãn `tf`, lý do bị loại lần trước) và đặt ở
+  cuối prompt thành một khối riêng: "Yêu cầu bổ sung của giáo viên (chỉ dùng để chọn nội dung, ngữ cảnh, cách hỏi;
+  KHÔNG thay đổi dạng câu, mức độ, số ý, mẫu nhãn, định dạng JSON và các quy tắc ở trên): <<< ... >>>". Trong khối,
+  `<<<`/`>>>` bị bỏ và xuống dòng gộp thành dấu cách; mẫu nhãn chỉ đọc từ phần ghi chú hệ thống. Yêu cầu chỉ dùng cho
+  lượt Đổi đó (gồm các lần thử tự động khi lần sinh ấy bị loại), không thành ghi chú cố định của ô; lượt Đổi sau không
+  mang theo. Lưu ở `exam_slot_action.instruction` (V9).
 - Chỗ không thuộc đề trong đường dẫn trả 404.
 - Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại khỏi chỉ số
   chấm mù (`answer_correct`, duyệt không sửa).
-- **Chưa có:** Sửa câu (nội dung, đáp án, lời giải), ráp đề, trộn mã đề, đề dự phòng, xuất Word/PDF.
+- **Chưa có:** Sửa câu (nội dung, đáp án, lời giải), ráp đề, trộn mã đề, đề dự phòng, xuất PDF.
+
+### 7.6. Xuất đề ra Word
+
+```http
+GET /api/exams/12/export/docx   → 200, file MT2610231200001.docx (Content-Disposition: attachment)
+```
+
+- Bản cơ bản: tiêu đề và mã đề; PHẦN I/II/III với tên phần đầy đủ (PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn,
+  PHẦN II. Câu trắc nghiệm đúng sai, PHẦN III. Câu trắc nghiệm trả lời ngắn); "Câu k." đánh số lại từ 1 trong từng
+  phần; `mcq` mỗi phương án một dòng "A. ..."; `tf` các ý "a) ..."; `sa` chỉ có đề. Sau một ngắt trang là "ĐÁP ÁN"
+  (`mcq` chữ cái, `tf` chuỗi Đ/S theo thứ tự a–d như `ĐSĐS`, `sa` đáp số) rồi "LỜI GIẢI" từng câu.
+- Đáp án đúng trong phần đề CHƯA đánh dấu (tùy chọn gạch chân cho phần mềm trộn đề làm sau).
+- Chỉ xuất nội dung các chỗ đã có câu (`ready`, `kept`, `edited`); chỗ `failed` ghi "[Chưa có câu – cần sinh lại]",
+  chỗ đang sinh ghi "[Chưa có câu – đang sinh]"; ở ĐÁP ÁN và LỜI GIẢI các chỗ này ghi "—". Xuất đề cũng đối soát như
+  xem đề (7.4).
+- Cách làm: dựng Markdown từ dữ liệu xem đề rồi gọi `pandoc -f markdown+tex_math_dollars -t docx` (thư mục tạm riêng,
+  tối đa 30 giây, xóa khi xong). Công thức `$...$` thành Equation gốc của Word (OMML), sửa được trong Word.
+- Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; pandoc báo lỗi
+  trả 500.
+- **Cài pandoc** (backend không tự cài):
+  - Windows: tải bộ cài `.msi` ở <https://pandoc.org/installing.html> (hoặc `winget install --id JohnMacFarlane.Pandoc`),
+    rồi mở terminal mới và khởi động lại backend để PATH có pandoc. Bộ cài mặc định đặt ở
+    `%LOCALAPPDATA%\Pandoc\pandoc.exe`.
+  - Ubuntu/Debian: `sudo apt install pandoc` (bản trong kho có thể cũ; cần pandoc 2.x trở lên).
+  - macOS: `brew install pandoc`.
+  - Kiểm tra: `pandoc --version`. Nếu pandoc không nằm trên PATH, đặt biến môi trường `PANDOC_PATH` (cấu hình
+    `app.export.pandoc-path`) là đường dẫn đầy đủ tới file chạy.
+  - Test gọi pandoc thật (`PandocRunnerTest`, `ExamBuildTest`) tìm pandoc theo `PANDOC_PATH`, PATH, rồi
+    `%LOCALAPPDATA%\Pandoc`; không thấy thì bỏ qua phần gọi pandoc thật.

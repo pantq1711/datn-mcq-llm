@@ -20,6 +20,7 @@ import com.datn.mcq.generation.service.TrueFalseQuestionStore;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
+import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GenerationJob;
@@ -57,7 +58,9 @@ public class GenerationJobProcessor {
             boolean validateLatex,
             QuestionType questionType,
             List<Difficulty> targetStatementDifficulties,
-            Purpose purpose
+            Purpose purpose,
+            /* mẫu nhãn bắt buộc của job tf theo ma trận (TfLabelPattern, đọc từ prompt_note); null với job khác */
+            String tfLabelPattern
     ) {}
 
     private final GenerationJobRepository generationJobRepository;
@@ -151,7 +154,8 @@ public class GenerationJobProcessor {
                 isMath,
                 questionType,
                 statementLevels,
-                run.getPurpose()
+                run.getPurpose(),
+                matrix && questionType == QuestionType.TF ? TfLabelPattern.fromNote(job.getPromptNote()) : null
         ));
     }
 

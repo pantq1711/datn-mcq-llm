@@ -21,6 +21,7 @@ import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
+import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.matrix.entity.ExamMatrix;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
@@ -116,6 +117,7 @@ public class ExamBuildService {
         int total = 0;
         int fromBank = 0;
         int jobs = 0;
+        String lastTfPattern = null;
         for (ExamMatrixCell cell : cells) {
             List<ExamSlot> slots = new ArrayList<>();
             for (int i = 1; i <= cell.getQuestionCount(); i++) {
@@ -152,9 +154,14 @@ public class ExamBuildService {
                     slot.setRunId(run.getId());
                     slot.setAttempts(1);
                     slot.setState(ExamSlot.GENERATING);
+                    List<String> note = new ArrayList<>();
+                    addLine(note, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount()));
+                    if (cell.getQuestionType() == QuestionType.TF) {
+                        lastTfPattern = TfLabelPattern.choose(lastTfPattern, ThreadLocalRandom.current());
+                        note.add(TfLabelPattern.promptLine(lastTfPattern));
+                    }
                     generationService.enqueueMatrixJob(run.getId(), cell.getTemplateId(), spec, slot.getId(),
-                            start.plusSeconds(JOB_SPACING_SECONDS * jobs),
-                            MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount()));
+                            start.plusSeconds(JOB_SPACING_SECONDS * jobs), joinNote(note));
                     jobs++;
                 }
             }
@@ -291,8 +298,25 @@ public class ExamBuildService {
         slot.setState(ExamSlot.READY);
     }
 
-    /** Một job sinh lại cho chỗ, dùng lại run của ô; chạy ngay. */
+    /**
+     * Một job sinh lại tự động cho chỗ (đối soát): giữ yêu cầu bổ sung của giáo viên nếu job trước của chỗ có (cùng một
+     * lượt Đổi câu).
+     */
     void enqueueRetry(ExamSlot slot) {
+        enqueue(slot, generationService.latestJobForSlot(slot.getId())
+                .map(j -> MatrixPromptDraftV0.teacherInstruction(j.getPromptNote())).orElse(null));
+    }
+
+    /** Job sinh lại khi giáo viên Đổi câu; {@code instruction} null thì không có yêu cầu bổ sung. */
+    void enqueueReplace(ExamSlot slot, String instruction) {
+        enqueue(slot, instruction);
+    }
+
+    /** Một job sinh lại cho chỗ, dùng lại run của ô; chạy ngay. */
+    private void enqueue(ExamSlot slot, String instruction) {
+        // Chuyển trạng thái trước mọi truy vấn: Hibernate có thể ghi chỗ xuống DB trước khi truy vấn exam_slot, và chỗ
+        // vừa bỏ câu khi Đổi mà còn 'ready' thì vi phạm chk_es_ready.
+        slot.setState(ExamSlot.GENERATING);
         ExamMatrixCell cell = matrixService.getCell(slot.getCellId());
         ExamMatrix matrix = matrixService.getMatrix(cell.getMatrixId());
         Subject subject = catalogService.getSubjectById(matrix.getSubjectId());
@@ -301,31 +325,59 @@ public class ExamBuildService {
             slot.setRunId(generationService.createMatrixRun(subject.getId(), spec, 1).getId());
         }
         generationService.enqueueMatrixJob(slot.getRunId(), cell.getTemplateId(), spec, slot.getId(),
-                LocalDateTime.now(), promptNote(slot, cell));
+                LocalDateTime.now(), promptNote(slot, cell, instruction));
         slot.setAttempts(slot.getAttempts() + 1);
-        slot.setState(ExamSlot.GENERATING);
     }
 
     /**
-     * Ghi chú cho job sinh lại (ngày 23/10, mục 5 và 8): dòng "câu thứ k/n" của chỗ, cộng lý do lần sinh trước bị loại
-     * nếu lần trước format_failed (đọc từ quality_check_result.errors, V8). Gọi trước khi xếp hàng job mới.
+     * Ghi chú cho job sinh lại (ngày 23/10, mục 5 và 8): dòng "câu thứ k/n" của chỗ; với câu tf, một mẫu nhãn bắt buộc
+     * mới (tránh mẫu của câu tf gần nhất cùng đề); cộng lý do lần sinh trước bị loại nếu lần trước format_failed (đọc
+     * từ quality_check_result.errors, V8); cuối cùng là khối yêu cầu bổ sung của giáo viên khi Đổi câu (nếu có). Gọi
+     * trước khi xếp hàng job mới.
      */
-    String promptNote(ExamSlot slot, ExamMatrixCell cell) {
+    String promptNote(ExamSlot slot, ExamMatrixCell cell, String instruction) {
         List<String> lines = new ArrayList<>();
-        String slotLine = MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount());
-        if (slotLine != null) {
-            lines.add(slotLine);
+        addLine(lines, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount()));
+        if (cell.getQuestionType() == QuestionType.TF) {
+            lines.add(TfLabelPattern.promptLine(
+                    TfLabelPattern.choose(latestTfPattern(slot), ThreadLocalRandom.current())));
         }
         Optional<GenerationJob> previous = generationService.latestJobForSlot(slot.getId());
         if (previous.isPresent() && previous.get().getQuestionId() != null) {
             GeneratedQuestion q = generationService.getQuestionById(previous.get().getQuestionId());
             if (q.getStatus() == QuestionStatus.FORMAT_FAILED) {
-                String hint = MatrixPromptDraftV0.retryHint(qcSummaryService.formatErrors(q.getId()));
-                if (hint != null) {
-                    lines.add(hint);
-                }
+                addLine(lines, MatrixPromptDraftV0.retryHint(qcSummaryService.formatErrors(q.getId())));
             }
         }
+        addLine(lines, MatrixPromptDraftV0.teacherBlock(instruction));
+        return joinNote(lines);
+    }
+
+    /** Mẫu nhãn bắt buộc của job tf mới nhất thuộc các chỗ khác cùng đề; null khi chưa có. */
+    private String latestTfPattern(ExamSlot slot) {
+        GenerationJob latest = null;
+        String pattern = null;
+        for (ExamSlot other : slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(slot.getExamId())) {
+            if (other.getId().equals(slot.getId()) || other.getQuestionType() != QuestionType.TF) {
+                continue;
+            }
+            Optional<GenerationJob> job = generationService.latestJobForSlot(other.getId());
+            String p = job.map(j -> TfLabelPattern.fromNote(j.getPromptNote())).orElse(null);
+            if (p != null && (latest == null || job.get().getId() > latest.getId())) {
+                latest = job.get();
+                pattern = p;
+            }
+        }
+        return pattern;
+    }
+
+    private static void addLine(List<String> lines, String line) {
+        if (line != null) {
+            lines.add(line);
+        }
+    }
+
+    private static String joinNote(List<String> lines) {
         return lines.isEmpty() ? null : String.join("\n", lines);
     }
 

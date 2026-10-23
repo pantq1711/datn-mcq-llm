@@ -42,6 +42,10 @@ public class ExamSlotAction {
     @Column(name = "actor_id")
     private Integer actorId;
 
+    /** Yêu cầu bổ sung của giáo viên khi Đổi câu (V9); null khi không có. */
+    @Column(name = "instruction")
+    private String instruction;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -87,5 +91,13 @@ public class ExamSlotAction {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public String getInstruction() {
+        return instruction;
+    }
+
+    public void setInstruction(String instruction) {
+        this.instruction = instruction;
     }
 }
