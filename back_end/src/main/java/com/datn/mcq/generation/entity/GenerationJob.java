@@ -57,6 +57,11 @@ public class GenerationJob {
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
 
+    /** V10: lúc worker nhận job; null khi chưa nhận hoặc đã được trả về pending vì quá hạn. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Column(name = "started_at")
+    private LocalDateTime startedAt;
+
     @Column(name = "token_count")
     private Integer tokenCount;
 
@@ -83,6 +88,14 @@ public class GenerationJob {
     private String promptNote;
 
     public GenerationJob() {}
+
+    public LocalDateTime getStartedAt() {
+        return startedAt;
+    }
+
+    public void setStartedAt(LocalDateTime startedAt) {
+        this.startedAt = startedAt;
+    }
 
     public String getPromptNote() {
         return promptNote;

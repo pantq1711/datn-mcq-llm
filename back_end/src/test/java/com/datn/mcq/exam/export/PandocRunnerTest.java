@@ -46,5 +46,25 @@ class PandocRunnerTest {
             assertEquals(before, s.filter(p -> p.getFileName().toString().startsWith(PandocRunner.TEMP_PREFIX)).count(),
                     "dọn thư mục tạm sau khi xong");
         }
+        // Đợt A bổ sung 3: không mở ở Compatibility Mode (để MathType Convert Equations chạy), font Times New Roman 13.
+        assertTrue(PandocTestSupport.hasCompatibilityMode15(PandocTestSupport.entry(docx, "word/settings.xml")),
+                "settings.xml khai báo compatibilityMode = 15");
+        assertTrue(PandocTestSupport.normalIsTimesNewRoman13(PandocTestSupport.entry(docx, "word/styles.xml")),
+                "kiểu Normal là Times New Roman 13");
+    }
+
+    /** File mẫu --reference-doc trong resources (không cần pandoc). */
+    @Test
+    void fileMauCoCompatibilityMode15VaFontTimesNewRoman() throws Exception {
+        byte[] reference;
+        try (var in = PandocRunner.class.getResourceAsStream(PandocRunner.REFERENCE_DOC_RESOURCE)) {
+            assertTrue(in != null, "thiếu " + PandocRunner.REFERENCE_DOC_RESOURCE);
+            reference = in.readAllBytes();
+        }
+        assertTrue(PandocTestSupport.hasCompatibilityMode15(PandocTestSupport.entry(reference, "word/settings.xml")));
+        String styles = PandocTestSupport.entry(reference, "word/styles.xml");
+        assertTrue(PandocTestSupport.normalIsTimesNewRoman13(styles));
+        assertFalse(styles.substring(styles.indexOf("<w:rPrDefault>"), styles.indexOf("</w:rPrDefault>"))
+                .contains("asciiTheme"), "mặc định của tài liệu không dùng font theo theme");
     }
 }

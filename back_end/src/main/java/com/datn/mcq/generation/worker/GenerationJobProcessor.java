@@ -91,7 +91,8 @@ public class GenerationJobProcessor {
     @Transactional
     public Optional<ClaimedJobContext> claimNextPendingJob() {
         LocalDateTime now = LocalDateTime.now();
-        Optional<GenerationJob> optJob = generationJobRepository.findFirstDuePendingJob(now);
+        // Đợt A: FOR UPDATE SKIP LOCKED, đổi sang running trong cùng transaction nên không nhận trùng job.
+        Optional<GenerationJob> optJob = generationJobRepository.lockNextDuePendingJob(now);
         if (optJob.isEmpty()) {
             return Optional.empty();
         }
@@ -99,6 +100,7 @@ public class GenerationJobProcessor {
         int nextAttempt = (job.getAttempt() != null ? job.getAttempt() : 0) + 1;
         job.setStatus(JobStatus.RUNNING);
         job.setAttempt(nextAttempt);
+        job.setStartedAt(now);
         job.setUpdatedAt(now);
         generationJobRepository.save(job);
 
