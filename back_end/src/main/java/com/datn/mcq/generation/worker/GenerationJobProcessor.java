@@ -16,6 +16,8 @@ import com.datn.mcq.generation.dto.ParsedTfDto;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.generation.service.PreviousQuestionLookup;
 import com.datn.mcq.generation.service.TrueFalseQuestionStore;
+import com.datn.mcq.llm.prompt.MatrixCellSpec;
+import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
@@ -101,7 +103,12 @@ public class GenerationJobProcessor {
 
         QuestionType questionType = job.getQuestionType() != null ? job.getQuestionType() : QuestionType.MCQ;
         List<Difficulty> statementLevels = GenerationService.splitLevels(job.getTargetStatementDifficulties());
-        String prompt = questionType == QuestionType.TF
+        // V7: run sinh câu theo ô ma trận mang thông số ô ở hyperparams; prompt dựng lại kèm câu đã sinh của ô.
+        boolean matrix = MatrixPromptDraftV0.isMatrixVersion(run.getPromptVersion()) && run.getHyperparams() != null;
+        String prompt = matrix
+                ? MatrixPromptDraftV0.buildGenerationPrompt(MatrixCellSpec.fromJson(run.getHyperparams()),
+                        previousQuestionLookup.recentForMatrix(tpl.getId(), questionType))
+                : questionType == QuestionType.TF
                 ? TfPromptDraftV0.buildGenerationPrompt(
                         subject.getName(),
                         tpl.getGradeLevel(),

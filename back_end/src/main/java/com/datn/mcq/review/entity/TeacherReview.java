@@ -94,7 +94,25 @@ public class TeacherReview {
     @Column(name = "reviewed_at", nullable = false)
     private LocalDateTime reviewedAt = LocalDateTime.now();
 
+    /**
+     * V7: 'blind' (chấm mù, mặc định) hoặc 'assisted' (giáo viên Giữ/Sửa câu ở chế độ giáo viên, đã thấy đáp án LLM).
+     * Đánh giá 'assisted' bị loại khỏi chỉ số chấm mù (answer_correct, duyệt không sửa).
+     */
+    @Column(name = "review_mode", nullable = false, length = 10)
+    private String reviewMode = MODE_BLIND;
+
+    public static final String MODE_BLIND = "blind";
+    public static final String MODE_ASSISTED = "assisted";
+
     public TeacherReview() {}
+
+    public String getReviewMode() {
+        return reviewMode;
+    }
+
+    public void setReviewMode(String reviewMode) {
+        this.reviewMode = reviewMode;
+    }
 
     public Integer getId() {
         return id;

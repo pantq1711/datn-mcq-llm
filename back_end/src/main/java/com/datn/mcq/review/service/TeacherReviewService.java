@@ -9,6 +9,7 @@ import com.datn.mcq.catalog.service.CatalogService;
 import com.datn.mcq.common.util.ShortAnswerValue;
 import com.datn.mcq.common.util.TextDistanceUtils;
 import com.datn.mcq.enums.AnswerChoice;
+import com.datn.mcq.enums.DbEnum;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.Purpose;
@@ -1009,6 +1010,125 @@ public class TeacherReviewService {
      * Lời giải chép vào bank_item (việc 2 ngày 22/10): với môn Toán, lời giải còn lỗi định dạng LaTeX nghiêm trọng
      * thì trả null; lời giải hợp lệ hoặc chỉ có cảnh báo được giữ nguyên. Môn khác không kiểm LaTeX.
      */
+    static final String KEEP_NOT_ALLOWED_MESSAGE = "Câu hỏi này không thể đưa vào ngân hàng.";
+
+    /**
+     * Giữ câu ở chế độ giáo viên (V7, phần C mục 4; quyết định 22/10 ở docs/ai-development-rules.md): ghi
+     * teacher_review production với review_mode = 'assisted', quyết định approved_as_is với chính đáp án/đáp số/nhãn của
+     * LLM (giáo viên đã thấy và chấp nhận), rồi chép vào bank_item trong cùng transaction (M-9).
+     *
+     * <p>Khác form chấm mù: không đòi câu qc_passed, vì câu lệch Solver được đưa vào đề kèm cờ "cần xem kỹ" và giáo viên
+     * Giữ sau khi đã thấy cờ. Không nhận câu duplicate, format_failed, rejected hoặc câu thuộc run experiment. Đánh giá
+     * assisted bị loại khỏi các chỉ số chấm mù.
+     *
+     * @return id của bank_item
+     */
+    @Transactional
+    public Integer keepAssisted(Integer questionId, Integer reviewerId) {
+        GeneratedQuestion gq = generationService.getQuestionById(questionId);
+        if (experimentService.getById(gq.getRunId()).getPurpose() != Purpose.PRODUCTION
+                || (gq.getStatus() != QuestionStatus.QC_PASSED && gq.getStatus() != QuestionStatus.GENERATED
+                    && gq.getStatus() != QuestionStatus.IN_BANK)) {
+            throw new IllegalArgumentException(KEEP_NOT_ALLOWED_MESSAGE);
+        }
+        Integer teacherId = reviewerId != null ? userService.getById(reviewerId).getId()
+                : userService.getOrCreateDefaultTeacher().getId();
+        QuestionTemplate tpl = catalogService.getTemplateById(gq.getTemplateId());
+        Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
+        String explanation = explanationForBank(subject.getName(), gq.getExplanation());
+        QuestionType type = gq.getQuestionType() != null ? gq.getQuestionType() : QuestionType.MCQ;
+
+        TeacherReview review = teacherReviewRepository.findByQuestionIdAndReviewerId(gq.getId(), teacherId)
+                .orElseGet(TeacherReview::new);
+        review.setQuestionType(type);
+        review.setQuestionId(gq.getId());
+        review.setReviewerId(teacherId);
+        review.setReviewPurpose(Purpose.PRODUCTION);
+        review.setReviewMode(TeacherReview.MODE_ASSISTED);
+        review.setFormatOk(Boolean.TRUE);
+        review.setDecision(ReviewDecision.APPROVED_AS_IS);
+        review.setEdited(false);
+        review.setEditedQuestionText(null);
+        review.setEditedOptionA(null);
+        review.setEditedOptionB(null);
+        review.setEditedOptionC(null);
+        review.setEditedOptionD(null);
+        review.setEditedExplanation(null);
+        review.setEditDistance(null);
+        review.setReviewedAt(LocalDateTime.now());
+
+        switch (type) {
+            case MCQ -> {
+                if (gq.getCorrectOption() == null || gq.getLlmDifficulty() == null) {
+                    throw new IllegalArgumentException(KEEP_NOT_ALLOWED_MESSAGE);
+                }
+                review.setReviewerAnswer(DbEnum.fromDbValue(AnswerChoice.class, gq.getCorrectOption().getDbValue()));
+                review.setAnswerCorrect(Boolean.TRUE);
+                review.setDifficultyLabel(gq.getLlmDifficulty());
+                review.setFinalOption(gq.getCorrectOption());
+                review.setReviewerSaKind(null);
+                review.setReviewerSaAnswer(null);
+                review.setFinalSaAnswer(null);
+                TeacherReview saved = teacherReviewRepository.saveAndFlush(review);
+                generationService.updateStatusAndDifficulty(gq.getId(), QuestionStatus.IN_BANK, gq.getLlmDifficulty());
+                return bankService.createOrUpdateFromReview(gq.getId(), saved.getId(), gq.getQuestionText(),
+                        gq.getOptionA(), gq.getOptionB(), gq.getOptionC(), gq.getOptionD(), gq.getCorrectOption(),
+                        explanation, gq.getLlmDifficulty()).getId();
+            }
+            case SA -> {
+                if (gq.getSaAnswer() == null || gq.getLlmDifficulty() == null) {
+                    throw new IllegalArgumentException(KEEP_NOT_ALLOWED_MESSAGE);
+                }
+                review.setReviewerAnswer(null);
+                review.setFinalOption(null);
+                review.setReviewerSaKind(SaAnswerKind.NUMBER);
+                review.setReviewerSaAnswer(gq.getSaAnswer());
+                review.setFinalSaAnswer(gq.getSaAnswer());
+                review.setAnswerCorrect(Boolean.TRUE);
+                review.setDifficultyLabel(gq.getLlmDifficulty());
+                TeacherReview saved = teacherReviewRepository.saveAndFlush(review);
+                generationService.updateStatusAndDifficulty(gq.getId(), QuestionStatus.IN_BANK, gq.getLlmDifficulty());
+                return bankService.createOrUpdateShortAnswerFromReview(gq.getId(), saved.getId(), gq.getQuestionText(),
+                        gq.getSaAnswer(), explanation, gq.getLlmDifficulty()).getId();
+            }
+            case TF -> {
+                List<GeneratedQuestionStatement> statements = generationService.getStatements(gq.getId());
+                if (statements.size() != 4 || statements.stream()
+                        .anyMatch(s -> s.getLlmLabel() == null || s.getLlmDifficulty() == null)) {
+                    throw new IllegalArgumentException(KEEP_NOT_ALLOWED_MESSAGE);
+                }
+                review.setReviewerAnswer(null);
+                review.setFinalOption(null);
+                review.setReviewerSaKind(null);
+                review.setReviewerSaAnswer(null);
+                review.setFinalSaAnswer(null);
+                review.setAnswerCorrect(null);
+                review.setDifficultyLabel(null);
+                TeacherReview saved = teacherReviewRepository.saveAndFlush(review);
+                teacherReviewStatementRepository.deleteByReviewId(saved.getId());
+                List<BankStatementInput> bankStatements = new ArrayList<>(4);
+                List<Difficulty> levels = new ArrayList<>(4);
+                for (GeneratedQuestionStatement s : statements) {
+                    TeacherReviewStatement row = new TeacherReviewStatement(saved.getId(), s.getStatementKey());
+                    row.setReviewerLabel(s.getLlmLabel() == TruthValue.TRUE ? TruthChoice.TRUE : TruthChoice.FALSE);
+                    row.setDifficultyLabel(s.getLlmDifficulty());
+                    row.setLabelCorrect(Boolean.TRUE);
+                    row.setFinalLabel(s.getLlmLabel());
+                    teacherReviewStatementRepository.save(row);
+                    bankStatements.add(new BankStatementInput(s.getStatementKey(), s.getStatementText(),
+                            s.getLlmLabel(), s.getLlmDifficulty()));
+                    levels.add(s.getLlmDifficulty());
+                }
+                teacherReviewStatementRepository.flush();
+                generationService.updateStatusAndDifficulty(gq.getId(), QuestionStatus.IN_BANK, null);
+                generationService.updateStatementFinalDifficulties(gq.getId(), levels);
+                return bankService.createOrUpdateTrueFalseFromReview(gq.getId(), saved.getId(), gq.getQuestionText(),
+                        explanation, bankStatements).getId();
+            }
+        }
+        throw new IllegalStateException("Dạng câu không hỗ trợ: " + type);
+    }
+
     static String explanationForBank(String subjectName, String explanation) {
         if (explanation == null || explanation.isBlank() || !GenerationJobProcessor.isMathSubject(subjectName)) {
             return explanation;

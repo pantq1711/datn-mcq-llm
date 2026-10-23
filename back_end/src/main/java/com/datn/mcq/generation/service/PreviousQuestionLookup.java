@@ -36,7 +36,23 @@ public class PreviousQuestionLookup {
     /** Mới nhất trước; rỗng với mcq. */
     @Transactional(readOnly = true)
     public List<PreviousQuestion> recent(Integer templateId, QuestionType type) {
-        if (templateId == null || (type != QuestionType.SA && type != QuestionType.TF)) {
+        if (type != QuestionType.SA && type != QuestionType.TF) {
+            return List.of();
+        }
+        return fetch(templateId, type);
+    }
+
+    /**
+     * Như {@link #recent}, áp cho cả mcq (chỉ lấy đề), dùng khi sinh câu theo ô ma trận (phần C mục 2): mỗi ô có template
+     * riêng nên danh sách là các câu đã sinh của chính ô đó. Không dùng cho thực nghiệm C1/C2/C3.
+     */
+    @Transactional(readOnly = true)
+    public List<PreviousQuestion> recentForMatrix(Integer templateId, QuestionType type) {
+        return fetch(templateId, type);
+    }
+
+    private List<PreviousQuestion> fetch(Integer templateId, QuestionType type) {
+        if (templateId == null || type == null) {
             return List.of();
         }
         List<GeneratedQuestion> questions = questionRepository

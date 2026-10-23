@@ -58,6 +58,17 @@ public class BankService {
                 .toList();
     }
 
+    /** Một câu ngân hàng kèm ý (tf); dùng cho xem đề ở chế độ giáo viên (V7). */
+    @Transactional(readOnly = true)
+    public BankItemDto getItem(Integer id) {
+        BankItem item = bankItemRepository.findById(id)
+                .orElseThrow(() -> new java.util.NoSuchElementException("Không tìm thấy câu ngân hàng id=" + id));
+        List<BankItemStatement> statements = item.getQuestionType() == QuestionType.TF
+                ? bankItemStatementRepository.findByBankItemIdInOrderByBankItemIdAscPositionAsc(List.of(id))
+                : List.of();
+        return BankItemDto.fromEntity(item, statements);
+    }
+
     @Transactional
     public BankItem createOrUpdateFromReview(
             Integer sourceQuestionId,

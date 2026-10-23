@@ -72,7 +72,20 @@ public class GenerationJob {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
 
+    /** V7: chỗ trong đề (exam_slot) mà job sinh câu cho; null với job thường (khi đó không có trong JSON). */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Column(name = "exam_slot_id")
+    private Integer examSlotId;
+
     public GenerationJob() {}
+
+    public Integer getExamSlotId() {
+        return examSlotId;
+    }
+
+    public void setExamSlotId(Integer examSlotId) {
+        this.examSlotId = examSlotId;
+    }
 
     public Integer getId() {
         return id;

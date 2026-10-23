@@ -87,26 +87,32 @@ public final class SaPromptDraftV0 {
             sb.append(NEW_PROBLEM_RULE).append("\n");
         }
         sb.append(PreviousQuestion.section(previous, false));
-        sb.append("""
-
-                Quy tắc đáp số:
-                - Đáp số là MỘT giá trị số viết ở một trong các dạng: số nguyên; số thập phân (dấu phẩy thập phân, \
-                ví dụ -0,75); phân số $\\frac{a}{b}$; hoặc một số nhân với một căn $k\\sqrt{n}$ (ví dụ $3\\sqrt{2}$).
-                - Phân số và căn viết bằng LaTeX trong $...$. Không kèm đơn vị, không viết "x =".
-                - Không viết tổng nhiều số hạng (ví dụ không viết $1 + \\sqrt{2}$).
-                - Chỉ khi giá trị đúng KHÔNG viết chính xác được bằng các dạng trên (ví dụ có $\\pi$, hoặc là tổng \
-                nhiều số hạng chứa căn), đề phải ghi rõ yêu cầu làm tròn (ví dụ "làm tròn đến hàng phần mười") \
-                và đáp số là giá trị đã làm tròn đúng yêu cầu đó.
-                - Không viết chữ số 0 thừa ở đầu (viết 5, không viết 05); không viết -0.
-                - Đề chỉ có một cách hiểu và một đáp số duy nhất.
-                """);
+        sb.append(ANSWER_RULES);
         sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append("\n");
-        sb.append("""
-                Viết lời giải từng bước TRƯỚC, sau đó ghi đáp số khớp với lời giải.
-                Trả về DUY NHẤT một JSON có đúng 3 trường theo thứ tự: "question_text", "explanation", "answer" (chuỗi).
-                """);
+        sb.append(OUTPUT_INSTRUCTION);
         return sb.toString();
     }
+
+    /** Quy tắc đáp số (dùng chung với {@link MatrixPromptDraftV0}); mở đầu bằng một dòng trống. */
+    static final String ANSWER_RULES = """
+
+            Quy tắc đáp số:
+            - Đáp số là MỘT giá trị số viết ở một trong các dạng: số nguyên; số thập phân (dấu phẩy thập phân, \
+            ví dụ -0,75); phân số $\\frac{a}{b}$; hoặc một số nhân với một căn $k\\sqrt{n}$ (ví dụ $3\\sqrt{2}$).
+            - Phân số và căn viết bằng LaTeX trong $...$. Không kèm đơn vị, không viết "x =".
+            - Không viết tổng nhiều số hạng (ví dụ không viết $1 + \\sqrt{2}$).
+            - Chỉ khi giá trị đúng KHÔNG viết chính xác được bằng các dạng trên (ví dụ có $\\pi$, hoặc là tổng \
+            nhiều số hạng chứa căn), đề phải ghi rõ yêu cầu làm tròn (ví dụ "làm tròn đến hàng phần mười") \
+            và đáp số là giá trị đã làm tròn đúng yêu cầu đó.
+            - Không viết chữ số 0 thừa ở đầu (viết 5, không viết 05); không viết -0.
+            - Đề chỉ có một cách hiểu và một đáp số duy nhất.
+            """;
+
+    /** Yêu cầu thứ tự viết và JSON đầu ra (dùng chung với {@link MatrixPromptDraftV0}). */
+    static final String OUTPUT_INSTRUCTION = """
+            Viết lời giải từng bước TRƯỚC, sau đó ghi đáp số khớp với lời giải.
+            Trả về DUY NHẤT một JSON có đúng 3 trường theo thứ tự: "question_text", "explanation", "answer" (chuỗi).
+            """;
 
     public static String buildSolverPrompt(String questionText) {
         return """

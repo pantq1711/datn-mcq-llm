@@ -48,6 +48,42 @@ public final class McqTextNormalizer {
 
     private McqTextNormalizer() {}
 
+    /**
+     * Câu chỉ dẫn chung ở cuối đề dẫn câu Đúng/Sai (quyết định 4 ngày 22/10), bỏ trước khi so đề dẫn. Danh sách tường
+     * minh; so không phân biệt hoa thường, khoảng trắng bất kỳ, có thể kèm một dấu ":", "?" hoặc "." ngay sau.
+     * Cụm dài đứng trước.
+     */
+    public static final List<String> TF_INSTRUCTION_PHRASES = List.of(
+            "Trong các khẳng định sau, khẳng định nào đúng, khẳng định nào sai",
+            "Hãy xét tính đúng sai của các khẳng định sau",
+            "Xét tính đúng sai của các khẳng định sau đây",
+            "Xét tính đúng sai của các khẳng định sau",
+            "Xét tính đúng, sai của các khẳng định sau",
+            "Xét tính đúng sai của mỗi khẳng định sau",
+            "Xét tính đúng sai của các mệnh đề sau",
+            "Các khẳng định sau đây là đúng hay sai",
+            "Các khẳng định sau đây đúng hay sai",
+            "Các khẳng định sau là đúng hay sai",
+            "Mỗi khẳng định sau đây đúng hay sai");
+
+    private static final Pattern TF_INSTRUCTION = Pattern.compile(
+            "(?<!\\p{L})(?:" + String.join("|", TF_INSTRUCTION_PHRASES.stream()
+                    .map(p -> String.join("\\s+", java.util.Arrays.stream(p.split(" ")).map(Pattern::quote).toList()))
+                    .toList()) + ")\\s*(?:[:?.]|$)",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+
+    /**
+     * Đề dẫn câu tf đã bỏ các câu chỉ dẫn chung trong {@link #TF_INSTRUCTION_PHRASES}: cụm phải đứng trọn vẹn, ngay sau
+     * là dấu ":", "?", "." hoặc hết chuỗi. Nhờ vậy chữ "sai" trong cụm không bị tính là phủ định.
+     */
+    public static String stripTfInstruction(String stem) {
+        if (stem == null) {
+            return null;
+        }
+        String nfc = java.text.Normalizer.normalize(stem, java.text.Normalizer.Form.NFC);
+        return WHITESPACE.matcher(TF_INSTRUCTION.matcher(nfc).replaceAll(" ")).replaceAll(" ").trim();
+    }
+
     /** Chuẩn hóa một trường văn bản (thân câu hoặc một phương án). */
     public static String normalize(String text) {
         if (text == null) {

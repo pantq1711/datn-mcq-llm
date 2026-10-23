@@ -40,13 +40,13 @@ Cách tham chiếu trong prompt: `Tuân thủ docs/ai-development-rules.md v1. L
 
 Chỉ ghi ở đây những điều đã có trong migration/`enums.md`. Phần chưa chốt nằm ở mục 10.
 
-**M-6. Chấm mù – mọi `purpose`:** payload trả về cho người chấm (form, danh sách, phản hồi sau khi nộp) **không** chứa `correct_option` của LLM, **không** chứa `answer_correct`, kể cả trong JSON ẩn. Server tự tính và lưu `answer_correct`. (V1 dòng 136–138, `enums.md` mục 3.)
+**M-6. Chấm mù – mọi `purpose`:** payload trả về cho người chấm (form, danh sách, phản hồi sau khi nộp) **không** chứa `correct_option` của LLM, **không** chứa `answer_correct`, kể cả trong JSON ẩn. Server tự tính và lưu `answer_correct`. (V1 dòng 136–138, `enums.md` mục 3.) **Ngoại lệ có chủ đích:** chế độ giáo viên khi tạo đề theo ma trận (`/api/exams/**`, production) không chấm mù, xem "Quyết định ngày 22/10/2026 – chế độ giáo viên" ở cuối tài liệu. Form chấm `/api/reviews/**` vẫn theo M-6.
 
 **M-7. Chấm mù – `experiment`:** ngoài M-6, payload còn không chứa `llm_difficulty`, chiến lược sinh, và mọi kết quả QC (gồm `judge_answer`, similarity, `status`). Không được để lộ gián tiếp qua tham số lọc, thứ tự, hay giá trị giả.
 
 **M-8. Provenance:** `purpose` của một lần chấm phải khớp `experiment_run.purpose` của câu hỏi. Giá trị client gửi lên không được quyết định `purpose`; nếu khác thì từ chối.
 
-**M-9. `bank_item`:** chỉ được tạo/cập nhật từ duyệt thật (`production`), với quyết định `approved_as_is` hoặc `approved_with_edit`, và trong **cùng transaction** với `teacher_review` tương ứng. Câu thuộc run `experiment` không bao giờ vào `bank_item`. Chỉ `bank_item` được đưa vào đề (`exam_question.bank_item_id`).
+**M-9. `bank_item`:** chỉ được tạo/cập nhật từ duyệt thật (`production`), với quyết định `approved_as_is` hoặc `approved_with_edit`, và trong **cùng transaction** với `teacher_review` tương ứng (kể cả Giữ/Sửa ở chế độ giáo viên: `teacher_review.review_mode = 'assisted'`). Câu thuộc run `experiment` không bao giờ vào `bank_item`. Chỉ `bank_item` được đưa vào đề (`exam_question.bank_item_id`).
 
 **M-10. Trạng thái QC:** chỉ chuyển `generated_question.status` theo kết quả pipeline QC hoặc theo duyệt production. Không ép trạng thái (ví dụ đặt thẳng `qc_passed`) ngoài pipeline. Định nghĩa đầy đủ của `qc_passed` đang chờ Q-2.
 
@@ -266,6 +266,8 @@ Xác nhận: không chạy lệnh thuộc M-27 / không gọi API tính phí / k
 ## Lịch sử
 
 - v1 (2026-10-21): bản đầu, tổng hợp từ audit repository.
+- 2026-10-22: thêm "Quyết định ngày 22/10/2026 – chế độ giáo viên" (ngoại lệ của M-6 và quyết định 21/10 mục 2 cho
+  luồng tạo đề theo ma trận); ghi chú ở M-6, M-9. Không đổi số phiên bản tài liệu.
 ## Quyết định ngày 21/10/2026 (thay thế các comment xung đột trong V1__init_schema.sql)
 
 Không sửa file V1 (đã chạy, sửa sẽ lệch checksum Flyway). Khi comment trong V1 mâu thuẫn với mục này, mục này thắng.
@@ -281,3 +283,12 @@ Không sửa file V1 (đã chạy, sửa sẽ lệch checksum Flyway). Khi comme
    - Chỉ lời giải đã qua bước 2 mới được coi là lời giải chính thức trong ngân hàng.
    - Cần migration, API và frontend mới. Chưa quyết thực nghiệm có làm bước 2 không.
 5. Phạm vi dedup: experiment chỉ so trong cùng run; production so cùng môn, cùng purpose; không so giữa experiment và production. Mẫu chấm experiment chỉ loại duplicate và format_failed, không lọc theo answer_check.
+
+## Quyết định ngày 22/10/2026 – chế độ giáo viên (tạo đề theo ma trận)
+
+Theo ưu tiên của giảng viên hướng dẫn (trải nghiệm giáo viên tiện nhất). Đây là **thay đổi so với quyết định 21/10 mục 2 và quy tắc V1 dòng 136–138 (M-6)**, chỉ áp cho luồng tạo đề theo ma trận; mọi chỗ khác giữ nguyên.
+
+1. Đề tạo theo ma trận (`exam.mode = 'teacher'`, API `/api/exams/**`, V7) là chế độ giáo viên, production, **không chấm mù**: API xem đề trả đáp án (`correctOption`), đáp số `sa`, nhãn và mức từng ý `tf`, lời giải và cờ "cần xem kỹ" (`needsReview`, `reviewReasons`: Solver lệch, không kết luận được hoặc chưa chạy; dedup chưa chạy; cảnh báo bước format).
+2. Không đổi: form chấm mù `/api/reviews/**` của cả production và experiment (M-6, M-7, quyết định 21/10 mục 2); thực nghiệm C1/C2/C3; experiment không dùng chế độ giáo viên.
+3. Giữ/Sửa ở chế độ giáo viên tạo `teacher_review` production với `review_mode = 'assisted'` và `bank_item` trong cùng transaction (M-9 vẫn giữ). Đánh giá `assisted` bị loại khỏi mọi chỉ số chấm mù (`answer_correct`, tỉ lệ duyệt không sửa); thống kê giữ/sửa/đổi lấy riêng từ `exam_slot_action`.
+4. Câu vẫn lệch Solver sau 1 lần sinh lại được đưa vào đề kèm cờ "cần xem kỹ". Giáo viên được Giữ câu này vào ngân hàng sau khi đã thấy cờ; đây là ngoại lệ có chủ đích so với form chấm mù (duyệt production ở đó chỉ nhận câu `qc_passed`/`in_bank`).

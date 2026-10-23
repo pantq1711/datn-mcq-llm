@@ -51,6 +51,16 @@ không lặp lại bài toán hay số liệu; xem `enums.md` mục 3, "Độ đ
 | POST | `/api/reviews/questions/{id}` | Nộp đánh giá |
 | POST | `/api/reviews/demo/seed-math` | Tạo 5 câu `mcq` demo; đi qua format và dedup, không chạy answer_check, nên giữ `generated` |
 | GET | `/api/bank-items?questionType=` | Ngân hàng câu hỏi đã duyệt, mới nhất trước; `questionType` (`mcq`, `tf`, `sa`) bỏ trống là mọi dạng |
+| POST | `/api/exam-matrices` | Tạo ma trận đề bằng JSON (mục 7) |
+| GET | `/api/exam-matrices`, `/api/exam-matrices/{id}` | Danh sách ma trận / chi tiết một ma trận |
+| GET | `/api/exam-matrices/samples` | Các mẫu ma trận có sẵn (hiện có `giuaki1-toan8`) |
+| POST | `/api/exam-matrices/samples/{key}` | Tạo ma trận từ mẫu có sẵn |
+| POST | `/api/exams/build` | Tạo đề theo ma trận một lần bấm (chế độ giáo viên). Sinh câu qua hàng đợi, có thể tốn phí |
+| GET | `/api/exams/{id}/progress` | Tiến độ theo ô |
+| GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
+| GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
+| POST | `/api/exams/{id}/slots/{slotId}/keep` | Giữ câu (vào ngân hàng) |
+| POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác (sinh lại đúng ô) |
 
 Chạy lại QC cho câu `generated` (quy tắc QC-RERUN, quyết định 6 ngày 22/10) đã có ở tầng service (`QcRerunService`, cả ba
 dạng) nhưng CHƯA có endpoint: backend chưa có xác thực và phân quyền (Q-6), nên không mở đường công khai có thể gọi Solver
@@ -474,3 +484,126 @@ ngoài công thức, `\neq`, `\ne`, `\notin`, `\not`, `\nu`, `\nabla`, `\neg`, `
 Gợi ý render phía frontend: tách chuỗi theo `$$...$$` và `$...$` (bỏ qua `\$`), render từng đoạn công thức bằng KaTeX
 (`displayMode` cho `$$`), để `throwOnError: false` hoặc bắt lỗi từng đoạn và hiện chuỗi gốc khi không render được.
 KaTeX ở chế độ `strict: "error"` có thể từ chối chữ tiếng Việt nằm trong công thức; backend không kiểm tra điều này.
+
+## 7. Tạo đề theo ma trận (chế độ giáo viên, V6-V7)
+
+Luồng dành cho giáo viên ra đề, production. **Không chấm mù**: API `/api/exams/**` trả đáp án, lời giải và cờ "cần xem
+kỹ" (quyết định 22/10, `docs/ai-development-rules.md`). Form chấm mù `/api/reviews/**` và chế độ experiment không đổi.
+
+Cách dùng: chọn hoặc tạo ma trận → `POST /api/exams/build` → gọi `GET /api/exams/{id}/progress` vài giây một lần
+cho tới khi `status` khác `generating` → `GET /api/exams/{id}` để xem đề → Giữ hoặc Đổi từng câu.
+
+### 7.1. Ma trận
+
+```http
+POST /api/exam-matrices
+{"name": "Đề thử", "subjectId": 1, "gradeLevel": 8, "notes": ["ghi chú"], "cells": [
+  {"part": "I", "questionType": "mcq", "difficulty": "easy", "questionCount": 2, "topic": "Đa thức",
+   "content": "Đơn thức, đa thức", "learningOutcomes": {"easy": "Nhận biết được đơn thức, đa thức."}},
+  {"part": "II", "questionType": "tf", "statementDifficulties": ["easy", "easy", "medium", "hard"], "questionCount": 1,
+   "topic": "Hằng đẳng thức", "learningOutcomes": {"easy": "Nhận biết.", "medium": "Khai triển.", "hard": "Vận dụng."}},
+  {"part": "III", "questionType": "sa", "difficulty": "medium", "questionCount": 1, "topic": "Tứ giác",
+   "learningOutcomes": {"medium": "Tính được góc trong tứ giác."}}]}
+```
+
+```json
+{"id": 3, "name": "Đề thử", "subjectId": 1, "gradeLevel": 8, "source": null, "notes": ["ghi chú"],
+ "createdAt": "2026-10-22T21:30:00",
+ "cells": [{"id": 11, "position": 1, "part": "I", "questionType": "mcq", "topic": "Đa thức", "content": "Đơn thức, đa thức",
+            "learningOutcomes": {"easy": "Nhận biết được đơn thức, đa thức."}, "difficulty": "easy",
+            "questionCount": 2, "templateId": 41}],
+ "totals": {"questionsByPart": {"I": 2, "II": 1, "III": 1}, "commandsByLevel": {"easy": 4, "medium": 2, "hard": 1},
+            "totalCommands": 7}}
+```
+
+- Phần I chỉ chứa `mcq`, phần II chỉ `tf`, phần III chỉ `sa` (DB cũng kiểm). `mcq`/`sa` cần `difficulty`; `tf` cần
+  `statementDifficulties` gồm đúng 4 mức (ý a-d) và không có `difficulty`. `questionCount` từ 1 đến 50.
+- `learningOutcomes` chỉ nhận khóa `easy`, `medium`, `hard` và phải có yêu cầu cần đạt cho mọi mức ô dùng.
+- Mỗi ô tạo một `question_template` (`templateId`) để dùng lại pipeline sinh câu.
+- `totals.commandsByLevel` đếm lệnh hỏi: mỗi câu `mcq`/`sa` một lệnh hỏi, mỗi câu `tf` 4 lệnh hỏi theo mức của 4 ý.
+- Lỗi dữ liệu trả 400 nêu số ô, ví dụ `Ô 2: câu đúng/sai phải có statementDifficulties gồm đúng 4 mức`; `subjectId`
+  không tồn tại trả 404. Lỗi thì không tạo gì (kể cả template).
+- Mẫu có sẵn: `GET /api/exam-matrices/samples`; `POST /api/exam-matrices/samples/giuaki1-toan8` với body `{}` (dùng môn
+  "Toán") hoặc `{"subjectId": 1}`. Mẫu "Giữa kì I – Toán 8" đọc từ `docs/sample/matrix_giuaki1_toan8.json` (bản chép
+  trong `back_end/src/main/resources/samples/`, có test so khớp), giữ nguyên `notes`; tổng I=12, II=2, III=4.
+
+### 7.2. Tạo đề một lần bấm
+
+```http
+POST /api/exams/build
+{"matrixId": 3, "title": "Đề giữa kì I", "teacherId": 1}
+→ {"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "matrixId": 3, "slots": 18, "fromBank": 5, "jobsQueued": 13}
+```
+
+- `title` bỏ trống thì lấy tên ma trận; `teacherId` bỏ trống thì dùng giáo viên mặc định. Đề có `mode = teacher`,
+  `status = draft`.
+- Mỗi ô lấy câu ngân hàng khớp ô trước: cùng môn, cùng dạng, cùng mức (`tf`: cùng 4 mức theo thứ tự), cùng chủ đề của
+  template gốc (so sau trim, không phân biệt hoa thường); nếu câu ngân hàng được sinh từ một ô ma trận thì còn phải cùng
+  nội dung. Câu chưa nằm trong đề nào được ưu tiên; không lấy trùng câu trong cùng một đề.
+- Phần thiếu: mỗi ô một run production, zero-shot, `prompt_version` `matrix-mcq-v0-draft` / `matrix-tf-v0-draft` /
+  `matrix-sa-v0-draft` (prompt nháp `MatrixPromptDraftV0`: sinh từ chủ đề, nội dung, yêu cầu cần đạt, không có câu
+  mẫu; quy tắc đa dạng và danh sách tối đa 10 câu đã sinh của ô; chủ đề hình học như Tứ giác dặn câu phải làm được
+  không cần hình vẽ). Mỗi chỗ một job, giãn cách 13 giây. Job chạy bằng worker (`app.worker.enabled=true`) hoặc
+  `POST /api/generation/jobs/process-next`. Một đề 18 câu khi ngân hàng còn trống mất khoảng 7-8 phút trên Free Tier.
+- Mỗi lần gọi tiến độ, xem đề hoặc thao tác, backend đối soát các job đã xong:
+  - câu `qc_passed`: chỗ đó có câu;
+  - câu lệch Solver (trạng thái `generated`): sinh lại 1 lần; vẫn lệch thì dùng câu đó, kèm cờ "cần xem kỹ";
+  - câu trùng, lỗi định dạng hoặc job lỗi: sinh lại, tối đa 3 lần mỗi chỗ; hết lượt thì dùng câu lệch Solver đã có (nếu
+    có), không thì chỗ đó `failed`.
+- Dedup của câu sinh ra dùng phạm vi production hiện có (so với câu `qc_passed`, `in_bank` cùng môn). Văn bản đã sửa
+  trong `bank_item` chưa được đưa vào dedup.
+
+### 7.3. Tiến độ
+
+```json
+{"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "status": "generating", "total": 18,
+ "ready": 9, "generating": 9, "failed": 0, "fromBank": 5,
+ "cells": [{"cellId": 11, "position": 1, "part": "I", "questionType": "mcq", "topic": "Đa thức", "content": "Đơn thức, đa thức",
+            "needed": 4, "fromBank": 2, "ready": 3, "generating": 1, "failed": 0}]}
+```
+
+`status`: `generating` (còn chỗ đang sinh), `ready` (đủ câu), `partial` (hết việc nhưng có chỗ `failed`, dùng nút Đổi câu
+khác để sinh lại).
+
+### 7.4. Xem đề
+
+```json
+{"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "mode": "teacher", "status": "draft",
+ "matrixId": 3, "createdAt": "2026-10-22T21:30:00", "buildStatus": "ready", "needsReviewCount": 1,
+ "parts": [{"part": "III", "required": 4, "ready": 4, "items": [
+   {"slotId": 101, "cellId": 21, "slotNo": 1, "part": "III", "topic": "Tứ giác", "questionType": "sa", "state": "ready",
+    "source": "generated", "questionId": 345, "questionText": "Tứ giác $ABCD$ có ba góc…", "saAnswer": "90",
+    "explanation": "Tổng bốn góc của tứ giác là 360 độ…", "difficulty": "medium",
+    "needsReview": true, "reviewReasons": ["solver_inconsistent"]}]}]}
+```
+
+- Phần luôn theo thứ tự I, II, III; trong phần theo thứ tự ô rồi số thứ tự câu. `required`/`ready` để kiểm đủ câu.
+- Mỗi câu có nội dung đầy đủ theo dạng: `mcq` có `optionA..optionD`, `correctOption`; `sa` có `saAnswer`; `tf` có
+  `statements: [{key, text, label, difficulty}]`; cùng `explanation`, `difficulty` (`tf` để trống, mức ở từng ý).
+  Chỗ chưa có câu chỉ có phần định danh và `state` (`generating`, `failed`).
+- `source`: `bank` (lấy từ ngân hàng) hoặc `generated`. Câu từ ngân hàng và câu đã Giữ hiển thị bản trong ngân hàng,
+  không gắn cờ.
+- `reviewReasons`: `solver_inconsistent` (Solver lệch), `solver_ambiguous`, `solver_unparseable` (`sa`),
+  `statement_undecidable` (`tf`), `solver_not_run` (Solver chưa chạy hoặc lỗi), `dedup_not_run`, và
+  `warning: <cảnh báo format>` (ví dụ `warning: label: 4 ý cùng nhãn T`). `needsReview` đúng khi danh sách khác rỗng.
+
+### 7.5. Giữ / Đổi câu khác
+
+```http
+POST /api/exams/12/slots/101/keep     {"teacherId": 1}   → câu (như 7.4) với "state": "kept", "bankItemId": 88
+POST /api/exams/12/slots/104/replace  {"teacherId": 1}   → câu với "state": "generating" (chưa có nội dung)
+```
+
+- Body tùy chọn; bỏ trống `teacherId` thì dùng giáo viên mặc định.
+- **Giữ:**
+  - câu hệ thống sinh được chép vào ngân hàng: ghi `teacher_review` production với `review_mode = 'assisted'` (duyệt
+    nguyên trạng theo đáp án/nhãn của LLM) và `bank_item` trong cùng transaction; câu chuyển `in_bank`;
+  - câu lệch Solver cũng Giữ được, vì giáo viên đã thấy cờ;
+  - câu lấy từ ngân hàng thì chỉ đánh dấu `kept`, không tạo đánh giá mới;
+  - Giữ lần hai trả 409 `Câu hỏi này đã được giữ.`; chỗ chưa có câu trả 409.
+- **Đổi câu khác:** bỏ câu hiện tại khỏi chỗ (câu cũ giữ nguyên trạng thái; câu đã Giữ vẫn ở ngân hàng) và sinh lại đúng
+  ô qua hàng đợi; prompt liệt kê các câu đã sinh của ô, kể cả câu vừa bị đổi. Chỗ đang sinh trả 409.
+- Chỗ không thuộc đề trong đường dẫn trả 404.
+- Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại khỏi chỉ số
+  chấm mù (`answer_correct`, duyệt không sửa).
+- **Chưa có:** Sửa câu (nội dung, đáp án, lời giải), ráp đề, trộn mã đề, đề dự phòng, xuất Word/PDF.

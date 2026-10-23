@@ -153,16 +153,16 @@ public final class DedupChecker {
      * @return null khi không trùng theo quy tắc này
      */
     static StatementMatch matchStatements(DedupCandidate subject, DedupCandidate candidate, double threshold) {
-        String stemA = McqTextNormalizer.normalize(subject.questionText());
-        String stemB = McqTextNormalizer.normalize(candidate.questionText());
+        String rawA = stemOf(subject);
+        String rawB = stemOf(candidate);
+        String stemA = McqTextNormalizer.normalize(rawA);
+        String stemB = McqTextNormalizer.normalize(rawB);
         double stemScore;
         if (stemA.equals(stemB)) {
             stemScore = 1.0;
         } else {
-            if (!McqTextNormalizer.stemSignature(subject.questionText())
-                    .equals(McqTextNormalizer.stemSignature(candidate.questionText()))
-                    || McqTextNormalizer.hasNegation(subject.questionText())
-                    != McqTextNormalizer.hasNegation(candidate.questionText())) {
+            if (!McqTextNormalizer.stemSignature(rawA).equals(McqTextNormalizer.stemSignature(rawB))
+                    || McqTextNormalizer.hasNegation(rawA) != McqTextNormalizer.hasNegation(rawB)) {
                 return null;
             }
             stemScore = McqTextNormalizer.trigramCosine(stemA, stemB);
@@ -219,6 +219,16 @@ public final class DedupChecker {
         }
     }
 
+    /**
+     * Đề dẫn dùng để so: câu tf bỏ câu chỉ dẫn chung (quyết định 4 ngày 22/10, {@link
+     * McqTextNormalizer#stripTfInstruction}); mcq/sa giữ nguyên thân câu.
+     */
+    static String stemOf(DedupCandidate c) {
+        return c.questionType() == QuestionType.TF
+                ? McqTextNormalizer.stripTfInstruction(c.questionText())
+                : c.questionText();
+    }
+
     private static String canonical(DedupCandidate c) {
         if (c.questionType() == QuestionType.SA) {
             return McqTextNormalizer.normalize(c.questionText()) + SA_ANSWER_SEPARATOR + answerKey(c.saAnswer());
@@ -230,7 +240,7 @@ public final class DedupChecker {
                 statements.add(McqTextNormalizer.normalize(s));
             }
             statements.sort(null);
-            return McqTextNormalizer.normalize(c.questionText()) + SA_ANSWER_SEPARATOR + String.join(" | ", statements);
+            return McqTextNormalizer.normalize(stemOf(c)) + SA_ANSWER_SEPARATOR + String.join(" | ", statements);
         }
         return McqTextNormalizer.canonicalText(c.questionText(), c.optionA(), c.optionB(), c.optionC(), c.optionD());
     }
@@ -240,7 +250,7 @@ public final class DedupChecker {
         if (c.questionType() != QuestionType.TF) {
             return McqTextNormalizer.stemSignature(c.questionText());
         }
-        List<String> all = new ArrayList<>(McqTextNormalizer.stemSignature(c.questionText()));
+        List<String> all = new ArrayList<>(McqTextNormalizer.stemSignature(stemOf(c)));
         for (String s : c.statements()) {
             all.addAll(McqTextNormalizer.stemSignature(s));
         }
@@ -253,7 +263,7 @@ public final class DedupChecker {
      * (thiết kế bản sửa 1, mục 6).
      */
     private static String negationKey(DedupCandidate c) {
-        String stem = String.valueOf(McqTextNormalizer.hasNegation(c.questionText()));
+        String stem = String.valueOf(McqTextNormalizer.hasNegation(stemOf(c)));
         if (c.questionType() != QuestionType.TF) {
             return stem;
         }

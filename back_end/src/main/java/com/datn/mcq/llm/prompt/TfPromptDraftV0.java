@@ -111,21 +111,32 @@ public final class TfPromptDraftV0 {
             }
             sb.append("Mức độ mục tiêu: ").append(levels).append(".\n");
         }
-        sb.append("""
-
-                Yêu cầu:
-                - Mỗi ý là một khẳng định (không phải câu hỏi), xác định được chắc chắn là Đúng hoặc Sai.
-                - Các ý có thể nối tiếp nhau (điều kiện xác định, rút gọn, tính giá trị...), nhưng mỗi ý phải tự kết \
-                luận được khi đã có đề dẫn. Không ghi "a)", "b)" ở đầu nội dung ý.
-                - Không bắt buộc số ý Đúng hay số ý Sai.
-                """);
+        sb.append(STATEMENT_RULES);
         sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append("\n");
-        sb.append("""
-                Viết lời giải cho lần lượt từng ý trong "explanation" TRƯỚC, sau đó mới ghi nhãn.
-                Trả về DUY NHẤT một JSON theo thứ tự: "question_text", "statement_a", "statement_b", "statement_c", \
-                "statement_d", "explanation", "label_a", "label_b", "label_c", "label_d" ("T" = Đúng, "F" = Sai).
-                """);
+        sb.append(OUTPUT_INSTRUCTION);
         return sb.toString();
+    }
+
+    /** Yêu cầu với 4 ý (dùng chung với {@link MatrixPromptDraftV0}); mở đầu bằng một dòng trống. */
+    static final String STATEMENT_RULES = """
+
+            Yêu cầu:
+            - Mỗi ý là một khẳng định (không phải câu hỏi), xác định được chắc chắn là Đúng hoặc Sai.
+            - Các ý có thể nối tiếp nhau (điều kiện xác định, rút gọn, tính giá trị...), nhưng mỗi ý phải tự kết \
+            luận được khi đã có đề dẫn. Không ghi "a)", "b)" ở đầu nội dung ý.
+            - Không bắt buộc số ý Đúng hay số ý Sai.
+            """;
+
+    /** Yêu cầu thứ tự viết và JSON đầu ra (dùng chung với {@link MatrixPromptDraftV0}). */
+    static final String OUTPUT_INSTRUCTION = """
+            Viết lời giải cho lần lượt từng ý trong "explanation" TRƯỚC, sau đó mới ghi nhãn.
+            Trả về DUY NHẤT một JSON theo thứ tự: "question_text", "statement_a", "statement_b", "statement_c", \
+            "statement_d", "explanation", "label_a", "label_b", "label_c", "label_d" ("T" = Đúng, "F" = Sai).
+            """;
+
+    /** Nhãn mức theo ma trận (dùng chung với {@link MatrixPromptDraftV0}). */
+    static String levelName(Difficulty d) {
+        return levelLabel(d);
     }
 
     /** Solver chỉ thấy đề dẫn và 4 ý, không thấy nhãn và lời giải của người soạn. */
