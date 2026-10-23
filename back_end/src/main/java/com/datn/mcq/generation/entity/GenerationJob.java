@@ -1,0 +1,175 @@
+package com.datn.mcq.generation.entity;
+
+import com.datn.mcq.enums.Difficulty;
+import com.datn.mcq.enums.JobStatus;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "generation_job")
+public class GenerationJob {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
+
+    @Column(name = "run_id", nullable = false)
+    private Integer runId;
+
+    @Column(name = "template_id", nullable = false)
+    private Integer templateId;
+
+    @Column(name = "question_id")
+    private Integer questionId;
+
+    @Column(name = "target_difficulty", length = 10)
+    private Difficulty targetDifficulty;
+
+    @Column(name = "status", nullable = false, length = 20)
+    private JobStatus status = JobStatus.PENDING;
+
+    @Column(name = "attempt", nullable = false)
+    private Integer attempt = 0;
+
+    @Column(name = "next_run_at")
+    private LocalDateTime nextRunAt;
+
+    @Column(name = "last_error", columnDefinition = "TEXT")
+    private String lastError;
+
+    @Column(name = "token_count")
+    private Integer tokenCount;
+
+    @Column(name = "latency_ms")
+    private Double latencyMs;
+
+    @Column(name = "cost_usd")
+    private Double costUsd;
+
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt = LocalDateTime.now();
+
+    public GenerationJob() {}
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public Integer getRunId() {
+        return runId;
+    }
+
+    public void setRunId(Integer runId) {
+        this.runId = runId;
+    }
+
+    public Integer getTemplateId() {
+        return templateId;
+    }
+
+    public void setTemplateId(Integer templateId) {
+        this.templateId = templateId;
+    }
+
+    public Integer getQuestionId() {
+        return questionId;
+    }
+
+    public void setQuestionId(Integer questionId) {
+        this.questionId = questionId;
+    }
+
+    public Difficulty getTargetDifficulty() {
+        return targetDifficulty;
+    }
+
+    public void setTargetDifficulty(Difficulty targetDifficulty) {
+        this.targetDifficulty = targetDifficulty;
+    }
+
+    public JobStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(JobStatus status) {
+        this.status = status;
+    }
+
+    public Integer getAttempt() {
+        return attempt;
+    }
+
+    public void setAttempt(Integer attempt) {
+        this.attempt = attempt;
+    }
+
+    public LocalDateTime getNextRunAt() {
+        return nextRunAt;
+    }
+
+    public void setNextRunAt(LocalDateTime nextRunAt) {
+        this.nextRunAt = nextRunAt;
+    }
+
+    public String getLastError() {
+        return lastError;
+    }
+
+    public void setLastError(String lastError) {
+        this.lastError = lastError;
+    }
+
+    public Integer getTokenCount() {
+        return tokenCount;
+    }
+
+    public void setTokenCount(Integer tokenCount) {
+        this.tokenCount = tokenCount;
+    }
+
+    public Double getLatencyMs() {
+        return latencyMs;
+    }
+
+    public void setLatencyMs(Double latencyMs) {
+        this.latencyMs = latencyMs;
+    }
+
+    public Double getCostUsd() {
+        return costUsd;
+    }
+
+    public void setCostUsd(Double costUsd) {
+        this.costUsd = costUsd;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+}
+
