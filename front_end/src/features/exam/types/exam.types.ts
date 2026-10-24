@@ -57,3 +57,20 @@ export interface GeneratedExamCode {
 }
 
 export type GenerateExamPayload = ExamGenerationValues;
+
+export interface ChangeQuestionRequest {
+    /** Câu hỏi cần được thay thế. Backend nên xác minh lại câu hỏi này. */
+    question: ExamQuestionItem;
+    /** Yêu cầu bổ sung do giáo viên nhập. */
+    instruction: string;
+}
+
+/**
+ * Câu ứng viên có thể chưa có ID trong hệ thống.
+ */
+export type QuestionReplacementCandidate = Omit<
+    ExamQuestionItem,
+    "id"
+> & {
+    id?: ExamQuestionItem["id"];
+};

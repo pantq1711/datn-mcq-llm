@@ -14,15 +14,15 @@ interface QuestionFiltersProps {
 
 const difficultyOptions = [
     {
-        label: "Dễ",
+        label: "Biết",
         value: "easy",
     },
     {
-        label: "Trung bình",
+        label: "Hiểu",
         value: "medium",
     },
     {
-        label: "Khó",
+        label: "Vận dụng",
         value: "hard",
     },
 ];
