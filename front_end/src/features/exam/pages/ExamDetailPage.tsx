@@ -2,8 +2,9 @@ import { Button, Card, Space, Tag, Typography } from "antd";
 import { ArrowLeftOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
-import ExamPreview, { type ExamPreviewData } from "../components/ExamPreview";
-import ExamQuestionList, { type ExamQuestionItem } from "../components/ExamQuestionList";
+import ExamPreview from "../components/ExamPreview";
+import ExamQuestionList from "../components/ExamQuestionList";
+import type { ExamPreviewData, ExamQuestionItem } from "../types/exam.types";
 
 import "./ExamDetailPage.css";
 
@@ -15,14 +16,49 @@ export default function ExamDetailPage() {
     const exam: ExamPreviewData = {
         title: "Đề thi giữa kỳ Hóa học",
         subject: "Hóa học",
-        questionCount: 20,
+        questionCount: 3,
         duration: 30,
-        easyCount: 5,
-        mediumCount: 10,
-        hardCount: 5,
+        easyCount: 1,
+        mediumCount: 1,
+        hardCount: 1,
     };
 
-    const questions: ExamQuestionItem[] = [];
+    // Bổ sung mock data câu hỏi để ExamQuestionList hiển thị
+    const questions: ExamQuestionItem[] = [
+        {
+            id: 1,
+            questionText: "Nguyên tố hóa học nào có ký hiệu hóa học là 'H'?",
+            optionA: "Heli",
+            optionB: "Hiđrô",
+            optionC: "Hafni",
+            optionD: "Holmi",
+            correctOption: "B",
+            explanation: "Hiđrô là nguyên tố hóa học có ký hiệu là H, là nguyên tố nhẹ nhất trong bảng tuần hoàn.",
+            difficulty: "easy",
+        },
+        {
+            id: 2,
+            questionText: "Dung dịch axit nào sau đây làm quỳ tím chuyển sang màu đỏ?",
+            optionA: "NaCl",
+            optionB: "NaOH",
+            optionC: "HCl",
+            optionD: "Ba(OH)₂",
+            correctOption: "C",
+            explanation: "HCl là axit mạnh, làm quỳ tím hóa đỏ. NaCl là muối trung tính, NaOH và Ba(OH)₂ là bazơ làm quỳ tím hóa xanh.",
+            difficulty: "medium",
+        },
+        {
+            id: 3,
+            questionText: "Oxit nào sau đây là oxit lưỡng tính?",
+            optionA: "SO₂",
+            optionB: "Al₂O₃",
+            optionC: "CaO",
+            optionD: "CO₂",
+            correctOption: "B",
+            explanation: "Al₂O₃ (Nhôm oxit) là oxit lưỡng tính, vừa tác dụng với axit vừa tác dụng với bazơ.",
+            difficulty: "hard",
+        },
+    ];
 
     return (
         <div className="exam-detail-page">

@@ -1,5 +1,5 @@
 import { Button, Empty, List, Skeleton, Space, Tag, Tooltip, Typography } from "antd";
-import { DeleteOutlined } from "@ant-design/icons";
+import { DeleteOutlined, BulbOutlined, CheckCircleOutlined, SwapOutlined } from "@ant-design/icons";
 
 import "./ExamQuestionList.css";
 import type { ExamQuestionDifficulty, ExamQuestionItem } from "../types/exam.types";
@@ -10,6 +10,8 @@ interface ExamQuestionListProps {
     questions: ExamQuestionItem[];
     loading?: boolean;
     onRemove?: (question: ExamQuestionItem, index: number) => void;
+    onKeep?: (question: ExamQuestionItem, index: number) => void;
+    onChangeQuestion?: (question: ExamQuestionItem, index: number) => void;
 }
 
 const difficultyConfig: Record<
@@ -39,6 +41,8 @@ export default function ExamQuestionList({
     questions,
     loading = false,
     onRemove,
+    onKeep,
+    onChangeQuestion,
 }: ExamQuestionListProps) {
     if (loading) {
         return (
@@ -89,31 +93,53 @@ export default function ExamQuestionList({
                         >
                             <div className="exam-question-item-content">
                                 <div className="exam-question-item-header">
-                                    <div className="exam-question-item-number">
-                                        Câu {index + 1}
-                                    </div>
+                                    {/* Số thứ tự và Tag độ khó */}
+                                    <Space size={8} align="center" wrap>
+                                        <div className="exam-question-item-number">
+                                            Câu {index + 1}
+                                        </div>
 
-                                    <Space
-                                        size={8}
-                                        wrap
-                                    >
                                         {difficulty && (
                                             <Tag color={difficulty.color}>
                                                 {difficulty.label}
                                             </Tag>
                                         )}
+                                    </Space>
+
+                                    {/* Nhóm các nút hành động: Giữ, Đổi câu khác, Xóa */}
+                                    <Space size={4} align="center">
+                                        <Tooltip title="Giữ lại câu hỏi này">
+                                            <Button
+                                                type="text"
+                                                size="small"
+                                                icon={<CheckCircleOutlined />}
+                                                className="exam-action-btn-keep"
+                                                onClick={() => onKeep?.(question, index)}
+                                            >
+                                                Giữ
+                                            </Button>
+                                        </Tooltip>
+
+                                        <Tooltip title="Đổi sang câu hỏi khác cùng mức độ">
+                                            <Button
+                                                type="text"
+                                                size="small"
+                                                icon={<SwapOutlined />}
+                                                className="exam-action-btn-change"
+                                                onClick={() => onChangeQuestion?.(question, index)}
+                                            >
+                                                Đổi câu khác
+                                            </Button>
+                                        </Tooltip>
 
                                         <Tooltip title="Xóa câu hỏi khỏi đề">
                                             <Button
                                                 type="text"
+                                                size="small"
                                                 danger
                                                 icon={<DeleteOutlined />}
-                                                onClick={() =>
-                                                    onRemove?.(
-                                                        question,
-                                                        index,
-                                                    )
-                                                }
+                                                className="exam-action-btn-delete"
+                                                onClick={() => onRemove?.(question, index)}
                                             />
                                         </Tooltip>
                                     </Space>
@@ -159,6 +185,19 @@ export default function ExamQuestionList({
                                         );
                                     })}
                                 </div>
+
+                                {/* Hiển thị lời giải chi tiết nếu có */}
+                                {question.explanation && (
+                                    <div className="exam-question-explanation">
+                                        <div className="exam-question-explanation-header">
+                                            <BulbOutlined className="exam-question-explanation-icon" />
+                                            <Text strong>Lời giải chi tiết:</Text>
+                                        </div>
+                                        <Paragraph className="exam-question-explanation-text">
+                                            {question.explanation}
+                                        </Paragraph>
+                                    </div>
+                                )}
                             </div>
                         </List.Item>
                     );

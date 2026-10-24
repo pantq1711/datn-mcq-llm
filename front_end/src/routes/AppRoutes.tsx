@@ -17,7 +17,9 @@ import ExperimentDetailPage from "../features/experiment/pages/ExperimentDetailP
 import ExperimentComparisonPage from "../features/experiment/pages/ExperimentComparisonPage";
 import GenerateQuestionPage from "../features/question-generation/pages/GenerateQuestionPage";
 import GenerationHistoryPage from "../features/question-generation/pages/GenerationHistoryPage";
+import ExamMatrixListPage from "../features/exam-matrix/pages/ExamMatrixListPage";
 import TestKaTeX from "../features/test-katex/pages/TestKaTeX";
+import ExamMatrixFormPage from "../features/exam-matrix/pages/ExamMatrixFormPage";
 
 export default function AppRoutes() {
     return (
@@ -41,6 +43,9 @@ export default function AppRoutes() {
                 <Route path="experiments/comparison" element={<ExperimentComparisonPage />} />
                 <Route path="generate" element={<GenerateQuestionPage />} />
                 <Route path="generation-history" element={<GenerationHistoryPage />} />
+                <Route path="exam-matrices" element={<ExamMatrixListPage />} />
+                <Route path="exam-matrices/new" element={<ExamMatrixFormPage />} />
+                <Route path="exam-matrices/:id/edit" element={<ExamMatrixFormPage />} />
                 <Route path="test-katex" element={<TestKaTeX />} />
             </Route>
         </Routes>

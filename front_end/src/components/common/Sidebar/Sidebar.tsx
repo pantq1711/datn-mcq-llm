@@ -5,6 +5,7 @@ import {
     FormOutlined,
     HomeOutlined,
     ReadOutlined,
+    TableOutlined,
     SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -33,6 +34,11 @@ const menuItems: MenuItem[] = [
         key: "/question-bank",
         icon: <ReadOutlined />,
         label: "Ngân hàng câu hỏi",
+    },
+    {
+        key: "/exam-matrices",
+        icon: <TableOutlined />,
+        label: "Quản lý ma trận",
     },
     {
         key: "/exams",

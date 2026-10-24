@@ -19,6 +19,7 @@ export interface ExamQuestionItem {
     optionC: string;
     optionD: string;
     correctOption: "A" | "B" | "C" | "D";
+    explanation?: string;
     difficulty?: ExamQuestionDifficulty;
 }
 

@@ -148,7 +148,6 @@ export default function ExamGenerationForm({
             initialValues={{
                 ...defaultValues,
                 ...initialValues,
-                // Tổng số câu luôn được tính từ 9 ô ma trận, không lấy giá trị nhập cũ.
                 questionCount: getMatrixTotal(initialMatrixCounts),
                 matrixCounts: initialMatrixCounts,
             }}
@@ -244,15 +243,15 @@ export default function ExamGenerationForm({
                 />
             )}
 
-            <Row gutter={[16, 16]} className="exam-matrix-options-row">
+            <Row gutter={[16, 16]} className="generate-exam-matrix-options-row">
                 <Col xs={24} lg={14}>
-                    <div className="exam-matrix-container">
-                        <Typography.Title level={5} className="exam-matrix-heading">
+                    <div className="generate-exam-matrix-container">
+                        <Typography.Title level={5} className="generate-exam-matrix-heading">
                             Ma trận đề thi
                         </Typography.Title>
 
-                        <div className="exam-matrix-table-wrapper">
-                            <table className="exam-matrix-table">
+                        <div className="generate-exam-matrix-table-wrapper">
+                            <table className="generate-exam-matrix-table">
                                 <thead>
                                     <tr>
                                         <th>Dạng câu hỏi</th>
@@ -265,15 +264,17 @@ export default function ExamGenerationForm({
                                         cognitiveLevels.map((level, levelIndex) => (
                                             <tr key={`${type.key}-${level.key}`}>
                                                 {levelIndex === 0 && (
-                                                    <td rowSpan={cognitiveLevels.length} className="exam-matrix-type-cell">
-                                                        <span className="exam-matrix-type-label">{type.label}</span>
-                                                        <span className="exam-matrix-type-total">
-                                                            ({getQuestionTypeTotal(matrixCounts, type.key)} câu)
-                                                        </span>
+                                                    <td rowSpan={cognitiveLevels.length} className="generate-exam-matrix-type-cell">
+                                                        <div className="generate-exam-matrix-type-wrapper">
+                                                            <span className="generate-exam-matrix-type-label">{type.label}</span>
+                                                            <span className="generate-exam-matrix-type-total">
+                                                                ({getQuestionTypeTotal(matrixCounts, type.key)} câu)
+                                                            </span>
+                                                        </div>
                                                     </td>
                                                 )}
                                                 <td>{level.label}</td>
-                                                <td className="exam-matrix-count-cell">
+                                                <td className="generate-exam-matrix-count-cell">
                                                     <Form.Item
                                                         name={["matrixCounts", type.key, level.key]}
                                                         noStyle
@@ -286,7 +287,7 @@ export default function ExamGenerationForm({
                                                             min={0}
                                                             max={200}
                                                             precision={0}
-                                                            className="exam-matrix-input"
+                                                            className="generate-exam-matrix-input"
                                                             placeholder="0"
                                                             disabled={loading}
                                                             defaultValue={0}
@@ -302,15 +303,14 @@ export default function ExamGenerationForm({
                                             </tr>
                                         )),
                                     )}
-                                    <tr className="exam-matrix-total-row">
+                                    <tr className="generate-exam-matrix-total-row">
                                         <td colSpan={2}>Tổng số câu</td>
-                                        <td className="exam-matrix-grand-total">{totalQuestionCount}</td>
+                                        <td className="generate-exam-matrix-grand-total">{totalQuestionCount}</td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
 
-                        {/* Lưu tổng đã tính vào payload nhưng không hiển thị trường nhập liệu. */}
                         <Form.Item name="questionCount" hidden>
                             <InputNumber />
                         </Form.Item>
@@ -319,7 +319,7 @@ export default function ExamGenerationForm({
 
                 <Col xs={24} lg={10} className="exam-right-column">
                     <div className="exam-options-container">
-                        <Typography.Title level={5} className="exam-matrix-heading">
+                        <Typography.Title level={5} className="generate-exam-matrix-heading">
                             Tùy chọn
                         </Typography.Title>
                         <Space direction="vertical" size={12} className="exam-options-space">

@@ -92,13 +92,13 @@ const getDifficultyTag = (
 ) => {
     switch (difficulty) {
         case "easy":
-            return <Tag>Dễ</Tag>;
+            return <Tag>Biết</Tag>;
 
         case "medium":
-            return <Tag color="blue">Trung bình</Tag>;
+            return <Tag color="blue">Hiểu</Tag>;
 
         case "hard":
-            return <Tag color="purple">Khó</Tag>;
+            return <Tag color="purple">Vận dụng</Tag>;
 
         default:
             return null;
@@ -135,10 +135,10 @@ export default function ReviewQuestionsPage() {
             render: (status) => getQualityStatusTag(status),
         },
         {
-            title: "Độ khó",
+            title: "Mức độ nhận thức",
             dataIndex: "difficulty",
             key: "difficulty",
-            width: 120,
+            width: 150,
             render: (difficulty) => getDifficultyTag(difficulty),
         },
         {
