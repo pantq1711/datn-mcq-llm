@@ -118,7 +118,7 @@ MTEF đoán mò.
 |---|---|
 | Cấu trúc MTEF so với MathType 7.12 tự sinh (bỏ qua record COLOR) | 10/10 mẫu; 49/49 bộ THCS (1 câu MathType không nhập được); 63/65 bộ ký hiệu (2 câu lệch do MathType nhập TeX sai: "ậ" thành `?`, `\lfloor` thành U+FFFD; 3 câu MathType không nhập được) **[đã chạy]** |
 | Word mở file (COM): số đối tượng `Equation.DSMT4` | `KIEM_TRA_10.docx`: 10 OLE, 0 Equation. `KIEM_TRA_mo_rong.docx`: 116 OLE, 2 Equation (cố ý giữ) **[đã chạy]** |
-| MathType đọc ngược đối tượng spike (Toggle TeX, đối tượng không chứa TeX gốc) | 10/10 và 116/116 đổi được sang TeX đúng **[đã chạy]** |
+| MathType đọc ngược đối tượng spike (Toggle TeX, đối tượng không chứa TeX gốc) | 10/10 và 116/116 đổi được sang TeX **[đã chạy]**. Đính chính 24/10: lần chạy này để mất `\,` ở 3 câu (B26 ra `ab`, B58 và C5 mất khoảng trước `dx`); sau bản sửa mục 9 thì 116/116 đúng |
 | Xuất PDF (thay cho in) và xem ảnh | Đúng dòng chữ; công thức hiển thị riêng dòng được căn giữa **[đã chạy]** |
 | Thời gian | 1,2–3,5 giây mỗi file, gồm cả khởi động JVM, cho 10–118 công thức **[đã chạy]** |
 | Bấm đúp sửa, lưu, mở lại; MathType Lite; MathType 6.x; in giấy; WPS/LibreOffice | **Chưa kiểm**, chờ bạn |
@@ -185,7 +185,7 @@ Việc cần làm:
 - Phân số, căn bậc n, chỉ số trên/dưới/cả hai, `\lim`, ∫ ∑ có cận.
 - Mọi loại rào `\left \right`, `cases`, `array`, `\binom`.
 - `\widehat`, `\overline`, `\overrightarrow`, cung `\overset\frown`, dấu mũ/phẩy trên một ký tự.
-- Chữ Hy Lạp, ℕℤℚℝ, `\text`, khoảng cách `\, \; \quad \ `.
+- Chữ Hy Lạp, ℕℤℚℝ, `\text`, khoảng cách `\, \; \quad \ ` (riêng `\,` cố ý khác MathType, xem mục 9).
 
 ## 7. Hướng dẫn kiểm tra (2 máy: MathType đầy đủ và MathType Lite)
 
@@ -236,6 +236,93 @@ Mẫu ghi kết quả:
 | `java-proto/` | Bản thử Java (Maven): `mvn -o package` rồi `java -cp "target/mathtype-ole-proto-0.0.1.jar;target/lib/*" spike.mathtype.Main <pandoc.docx> <latex.txt> <out.docx>` |
 | `tools/mtef_dump.py`, `compare_mtef.py`, `inspect_ole.py` | Giải mã MTEF, so với MathType, xem stream OLE (chạy bằng `.venv313`, Python 3.13) |
 | `tools/mathtype_textoggle_ref.ps1` | Nhờ MathType trên máy dev sinh đối tượng tham chiếu từ danh sách TeX (cần Word + MathType) |
-| `tools/mathtype_roundtrip.ps1`, `word_probe.ps1` | MathType đọc ngược đối tượng; Word đếm đối tượng và xuất PDF |
+| `tools/mathtype_roundtrip.ps1`, `word_probe.ps1` | MathType đọc ngược đối tượng (`-Translator Texvc.tdl` để thử bộ dịch khác); Word đếm đối tượng và xuất PDF |
+| `tools/office_guard.ps1`, `office_guard_watchdog.ps1` | Dùng chung cho các script Word/MathType: luôn đóng Word/MathType do script mở, khôi phục Cut and Copy Preferences (mục 9) |
+| `tools/extract_mtef.py`, `mathtype_measure.ps1` | Tách MTEF thô từ docx; nhờ MathType (`MT6.dll`) dựng và trả kích thước để so độ rộng (mục 9) |
+| `java-proto/src/test` | `SpaceCodeTest`: ký tự khoảng cách sinh ra phải nằm trong danh sách đã đối chiếu (`mvn -o test`) |
 | `samples/` | Biểu thức thử (`exprs`, `thcs50`, `chars68`), file Markdown kiểm tra, bản sao `reference.docx` |
 | `out/` | File trung gian: `ref_*` là file MathType sinh, `01_omml_converter.*` là kết quả omml-converter, `*.compare.txt` / `*.roundtrip.txt` là kết quả kiểm chứng |
+
+## 9. Lỗi "No translation available for Inner space (0xEF07)" (24/10)
+
+**Triệu chứng:** MathType báo "MathType Translation Error: No translation available for Inner space (0xEF07) ...
+texvc.tdl" khi dịch 3 đối tượng của `KIEM_TRA_mo_rong.docx` (oleObjectMT66, MT98, MT118). `KIEM_TRA_10.docx` không có
+mã này.
+
+**Kiểm tra [đã chạy: giải mã MTEF bằng `tools/mtef_dump.py`, đọc thư mục Translators của MathType 7.12.3]:**
+
+- Cả 3 đối tượng là `\,`: B26 `a\,b`, B58 `\int_0^1 x\,dx`, C5 `\int_0^1 x^2\,dx`. Pandoc ghi `\,` thành U+2009, bộ sinh
+  đổi thành U+EF07.
+- **MathType 7.12 tự nhập TeX cũng ghi `\,` thành U+EF07** (`out/ref_chars68_mathtype.docx`, đối tượng 26 `a\,b` và 55
+  `\int_0^1 x\,dx`). Bộ sinh khớp MathType; lỗi nằm ở bộ dịch của chính MathType.
+- Bộ dịch Texvc (`Texvc (chars).tdl`) có dòng U+EF07 nhưng bị chú thích, nên không có bản dịch. Bộ LaTeX/TeX
+  (`TeX (base rules).tdl`, được LaTeX, AMS LaTeX, MathJax-LaTeX, Plain TeX dùng lại) dịch U+EF07 thành `{\mkern 1mu}`,
+  chỉ bằng 1/3 độ rộng của `\,`.
+
+| Mã MathType | Texvc | LaTeX/TeX | MathType nhập TeX |
+|---|---|---|---|
+| U+EF02 thin space | `\,` | `\,` | (không gặp) |
+| U+EF04 thick space | `\ ` | `\;` | `\;`, `\ ` |
+| U+EF05 em space | `\quad` | `\quad` | `\quad` |
+| U+EF07 inner space | **không có** | `{\mkern 1mu}` | `\,` |
+
+**Sửa [đã chạy]:** `\,` (U+2009, U+2006, U+202F, U+200A) nay ghi thành **U+EF02**: mọi bộ dịch TeX của MathType đều dịch
+lại thành `\,`, đúng độ rộng. Đây là chỗ duy nhất bộ sinh cố ý khác MathType tự nhập TeX, nên `compare_mtef.py` với
+`ref_chars68` sẽ lệch ở 2 câu `a\,b` và `\int_0^1 x\,dx`. Danh sách mã khoảng cách được phép ghi là
+`OmmlToMtef.VERIFIED_SPACE_CODES` (U+EF02, U+EF04, U+EF05); `SpaceCodeTest` kiểm mọi ký tự đầu vào và mọi ký tự khoảng
+trắng Unicode chỉ sinh ra các mã trong danh sách này.
+
+**Script tự động [đã chạy]:** cả 3 script Word/MathType dùng `tools/office_guard.ps1`:
+
+- Đóng đúng tiến trình Word do script mở (tìm qua cửa sổ `OpusApp` có caption riêng) và MathType/MathTypeLib khởi
+  động trong lúc chạy; không đụng Word/MathType đã chạy từ trước.
+- Một tiến trình canh chạy song song: quá `-TimeoutSec` (mặc định 600) thì đóng Word để lời gọi COM bị treo (hộp thoại lỗi
+  của MathType là modal) thoát ra. Script bị dừng giữa chừng thì tiến trình canh tự dọn.
+- Khôi phục `CutAndCopy`, `OutputTranslator`, `MTEFInTeX`, `TransNameInTeX` (HKCU\Software\Design Science\DSMT7\General)
+  nếu bị đổi, sau khi MathType đã thoát.
+- Cuối mỗi lần chạy in "Guard: ..." (đã đóng gì, đã khôi phục gì, còn sót tiến trình nào).
+- Đã chạy 3 lần (1 roundtrip, 2 lần đo): mỗi lần guard đóng MathType và MathTypeLib do script khởi động, không còn
+  tiến trình nào sót; lần roundtrip khôi phục `OutputTranslator` từ `Texvc.tdl` về `LaTeX.tdl`. Đường hết giờ (tiến trình
+  canh đóng Word đang treo) **chưa được thử**, vì không lần nào bị treo.
+
+**Kiểm chứng sau khi sửa [đã chạy 24/10, 21:13–21:25]:**
+
+- `mvn -o test` (`SpaceCodeTest`): 4/4 qua. Tạm đưa `\,` về U+EF07 thì 3/4 test hỏng (U+EF07 bị bắt), rồi trả lại;
+  `mvn -o package` qua.
+- Sinh lại `KIEM_TRA_mo_rong.docx` từ `out/KIEM_TRA_mo_rong.pandoc.docx` và `out/KIEM_TRA_mo_rong.tex.txt` (tạo cùng lúc
+  với `samples/KIEM_TRA_mo_rong.md`): 116 đối tượng MathType, 2 công thức giữ Equation như trước; không còn U+EF07;
+  MT66, MT98, MT118 ghi U+EF02.
+- `mathtype_roundtrip.ps1 -Translator Texvc.tdl` (`out/KIEM_TRA_mo_rong.roundtrip.texvc.txt`): 116/116 đổi sang TeX,
+  không có hộp thoại lỗi; B26 ra `a\,b`, B58 và C5 ra `...\,dx`. Lần chạy cũ (`out/KIEM_TRA_mo_rong.roundtrip.txt`,
+  đối tượng còn U+EF07) đã lặng lẽ bỏ khoảng: B26 ra `ab`, B58 và C5 ra `{x}dx`.
+- **Toggle TeX có vẻ không dùng `OutputTranslator`** khi `CutAndCopy = Std`: cả lần cũ lẫn lần này đều dịch U+EF04 thành
+  `\ ` (kiểu Texvc; `LaTeX.tdl` sẽ cho `\;`) và không hiện hộp thoại lỗi U+EF07. Không đổi `CutAndCopy` trên máy để thử
+  thêm. Lỗi "No translation available" có lẽ xuất hiện ở đường Cut/Copy dùng bộ dịch Texvc **[suy luận]**.
+
+**Độ rộng hiển thị do chính MathType vẽ [đã chạy, `tools/extract_mtef.py` + `tools/mathtype_measure.ps1`]:**
+
+MathType dựng ảnh từ MTEF qua `MT6.dll` (`MTXFormEqn`, `MTGetLastDimension`; hằng số và chữ ký lấy từ mã VBA của
+"MathType Commands 2016.dotm"). Đơn vị trả về là 1/32 point; đã đối chiếu với `w:dxaOrig` của 4 đối tượng MathType tự
+sinh (vd. `a\,b`: 512 = 16 pt = 320 twip). Kích thước bị làm tròn tới 1 pt, nên đo chuỗi 12 khoảng giống nhau giữa `a`
+và `b` rồi chia 12. Cỡ chữ Full 12 pt (1 em = 12 pt).
+
+| Mẫu | Độ rộng một khoảng | Theo em | TeX tương ứng |
+|---|---|---|---|
+| U+EF07, MathType tự nhập `\,` | 1,08 pt | 0,09 em | `\,` = 2 pt (TeX), dịch ngược thành `{\mkern 1mu}` = 0,67 pt |
+| U+EF07, spike cũ | 1,08 pt (giống hệt MathType) | 0,09 em | |
+| **U+EF02, spike mới** | **2,17 pt** | **0,18 em** | `\,` = 1/6 em = 2 pt |
+| U+EF04 (`\;`, `\ `) | 3,33 pt | 0,28 em | `\;` = 5/18 em = 3,33 pt |
+| U+EF05 (`\quad`) | 11,9 pt | 0,99 em | `\quad` = 12 pt |
+
+Một khoảng đơn lẻ: `a\,b` rộng 16 pt (MathType, U+EF07) so với 17 pt (U+EF02); `\int_0^1 x\,dx` rộng 32 pt so với
+33 pt; bỏ hẳn khoảng thì 16 pt và 31 pt.
+
+Kết luận: U+EF02 hiển thị gần đúng `\,` của TeX (2,17 so với 2 pt). `\,` mà MathType tự nhập (U+EF07) chỉ rộng khoảng một
+nửa. Công thức của spike vì vậy rộng hơn công thức MathType tự nhập khoảng 1 pt ở mỗi `\,`. Nếu sau này muốn khớp đúng
+độ rộng MathType, không có mã nào vừa rộng 1,08 pt vừa có bản dịch Texvc **[suy luận từ bảng dịch]**, nên giữ U+EF02.
+
+**Dữ liệu cho tích hợp (chưa làm):** `out/KIEM_TRA_10.after_mathtype_edit.docx` là bản `KIEM_TRA_10` do người kiểm tra
+mở, sửa và lưu bằng MathType (10 đối tượng, có preview WMF và kích thước do MathType dựng lại). Dùng để hiệu chỉnh kích
+thước preview khi đưa vào backend (tuần 2). `KIEM_TRA_10.docx` giữ bản spike sinh ra.
+
+Spike đóng băng sau mục này: không thêm tính năng; tích hợp vào `exam/export` để sang tuần 2.

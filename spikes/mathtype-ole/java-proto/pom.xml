@@ -27,10 +27,22 @@
             <artifactId>jlatexmath</artifactId>
             <version>1.0.7</version>
         </dependency>
+        <!-- EPL-2.0, chỉ cho test. Cùng bản với back_end để chạy được offline (mvn -o). -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>6.0.3</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.6</version>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
@@ -40,7 +52,10 @@
                         <id>copy-deps</id>
                         <phase>package</phase>
                         <goals><goal>copy-dependencies</goal></goals>
-                        <configuration><outputDirectory>${project.build.directory}/lib</outputDirectory></configuration>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

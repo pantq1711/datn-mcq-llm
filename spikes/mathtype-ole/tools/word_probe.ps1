@@ -1,14 +1,16 @@
 # Mở .docx bằng Word (COM, ẩn), đếm công thức OMML và đối tượng OLE, in ProgID từng đối tượng,
 # xuất PDF để xem hiển thị/in. Không lưu đè file gốc.
-# Dùng: powershell -NoProfile -File word_probe.ps1 <file.docx> [<pdf-out>]
-param([Parameter(Mandatory = $true)][string]$Path, [string]$PdfOut)
+# Luôn đóng Word/MathType do script mở và khôi phục Cut and Copy Preferences (office_guard.ps1).
+# Dùng: powershell -NoProfile -File word_probe.ps1 <file.docx> [<pdf-out>] [-TimeoutSec 600]
+param([Parameter(Mandatory = $true)][string]$Path, [string]$PdfOut, [int]$TimeoutSec = 600)
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'office_guard.ps1')
 $full = (Resolve-Path $Path).Path
-$word = New-Object -ComObject Word.Application
-$word.Visible = $false
-$word.DisplayAlerts = 0
+$guard = Start-OfficeGuard -TimeoutSec $TimeoutSec
+$word = $null
 try {
+    $word = New-GuardedWord $guard
     # ReadOnly, không thêm vào danh sách gần đây
     $doc = $word.Documents.Open($full, $false, $true, $false)
     "File: $full"
@@ -19,17 +21,14 @@ try {
     foreach ($s in $doc.InlineShapes) {
         $i++
         $prog = ''
-        try { $prog = $s.OLEFormat.ProgID } catch { $prog = '(không có OLEFormat)' }
+        try { $prog = $s.OLEFormat.ProgID } catch { $prog = '(khong co OLEFormat)' }
         "  #$i type=$($s.Type) progID=$prog size=$([math]::Round($s.Width,1))x$([math]::Round($s.Height,1))pt"
     }
     if ($PdfOut) {
         $doc.ExportAsFixedFormat($PdfOut, 17)  # wdExportFormatPDF
         "PDF: $PdfOut"
     }
-    $noSave = [ref]0
-    $doc.Close($noSave)
+    $doc.Close([ref]0)
 } finally {
-    $noSave2 = [ref]0
-    $word.Quit($noSave2)
-    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null
+    Stop-OfficeGuard $guard $word
 }
