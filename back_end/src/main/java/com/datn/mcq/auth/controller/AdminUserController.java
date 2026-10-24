@@ -43,7 +43,10 @@ public class AdminUserController {
         return ResponseEntity.status(HttpStatus.CREATED).body(adminUserService.createTeacher(request));
     }
 
-    /** Sửa tên và/hoặc bật-khóa. Khóa thì thu hồi refresh token; tự khóa mình hoặc khóa admin cuối cùng: 409. */
+    /**
+     * Sửa tên, email và/hoặc bật-khóa. Đổi email hoặc khóa thì thu hồi refresh token; email đã dùng, tự khóa mình hoặc
+     * khóa admin cuối cùng: 409.
+     */
     @PatchMapping("/{id}")
     public AdminUserDto update(CurrentUser admin, @PathVariable Integer id, @RequestBody UpdateUserRequest request) {
         return adminUserService.update(admin.id(), id, request);

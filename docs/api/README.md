@@ -56,7 +56,7 @@ Cột "Quyền": `công khai`, `đăng nhập` (mọi vai trò), `GV` (giáo vi�
 | GET | `/api/exams?page=&size=` | Đề của tôi, mới nhất trước, phân trang (mục 7.0) | GV |
 | GET | `/api/admin/users?role=` | Danh sách tài khoản (mục 8.1) | AD |
 | POST | `/api/admin/users` | Tạo tài khoản giáo viên | AD |
-| PATCH | `/api/admin/users/{id}` | Sửa tên, bật/khóa (khóa thì thu hồi phiên) | AD |
+| PATCH | `/api/admin/users/{id}` | Sửa tên, email, bật/khóa (đổi email hoặc khóa thì thu hồi phiên) | AD |
 | POST | `/api/admin/users/{id}/reset-password` | Đặt lại mật khẩu (thu hồi phiên) | AD |
 
 Quyền của các dòng dưới: `catalog` GET và `bank-items` cho GV và AD; `POST /api/catalog/templates`, `/api/generation/**`,
@@ -792,6 +792,7 @@ POST /api/admin/users          {"name": "Nguyễn Văn A", "email": "gv.toan@tru
 
 PATCH /api/admin/users/7       {"enabled": false}            → 200, tài khoản sau khi sửa
 PATCH /api/admin/users/7       {"name": "Nguyễn Văn B"}
+PATCH /api/admin/users/7       {"email": "gv.moi@truong.edu.vn"}
 
 POST /api/admin/users/7/reset-password   {"newPassword": "********"}   → 204
 ```
@@ -800,13 +801,19 @@ POST /api/admin/users/7/reset-password   {"newPassword": "********"}   → 204
   hay mật khẩu băm; `hasPassword = false` là tài khoản cũ chưa đặt mật khẩu.
 - Tạo: `name` không trống (tối đa 255 ký tự), `email` hợp lệ (lưu chữ thường), mật khẩu từ 8 ký tự, tối đa 72 byte;
   sai thì 400. Email đã dùng (không phân biệt hoa thường) trả 409.
-- Sửa: chỉ đổi trường được gửi; body rỗng hoặc `name` trống trả 400; id không tồn tại 404. **Khóa** (`enabled: false`)
+- Sửa: chỉ đổi trường được gửi (`name`, `email`, `enabled`); body rỗng, `name` trống hoặc `email` không hợp lệ trả
+  400; id không tồn tại 404. Mọi trường được kiểm tra trước khi ghi: một trường lỗi thì không đổi gì.
+- **Đổi email** (`email`): chuẩn hóa chữ thường, bỏ khoảng trắng hai đầu; email đã thuộc tài khoản khác (không phân biệt
+  hoa thường) trả 409 `Email đã được dùng: ...`. Đổi thật thì thu hồi mọi refresh token của người đó (lý do
+  `email_changed`, V12), người đó đăng nhập lại bằng email mới; gửi lại đúng email hiện tại thì không thu hồi gì. Dùng
+  để thêm email cho tài khoản cũ trước khi đặt mật khẩu.
+- **Khóa** (`enabled: false`)
   thu hồi mọi refresh token của người đó; access token cũ còn hiệu lực tối đa 15 phút (H10). Tự khóa mình trả 409
   `Không thể tự khóa tài khoản của mình`; khóa admin đang hoạt động cuối cùng trả 409
   `Không thể khóa admin đang hoạt động cuối cùng`. Mở khóa không cấp lại phiên, người đó đăng nhập lại.
 - Đặt lại mật khẩu: dùng được cho cả tài khoản cũ chưa có mật khẩu (để giáo viên mặc định/dữ liệu cũ đăng nhập); thu hồi
-  mọi phiên của người đó. Tài khoản chưa có email trả 400 `Tài khoản chưa có email nên không đặt mật khẩu được` (API
-  chưa có chỗ sửa email).
+  mọi phiên của người đó. Tài khoản chưa có email trả 400 `Tài khoản chưa có email nên không đặt mật khẩu được`: thêm
+  email bằng PATCH trước rồi đặt mật khẩu.
 
 ### 8.2. Giới hạn đăng nhập sai
 

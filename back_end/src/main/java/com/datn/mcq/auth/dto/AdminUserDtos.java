@@ -13,8 +13,12 @@ public final class AdminUserDtos {
     /** Admin tạo tài khoản giáo viên (vai trò luôn là teacher). Mật khẩu từ 8 ký tự, tối đa 72 byte. */
     public record CreateTeacherRequest(String name, String email, String password) {}
 
-    /** Sửa tài khoản: chỉ đổi trường được gửi; phải gửi ít nhất một trường. */
-    public record UpdateUserRequest(String name, Boolean enabled) {}
+    /**
+     * Sửa tài khoản: chỉ đổi trường được gửi; phải gửi ít nhất một trường.
+     *
+     * @param email email mới (chuẩn hóa chữ thường, bỏ khoảng trắng hai đầu); đổi email thì thu hồi phiên của người đó
+     */
+    public record UpdateUserRequest(String name, String email, Boolean enabled) {}
 
     public record ResetPasswordRequest(String newPassword) {}
 

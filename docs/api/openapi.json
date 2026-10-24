@@ -2117,6 +2117,9 @@
           "name" : {
             "type" : "string"
           },
+          "email" : {
+            "type" : "string"
+          },
           "enabled" : {
             "type" : "boolean"
           }
