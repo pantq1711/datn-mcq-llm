@@ -1,6 +1,12 @@
 package com.datn.mcq.exam.service;
 
+import com.datn.mcq.common.exception.ApiErrorException;
+import com.datn.mcq.common.util.JsonStringArray;
+import com.datn.mcq.exam.dto.ExamEditDtos.EditQuestionRequest;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamItemDto;
+import com.datn.mcq.generation.dto.QuestionEditInput;
+import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.generation.service.QuestionEditService;
 import com.datn.mcq.exam.entity.ExamSlot;
 import com.datn.mcq.exam.entity.ExamSlotAction;
 import com.datn.mcq.exam.repository.ExamSlotActionRepository;
@@ -24,22 +30,36 @@ public class ExamActionService {
     static final String ALREADY_KEPT_MESSAGE = "Câu hỏi này đã được giữ.";
     static final String GENERATING_MESSAGE = "Chỗ này đang sinh câu hỏi, hãy chờ xong rồi thao tác.";
 
+    /** Mã lỗi 409 của W1-2 (D7). */
+    public static final String SLOT_KEPT = "SLOT_KEPT";
+    public static final String SLOT_NOT_READY = "SLOT_NOT_READY";
+    public static final String SLOT_FROM_BANK = "SLOT_FROM_BANK";
+    public static final String VERSION_CONFLICT = "VERSION_CONFLICT";
+    public static final String QC_CHECKING = "QC_CHECKING";
+    static final String QC_CHECKING_MESSAGE =
+            "Câu vừa sửa đang được kiểm tra lại (Solver), hãy chờ kiểm xong rồi Giữ.";
+
     private final ExamSlotRepository slotRepository;
     private final ExamSlotActionRepository actionRepository;
     private final ExamBuildService buildService;
     private final ExamViewService viewService;
     private final MatrixService matrixService;
     private final TeacherReviewService teacherReviewService;
+    private final QuestionEditService questionEditService;
+    private final GenerationService generationService;
 
     public ExamActionService(ExamSlotRepository slotRepository, ExamSlotActionRepository actionRepository,
                              ExamBuildService buildService, ExamViewService viewService, MatrixService matrixService,
-                             TeacherReviewService teacherReviewService) {
+                             TeacherReviewService teacherReviewService, QuestionEditService questionEditService,
+                             GenerationService generationService) {
         this.slotRepository = slotRepository;
         this.actionRepository = actionRepository;
         this.buildService = buildService;
         this.viewService = viewService;
         this.matrixService = matrixService;
         this.teacherReviewService = teacherReviewService;
+        this.questionEditService = questionEditService;
+        this.generationService = generationService;
     }
 
     /**
@@ -57,11 +77,18 @@ public class ExamActionService {
         if (!ExamSlot.READY.equals(slot.getState())) {
             throw new IllegalStateException(NO_QUESTION_MESSAGE);
         }
+        boolean edited = false;
         if (slot.getGeneratedQuestionId() != null) {
+            // W1-2 (D4): bản sửa còn đang chờ Solver kiểm lại thì chưa cho Giữ; job thất bại thì Giữ được (kèm cờ).
+            if (questionEditService.hasActiveAnswerCheck(slot.getGeneratedQuestionId())) {
+                throw ApiErrorException.conflict(QC_CHECKING, QC_CHECKING_MESSAGE);
+            }
+            edited = generationService.getQuestionById(slot.getGeneratedQuestionId()).getEditedFromQuestionId() != null;
             Integer bankItemId = teacherReviewService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
             slot.setBankItemId(bankItemId);
         }
-        slot.setState(ExamSlot.KEPT);
+        // W1-2 (D6): Giữ bản giáo viên sửa thì chỗ ở trạng thái edited (V7), câu chưa sửa là kept.
+        slot.setState(edited ? ExamSlot.EDITED : ExamSlot.KEPT);
         slotRepository.save(slot);
         actionRepository.save(new ExamSlotAction(slot.getId(), ExamSlotAction.KEEP, slot.getGeneratedQuestionId(),
                 slot.getBankItemId(), null, actorId));
@@ -97,6 +124,58 @@ public class ExamActionService {
         buildService.enqueueReplace(slot, cleanInstruction);
         slotRepository.save(slot);
         return viewService.item(slot, matrixService.getCell(slot.getCellId()));
+    }
+
+    /**
+     * W1-2: giáo viên sửa câu của một chỗ chưa Giữ. Mỗi lần sửa tạo một bản mới (generated_question, trỏ bản trước),
+     * bản gốc LLM giữ nguyên; QC không cần LLM chạy ngay, Solver (nếu cần) xếp vào hàng đợi, request không chờ. Ghi một
+     * dòng exam_slot_action 'edit' (bản mới, các trường đã đổi, edit_distance, người sửa, thời điểm).
+     *
+     * <p>Thứ tự: chủ sở hữu (404, chưa ghi gì) → đối soát, khóa mọi chỗ của đề (hai lần sửa đồng thời xếp hàng nhau) →
+     * trạng thái chỗ (409) → phiên bản (409 VERSION_CONFLICT) → tạo bản sửa (400 khi sai hình dạng hoặc định dạng).
+     */
+    @Transactional
+    public ExamItemDto editQuestion(Integer examId, Integer slotId, Integer actorId, EditQuestionRequest request) {
+        buildService.getOwnedExam(examId, actorId);
+        buildService.reconcile(examId);
+        ExamSlot slot = loadSlot(examId, slotId);
+        if (ExamSlot.KEPT.equals(slot.getState()) || ExamSlot.EDITED.equals(slot.getState())) {
+            throw ApiErrorException.conflict(SLOT_KEPT, "Câu đã được Giữ vào ngân hàng; sửa câu ngân hàng chưa hỗ trợ.");
+        }
+        if (!ExamSlot.READY.equals(slot.getState())) {
+            throw ApiErrorException.conflict(SLOT_NOT_READY, "Chỗ này chưa có câu để sửa (đang sinh hoặc hỏng).");
+        }
+        if (slot.getGeneratedQuestionId() == null) {
+            throw ApiErrorException.conflict(SLOT_FROM_BANK,
+                    "Câu lấy từ ngân hàng; sửa câu ngân hàng chưa hỗ trợ (dùng Đổi câu khác).");
+        }
+        if (request == null || request.baseQuestionId() == null) {
+            throw ApiErrorException.badRequest(QuestionEditService.INVALID_REQUEST, "Thiếu baseQuestionId");
+        }
+        if (!request.baseQuestionId().equals(slot.getGeneratedQuestionId())) {
+            throw ApiErrorException.conflict(VERSION_CONFLICT,
+                    "Câu đã thay đổi kể từ lúc bạn mở (có người sửa hoặc đổi câu). Hãy tải lại rồi sửa tiếp.");
+        }
+        QuestionEditService.EditOutcome outcome = questionEditService.createVersion(slot.getGeneratedQuestionId(),
+                toInput(request));
+        if (outcome.changed()) {
+            slot.setGeneratedQuestionId(outcome.questionId());
+            slot.setState(ExamSlot.READY);
+            slotRepository.save(slot);
+            ExamSlotAction log = new ExamSlotAction(slot.getId(), ExamSlotAction.EDIT, outcome.questionId(), null,
+                    outcome.editDistance(), actorId);
+            log.setChangedFields(JsonStringArray.write(outcome.changedFields()));
+            actionRepository.save(log);
+        }
+        return viewService.item(slot, matrixService.getCell(slot.getCellId()));
+    }
+
+    private static QuestionEditInput toInput(EditQuestionRequest r) {
+        return new QuestionEditInput(r.questionText(), r.optionA(), r.optionB(), r.optionC(), r.optionD(),
+                r.correctOption(), r.saAnswer(), r.statements() == null ? null : r.statements().stream()
+                        .map(s -> s == null ? null : new QuestionEditInput.StatementEdit(s.key(), s.text(), s.label()))
+                        .toList(),
+                r.explanation());
     }
 
     /** Trim; trống thì null; dài hơn giới hạn thì 400. */

@@ -29,18 +29,29 @@ public class QcSummaryService {
     public static final String STATEMENT_UNDECIDABLE = "statement_undecidable";
     public static final String DEDUP_NOT_RUN = "dedup_not_run";
     public static final String WARNING_PREFIX = "warning: ";
+    /** W1-2: dedup báo trùng (bản giáo viên sửa), dạng "duplicate: &lt;id câu bị trùng&gt;". */
+    public static final String DUPLICATE_PREFIX = "duplicate: ";
 
     /**
      * @param answerCheckPassed null khi không có dòng answer_check (Solver chưa chạy hoặc lỗi)
      * @param warnings          cảnh báo bước format (V5)
+     * @param duplicateOf       (W1-2) câu bị trùng khi dòng dedup không qua; null khi không trùng
      */
     public record QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
-                            boolean hasUndecidable, List<String> warnings) {
+                            boolean hasUndecidable, List<String> warnings, Integer duplicateOf) {
+
+        public QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
+                         boolean hasUndecidable, List<String> warnings) {
+            this(dedupRan, answerCheckPassed, judgeSaKind, hasUndecidable, warnings, null);
+        }
 
         /** Lý do "cần xem kỹ"; rỗng khi câu qua QC sạch. */
         public List<String> reviewReasons() {
             List<String> reasons = new ArrayList<>();
-            if (answerCheckPassed == null) {
+            if (duplicateOf != null) {
+                // Câu trùng thì Solver không chạy (Q-2), không thêm solver_not_run.
+                reasons.add(DUPLICATE_PREFIX + duplicateOf);
+            } else if (answerCheckPassed == null) {
                 reasons.add(SOLVER_NOT_RUN);
             } else if (!answerCheckPassed) {
                 if (judgeSaKind == SaJudgeKind.AMBIGUOUS) {
@@ -97,6 +108,8 @@ public class QcSummaryService {
                 answer.map(QualityCheckResult::getPassed).orElse(null),
                 answer.map(QualityCheckResult::getJudgeSaKind).orElse(null),
                 undecidable,
-                JsonStringArray.read(format.map(QualityCheckResult::getWarnings).orElse(null)));
+                JsonStringArray.read(format.map(QualityCheckResult::getWarnings).orElse(null)),
+                dedup.filter(d -> Boolean.FALSE.equals(d.getPassed()))
+                        .map(QualityCheckResult::getComparedToQuestionId).orElse(null));
     }
 }

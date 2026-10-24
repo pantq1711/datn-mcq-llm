@@ -26,9 +26,14 @@ import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.parser.McqJsonParser;
 import com.datn.mcq.generation.repository.GeneratedQuestionRepository;
+import com.datn.mcq.generation.repository.GeneratedQuestionStatementRepository;
 import com.datn.mcq.generation.repository.GenerationJobRepository;
+import com.datn.mcq.generation.service.StoredQcInput;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.llm.prompt.PromptBuilder;
+import com.datn.mcq.qc.dto.QuestionQcInput;
+import com.datn.mcq.qc.dto.SolverVerdict;
+import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,8 +65,16 @@ public class GenerationJobProcessor {
             List<Difficulty> targetStatementDifficulties,
             Purpose purpose,
             /* mẫu nhãn bắt buộc của job tf theo ma trận (TfLabelPattern, đọc từ prompt_note); null với job khác */
-            String tfLabelPattern
-    ) {}
+            String tfLabelPattern,
+            /* V13 (W1-2): loại job; với answer_check chỉ có jobId, runId, templateId, attempt, questionType, questionId */
+            String jobType,
+            /* answer_check: bản giáo viên sửa cần chạy lại Solver; null với job sinh câu */
+            Integer questionId
+    ) {
+        public boolean answerCheck() {
+            return GenerationJob.TYPE_ANSWER_CHECK.equals(jobType);
+        }
+    }
 
     private final GenerationJobRepository generationJobRepository;
     private final GeneratedQuestionRepository generatedQuestionRepository;
@@ -70,6 +83,8 @@ public class GenerationJobProcessor {
     private final PromptBuilder promptBuilder;
     private final PreviousQuestionLookup previousQuestionLookup;
     private final TrueFalseQuestionStore trueFalseQuestionStore;
+    private final GeneratedQuestionStatementRepository statementRepository;
+    private final QcOrchestrator qcOrchestrator;
 
     public GenerationJobProcessor(
             GenerationJobRepository generationJobRepository,
@@ -78,7 +93,9 @@ public class GenerationJobProcessor {
             ExperimentService experimentService,
             PromptBuilder promptBuilder,
             TrueFalseQuestionStore trueFalseQuestionStore,
-            PreviousQuestionLookup previousQuestionLookup) {
+            PreviousQuestionLookup previousQuestionLookup,
+            GeneratedQuestionStatementRepository statementRepository,
+            QcOrchestrator qcOrchestrator) {
         this.generationJobRepository = generationJobRepository;
         this.generatedQuestionRepository = generatedQuestionRepository;
         this.catalogService = catalogService;
@@ -86,13 +103,25 @@ public class GenerationJobProcessor {
         this.promptBuilder = promptBuilder;
         this.trueFalseQuestionStore = trueFalseQuestionStore;
         this.previousQuestionLookup = previousQuestionLookup;
+        this.statementRepository = statementRepository;
+        this.qcOrchestrator = qcOrchestrator;
     }
 
     @Transactional
     public Optional<ClaimedJobContext> claimNextPendingJob() {
+        return claimNextPendingJob(true);
+    }
+
+    /**
+     * @param includeAnswerCheck false: chỉ nhận job sinh câu (process-next với runAnswerCheck = false, W1-2)
+     */
+    @Transactional
+    public Optional<ClaimedJobContext> claimNextPendingJob(boolean includeAnswerCheck) {
         LocalDateTime now = LocalDateTime.now();
         // Đợt A: FOR UPDATE SKIP LOCKED, đổi sang running trong cùng transaction nên không nhận trùng job.
-        Optional<GenerationJob> optJob = generationJobRepository.lockNextDuePendingJob(now);
+        Optional<GenerationJob> optJob = includeAnswerCheck
+                ? generationJobRepository.lockNextDuePendingJob(now)
+                : generationJobRepository.lockNextDuePendingGenerateJob(now);
         if (optJob.isEmpty()) {
             return Optional.empty();
         }
@@ -103,6 +132,14 @@ public class GenerationJobProcessor {
         job.setStartedAt(now);
         job.setUpdatedAt(now);
         generationJobRepository.save(job);
+
+        QuestionType jobQuestionType = job.getQuestionType() != null ? job.getQuestionType() : QuestionType.MCQ;
+        if (GenerationJob.TYPE_ANSWER_CHECK.equals(job.getJobType())) {
+            // W1-2: job chạy lại Solver cho bản giáo viên sửa, không dựng prompt sinh câu.
+            return Optional.of(new ClaimedJobContext(job.getId(), job.getRunId(), job.getTemplateId(), nextAttempt,
+                    null, null, null, null, null, false, jobQuestionType, List.of(), null, null,
+                    job.getJobType(), job.getQuestionId()));
+        }
 
         ExperimentRun run = experimentService.getById(job.getRunId());
         QuestionTemplate tpl = catalogService.getTemplateById(job.getTemplateId());
@@ -157,8 +194,86 @@ public class GenerationJobProcessor {
                 questionType,
                 statementLevels,
                 run.getPurpose(),
-                matrix && questionType == QuestionType.TF ? TfLabelPattern.fromNote(job.getPromptNote()) : null
+                matrix && questionType == QuestionType.TF ? TfLabelPattern.fromNote(job.getPromptNote()) : null,
+                job.getJobType(),
+                null
         ));
+    }
+
+    /**
+     * W1-2, bước 1 của job answer_check (transaction ngắn, không gọi mạng): dựng đầu vào Solver từ bản đã lưu. Bản đã
+     * bị thay bằng bản sửa mới, hoặc không còn ở generated (ví dụ đã Giữ), thì đánh dấu job xong và trả rỗng, không
+     * gọi LLM.
+     */
+    @Transactional
+    public Optional<QuestionQcInput> prepareAnswerCheck(ClaimedJobContext ctx) {
+        GeneratedQuestion gq = generatedQuestionRepository.findById(ctx.questionId())
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generated_question id=" + ctx.questionId()));
+        String skip = skipReason(gq);
+        if (skip != null) {
+            finishAnswerCheckJob(ctx.jobId(), skip);
+            return Optional.empty();
+        }
+        Subject subject = catalogService.getSubjectById(catalogService.getTemplateById(gq.getTemplateId()).getSubjectId());
+        return Optional.of(StoredQcInput.of(gq,
+                gq.getQuestionType() == QuestionType.TF ? statementRepository.findByQuestionIdOrderByPositionAsc(gq.getId())
+                        : List.of(),
+                isMathSubject(subject.getName()), true));
+    }
+
+    /**
+     * W1-2, bước 3 của job answer_check (transaction ngắn): ghi kết quả Solver, tính trạng thái câu (QcStatusDecider,
+     * theo dòng format và dedup đã lưu) và đánh dấu job xong trong CÙNG một transaction. Nếu trong lúc Solver chạy câu đã
+     * bị thay bằng bản sửa mới (hoặc không còn ở generated) thì bỏ kết quả: kết quả của bản cũ không được ghi lên bất kỳ
+     * bản nào. Không bao giờ đổi đáp án của câu.
+     *
+     * @return trạng thái câu sau khi ghi
+     */
+    @Transactional
+    public QuestionStatus completeAnswerCheck(ClaimedJobContext ctx, SolverVerdict verdict) {
+        GeneratedQuestion gq = generatedQuestionRepository.findById(ctx.questionId())
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generated_question id=" + ctx.questionId()));
+        String skip = skipReason(gq);
+        if (skip != null) {
+            finishAnswerCheckJob(ctx.jobId(), skip);
+            return gq.getStatus();
+        }
+        qcOrchestrator.recordSolver(gq.getId(), verdict);
+        QuestionStatus status = qcOrchestrator.decideWithStoredChecks(gq.getId(), verdict.status());
+        gq.setStatus(status);
+        generatedQuestionRepository.save(gq);
+        finishAnswerCheckJob(ctx.jobId(), null);
+        return status;
+    }
+
+    /** W1-2: job answer_check thất bại ngay, không thử lại (lỗi cấu hình như thiếu API key cho Solver). */
+    @Transactional
+    public GenerationJob failJobNow(Integer jobId, String error) {
+        GenerationJob job = generationJobRepository.findById(jobId)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generation_job id=" + jobId));
+        job.setStatus(JobStatus.FAILED);
+        job.setLastError(error);
+        job.setUpdatedAt(LocalDateTime.now());
+        return generationJobRepository.save(job);
+    }
+
+    private String skipReason(GeneratedQuestion gq) {
+        if (generatedQuestionRepository.existsByEditedFromQuestionId(gq.getId())) {
+            return "skipped: superseded";
+        }
+        if (gq.getStatus() != QuestionStatus.GENERATED) {
+            return "skipped: status " + gq.getStatus().getDbValue();
+        }
+        return null;
+    }
+
+    private void finishAnswerCheckJob(Integer jobId, String note) {
+        GenerationJob job = generationJobRepository.findById(jobId)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generation_job id=" + jobId));
+        job.setStatus(JobStatus.DONE);
+        job.setLastError(note);
+        job.setUpdatedAt(LocalDateTime.now());
+        generationJobRepository.save(job);
     }
 
     /** Lưu câu Đúng/Sai sinh từ job (câu và 4 ý) và đánh dấu job done, trong cùng transaction ngắn (GĐ3). */

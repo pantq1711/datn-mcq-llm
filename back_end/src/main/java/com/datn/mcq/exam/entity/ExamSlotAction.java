@@ -6,6 +6,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -45,6 +47,11 @@ public class ExamSlotAction {
     /** Yêu cầu bổ sung của giáo viên khi Đổi câu (V9); null khi không có. */
     @Column(name = "instruction")
     private String instruction;
+
+    /** Các trường đã đổi khi Sửa (V13, mảng JSON tên trường); null với dòng khác edit. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "changed_fields", columnDefinition = "jsonb")
+    private String changedFields;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -99,5 +106,13 @@ public class ExamSlotAction {
 
     public void setInstruction(String instruction) {
         this.instruction = instruction;
+    }
+
+    public String getChangedFields() {
+        return changedFields;
+    }
+
+    public void setChangedFields(String changedFields) {
+        this.changedFields = changedFields;
     }
 }

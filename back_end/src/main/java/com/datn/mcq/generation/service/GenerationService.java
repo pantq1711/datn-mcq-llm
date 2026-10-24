@@ -578,6 +578,25 @@ public class GenerationService {
         return generationJobRepository.findFirstByExamSlotIdOrderByIdDesc(examSlotId);
     }
 
+    /** W1-2: job answer_check (chạy lại Solver) mới nhất của một bản giáo viên sửa; rỗng với câu LLM. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<GenerationJob> latestAnswerCheckJob(Integer questionId) {
+        return generationJobRepository.findFirstByQuestionIdAndJobTypeOrderByIdDesc(questionId,
+                GenerationJob.TYPE_ANSWER_CHECK);
+    }
+
+    /**
+     * W1-2: bản gốc LLM của một câu theo chuỗi edited_from_question_id (chính câu đó nếu là đầu ra LLM).
+     */
+    @Transactional(readOnly = true)
+    public Integer originalQuestionId(Integer questionId) {
+        GeneratedQuestion cur = getQuestionById(questionId);
+        for (int i = 0; i < 1000 && cur.getEditedFromQuestionId() != null; i++) {
+            cur = getQuestionById(cur.getEditedFromQuestionId());
+        }
+        return cur.getId();
+    }
+
     @Transactional
     public List<GenerationJob> enqueueJobs(
             Integer templateId,

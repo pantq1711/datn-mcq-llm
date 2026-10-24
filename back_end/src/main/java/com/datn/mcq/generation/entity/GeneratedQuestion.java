@@ -92,7 +92,22 @@ public class GeneratedQuestion {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    /**
+     * V13 (W1-2): bản giáo viên sửa trỏ bản ngay trước nó; null = đầu ra LLM. Nội dung một bản không đổi sau khi tạo.
+     * Thống kê về đầu ra LLM phải lọc cột này IS NULL.
+     */
+    @Column(name = "edited_from_question_id", updatable = false)
+    private Integer editedFromQuestionId;
+
     public GeneratedQuestion() {}
+
+    public Integer getEditedFromQuestionId() {
+        return editedFromQuestionId;
+    }
+
+    public void setEditedFromQuestionId(Integer editedFromQuestionId) {
+        this.editedFromQuestionId = editedFromQuestionId;
+    }
 
     public Integer getId() {
         return id;

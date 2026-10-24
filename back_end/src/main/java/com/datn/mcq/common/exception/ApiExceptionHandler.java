@@ -11,6 +11,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
@@ -33,6 +34,18 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, String>> handleIllegalState(IllegalStateException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", ex.getMessage() != null ? ex.getMessage() : "Trạng thái không hợp lệ"));
+    }
+
+    /** W1-2 (D7): lỗi nghiệp vụ kèm mã, ví dụ 409 VERSION_CONFLICT, 400 FORMAT_INVALID kèm danh sách lỗi từng trường. */
+    @ExceptionHandler(ApiErrorException.class)
+    public ResponseEntity<Map<String, Object>> handleApiError(ApiErrorException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", ex.getMessage() != null ? ex.getMessage() : "Yêu cầu không hợp lệ");
+        body.put("code", ex.getCode());
+        if (!ex.getErrors().isEmpty()) {
+            body.put("errors", ex.getErrors());
+        }
+        return ResponseEntity.status(ex.getStatus()).body(body);
     }
 
     /** Xuất đề ra Word không thành (thiếu pandoc, quá thời gian, pandoc báo lỗi): trả đúng mã kèm thông báo. */

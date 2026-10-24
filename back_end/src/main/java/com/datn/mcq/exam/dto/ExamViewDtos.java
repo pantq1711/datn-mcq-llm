@@ -28,7 +28,13 @@ public final class ExamViewDtos {
      * @param source        "bank" (lấy từ ngân hàng) hoặc "generated" (hệ thống sinh)
      * @param difficulty    mức của câu mcq/sa; tf ghi mức ở từng ý
      * @param reviewReasons lý do "cần xem kỹ": solver_inconsistent, solver_not_run, solver_ambiguous,
-     *                      solver_unparseable, statement_undecidable, dedup_not_run, "warning: ..." (cảnh báo format)
+     *                      solver_unparseable, statement_undecidable, dedup_not_run, "warning: ..." (cảnh báo format);
+     *                      W1-2 thêm solver_pending (Solver đang kiểm lại bản sửa), solver_failed (job kiểm lại thất
+     *                      bại), "duplicate: &lt;id&gt;" (bản sửa trùng câu khác)
+     * @param qcState       (W1-2) chỉ với câu hệ thống sinh chưa Giữ: "checking" (Solver đang kiểm lại), "passed" (không
+     *                      còn lý do cần xem kỹ), "needs_review" (có lý do); bỏ khỏi JSON với chỗ khác
+     * @param edited        (W1-2) câu hiện tại của chỗ là bản giáo viên sửa (kể cả khi đã Giữ)
+     * @param originalQuestionId (W1-2) bản gốc LLM của bản sửa; bỏ khỏi JSON khi câu chưa sửa
      */
     public record ExamItemDto(
             Integer slotId,
@@ -52,8 +58,26 @@ public final class ExamViewDtos {
             @JsonInclude(JsonInclude.Include.NON_NULL) String explanation,
             @JsonInclude(JsonInclude.Include.NON_NULL) Difficulty difficulty,
             boolean needsReview,
-            List<String> reviewReasons
-    ) {}
+            List<String> reviewReasons,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String qcState,
+            boolean edited,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Integer originalQuestionId
+    ) {
+        public static final String QC_CHECKING = "checking";
+        public static final String QC_PASSED = "passed";
+        public static final String QC_NEEDS_REVIEW = "needs_review";
+
+        /** Chữ ký trước W1-2 (câu chưa sửa, không có trạng thái QC). */
+        public ExamItemDto(Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
+                           QuestionType questionType, String state, String source, Integer bankItemId,
+                           Integer questionId, String questionText, String optionA, String optionB, String optionC,
+                           String optionD, Option correctOption, String saAnswer, List<ItemStatementDto> statements,
+                           String explanation, Difficulty difficulty, boolean needsReview, List<String> reviewReasons) {
+            this(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId, questionText,
+                    optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation, difficulty,
+                    needsReview, reviewReasons, null, false, null);
+        }
+    }
 
     /** @param required số câu ma trận yêu cầu; {@code ready} số câu đã có */
     public record PartDto(String part, int required, int ready, List<ExamItemDto> items) {}

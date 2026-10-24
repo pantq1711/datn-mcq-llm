@@ -73,8 +73,11 @@ class GenerationJobsApiSnapshotTest {
         jobs.get(0).fieldNames().forEachRemaining(keys::add);
         Set<String> expected = new LinkedHashSet<>(OLD_KEYS);
         expected.add("questionType");
+        // W1-2 (V13): loại job luôn có trong JSON; job cũ và job sinh câu là "generate".
+        expected.add("jobType");
         assertEquals(expected, keys);
         assertEquals("mcq", jobs.get(0).get("questionType").asText());
+        assertEquals("generate", jobs.get(0).get("jobType").asText());
         assertEquals("easy", jobs.get(0).get("targetDifficulty").asText());
     }
 }

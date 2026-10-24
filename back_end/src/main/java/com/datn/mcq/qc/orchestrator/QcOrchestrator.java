@@ -3,9 +3,10 @@ package com.datn.mcq.qc.orchestrator;
 import com.datn.mcq.common.util.JsonStringArray;
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
+import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SaJudgeKind;
-import com.datn.mcq.enums.StatementKey;
+import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.AnswerCheckStatus;
@@ -15,6 +16,7 @@ import com.datn.mcq.qc.dto.DedupScope;
 import com.datn.mcq.qc.dto.DedupStatus;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
+import com.datn.mcq.qc.dto.SolverVerdict;
 import com.datn.mcq.qc.dto.TfJudgement;
 import com.datn.mcq.qc.entity.QualityCheckResult;
 import com.datn.mcq.qc.repository.QualityCheckResultRepository;
@@ -25,8 +27,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Điều phối tuần tự pipeline QC: format -> dedup -> answer_check.
@@ -160,99 +162,29 @@ public class QcOrchestrator {
             // Thiếu API key là lỗi cấu hình, không phải một lần kiểm tra thành công.
             answerCheckStatus = AnswerCheckStatus.NOT_RUN;
             solverReasoning = "answer_check không chạy: chưa cấu hình API key cho Solver";
-        } else if (input.questionType() == QuestionType.TF) {
-            // GĐ3: CONSISTENT chỉ khi đủ 4 ý khớp; có ý lệch hoặc undecidable là INCONSISTENT (có ghi dòng).
-            // Dòng answer_check và 4 dòng ý ghi trong cùng một transaction (AnswerCheckRecorder); lỗi là ERROR.
-            try {
-                if (answerCheckRecorder == null) {
-                    throw new IllegalStateException("Chưa có bộ ghi kết quả Solver câu đúng/sai");
-                }
-                AnswerSolverChecker.TfSolverOutcome tf = answerSolverChecker.checkTrueFalse(
-                        input.questionText(), input.statements(), input.statementLabels());
-                answerCheckRecorder.recordTrueFalse(input.questionId(), tf.passed(), tf.judgeModel(), tf.judgeLabels());
-                answerCheckPassed = tf.passed();
-                judgeModel = tf.judgeModel();
-                solverReasoning = tf.reasoning();
-                List<TfJudgement> judgements = new ArrayList<>(4);
-                StatementKey[] keys = StatementKey.values();
-                for (int i = 0; i < keys.length; i++) {
-                    judgements.add(new TfJudgement(keys[i], tf.judgeLabels().get(i)));
-                }
-                tfJudgements = judgements;
-                answerCheckStatus = tf.passed() ? AnswerCheckStatus.CONSISTENT : AnswerCheckStatus.INCONSISTENT;
-            } catch (RuntimeException ex) {
-                answerCheckStatus = AnswerCheckStatus.ERROR;
-                answerCheckPassed = null;
-                judgeModel = null;
-                tfJudgements = null;
-                solverReasoning = "Không hoàn tất answer_check: " + ex.getMessage();
-            }
-        } else if (input.questionType() == QuestionType.SA) {
-            // V4, bản sửa 1 mục 7: so đáp số theo giá trị; ambiguous và không phân tích được là INCONSISTENT
-            // (có ghi dòng); lỗi gọi hoặc phản hồi hỏng là ERROR (không ghi dòng).
-            try {
-                AnswerSolverChecker.SaSolverOutcome sa = answerSolverChecker.checkShortAnswer(
-                        input.questionText(), input.saAnswer());
-                upsertCheckResult(
-                        input.questionId(),
-                        QuestionType.SA,
-                        CheckType.ANSWER_CHECK,
-                        sa.passed(),
-                        null,
-                        sa.judgeModel(),
-                        sa.judgeKind(),
-                        sa.judgeAnswer()
-                );
-                answerCheckPassed = sa.passed();
-                judgeModel = sa.judgeModel();
-                solverReasoning = sa.reasoning();
-                saJudgeKind = sa.judgeKind();
-                saJudgeAnswer = sa.judgeAnswer();
-                answerCheckStatus = sa.passed() ? AnswerCheckStatus.CONSISTENT : AnswerCheckStatus.INCONSISTENT;
-            } catch (RuntimeException ex) {
-                answerCheckStatus = AnswerCheckStatus.ERROR;
-                answerCheckPassed = null;
-                judgeModel = null;
-                saJudgeKind = null;
-                saJudgeAnswer = null;
-                solverReasoning = "Không hoàn tất answer_check: " + ex.getMessage();
-            }
         } else {
+            // W1-2: gọi Solver (callSolver) rồi ghi kết quả (recordSolver), như trước khi tách. Lỗi mạng/HTTP, JSON
+            // hỏng, thiếu hoặc sai judge_*, hoặc lỗi khi lưu kết quả: không có kết quả hợp lệ -> ERROR, không lưu dòng
+            // answer_check (chk_qcr_judge_only_answer_check bắt buộc kết quả Solver).
             try {
-                AnswerSolverChecker.SolverCheckOutcome solverOutcome = answerSolverChecker.check(
-                        input.questionText(),
-                        input.optionA(),
-                        input.optionB(),
-                        input.optionC(),
-                        input.optionD(),
-                        input.correctOption()
-                );
-                answerCheckPassed = solverOutcome.passed();
-                judgeAnswer = solverOutcome.judgeAnswer();
-                judgeModel = solverOutcome.judgeModel();
-                solverReasoning = solverOutcome.reasoning();
-
-                upsertCheckResult(
-                        input.questionId(),
-                        QuestionType.MCQ,
-                        CheckType.ANSWER_CHECK,
-                        solverOutcome.passed(),
-                        solverOutcome.judgeAnswer(),
-                        solverOutcome.judgeModel(),
-                        null,
-                        null
-                );
-                answerCheckStatus = solverOutcome.passed()
-                        ? AnswerCheckStatus.CONSISTENT
-                        : AnswerCheckStatus.INCONSISTENT;
+                SolverVerdict verdict = callSolver(input);
+                recordSolver(input.questionId(), verdict);
+                answerCheckPassed = verdict.passed();
+                judgeAnswer = verdict.judgeAnswer();
+                judgeModel = verdict.judgeModel();
+                solverReasoning = verdict.reasoning();
+                saJudgeKind = verdict.saJudgeKind();
+                saJudgeAnswer = verdict.saJudgeAnswer();
+                tfJudgements = verdict.tfJudgements();
+                answerCheckStatus = verdict.status();
             } catch (RuntimeException ex) {
-                // Lỗi mạng/HTTP, JSON hỏng, thiếu hoặc sai judge_answer, hoặc lỗi khi lưu kết quả:
-                // không có kết quả hợp lệ -> ERROR. Không lưu dòng answer_check
-                // (chk_qcr_judge_only_answer_check bắt buộc judge_answer; lưu lỗi cần migration riêng).
                 answerCheckStatus = AnswerCheckStatus.ERROR;
                 answerCheckPassed = null;
                 judgeAnswer = null;
                 judgeModel = null;
+                saJudgeKind = null;
+                saJudgeAnswer = null;
+                tfJudgements = null;
                 solverReasoning = "Không hoàn tất answer_check: " + ex.getMessage();
             }
         }
@@ -273,6 +205,114 @@ public class QcOrchestrator {
                 saJudgeAnswer,
                 tfJudgements
         );
+    }
+
+    /** Lý do Solver không chạy được vì thiếu cấu hình (lỗi cấu hình, không phải lỗi tạm thời: không thử lại). */
+    public static final String SOLVER_NOT_CONFIGURED = "answer_check không chạy: chưa cấu hình API key cho Solver";
+
+    /** Solver gọi được (đã cấu hình API key). */
+    public boolean solverAvailable() {
+        return answerSolverChecker.canRunOnline();
+    }
+
+    /**
+     * Gọi Solver cho một câu (gọi mạng, KHÔNG ghi DB, không mở transaction). Ném lỗi khi không có kết quả hợp lệ (lỗi
+     * mạng/HTTP, hết thời gian chờ, JSON hỏng, thiếu hoặc sai judge_*), nơi gọi coi là ERROR.
+     * <ul>
+     *   <li>mcq: so judge_answer với correct_option;</li>
+     *   <li>sa (V4): so đáp số theo giá trị; ambiguous và không phân tích được là kết quả hợp lệ không khớp;</li>
+     *   <li>tf (GĐ3): khớp khi đủ 4 ý khớp; có ý lệch hoặc undecidable là không khớp.</li>
+     * </ul>
+     * Solver chỉ thấy đề và phương án/ý, không thấy đáp án, nhãn hay lời giải của người soạn.
+     */
+    public SolverVerdict callSolver(QuestionQcInput input) {
+        if (!answerSolverChecker.canRunOnline()) {
+            throw new IllegalStateException(SOLVER_NOT_CONFIGURED);
+        }
+        if (input.questionType() == QuestionType.TF) {
+            if (answerCheckRecorder == null) {
+                throw new IllegalStateException("Chưa có bộ ghi kết quả Solver câu đúng/sai");
+            }
+            AnswerSolverChecker.TfSolverOutcome tf = answerSolverChecker.checkTrueFalse(
+                    input.questionText(), input.statements(), input.statementLabels());
+            return new SolverVerdict(QuestionType.TF, tf.passed(), tf.judgeModel(), tf.reasoning(), null, null, null,
+                    tf.judgeLabels());
+        }
+        if (input.questionType() == QuestionType.SA) {
+            AnswerSolverChecker.SaSolverOutcome sa = answerSolverChecker.checkShortAnswer(
+                    input.questionText(), input.saAnswer());
+            return new SolverVerdict(QuestionType.SA, sa.passed(), sa.judgeModel(), sa.reasoning(), null,
+                    sa.judgeKind(), sa.judgeAnswer(), null);
+        }
+        AnswerSolverChecker.SolverCheckOutcome mcq = answerSolverChecker.check(
+                input.questionText(), input.optionA(), input.optionB(), input.optionC(), input.optionD(),
+                input.correctOption());
+        return new SolverVerdict(QuestionType.MCQ, mcq.passed(), mcq.judgeModel(), mcq.reasoning(), mcq.judgeAnswer(),
+                null, null, null);
+    }
+
+    /**
+     * Ghi kết quả Solver hợp lệ của một câu: dòng answer_check (tf kèm 4 dòng answer_check_statement, cùng transaction).
+     * Không gọi mạng. Gọi từ bean khác thì chạy trong transaction của nơi gọi (job answer_check: cùng transaction với
+     * trạng thái câu và trạng thái job).
+     */
+    @Transactional
+    public void recordSolver(Integer questionId, SolverVerdict verdict) {
+        switch (verdict.questionType()) {
+            case TF -> {
+                if (answerCheckRecorder == null) {
+                    throw new IllegalStateException("Chưa có bộ ghi kết quả Solver câu đúng/sai");
+                }
+                answerCheckRecorder.recordTrueFalse(questionId, verdict.passed(), verdict.judgeModel(),
+                        verdict.tfLabels());
+            }
+            case SA -> upsertCheckResult(questionId, QuestionType.SA, CheckType.ANSWER_CHECK, verdict.passed(), null,
+                    verdict.judgeModel(), verdict.saJudgeKind(), verdict.saJudgeAnswer());
+            case MCQ -> upsertCheckResult(questionId, QuestionType.MCQ, CheckType.ANSWER_CHECK, verdict.passed(),
+                    verdict.judgeAnswer(), verdict.judgeModel(), null, null);
+        }
+    }
+
+    /**
+     * W1-2 (D5): chép kết quả Solver của {@code fromQuestionId} sang {@code toQuestionId} khi bản sửa chỉ đổi lời giải.
+     * Solver không thấy lời giải nên nội dung nó đã xét không đổi. Không gọi mạng. Rỗng khi câu nguồn chưa có dòng
+     * answer_check (Solver chưa chạy hoặc lỗi).
+     */
+    @Transactional
+    public Optional<AnswerCheckStatus> copyAnswerCheck(Integer fromQuestionId, Integer toQuestionId) {
+        Optional<QualityCheckResult> source = qualityCheckResultRepository
+                .findByQuestionIdAndCheckType(fromQuestionId, CheckType.ANSWER_CHECK);
+        if (source.isEmpty()) {
+            return Optional.empty();
+        }
+        QualityCheckResult r = source.get();
+        List<TruthChoice> labels = null;
+        if (r.getQuestionType() == QuestionType.TF) {
+            if (answerCheckRecorder == null) {
+                throw new IllegalStateException("Chưa có bộ ghi kết quả Solver câu đúng/sai");
+            }
+            labels = answerCheckRecorder.judgeLabels(r.getId());
+        }
+        SolverVerdict copy = new SolverVerdict(r.getQuestionType(), Boolean.TRUE.equals(r.getPassed()),
+                r.getJudgeModel(), null, r.getJudgeAnswer(), r.getJudgeSaKind(), r.getJudgeSaAnswer(), labels);
+        recordSolver(toQuestionId, copy);
+        return Optional.of(copy.status());
+    }
+
+    /**
+     * Trạng thái của câu khi bước answer_check vừa có kết quả {@code answerCheck}, theo các dòng format và dedup đã lưu
+     * (bảng quyết định QcStatusDecider, Q-2). Thiếu dòng dedup là dedup chưa kết luận (ERROR).
+     */
+    @Transactional(readOnly = true)
+    public QuestionStatus decideWithStoredChecks(Integer questionId, AnswerCheckStatus answerCheck) {
+        Optional<QualityCheckResult> format = qualityCheckResultRepository
+                .findByQuestionIdAndCheckType(questionId, CheckType.FORMAT);
+        Optional<QualityCheckResult> dedup = qualityCheckResultRepository
+                .findByQuestionIdAndCheckType(questionId, CheckType.DEDUP);
+        DedupStatus dedupStatus = dedup.isEmpty() ? DedupStatus.ERROR
+                : Boolean.TRUE.equals(dedup.get().getPassed()) ? DedupStatus.NO_DUPLICATE : DedupStatus.DUPLICATE;
+        boolean formatPassed = format.isPresent() && Boolean.TRUE.equals(format.get().getPassed());
+        return QcStatusDecider.decide(formatPassed, dedupStatus, answerCheck);
     }
 
     /**
