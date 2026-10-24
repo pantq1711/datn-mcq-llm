@@ -20,6 +20,8 @@ public class RefreshToken {
     public static final String REUSE_DETECTED = "reuse_detected";
     public static final String ADMIN_DISABLED = "admin_disabled";
     public static final String PASSWORD_CHANGED = "password_changed";
+    /** V12: admin đổi email của tài khoản. */
+    public static final String EMAIL_CHANGED = "email_changed";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

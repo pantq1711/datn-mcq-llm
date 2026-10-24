@@ -58,10 +58,7 @@ public class AdminUserService {
             throw new IllegalArgumentException("Thiếu dữ liệu tài khoản");
         }
         String name = cleanName(req.name());
-        String email = AuthService.normalizeEmail(req.email());
-        if (email == null || email.isEmpty() || email.length() > MAX_LENGTH || !EMAIL.matcher(email).matches()) {
-            throw new IllegalArgumentException("email không hợp lệ");
-        }
+        String email = cleanEmail(req.email());
         AuthService.validateNewPassword(req.password(), AuthService.MIN_PASSWORD_LENGTH);
         if (userService.findByEmail(email).isPresent()) {
             throw new IllegalStateException("Email đã được dùng: " + email);
@@ -82,11 +79,19 @@ public class AdminUserService {
      */
     @Transactional
     public AdminUserDto update(Integer actorId, Integer userId, UpdateUserRequest req) {
-        if (req == null || (req.name() == null && req.enabled() == null)) {
-            throw new IllegalArgumentException("Phải gửi name hoặc enabled");
+        if (req == null || (req.name() == null && req.email() == null && req.enabled() == null)) {
+            throw new IllegalArgumentException("Phải gửi name, email hoặc enabled");
         }
         UserAccount user = userService.getById(userId);
+        // Kiểm tra mọi trường trước khi ghi: một trường lỗi thì không đổi gì.
         String name = req.name() != null ? cleanName(req.name()) : null;
+        String email = req.email() != null ? cleanEmail(req.email()) : null;
+        boolean emailChanges = email != null && !email.equals(AuthService.normalizeEmail(user.getEmail()));
+        if (emailChanges) {
+            userService.findByEmail(email).filter(other -> !other.getId().equals(userId)).ifPresent(other -> {
+                throw new IllegalStateException("Email đã được dùng: " + email);
+            });
+        }
         if (Boolean.FALSE.equals(req.enabled()) && Boolean.TRUE.equals(user.getEnabled())) {
             if (Objects.equals(actorId, userId)) {
                 throw new IllegalStateException(SELF_DISABLE_MESSAGE);
@@ -101,6 +106,16 @@ public class AdminUserService {
         }
         if (name != null) {
             user = userService.rename(userId, name);
+        }
+        if (emailChanges) {
+            try {
+                user = userService.changeEmail(userId, email);
+            } catch (DataIntegrityViolationException e) {
+                // Hai yêu cầu dùng cùng email đồng thời: unique index của V11 chặn.
+                throw new IllegalStateException("Email đã được dùng: " + email);
+            }
+            int revoked = refreshTokenService.revokeAllForUser(userId, RefreshToken.EMAIL_CHANGED);
+            log.info("Admin {} đổi email tài khoản {}; thu hồi {} refresh token", actorId, userId, revoked);
         }
         if (req.enabled() != null && !req.enabled().equals(user.getEnabled())) {
             user = userService.setEnabled(userId, req.enabled());
@@ -122,6 +137,15 @@ public class AdminUserService {
         }
         userService.updatePasswordHash(userId, passwordEncoder.encode(req.newPassword()));
         refreshTokenService.revokeAllForUser(userId, RefreshToken.PASSWORD_CHANGED);
+    }
+
+    /** Email chuẩn hóa (chữ thường, bỏ khoảng trắng hai đầu), hợp lệ, tối đa 255 ký tự; không thì 400. */
+    private static String cleanEmail(String raw) {
+        String email = AuthService.normalizeEmail(raw);
+        if (email == null || email.isEmpty() || email.length() > MAX_LENGTH || !EMAIL.matcher(email).matches()) {
+            throw new IllegalArgumentException("email không hợp lệ");
+        }
+        return email;
     }
 
     private static String cleanName(String name) {

@@ -255,6 +255,80 @@ class AdminUserApiTest {
                 .andExpect(jsonPath("$.error").value("Tài khoản chưa có email nên không đặt mật khẩu được"));
     }
 
+    // ---------- đổi email (PATCH email) ----------
+
+    private String revokeReason(String refreshToken) {
+        return jdbc.queryForObject("SELECT revoke_reason FROM refresh_token WHERE token_hash = ?", String.class,
+                AuthTestSupport.sha256Hex(refreshToken));
+    }
+
+    @Test
+    void doiEmailThuHoiPhienRoiDangNhapBangEmailMoi() throws Exception {
+        String refreshToken = teacherRefreshToken();
+
+        JsonNode changed = json(patchJson("/api/admin/users/" + teacher, "{\"email\": \"  GV.Email.Moi@Test.VN \"}",
+                asAdmin()).andExpect(status().isOk()));
+        assertEquals("gv.email.moi@test.vn", changed.get("email").asText(), "chuẩn hóa chữ thường, bỏ khoảng trắng");
+        assertEquals("GV cũ", changed.get("name").asText(), "chỉ đổi trường được gửi");
+        assertTrue(changed.get("enabled").asBoolean());
+        assertNoSecret(changed);
+        assertEquals("gv.email.moi@test.vn", jdbc.queryForObject("SELECT email FROM users WHERE id = ?", String.class,
+                teacher));
+
+        assertEquals("email_changed", revokeReason(refreshToken), "đổi email thì thu hồi phiên của người đó");
+        refresh(refreshToken).andExpect(status().isUnauthorized());
+        login("gv.cu.users@test.vn", TEACHER_PASSWORD).andExpect(status().isUnauthorized());
+        login("gv.email.moi@test.vn", TEACHER_PASSWORD).andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.email").value("gv.email.moi@test.vn"));
+    }
+
+    @Test
+    void guiLaiEmailHienTaiKhongThuHoiPhien() throws Exception {
+        String refreshToken = teacherRefreshToken();
+        patchJson("/api/admin/users/" + teacher, "{\"email\": \" GV.CU.users@Test.vn \"}", asAdmin())
+                .andExpect(status().isOk()).andExpect(jsonPath("$.email").value("gv.cu.users@test.vn"));
+        refresh(refreshToken).andExpect(status().isOk());
+    }
+
+    @Test
+    void doiEmailTrungHoacKhongHopLe() throws Exception {
+        String refreshToken = teacherRefreshToken();
+        patchJson("/api/admin/users/" + teacher, "{\"email\": \" ADMIN.Users@test.vn\"}", asAdmin())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("Email đã được dùng: admin.users@test.vn"));
+        patchJson("/api/admin/users/" + teacher, "{\"email\": \"khong-phai-email\"}", asAdmin())
+                .andExpect(status().isBadRequest());
+        patchJson("/api/admin/users/" + teacher, "{\"email\": \"   \"}", asAdmin())
+                .andExpect(status().isBadRequest());
+        // Lỗi email thì không đổi các trường khác gửi kèm.
+        patchJson("/api/admin/users/" + teacher, "{\"name\": \"Tên khác\", \"email\": \"admin.users@test.vn\"}",
+                asAdmin()).andExpect(status().isConflict());
+
+        Map<String, Object> row = jdbc.queryForMap("SELECT name, email FROM users WHERE id = ?", teacher);
+        assertEquals("gv.cu.users@test.vn", row.get("email"));
+        assertEquals("GV cũ", row.get("name"));
+        refresh(refreshToken).andExpect(status().isOk());
+    }
+
+    /** Tài khoản cũ không có email: admin thêm email rồi đặt mật khẩu, giáo viên đăng nhập được. */
+    @Test
+    void taiKhoanCuKhongEmailThemEmailRoiDatMatKhau() throws Exception {
+        int noEmail = jdbc.queryForObject("INSERT INTO users (name, role) VALUES ('GV không email', 'teacher')"
+                + " RETURNING id", Integer.class);
+        postJson("/api/admin/users/" + noEmail + "/reset-password", "{\"newPassword\": \"matkhau-moi-4\"}", asAdmin())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Tài khoản chưa có email nên không đặt mật khẩu được"));
+
+        patchJson("/api/admin/users/" + noEmail, "{\"email\": \"GV.Khong.Email@Test.vn\"}", asAdmin())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("gv.khong.email@test.vn"))
+                .andExpect(jsonPath("$.hasPassword").value(false));
+        postJson("/api/admin/users/" + noEmail + "/reset-password", "{\"newPassword\": \"matkhau-moi-4\"}", asAdmin())
+                .andExpect(status().isNoContent());
+        login("gv.khong.email@test.vn", "matkhau-moi-4").andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.id").value(noEmail));
+    }
+
     @Test
     void giaoVienKhongGoiDuocApiQuanTri() throws Exception {
         RequestPostProcessor asTeacher = AuthTestSupport.teacher(teacher);

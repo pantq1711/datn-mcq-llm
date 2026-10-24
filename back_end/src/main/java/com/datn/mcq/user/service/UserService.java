@@ -71,6 +71,14 @@ public class UserService {
         return userAccountRepository.save(u);
     }
 
+    /** Đổi email (nơi gọi đã chuẩn hóa và kiểm tra trùng; unique index V11 chặn trường hợp đua). */
+    @Transactional
+    public UserAccount changeEmail(Integer id, String email) {
+        UserAccount u = getById(id);
+        u.setEmail(email);
+        return userAccountRepository.saveAndFlush(u);
+    }
+
     @Transactional
     public UserAccount setEnabled(Integer id, boolean enabled) {
         UserAccount u = getById(id);
