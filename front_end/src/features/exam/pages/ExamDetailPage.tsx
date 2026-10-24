@@ -4,14 +4,25 @@ import { useNavigate } from "react-router-dom";
 
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
-import type { ExamPreviewData, ExamQuestionItem } from "../types/exam.types";
+import type { ExamPreviewData, ExamQuestionItem, ChangeQuestionRequest, QuestionReplacementCandidate } from "../types/exam.types";
 
 import "./ExamDetailPage.css";
+import { useState } from "react";
+import ChangeQuestionModal from "../components/ChangeQuestionModal";
+import QuestionReplacementPreview from "../components/QuestionReplacementPreview";
 
 const { Title, Text } = Typography;
 
 export default function ExamDetailPage() {
     const navigate = useNavigate();
+
+    const [changeQuestion, setChangeQuestion] = useState<ExamQuestionItem | null>(null);
+    const [generatingReplacement, setGeneratingReplacement] = useState(false);
+
+    const [originalQuestion, setOriginalQuestion] = useState<ExamQuestionItem | null>(null);
+    const [replacementQuestion, setReplacementQuestion] = useState<QuestionReplacementCandidate | null>(null);
+    const [showReplacementPreview, setShowReplacementPreview] = useState(false);
+    const [confirmingReplacement, setConfirmingReplacement] = useState(false);
 
     const exam: ExamPreviewData = {
         title: "Đề thi giữa kỳ Hóa học",
@@ -59,6 +70,49 @@ export default function ExamDetailPage() {
             difficulty: "hard",
         },
     ];
+
+    const mockOriginalQuestion: ExamQuestionItem = {
+        id: 1,
+        questionText:
+            "Dung dịch nào sau đây làm quỳ tím chuyển sang màu đỏ?",
+        optionA: "Dung dịch NaOH",
+        optionB: "Dung dịch HCl",
+        optionC: "Dung dịch NaCl",
+        optionD: "Dung dịch KOH",
+        correctOption: "B",
+        explanation:
+            "HCl là axit mạnh, phân li trong nước tạo ion H+, làm quỳ tím chuyển sang màu đỏ.",
+        difficulty: "easy",
+    };
+
+    const mockReplacementQuestion: QuestionReplacementCandidate = {
+        questionText:
+            "Khi nhúng giấy quỳ tím vào dung dịch H₂SO₄ loãng, hiện tượng nào xảy ra?",
+        optionA: "Quỳ tím chuyển sang màu xanh",
+        optionB: "Quỳ tím không đổi màu",
+        optionC: "Quỳ tím chuyển sang màu đỏ",
+        optionD: "Quỳ tím mất màu hoàn toàn",
+        correctOption: "C",
+        explanation:
+            "H₂SO₄ là axit. Dung dịch axit làm giấy quỳ tím chuyển sang màu đỏ.",
+        difficulty: "easy",
+    };
+
+    const handleGenerateReplacement = async (request: ChangeQuestionRequest) => {
+        console.log('request: ', request);
+    };
+
+    const handleConfirmReplacement = () => {
+        setConfirmingReplacement(true);
+
+        setTimeout(() => {
+            setConfirmingReplacement(false);
+            setShowReplacementPreview(false);
+
+            setOriginalQuestion(null);
+            setReplacementQuestion(null);
+        }, 1500);
+    };
 
     return (
         <div className="exam-detail-page">
@@ -138,6 +192,36 @@ export default function ExamDetailPage() {
                 <Card title="Danh sách câu hỏi">
                     <ExamQuestionList
                         questions={questions}
+                        onChangeQuestion={(question) => setChangeQuestion(question)}
+                    />
+
+                    <ChangeQuestionModal
+                        open={changeQuestion !== null}
+                        question={changeQuestion}
+                        loading={generatingReplacement}
+                        onCancel={() => setChangeQuestion(null)}
+                        onGenerate={handleGenerateReplacement}
+                    />
+
+                    <Space>
+                        <Button
+                            type="primary"
+                            onClick={() => setShowReplacementPreview(true)}
+                        >
+                            Xem thử đổi câu
+                        </Button>
+                    </Space>
+
+                    <QuestionReplacementPreview
+                        open={showReplacementPreview}
+                        originalQuestion={mockOriginalQuestion}
+                        replacementQuestion={mockReplacementQuestion}
+                        onCancel={() => setShowReplacementPreview(false)}
+                        onConfirm={() => {
+                            console.log("Mock: Đã xác nhận thay câu hỏi");
+
+                            setShowReplacementPreview(false);
+                        }}
                     />
                 </Card>
             </div>

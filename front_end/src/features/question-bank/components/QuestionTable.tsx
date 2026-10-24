@@ -1,6 +1,6 @@
 import { Button, Space, Table, Tag, Tooltip, Typography, } from "antd";
 import type { TableColumnsType, TablePaginationConfig } from "antd";
-import { EyeOutlined } from "@ant-design/icons";
+import { EyeOutlined, EyeInvisibleOutlined } from "@ant-design/icons";
 import "./QuestionTable.css";
 import type { QuestionDifficulty, QuestionStatus, QuestionTableItem } from "../types/questionBank.types";
 
@@ -14,19 +14,20 @@ interface QuestionTableProps {
     pageSize?: number;
     onPageChange?: (page: number, pageSize: number) => void;
     onView?: (question: QuestionTableItem) => void;
+    onHide?: (question: QuestionTableItem) => void; // Thêm callback ẩn câu hỏi
 }
 
 const difficultyMap = {
     easy: {
-        label: "Dễ",
+        label: "Biết",
         color: "green",
     },
     medium: {
-        label: "Trung bình",
+        label: "Hiểu",
         color: "orange",
     },
     hard: {
-        label: "Khó",
+        label: "Vận dụng",
         color: "red",
     },
 } as const;
@@ -50,6 +51,7 @@ export default function QuestionTable({
     pageSize = 10,
     onPageChange,
     onView,
+    onHide,
 }: QuestionTableProps) {
     const columns: TableColumnsType<QuestionTableItem> = [
         {
@@ -124,7 +126,7 @@ export default function QuestionTable({
         {
             title: "Thao tác",
             key: "action",
-            width: 100,
+            width: 120, // Tăng nhẹ width để vừa 2 nút
             align: "center",
             render: (_, record) => (
                 <Space size={0}>
@@ -133,6 +135,14 @@ export default function QuestionTable({
                             type="text"
                             icon={<EyeOutlined />}
                             onClick={() => onView?.(record)}
+                        />
+                    </Tooltip>
+                    <Tooltip title="Ẩn câu hỏi">
+                        <Button
+                            type="text"
+                            danger // Có thể thêm màu đỏ nhẹ hoặc giữ mặc định tùy ý
+                            icon={<EyeInvisibleOutlined />}
+                            onClick={() => onHide?.(record)}
                         />
                     </Tooltip>
                 </Space>
