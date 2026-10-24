@@ -1,0 +1,85 @@
+.exam-matrix-distribution-table {
+    width: 100%;
+    min-width: 0;
+}
+
+.exam-matrix-distribution-table__intro {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    min-width: 0;
+}
+
+.exam-matrix-distribution-table__info-icon {
+    color: #8c8c8c;
+    cursor: help;
+    flex-shrink: 0;
+}
+
+.exam-matrix-distribution-table__table {
+    width: 100%;
+}
+
+.exam-matrix-distribution-table__table .ant-table-cell {
+    vertical-align: middle;
+}
+
+.exam-matrix-distribution-table__table .ant-table-thead>tr>th {
+    font-weight: 600;
+    white-space: normal;
+}
+
+.exam-matrix-distribution-table__question-type {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.exam-matrix-distribution-table__subtotal {
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.exam-matrix-distribution-table__count-heading {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.exam-matrix-distribution-table__count-input.ant-input-number {
+    width: 88px;
+    max-width: 100%;
+}
+
+.exam-matrix-distribution-table__count-input .ant-input-number-input {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.exam-matrix-distribution-table__total-row>td {
+    background: #ececec;
+}
+
+.exam-matrix-distribution-table__table.ant-table-wrapper .ant-table-bordered .ant-table-cell {
+    border-inline-end: 1px solid #d9d9d9 !important;
+    border-bottom: 1px solid #d9d9d9 !important;
+}
+
+@media (max-width: 640px) {
+    .exam-matrix-distribution-table__intro {
+        align-items: flex-start;
+    }
+
+    .exam-matrix-distribution-table__table .ant-table-cell {
+        padding: 10px 8px;
+    }
+
+    .exam-matrix-distribution-table__count-input.ant-input-number {
+        width: 64px;
+    }
+}

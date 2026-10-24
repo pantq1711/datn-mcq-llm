@@ -12,6 +12,10 @@ html:has(.auth-layout) {
     background: #867f73;
 }
 
+.ant-table-wrapper .ant-table-thead>tr>th {
+    background-color: #ececec;
+}
+
 textarea,
 textarea::placeholder,
 .ant-input-number-input {

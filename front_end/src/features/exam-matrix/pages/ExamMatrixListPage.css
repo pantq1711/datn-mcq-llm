@@ -1,0 +1,77 @@
+.exam-matrix-list-page {
+    width: 100%;
+    padding: 32px 24px 48px;
+    box-sizing: border-box;
+}
+
+.exam-matrix-list-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+}
+
+.exam-matrix-list-page-title {
+    margin: 0 !important;
+}
+
+.exam-matrix-list-page-actions {
+    flex-shrink: 0;
+}
+
+.exam-matrix-filter-card {
+    margin-bottom: 24px;
+}
+
+.exam-matrix-filter {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.exam-matrix-search {
+    width: min(100%, 380px);
+}
+
+.exam-matrix-list-card {
+    width: 100%;
+}
+
+.exam-matrix-list-header {
+    margin-bottom: 20px;
+}
+
+.exam-matrix-list-title {
+    margin: 0 0 4px !important;
+}
+
+@media (max-width: 768px) {
+    .exam-matrix-list-page {
+        padding: 24px 16px 40px;
+    }
+
+    .exam-matrix-list-page-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .exam-matrix-list-page-actions {
+        width: 100%;
+    }
+
+    .exam-matrix-list-page-actions .ant-btn {
+        flex: 1;
+    }
+
+    .exam-matrix-search {
+        width: 100%;
+    }
+
+    .exam-matrix-filter {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

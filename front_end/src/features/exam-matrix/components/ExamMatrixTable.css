@@ -1,0 +1,55 @@
+.exam-matrix-table {
+    width: 100%;
+    min-width: 0;
+}
+
+.exam-matrix-table__summary {
+    display: flex;
+    justify-content: flex-end;
+    margin: 0 0 12px;
+}
+
+.exam-matrix-table__name-cell,
+.exam-matrix-table__subject-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.exam-matrix-table__name {
+    overflow-wrap: anywhere;
+}
+
+.exam-matrix-table__meta {
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.exam-matrix-table__question-count {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.exam-matrix-table__actions {
+    white-space: nowrap;
+}
+
+.exam-matrix-table .ant-table-cell {
+    vertical-align: middle;
+}
+
+.exam-matrix-table .ant-table-thead>tr>th {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+    .exam-matrix-table__summary {
+        margin-bottom: 8px;
+    }
+
+    .exam-matrix-table .ant-table {
+        font-size: 13px;
+    }
+}

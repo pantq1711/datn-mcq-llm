@@ -1,0 +1,37 @@
+.exam-matrix-basic-info-form {
+    width: 100%;
+    min-width: 0;
+}
+
+.exam-matrix-basic-info-form .ant-form-item {
+    margin-bottom: 18px;
+}
+
+.exam-matrix-basic-info-form .ant-form-item:last-child {
+    margin-bottom: 0;
+}
+
+.exam-matrix-basic-info-form .ant-form-item-label {
+    padding-bottom: 6px;
+}
+
+.exam-matrix-basic-info-form .ant-form-item-label>label {
+    color: rgba(0, 0, 0, 0.88);
+    font-weight: 500;
+}
+
+.exam-matrix-basic-info-form .ant-input,
+.exam-matrix-basic-info-form .ant-input-affix-wrapper,
+.exam-matrix-basic-info-form .ant-select-selector {
+    border-radius: 6px;
+}
+
+.exam-matrix-basic-info-form .ant-input-textarea textarea {
+    resize: vertical;
+}
+
+@media (max-width: 640px) {
+    .exam-matrix-basic-info-form .ant-form-item {
+        margin-bottom: 14px;
+    }
+}
