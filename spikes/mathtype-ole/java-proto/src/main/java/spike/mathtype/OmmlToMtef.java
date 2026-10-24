@@ -422,12 +422,7 @@ final class OmmlToMtef {
                 w.ch(FN_TEXT, bmp(cp), -1, false, emb);
                 continue;
             }
-            int space = switch (cp) { // khoảng trắng tường minh -> ký tự khoảng của MathType
-                case 0x2009, 0x2006, 0x202F, 0x200A -> 0xEF07; // \,
-                case 0x2004, 0x2005, 0x00A0, 0x2002 -> 0xEF04; // \; \:  "\ "
-                case 0x2001, 0x2003 -> 0xEF05;                 // \quad
-                default -> -1;
-            };
+            int space = spaceCode(cp); // khoảng trắng tường minh -> ký tự khoảng của MathType
             if (space >= 0) {
                 w.size(size);
                 w.ch(FN_SPACE, space, -1, false);
@@ -475,6 +470,35 @@ final class OmmlToMtef {
                 prevFunc = false;
             }
         }
+    }
+
+    /**
+     * Ký tự khoảng cách của MathType (typeface Space) mà bộ sinh được phép ghi, đã đối chiếu với các bộ dịch TeX của
+     * MathType 7.12.3 (thư mục Translators): mỗi mã đều có bản dịch ở Texvc và ở LaTeX/TeX (gồm AMS LaTeX, MathJax-LaTeX,
+     * Plain TeX qua "TeX (base rules)").
+     * <ul>
+     *   <li>U+EF02 thin space: Texvc "\,", LaTeX/TeX "\,".</li>
+     *   <li>U+EF04 thick space: Texvc "\ ", LaTeX/TeX "\;". MathType nhập "\;" và "\ " đều ra U+EF04.</li>
+     *   <li>U+EF05 em space: Texvc và TeX "\quad". MathType nhập "\quad" ra U+EF05.</li>
+     * </ul>
+     * KHÔNG dùng U+EF07 (inner space) cho "\,", dù chính MathType 7.12 nhập "\," thành U+EF07: Texvc không có bản dịch
+     * (dòng U+EF07 bị chú thích trong "Texvc (chars).tdl"; lỗi "No translation available for Inner space (0xEF07)"), còn
+     * LaTeX/TeX dịch thành "{\mkern 1mu}", chỉ bằng 1/3 độ rộng của "\,".
+     */
+    static final Set<Integer> VERIFIED_SPACE_CODES = Set.of(0xEF02, 0xEF04, 0xEF05);
+
+    /**
+     * Mã khoảng cách MathType cho một ký tự khoảng trắng tường minh trong OMML (pandoc ghi "\," = U+2009, "\;" = U+2004,
+     * "\ " = U+2005, "\quad" = U+2001); -1 nếu không phải ký tự khoảng tường minh. Chỉ trả mã trong
+     * {@link #VERIFIED_SPACE_CODES}.
+     */
+    static int spaceCode(int cp) {
+        return switch (cp) {
+            case 0x2009, 0x2006, 0x202F, 0x200A -> 0xEF02; // \, (thin space)
+            case 0x2004, 0x2005, 0x00A0, 0x2002 -> 0xEF04; // \; \:  "\ "
+            case 0x2001, 0x2003 -> 0xEF05;                 // \quad
+            default -> -1;
+        };
     }
 
     /** Dấu câu ASCII: MathType ghi ở style Function (Times New Roman đứng), không kèm vị trí font. */
