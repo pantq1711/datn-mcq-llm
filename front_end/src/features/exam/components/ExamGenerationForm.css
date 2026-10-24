@@ -16,7 +16,6 @@
     width: 100%;
 }
 
-/* Ma trận và các tùy chọn */
 .generate-exam-matrix-options-row {
     margin-bottom: 20px;
 }
@@ -104,7 +103,6 @@
     vertical-align: middle;
 }
 
-/* Đổi cấu trúc thành khối để đẩy tổng số câu xuống dòng dưới */
 .generate-exam-matrix-type-wrapper {
     display: flex;
     flex-direction: column;
@@ -156,14 +154,42 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* Các tùy chọn tạo đề */
 .exam-options-space {
     display: flex;
     flex-direction: column;
     gap: 12px;
 }
 
-/* Trường số mã đề */
+.exam-backup-option-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.exam-backup-input-group {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-left: 24px;
+}
+
+.exam-backup-label {
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.88);
+}
+
+.exam-backup-option-row {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.exam-backup-input {
+    width: 80px !important;
+}
+
 .exam-generation-form-code-count {
     width: 100%;
     max-width: 300px;
@@ -173,7 +199,6 @@
     width: 100%;
 }
 
-/* Nút tạo đề */
 .exam-generation-form-actions {
     display: flex;
     justify-content: flex-end;

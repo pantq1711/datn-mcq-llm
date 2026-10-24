@@ -1,16 +1,26 @@
-.auth-layout {
+.auth-layout-wrapper {
+    display: flex;
+    flex-direction: column;
     width: 100%;
     min-height: 100vh;
+}
+
+.auth-layout {
+    width: 100%;
+    flex: 1;
+    background: transparent;
 }
 
 .auth-layout-content {
     width: 100%;
-    min-height: 100vh;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
 .auth-layout-container {
     width: 100%;
-    min-height: 100vh;
+    min-height: calc(100vh - 64px);
     display: flex;
     align-items: center;
     justify-content: center;

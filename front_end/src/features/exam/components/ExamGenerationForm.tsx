@@ -1,17 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-    Alert,
-    Button,
-    Checkbox,
-    Col,
-    Form,
-    Input,
-    InputNumber,
-    Row,
-    Select,
-    Space,
-    Typography,
-} from "antd";
+import { Alert, Button, Checkbox, Col, Form, Input, InputNumber, Row, Select, Space, Typography } from "antd";
 import { ClearOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import type { ExamSubjectOption, ExamGenerationValues } from "../types/exam.types";
 import "./ExamGenerationForm.css";
@@ -25,6 +13,8 @@ type ExamGenerationFormValues = ExamGenerationValues & {
     matrixCounts: MatrixCounts;
     questionCount: number;
     examCodeCount?: number;
+    hasBackupExam?: boolean;
+    backupExamCount?: number;
 };
 
 interface ExamGenerationFormProps {
@@ -33,6 +23,8 @@ interface ExamGenerationFormProps {
     loadingSubjects?: boolean;
     initialValues?: Partial<ExamGenerationValues> & {
         matrixCounts?: MatrixCounts;
+        hasBackupExam?: boolean;
+        backupExamCount?: number;
     };
     onGenerate?: (values: ExamGenerationFormValues) => void;
     onReset?: () => void;
@@ -65,6 +57,8 @@ const defaultValues: Partial<ExamGenerationFormValues> = {
     mediumCount: undefined,
     hardCount: undefined,
     examCodeCount: 1,
+    hasBackupExam: false,
+    backupExamCount: 1,
     matrixCounts: defaultMatrixCounts,
     shuffleQuestions: true,
     shuffleOptions: false,
@@ -105,6 +99,8 @@ export default function ExamGenerationForm({
     const initialMatrixCounts = initialValues?.matrixCounts ?? defaultMatrixCounts;
     const watchedMatrixCounts = Form.useWatch("matrixCounts", form) as MatrixCounts | undefined;
     const matrixCounts = watchedMatrixCounts ?? initialMatrixCounts;
+
+    const hasBackupExam = Form.useWatch("hasBackupExam", form);
 
     const totalQuestionCount = useMemo(() => getMatrixTotal(matrixCounts), [matrixCounts]);
 
@@ -329,6 +325,35 @@ export default function ExamGenerationForm({
                             <Form.Item name="shuffleOptions" valuePropName="checked" noStyle>
                                 <Checkbox>Trộn thứ tự đáp án</Checkbox>
                             </Form.Item>
+
+                            <div className="exam-backup-option-row">
+                                <Form.Item name="hasBackupExam" valuePropName="checked" noStyle>
+                                    <Checkbox>Tạo đề dự phòng</Checkbox>
+                                </Form.Item>
+
+                                {hasBackupExam && (
+                                    <div className="exam-backup-input-group">
+                                        <span className="exam-backup-label">Số mã đề:</span>
+                                        <Form.Item
+                                            name="backupExamCount"
+                                            noStyle
+                                            rules={[
+                                                { required: true, message: "Nhập số lượng đề." },
+                                                { type: "number", min: 1, max: 10, message: "Từ 1 đến 10." },
+                                            ]}
+                                        >
+                                            <InputNumber
+                                                min={1}
+                                                max={10}
+                                                precision={0}
+                                                placeholder="1"
+                                                className="exam-backup-input"
+                                                disabled={loading}
+                                            />
+                                        </Form.Item>
+                                    </div>
+                                )}
+                            </div>
                         </Space>
                     </div>
 
