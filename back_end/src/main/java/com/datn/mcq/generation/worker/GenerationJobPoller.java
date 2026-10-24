@@ -34,9 +34,10 @@ import java.util.Optional;
  * Poller chạy ngoài transaction DB:
  * 1. Gọi GenerationJobProcessor.claimNextPendingJob() (transaction ngắn #1).
  * 2. Gọi LlmClient.generateMcq(...) ngoài transaction.
- * 3. Lưu GeneratedQuestion + cập nhật GenerationJob (transaction ngắn #2),
- *    dựng phạm vi dedup theo purpose của run, chạy pipeline QC (format -> dedup -> answer_check)
- *    và cập nhật QuestionStatus.
+ * 3. Lưu GeneratedQuestion + ghi câu vào GenerationJob, job vẫn running (transaction ngắn #2),
+ *    dựng phạm vi dedup theo purpose của run, chạy pipeline QC (format -> dedup -> answer_check).
+ * 4. Cập nhật QuestionStatus và đánh dấu job done trong cùng một transaction ngắn (#3, L-39: đối soát không bao giờ thấy
+ *    job done khi câu còn ở trạng thái trung gian).
  */
 @Component
 public class GenerationJobPoller {
@@ -200,7 +201,7 @@ public class GenerationJobPoller {
             QcPipelineReport tfReport = qcOrchestrator.evaluateAndSave(
                     GenerationService.trueFalseQcInput(savedTf.getId(), parsedTf, ctx.validateLatex(), runAnswerCheck),
                     dedupScopeResolver.resolve(ctx.runId()));
-            processor.updateQuestionStatus(savedTf.getId(), tfReport.resultingStatus());
+            processor.finishGeneratedJob(ctx.jobId(), savedTf.getId(), tfReport.resultingStatus());
             return new ProcessedJobSummary(true, ctx.jobId(), savedTf.getId(), "done",
                     tfReport.resultingStatus().getDbValue(), parsedTf.parseError());
         }
@@ -211,7 +212,7 @@ public class GenerationJobPoller {
             QcPipelineReport saReport = qcOrchestrator.evaluateAndSave(
                     GenerationService.shortAnswerQcInput(savedSa.getId(), parsedSa, ctx.validateLatex(), runAnswerCheck),
                     dedupScopeResolver.resolve(ctx.runId()));
-            processor.updateQuestionStatus(savedSa.getId(), saReport.resultingStatus());
+            processor.finishGeneratedJob(ctx.jobId(), savedSa.getId(), saReport.resultingStatus());
             return new ProcessedJobSummary(true, ctx.jobId(), savedSa.getId(), "done",
                     saReport.resultingStatus().getDbValue(), parsedSa.parseError());
         }
@@ -233,7 +234,7 @@ public class GenerationJobPoller {
                 runAnswerCheck,
                 parsed.parseError()
         ).withParseWarnings(parsed.parseWarnings()), dedupScopeResolver.resolve(ctx.runId()));
-        processor.updateQuestionStatus(savedQuestion.getId(), qcReport.resultingStatus());
+        processor.finishGeneratedJob(ctx.jobId(), savedQuestion.getId(), qcReport.resultingStatus());
 
         return new ProcessedJobSummary(
                 true,

@@ -52,8 +52,10 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-36 | Lỗi Gemini không được phân loại khi thử lại | Hàng đợi/đồng thời | Cao | Chưa sửa |
 | L-37 | Lệch đồng hồ JVM và container DB làm test chập chờn | Hàng đợi/đồng thời | Trung bình | Đã sửa |
 | L-38 | File Word mở ở Compatibility Mode | Xuất file | Trung bình | Đã sửa |
+| L-39 | Job sinh câu `done` trước khi QC xong, đối soát sinh lại câu tốt (bổ sung 24/10) | Hàng đợi/đồng thời | Cao | Đã sửa |
+| L-40 | Chạy lại QC làm mất cảnh báo từ bước giải mã (bổ sung 24/10) | QC | Thấp | Chưa sửa |
 
-**Thống kê theo nhóm** (38 mục):
+**Thống kê theo nhóm** (40 mục):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
@@ -61,12 +63,12 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | Dữ liệu/DB | 4 | 4 | 0 | 0 |
 | Quy trình git | 2 | 2 | 0 | 0 |
 | LLM & parse | 11 | 10 | 0 | 1 |
-| QC | 5 | 5 | 0 | 0 |
-| Hàng đợi/đồng thời | 5 | 4 | 0 | 1 |
+| QC | 6 | 5 | 0 | 1 |
+| Hàng đợi/đồng thời | 6 | 5 | 0 | 1 |
 | Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **38** | **36** | **0** | **2** |
+| **Tổng** | **40** | **37** | **0** | **3** |
 
-Theo mức độ: Cao 8, Trung bình 20, Thấp 10.
+Theo mức độ: Cao 9, Trung bình 20, Thấp 11.
 
 ---
 
@@ -520,6 +522,24 @@ Theo mức độ: Cao 8, Trung bình 20, Thấp 10.
   người dùng sẽ bỏ qua mọi cờ.
 - Trạng thái: Đã sửa.
 
+### L-40 Chạy lại QC làm mất cảnh báo từ bước giải mã (bổ sung 24/10)
+- Nhóm: QC
+- Triệu chứng: chạy lại QC cho một câu `generated` (`QcRerunService`, quy tắc QC-RERUN) ghi đè cột
+  `quality_check_result.warnings` của dòng `format` mà không còn các cảnh báo từ bước giải mã, ví dụ
+  `option_a: đã tự đóng $` hay `json: đã sửa 1 escape LaTeX (\circ)`. Cảnh báo "đã tự đóng $" đang bật cờ "cần xem kỹ"
+  (L-32), nên sau khi chạy lại, cờ có thể biến mất dù câu đã bị hệ thống tự sửa. Chưa gặp trên dữ liệu thật (chưa có
+  endpoint gọi `QcRerunService`); suy luận từ đọc code.
+- Nguyên nhân gốc: `QcRerunService` dựng đầu vào QC từ câu đã lưu (từ W1-2 qua `StoredQcInput`), không có
+  `parseWarnings`, vì cảnh báo giải mã chỉ có lúc giải mã phản hồi LLM; `QcOrchestrator.evaluateAndSave` luôn ghi đè dòng
+  `format` theo kết quả mới.
+- Cách phát hiện: audit thiết kế W1-2 (giáo viên sửa câu) ngày 24/10, khi xem lại cách dựng đầu vào QC từ câu đã lưu.
+- Cách sửa: chưa có. Hướng có thể: khi chạy lại, giữ các cảnh báo giải mã của dòng `format` cũ (nhận diện theo tiền tố
+  `json: đã sửa ` và hậu tố `: đã tự đóng $`) và gộp vào kết quả mới. Luồng sửa câu của giáo viên (W1-2) không bị ảnh
+  hưởng: cảnh báo tự đóng `$` được truyền vào QC ngay trong request.
+- Chống tái phát: chưa có.
+- Bài học: dữ liệu chỉ có ở một bước (cảnh báo khi giải mã) phải được giữ lại khi bước sau ghi đè kết quả.
+- Trạng thái: Chưa sửa (mới ghi nhận).
+
 ## Hàng đợi/đồng thời
 
 ### L-33 Đổi câu ở chỗ TF vi phạm `chk_es_ready`
@@ -600,6 +620,30 @@ Theo mức độ: Cao 8, Trung bình 20, Thấp 10.
   Commit `5fefe87`.
 - Chống tái phát: hai test nêu trên; `GenerationJobQueueTest`.
 - Bài học: một mốc thời gian chỉ nên do một đồng hồ sinh ra và so sánh.
+- Trạng thái: Đã sửa.
+
+### L-39 Job sinh câu `done` trước khi QC xong, đối soát sinh lại câu tốt (bổ sung 24/10)
+- Nhóm: Hàng đợi/đồng thời
+- Triệu chứng: giáo viên mở tiến độ hoặc xem đề đúng lúc worker đang chạy dedup/Solver cho câu vừa sinh thì chỗ đó bị
+  xếp hàng sinh lại: `exam_slot.attempts` từ 1 lên 2, `solver_retries = 1`, câu (thực ra sẽ `qc_passed`) bị coi như lệch
+  Solver và chỉ còn làm câu dự phòng. Tốn thêm một lời gọi Gemini và có thể mất câu tốt. Test tái hiện trước khi sửa:
+  `GenerationJobDoneAfterQcTest ... không xếp hàng sinh lại ==> expected: <1> but was: <2>`; trạng thái job thấy được
+  trong lúc Solver chạy là `done`.
+- Nguyên nhân gốc: `GenerationJobProcessor.save*FromJob` lưu câu và đánh dấu job `done` trong cùng transaction, TRƯỚC khi
+  `GenerationJobPoller` chạy dedup và Solver (gọi LLM, vài giây); trạng thái QC cuối của câu chỉ được ghi ở transaction
+  sau. Trong khoảng đó câu ở `generated`, đúng là trạng thái mà `ExamBuildService.reconcileSlot` hiểu là "lệch Solver
+  hoặc chưa kết luận" nên sinh lại. Audit 21/10 đã ghi ý này (F-9: "job đánh dấu done trước khi QC chạy").
+- Cách phát hiện: audit thiết kế W1-2 ngày 24/10 (đọc code), rồi test hai bước có móc trong Solver giả gọi API tiến độ
+  đúng lúc Solver đang chạy.
+- Cách sửa: lưu câu thì chỉ ghi `question_id` và số liệu lời gọi LLM vào job, job vẫn `running`;
+  `GenerationJobProcessor.finishGeneratedJob` ghi trạng thái QC cuối của câu và đánh dấu job `done` trong cùng một
+  transaction ngắn sau khi QC xong. Đối soát thấy job `running` thì chờ như trước. Job `answer_check` của W1-2 cũng chỉ
+  `done` cùng transaction với kết quả Solver.
+- Chống tái phát: `GenerationJobDoneAfterQcTest.xemTienDoTrongLucSolverDangChayKhongSinhLaiCauTot`.
+- Hạn chế còn lại: nếu backend chết sau khi lưu câu mà trước khi QC xong, job ở `running` tới khi `StaleJobRecovery` trả về
+  `pending` và sinh câu mới; câu đã lưu nằm lại ở `generated`, không gắn chỗ nào (như ghi chú còn lại của L-34).
+- Bài học: một trạng thái "xong" chỉ được ghi cùng lúc với kết quả cuối mà người khác sẽ đọc; trạng thái trung gian
+  không được nhìn giống trạng thái kết luận.
 - Trạng thái: Đã sửa.
 
 ## Xuất file

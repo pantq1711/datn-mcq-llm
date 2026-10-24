@@ -276,7 +276,10 @@ public class GenerationJobProcessor {
         generationJobRepository.save(job);
     }
 
-    /** Lưu câu Đúng/Sai sinh từ job (câu và 4 ý) và đánh dấu job done, trong cùng transaction ngắn (GĐ3). */
+    /**
+     * Lưu câu Đúng/Sai sinh từ job (câu và 4 ý) và ghi câu vào job, trong cùng transaction ngắn (GĐ3). Job chưa done
+     * (L-39, xem {@link #finishGeneratedJob}).
+     */
     @Transactional
     public GeneratedQuestion saveTrueFalseFromJob(
             ClaimedJobContext ctx,
@@ -284,7 +287,7 @@ public class GenerationJobProcessor {
             ParsedTfDto parsed) {
         GeneratedQuestion saved = trueFalseQuestionStore.save(ctx.templateId(), ctx.runId(),
                 ctx.targetStatementDifficulties(), llmResult, parsed, ctx.attempt());
-        markJobDone(ctx, llmResult, saved.getId(), parsed.parseError());
+        recordJobQuestion(ctx, llmResult, saved.getId(), parsed.parseError());
         return saved;
     }
 
@@ -313,11 +316,11 @@ public class GenerationJobProcessor {
         gq.setStatus(QuestionStatus.GENERATED);
         gq.setCreatedAt(LocalDateTime.now());
         GeneratedQuestion savedQuestion = generatedQuestionRepository.save(gq);
-        markJobDone(ctx, llmResult, savedQuestion.getId(), parsed.parseError());
+        recordJobQuestion(ctx, llmResult, savedQuestion.getId(), parsed.parseError());
         return savedQuestion;
     }
 
-    /** Lưu câu Trả lời ngắn sinh từ job và đánh dấu job done, trong cùng transaction ngắn (V4). */
+    /** Lưu câu Trả lời ngắn sinh từ job và ghi câu vào job, trong cùng transaction ngắn (V4); job chưa done (L-39). */
     @Transactional
     public GeneratedQuestion saveShortAnswerFromJob(
             ClaimedJobContext ctx,
@@ -340,11 +343,16 @@ public class GenerationJobProcessor {
         gq.setStatus(QuestionStatus.GENERATED);
         gq.setCreatedAt(LocalDateTime.now());
         GeneratedQuestion savedQuestion = generatedQuestionRepository.save(gq);
-        markJobDone(ctx, llmResult, savedQuestion.getId(), parsed.parseError());
+        recordJobQuestion(ctx, llmResult, savedQuestion.getId(), parsed.parseError());
         return savedQuestion;
     }
 
-    private void markJobDone(ClaimedJobContext ctx, LlmCallResult llmResult, Integer questionId, String parseError) {
+    /**
+     * Ghi câu vừa lưu và số liệu lời gọi LLM vào job. L-39: job VẪN ở running, chưa done: QC (dedup, Solver) chưa
+     * chạy, câu còn ở trạng thái trung gian generated. Đối soát chỗ trong đề thấy job running thì chờ, không coi câu là
+     * lệch Solver. Job chỉ done ở {@link #finishGeneratedJob}, cùng transaction với trạng thái QC cuối.
+     */
+    private void recordJobQuestion(ClaimedJobContext ctx, LlmCallResult llmResult, Integer questionId, String parseError) {
         GenerationJob job = generationJobRepository.findById(ctx.jobId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generation_job id=" + ctx.jobId()));
         job.setQuestionId(questionId);
@@ -352,6 +360,19 @@ public class GenerationJobProcessor {
         job.setLatencyMs(llmResult.latencyMs());
         job.setCostUsd(llmResult.costUsd());
         job.setLastError(parseError);
+        job.setUpdatedAt(LocalDateTime.now());
+        generationJobRepository.save(job);
+    }
+
+    /**
+     * L-39: trạng thái QC cuối của câu vừa sinh và job done trong CÙNG một transaction ngắn (sau khi QC chạy xong, ngoài
+     * transaction). Nhờ đó không ai thấy job done mà câu còn ở trạng thái trung gian.
+     */
+    @Transactional
+    public void finishGeneratedJob(Integer jobId, Integer questionId, QuestionStatus newStatus) {
+        updateQuestionStatus(questionId, newStatus);
+        GenerationJob job = generationJobRepository.findById(jobId)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generation_job id=" + jobId));
         job.setStatus(JobStatus.DONE);
         job.setUpdatedAt(LocalDateTime.now());
         generationJobRepository.save(job);
