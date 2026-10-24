@@ -1026,8 +1026,11 @@ public class TeacherReviewService {
                     && gq.getStatus() != QuestionStatus.IN_BANK)) {
             throw new IllegalArgumentException(KEEP_NOT_ALLOWED_MESSAGE);
         }
-        Integer teacherId = reviewerId != null ? userService.getById(reviewerId).getId()
-                : userService.getOrCreateDefaultTeacher().getId();
+        // W1-1: người Giữ là người đăng nhập (chủ đề), không còn dùng giáo viên mặc định.
+        if (reviewerId == null) {
+            throw new IllegalArgumentException("Thiếu người Giữ câu");
+        }
+        Integer teacherId = userService.getById(reviewerId).getId();
         QuestionTemplate tpl = catalogService.getTemplateById(gq.getTemplateId());
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
         String explanation = explanationForBank(subject.getName(), gq.getExplanation());

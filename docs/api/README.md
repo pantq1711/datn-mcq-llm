@@ -1,6 +1,7 @@
 # API backend: tóm tắt cho frontend
 
-Cập nhật 2026-10-22 (thêm câu Đúng/Sai `tf` và Trả lời ngắn `sa`). Nguồn chuẩn là code trong `back_end/` và các
+Cập nhật 2026-10-24 (W1-1: đăng nhập JWT, phân quyền, quyền sở hữu, `GET /api/exams`; mục 8). Trước đó 2026-10-22
+(thêm câu Đúng/Sai `tf` và Trả lời ngắn `sa`). Nguồn chuẩn là code trong `back_end/` và các
 migration Flyway; file này chỉ tóm tắt.
 Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị trong DB" của [`docs/contract/enums.md`](../contract/enums.md)
 (riêng `answerCheckStatus`, `dedupStatus` viết hoa như `CONSISTENT`, `NO_DUPLICATE`).
@@ -16,16 +17,22 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 
 ## 1. Quy ước chung
 
-- Base URL: `http://localhost:8080`. CORS cho phép mọi cổng của `localhost` và `127.0.0.1` trên `/api/**`.
-- Chưa có xác thực. `reviewerId` lấy từ body; bỏ trống thì dùng giáo viên mặc định.
-- Lỗi do backend chủ động trả có dạng `{"error": "thông báo tiếng Việt"}`:
+- Base URL: dev gọi qua Vite proxy `/api` → `http://localhost:8080` (cùng origin); triển khai: nginx phục vụ frontend và
+  proxy `/api` cùng domain. CORS vẫn bật cho các origin trong `CORS_ALLOWED_ORIGINS` (mặc định `http://localhost:5173`,
+  `http://127.0.0.1:5173`), có `allowCredentials`.
+- **Cần đăng nhập** cho mọi `/api/**` trừ `POST /api/auth/login|refresh|logout` (mục 8). Gửi header
+  `Authorization: Bearer <accessToken>`. Vai trò: `teacher`, `admin`. Form chấm `/api/reviews/**` vẫn lấy `reviewerId`
+  từ body như cũ (chưa đổi, chờ Q-6).
+- Lỗi do backend chủ động trả có dạng `{"error": "thông báo tiếng Việt"}`; lỗi xác thực có thêm `"code"`:
 
 | Mã | Khi nào |
 |---|---|
 | 400 | Dữ liệu không hợp lệ, ví dụ thiếu trường bắt buộc, gửi trường không áp dụng cho dạng câu, hoặc bản sửa còn lỗi LaTeX fatal |
-| 404 | Không tìm thấy bản ghi, ví dụ `subjectId` hoặc `templateId` không tồn tại |
+| 401 | Chưa đăng nhập (`UNAUTHENTICATED`), token hết hạn (`TOKEN_EXPIRED`), token sai (`TOKEN_INVALID`), đăng nhập sai (`INVALID_CREDENTIALS`), refresh không hợp lệ (`REFRESH_INVALID`) |
+| 403 | Sai vai trò (`FORBIDDEN`), ví dụ giáo viên gọi API quản trị, admin gọi API của giáo viên |
+| 404 | Không tìm thấy bản ghi, ví dụ `subjectId` hoặc `templateId` không tồn tại. Ma trận, đề của giáo viên khác cũng trả 404 (giống id không tồn tại) |
 | 409 | Xung đột trạng thái, ví dụ nộp đánh giá cho câu `duplicate` hoặc nộp lại câu experiment |
-| 429 | Gemini đang giới hạn tần suất gọi; chờ khoảng một phút rồi thử lại |
+| 429 | Gemini đang giới hạn tần suất gọi; chờ khoảng một phút rồi thử lại. Hoặc đăng nhập sai quá nhiều lần (`TOO_MANY_ATTEMPTS`, header `Retry-After`, mục 8.2) |
 | 503 | Gemini tạm thời quá tải hoặc bảo trì |
 | 500 | Lỗi khác chưa được phân loại, body theo định dạng mặc định của Spring |
 
@@ -36,6 +43,25 @@ Khi sinh câu `tf`/`sa` (sync và job), prompt gửi model kèm tối đa 10 câ
 không lặp lại bài toán hay số liệu; xem `enums.md` mục 3, "Độ đa dạng".
 
 ## 2. Endpoint
+
+Cột "Quyền": `công khai`, `đăng nhập` (mọi vai trò), `GV` (giáo viên), `AD` (admin). Đường không có trong bảng bị chặn.
+
+| Phương thức | Đường dẫn | Việc | Quyền |
+|---|---|---|---|
+| POST | `/api/auth/login` | Đăng nhập (mục 8) | công khai |
+| POST | `/api/auth/refresh` | Đổi refresh token (cookie) lấy cặp token mới | công khai |
+| POST | `/api/auth/logout` | Đăng xuất, xóa cookie | công khai |
+| GET | `/api/auth/me` | Thông tin người đang đăng nhập | đăng nhập |
+| POST | `/api/auth/password` | Đổi mật khẩu (thu hồi mọi phiên) | đăng nhập |
+| GET | `/api/exams?page=&size=` | Đề của tôi, mới nhất trước, phân trang (mục 7.0) | GV |
+| GET | `/api/admin/users?role=` | Danh sách tài khoản (mục 8.1) | AD |
+| POST | `/api/admin/users` | Tạo tài khoản giáo viên | AD |
+| PATCH | `/api/admin/users/{id}` | Sửa tên, bật/khóa (khóa thì thu hồi phiên) | AD |
+| POST | `/api/admin/users/{id}/reset-password` | Đặt lại mật khẩu (thu hồi phiên) | AD |
+
+Quyền của các dòng dưới: `catalog` GET và `bank-items` cho GV và AD; `POST /api/catalog/templates`, `/api/generation/**`,
+`/api/reviews/demo/seed-math` chỉ AD; `/api/reviews/**` khác, `/api/exam-matrices/**`, `/api/exams/**` chỉ GV (ma trận,
+đề chỉ của chính người gọi).
 
 | Phương thức | Đường dẫn | Việc |
 |---|---|---|
@@ -64,8 +90,7 @@ không lặp lại bài toán hay số liệu; xem `enums.md` mục 3, "Độ đ
 | GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; cần pandoc trên máy chủ |
 
 Chạy lại QC cho câu `generated` (quy tắc QC-RERUN, quyết định 6 ngày 22/10) đã có ở tầng service (`QcRerunService`, cả ba
-dạng) nhưng CHƯA có endpoint: backend chưa có xác thực và phân quyền (Q-6), nên không mở đường công khai có thể gọi Solver
-tính phí cho câu tùy ý.
+dạng) nhưng CHƯA có endpoint (chưa chốt ai được gọi Solver tính phí cho câu tùy ý).
 
 ### Tạo template
 
@@ -501,6 +526,29 @@ kỹ" (quyết định 22/10, `docs/ai-development-rules.md`). Form chấm mù `
 Cách dùng: chọn hoặc tạo ma trận → `POST /api/exams/build` → gọi `GET /api/exams/{id}/progress` vài giây một lần
 cho tới khi `status` khác `generating` → `GET /api/exams/{id}` để xem đề → Giữ hoặc Đổi từng câu.
 
+**Quyền (W1-1):** chỉ vai trò `teacher`. Ma trận và đề thuộc người tạo (lấy từ token, không gửi `teacherId`); ma trận,
+đề của người khác trả 404 giống id không tồn tại. Admin gọi các API này nhận 403.
+
+### 7.0. Đề của tôi
+
+```http
+GET /api/exams?page=0&size=10
+→ {"items": [{"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "mode": "teacher",
+              "status": "draft", "matrixId": 3, "createdAt": "2026-10-22T21:30:00", "totalSlots": 18,
+              "readySlots": 10, "keptSlots": 5, "needsReviewSlots": 2, "generatingSlots": 2, "failedSlots": 1}],
+    "page": 0, "size": 10, "totalItems": 1, "totalPages": 1}
+```
+
+- Chỉ đề do người gọi tạo, mới nhất trước. `page` từ 0 (mặc định 0), `size` từ 1 đến 50 (mặc định 10); sai thì 400.
+- `readySlots`: chỗ đã có câu, chưa Giữ (`ready`); `keptSlots`: đã Giữ (`kept`, `edited`); `needsReviewSlots`: trong số
+  `readySlots`, câu hệ thống sinh có cờ "cần xem kỹ" (cùng cách tính `needsReview` ở 7.4); `generatingSlots`: `pending`,
+  `generating`; `failedSlots`: `failed`.
+- Danh sách chỉ đọc, KHÔNG đối soát job (khác 7.3/7.4): số liệu theo lần đối soát gần nhất. Muốn số mới nhất của một đề
+  thì gọi `GET /api/exams/{id}/progress`.
+- **Việc còn nợ (chưa làm):** `needsReviewSlots` đang tính N+1: mỗi chỗ `ready` có câu hệ thống sinh gọi
+  `QcSummaryService.summarize` (vài truy vấn `quality_check_result`, `answer_check_statement` mỗi câu). Sẽ thay bằng một
+  truy vấn gộp theo danh sách câu ở task thống kê; trước đó giữ `size` nhỏ (mặc định 10, tối đa 50).
+
 ### 7.1. Ma trận
 
 ```http
@@ -539,12 +587,13 @@ POST /api/exam-matrices
 
 ```http
 POST /api/exams/build
-{"matrixId": 3, "title": "Đề giữa kì I", "teacherId": 1}
+{"matrixId": 3, "title": "Đề giữa kì I"}
 → {"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "matrixId": 3, "slots": 18, "fromBank": 5, "jobsQueued": 13}
 ```
 
-- `title` bỏ trống thì lấy tên ma trận; `teacherId` bỏ trống thì dùng giáo viên mặc định. Đề có `mode = teacher`,
-  `status = draft`.
+- `title` bỏ trống thì lấy tên ma trận. Người tạo đề là người đăng nhập (`teacherId` đã bỏ khỏi API từ W1-1; gửi lên
+  thì bị bỏ qua). Ma trận phải của chính người gọi, không thì 404. Đề có `mode = teacher`, `status = draft`.
+- Ngân hàng câu dùng chung cho mọi giáo viên (H1): câu ngân hàng khớp ô được lấy bất kể ai đã đưa vào.
 - Mỗi ô lấy câu ngân hàng khớp ô trước: cùng môn, cùng dạng, cùng mức (`tf`: cùng 4 mức theo thứ tự), cùng chủ đề của
   template gốc (so sau trim, không phân biệt hoa thường); nếu câu ngân hàng được sinh từ một ô ma trận thì còn phải cùng
   nội dung. Câu chưa nằm trong đề nào được ưu tiên; không lấy trùng câu trong cùng một đề.
@@ -608,12 +657,13 @@ khác để sinh lại).
 ### 7.5. Giữ / Đổi câu khác
 
 ```http
-POST /api/exams/12/slots/101/keep     {"teacherId": 1}   → câu (như 7.4) với "state": "kept", "bankItemId": 88
-POST /api/exams/12/slots/104/replace  {"teacherId": 1}   → câu với "state": "generating" (chưa có nội dung)
-POST /api/exams/12/slots/104/replace  {"teacherId": 1, "instruction": "Dùng ngữ cảnh tính tiền mua vở"}
+POST /api/exams/12/slots/101/keep                    → câu (như 7.4) với "state": "kept", "bankItemId": 88
+POST /api/exams/12/slots/104/replace                 → câu với "state": "generating" (chưa có nội dung)
+POST /api/exams/12/slots/104/replace  {"instruction": "Dùng ngữ cảnh tính tiền mua vở"}
 ```
 
-- Body tùy chọn; bỏ trống `teacherId` thì dùng giáo viên mặc định.
+- Không cần body (Đổi có thể kèm `instruction`). Người thao tác (`exam_slot_action.actor_id`, `teacher_review.reviewer_id`
+  khi Giữ) là người đăng nhập.
 - **Giữ:**
   - câu hệ thống sinh được chép vào ngân hàng: ghi `teacher_review` production với `review_mode = 'assisted'` (duyệt
     nguyên trạng theo đáp án/nhãn của LLM) và `bank_item` trong cùng transaction; câu chuyển `in_bank`;
@@ -670,3 +720,118 @@ GET /api/exams/12/export/docx   → 200, file MT2610231200001.docx (Content-Disp
     `app.export.pandoc-path`) là đường dẫn đầy đủ tới file chạy.
   - Test gọi pandoc thật (`PandocRunnerTest`, `ExamBuildTest`) tìm pandoc theo `PANDOC_PATH`, PATH, rồi
     `%LOCALAPPDATA%\Pandoc`; không thấy thì bỏ qua phần gọi pandoc thật.
+
+## 8. Đăng nhập và phân quyền (W1-1)
+
+Không có đăng ký tự do: admin tạo tài khoản giáo viên (mục 8.1). Admin đầu tiên tạo khi backend khởi động từ biến môi
+trường `ADMIN_EMAIL`, `ADMIN_PASSWORD` (từ 12 ký tự), `ADMIN_NAME`; chỉ tạo khi chưa có admin, không ghi đè mật khẩu.
+Tài khoản cũ trong DB chưa có mật khẩu nên chưa đăng nhập được tới khi admin đặt mật khẩu (`reset-password`, mục 8.1).
+
+- **Access token**: JWT HS256, sống 15 phút, trả trong JSON. Frontend giữ trong bộ nhớ (store), **không** lưu
+  `localStorage`; gửi `Authorization: Bearer <accessToken>`.
+- **Refresh token**: chuỗi ngẫu nhiên trong cookie `refresh_token` (HttpOnly, Secure theo `app.security.cookie-secure`,
+  SameSite=Strict, Path=/api/auth), sống 7 ngày, gia hạn khi dùng, phiên dài tối đa 30 ngày. JavaScript không đọc được
+  cookie này; trình duyệt tự gửi khi gọi `/api/auth/*` cùng origin (Vite proxy hoặc nginx). Mỗi lần refresh cấp token
+  mới; gửi lại token cũ bị coi là dùng lại và cả phiên bị thu hồi.
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+{"email": "gv.toan@truong.edu.vn", "password": "********"}
+
+200 OK
+Set-Cookie: refresh_token=<opaque>; Path=/api/auth; Max-Age=604800; Secure; HttpOnly; SameSite=Strict
+{"accessToken": "eyJ...", "tokenType": "Bearer", "expiresIn": 900,
+ "user": {"id": 7, "name": "Nguyễn Văn A", "email": "gv.toan@truong.edu.vn", "role": "teacher"}}
+
+401 {"error": "Email hoặc mật khẩu không đúng", "code": "INVALID_CREDENTIALS"}
+400 {"error": "email và password không được để trống"}
+```
+
+```http
+POST /api/auth/refresh        (không body; trình duyệt gửi cookie)
+200 → cùng dạng như login, kèm cookie mới
+401 → {"error": "Phiên đăng nhập không hợp lệ hoặc đã hết hạn, hãy đăng nhập lại", "code": "REFRESH_INVALID"}, xóa cookie
+
+POST /api/auth/logout         → 204, xóa cookie (gọi lại hoặc không có cookie vẫn 204)
+GET  /api/auth/me             → {"id": 7, "name": "...", "email": "...", "role": "teacher"}
+POST /api/auth/password       {"currentPassword": "...", "newPassword": "..."}
+     → 204 và mọi phiên bị thu hồi (phải đăng nhập lại); sai mật khẩu hiện tại → 400
+       {"error": "Mật khẩu hiện tại không đúng"}; mật khẩu mới phải từ 8 ký tự, tối đa 72 byte → 400
+```
+
+Lỗi xác thực từ filter: `401 {"error": "Chưa đăng nhập", "code": "UNAUTHENTICATED"}`,
+`401 {"error": "Phiên đăng nhập đã hết hạn", "code": "TOKEN_EXPIRED"}`,
+`401 {"error": "Token không hợp lệ", "code": "TOKEN_INVALID"}` (kèm header `WWW-Authenticate: Bearer ...`),
+`403 {"error": "Bạn không có quyền thực hiện thao tác này", "code": "FORBIDDEN"}`.
+
+**Hướng dẫn frontend:**
+
+1. Axios `baseURL` để trống (gọi `/api/...` cùng origin qua Vite proxy `/api` → `http://localhost:8080`, hoặc nginx khi
+   triển khai). Cookie tự gửi khi cùng origin; nếu gọi khác origin thì cần `withCredentials: true`.
+2. Interceptor request: gắn `Authorization: Bearer <accessToken>` nếu có.
+3. Interceptor response, khi **401** (trừ phản hồi của `/api/auth/login` và `/api/auth/refresh`): gọi
+   `POST /api/auth/refresh` **một lần dùng chung** cho mọi request đang chờ (single-flight, ví dụ giữ một Promise), rồi
+   gửi lại request gốc đúng một lần với token mới. Refresh lỗi → xóa store, chuyển về trang đăng nhập. Không gộp như vậy
+   thì hai lần refresh song song sẽ bị coi là dùng lại token và cả phiên bị đăng xuất.
+4. **403** → báo "không có quyền", không gọi refresh. **404** với đề, ma trận → "không tìm thấy" (có thể là của người khác).
+5. Khi tải lại trang: gọi `/api/auth/refresh` để lấy access token mới (cookie còn hạn thì vẫn đăng nhập).
+6. **Tải file Word**: không dùng `window.open`/`<a href>` (không gắn được header). Dùng
+   `apiClient.get(url, {responseType: 'blob'})`, lấy tên file từ header `Content-Disposition` (đã cho phép đọc qua CORS).
+7. Không gửi `teacherId` nữa. Bỏ trang đăng ký. Phân trang theo `user.role` (`teacher`, `admin`).
+
+### 8.1. Quản trị tài khoản (chỉ admin)
+
+```http
+GET  /api/admin/users?role=teacher
+→ [{"id": 7, "name": "Nguyễn Văn A", "email": "gv.toan@truong.edu.vn", "role": "teacher", "enabled": true,
+    "hasPassword": true, "createdAt": "2026-10-24T11:00:00", "lastLoginAt": "2026-10-24T11:05:00"}]
+
+POST /api/admin/users          {"name": "Nguyễn Văn A", "email": "gv.toan@truong.edu.vn", "password": "********"}
+→ 201, tài khoản như trên (vai trò luôn là teacher)
+
+PATCH /api/admin/users/7       {"enabled": false}            → 200, tài khoản sau khi sửa
+PATCH /api/admin/users/7       {"name": "Nguyễn Văn B"}
+
+POST /api/admin/users/7/reset-password   {"newPassword": "********"}   → 204
+```
+
+- Danh sách theo id tăng dần; `role` (`teacher`, `admin`, `researcher`) bỏ trống là tất cả. Không bao giờ trả mật khẩu
+  hay mật khẩu băm; `hasPassword = false` là tài khoản cũ chưa đặt mật khẩu.
+- Tạo: `name` không trống (tối đa 255 ký tự), `email` hợp lệ (lưu chữ thường), mật khẩu từ 8 ký tự, tối đa 72 byte;
+  sai thì 400. Email đã dùng (không phân biệt hoa thường) trả 409.
+- Sửa: chỉ đổi trường được gửi; body rỗng hoặc `name` trống trả 400; id không tồn tại 404. **Khóa** (`enabled: false`)
+  thu hồi mọi refresh token của người đó; access token cũ còn hiệu lực tối đa 15 phút (H10). Tự khóa mình trả 409
+  `Không thể tự khóa tài khoản của mình`; khóa admin đang hoạt động cuối cùng trả 409
+  `Không thể khóa admin đang hoạt động cuối cùng`. Mở khóa không cấp lại phiên, người đó đăng nhập lại.
+- Đặt lại mật khẩu: dùng được cho cả tài khoản cũ chưa có mật khẩu (để giáo viên mặc định/dữ liệu cũ đăng nhập); thu hồi
+  mọi phiên của người đó. Tài khoản chưa có email trả 400 `Tài khoản chưa có email nên không đặt mật khẩu được` (API
+  chưa có chỗ sửa email).
+
+### 8.2. Giới hạn đăng nhập sai
+
+Sai 5 lần trong 15 phút với cùng email và IP thì khóa đăng nhập 15 phút cho cặp đó, kể cả khi nhập đúng mật khẩu:
+
+```http
+429 Too Many Requests
+Retry-After: 873
+{"error": "Đăng nhập sai quá nhiều lần. Thử lại sau 15 phút.", "code": "TOO_MANY_ATTEMPTS"}
+```
+
+- Email không tồn tại cũng bị đếm như nhau (không lộ email nào có tài khoản). Đăng nhập đúng thì xóa bộ đếm.
+- Đếm theo cả IP để người khác không khóa được tài khoản của giáo viên chỉ bằng cách cố tình nhập sai.
+- Bộ đếm nằm trong bộ nhớ của backend: khởi động lại thì mất; chạy nhiều bản backend thì mỗi bản đếm riêng.
+- Sau nginx phải đặt `FORWARD_HEADERS_STRATEGY=native` (nginx gửi `X-Forwarded-For`), nếu không mọi người dùng chung IP
+  của nginx và giới hạn thành theo email.
+- Cấu hình: `LOGIN_MAX_FAILURES` (5), `LOGIN_FAILURE_WINDOW` (`15m`), `LOGIN_LOCK_DURATION` (`15m`).
+- Frontend: 429 thì hiện thông báo trong `error`, không gọi refresh.
+
+**Ghi chú cho sau này (chưa làm):** nếu thêm SSE để đẩy tiến độ tạo đề, KHÔNG dùng `EventSource` vì không gửi được header
+`Authorization`; dùng `fetch` đọc stream (gắn header được) hoặc cấp vé ngắn hạn dùng một lần cho kết nối SSE.
+
+**Cấu hình backend** (biến môi trường, xem `.env.example`): `JWT_SECRET` (bắt buộc, base64 từ 32 byte, ví dụ
+`openssl rand -base64 48`; thiếu thì backend không khởi động), `JWT_ACCESS_TTL` (mặc định `15m`), `REFRESH_TTL` (`7d`),
+`REFRESH_ABSOLUTE_TTL` (`30d`), `COOKIE_SECURE` (mặc định `true`; Chrome chấp nhận cookie Secure trên
+`http://localhost`, nên chỉ đặt `false` khi dev qua http với host khác localhost), `CORS_ALLOWED_ORIGINS`,
+`ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`. Swagger UI (`/swagger-ui.html`) có nút **Authorize**: đăng nhập bằng
+`POST /api/auth/login`, dán `accessToken`. `GET /actuator/health` công khai nhưng chỉ trả chi tiết cho người đã đăng nhập.

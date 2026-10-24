@@ -26,8 +26,6 @@ import com.datn.mcq.matrix.entity.ExamMatrix;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
 import com.datn.mcq.qc.service.QcSummaryService;
-import com.datn.mcq.user.entity.UserAccount;
-import com.datn.mcq.user.service.UserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,32 +68,29 @@ public class ExamBuildService {
     private final MatrixService matrixService;
     private final GenerationService generationService;
     private final CatalogService catalogService;
-    private final UserService userService;
     private final QcSummaryService qcSummaryService;
 
     public ExamBuildService(ExamRepository examRepository, ExamSlotRepository slotRepository,
                             MatrixService matrixService, GenerationService generationService,
-                            CatalogService catalogService, UserService userService,
-                            QcSummaryService qcSummaryService) {
+                            CatalogService catalogService, QcSummaryService qcSummaryService) {
         this.examRepository = examRepository;
         this.slotRepository = slotRepository;
         this.matrixService = matrixService;
         this.generationService = generationService;
         this.catalogService = catalogService;
-        this.userService = userService;
         this.qcSummaryService = qcSummaryService;
     }
 
+    /**
+     * @param actorId người đăng nhập (W1-1): là người tạo đề; ma trận phải của chính người này, không thì 404
+     */
     @Transactional
-    public BuildResultDto build(BuildExamRequest req) {
+    public BuildResultDto build(BuildExamRequest req, Integer actorId) {
         if (req == null || req.matrixId() == null) {
             throw new IllegalArgumentException("Phải truyền matrixId");
         }
-        ExamMatrix matrix = matrixService.getMatrix(req.matrixId());
+        ExamMatrix matrix = matrixService.getOwnedMatrix(req.matrixId(), actorId);
         List<ExamMatrixCell> cells = matrixService.cells(matrix.getId());
-        UserAccount teacher = req.teacherId() != null
-                ? userService.getById(req.teacherId())
-                : userService.getOrCreateDefaultTeacher();
         Subject subject = catalogService.getSubjectById(matrix.getSubjectId());
         String title = req.title() == null || req.title().isBlank() ? matrix.getName() : req.title().trim();
         if (title.length() > 255) {
@@ -106,7 +101,7 @@ public class ExamBuildService {
         exam.setExamCode(newExamCode());
         exam.setTitle(title);
         exam.setSubjectId(subject.getId());
-        exam.setCreatedBy(teacher.getId());
+        exam.setCreatedBy(actorId);
         exam.setStatus(ExamStatus.DRAFT);
         exam.setMode(Exam.MODE_TEACHER);
         exam.setMatrixId(matrix.getId());
@@ -171,10 +166,10 @@ public class ExamBuildService {
                 jobs);
     }
 
-    /** Tiến độ theo ô; đối soát trước khi đếm. */
+    /** Tiến độ theo ô; kiểm tra chủ sở hữu rồi mới đối soát và đếm. */
     @Transactional
-    public ProgressDto progress(Integer examId) {
-        Exam exam = getExam(examId);
+    public ProgressDto progress(Integer examId, Integer actorId) {
+        Exam exam = getOwnedExam(examId, actorId);
         reconcile(examId);
         List<ExamSlot> slots = slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(examId);
         List<ExamMatrixCell> cells = exam.getMatrixId() != null ? matrixService.cells(exam.getMatrixId()) : List.of();
@@ -212,10 +207,10 @@ public class ExamBuildService {
                 generating, failed, fromBank, cellDtos);
     }
 
-    /** Các chỗ của một ô (tóm tắt); đối soát trước. */
+    /** Các chỗ của một ô (tóm tắt); kiểm tra chủ sở hữu rồi mới đối soát. */
     @Transactional
-    public List<SlotDto> cellSlots(Integer examId, Integer cellId) {
-        getExam(examId);
+    public List<SlotDto> cellSlots(Integer examId, Integer cellId, Integer actorId) {
+        getOwnedExam(examId, actorId);
         reconcile(examId);
         List<SlotDto> out = slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(examId).stream()
                 .filter(s -> s.getCellId().equals(cellId))
@@ -399,8 +394,12 @@ public class ExamBuildService {
                 cell.getQuestionType() == QuestionType.TF ? levels : null);
     }
 
-    Exam getExam(Integer examId) {
-        return examRepository.findById(examId)
+    /**
+     * Đề thuộc {@code actorId} (W1-1). Không có hoặc của người khác đều NoSuchElementException cùng thông báo (404), để id
+     * đoán được không lộ đề nào có thật. Mọi thao tác trên đề gọi hàm này TRƯỚC khi đối soát (đối soát có ghi DB).
+     */
+    Exam getOwnedExam(Integer examId, Integer actorId) {
+        return examRepository.findByIdAndCreatedBy(examId, actorId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy đề id=" + examId));
     }
 

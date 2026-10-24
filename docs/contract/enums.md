@@ -175,8 +175,12 @@ Mã dùng theo dạng câu (service kiểm, DB không chặn): `options_out_of_s
 
 | Giá trị trong DB | Hiển thị / ý nghĩa |
 |---|---|
-| `teacher` | Giáo viên |
-| `researcher` | Người nghiên cứu (nhóm đồ án) |
+| `teacher` | Giáo viên. Đăng nhập được (W1-1), dùng ma trận, tạo đề, Giữ/Đổi, xuất Word, form chấm |
+| `researcher` | Người nghiên cứu (nhóm đồ án). Chưa được đăng nhập qua API (W1-1) |
+| `admin` | Quản trị (V11, W1-1): quản lý tài khoản, xem thống kê; không dùng chức năng của giáo viên. Tài khoản đầu tiên tạo từ biến môi trường `ADMIN_EMAIL`, `ADMIN_PASSWORD` |
+
+Claim `role` trong access token (JWT) dùng tên hằng viết hoa (`TEACHER`, `ADMIN`); JSON trả frontend (`user.role`) dùng
+giá trị DB viết thường như trên.
 
 ### `QuestionType` (V4)
 

@@ -7,11 +7,15 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
 
     List<ExamSlot> findByExamIdOrderByCellIdAscSlotNoAsc(Integer examId);
+
+    /** Các chỗ của nhiều đề (danh sách đề của tôi, chỉ đọc). */
+    List<ExamSlot> findByExamIdIn(Collection<Integer> examIds);
 
     /** Khóa các chỗ của một đề khi đối soát, để hai lần đối soát đồng thời không tạo job trùng. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -37,3 +37,8 @@ app:
     model: ""
   worker:
     enabled: false        # Tắt poller worker khi chạy test
+  security:
+    jwt:
+      # Khóa giả CHỈ dùng cho test (trùng AuthTestSupport.TEST_JWT_SECRET_BASE64), không phải secret thật.
+      secret: "dGVzdC1vbmx5LWp3dC1zZWNyZXQtZm9yLWRhdG4tbWNxLW5vdC1mb3ItcHJvZHVjdGlvbg=="
+    # Không đặt bootstrap-admin: AdminBootstrap không tạo tài khoản khi chạy test.

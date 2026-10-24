@@ -62,15 +62,20 @@ public class MatrixService {
         this.catalogService = catalogService;
     }
 
+    /** Tạo ma trận; {@code ownerId} là người đăng nhập (W1-1). */
     @Transactional
-    public MatrixDto create(CreateMatrixRequest req) {
-        return create(req, null);
+    public MatrixDto create(CreateMatrixRequest req, Integer ownerId) {
+        return create(req, null, ownerId);
     }
 
-    private MatrixDto create(CreateMatrixRequest req, String sampleKey) {
+    private MatrixDto create(CreateMatrixRequest req, String sampleKey, Integer ownerId) {
+        if (ownerId == null) {
+            throw new IllegalArgumentException("Thiếu người tạo ma trận");
+        }
         validate(req);
         Subject subject = catalogService.getSubjectById(req.subjectId());
         ExamMatrix matrix = new ExamMatrix();
+        matrix.setCreatedBy(ownerId);
         matrix.setName(req.name().trim());
         matrix.setSubjectId(subject.getId());
         matrix.setGradeLevel(req.gradeLevel());
@@ -104,7 +109,7 @@ public class MatrixService {
             cell.setTemplateId(createTemplate(matrix, cell).getId());
             cellRepository.save(cell);
         }
-        return get(matrix.getId());
+        return toDto(matrix);
     }
 
     /** question_template của ô: source_question ghi ma trận, phần, chủ đề, nội dung và yêu cầu cần đạt. */
@@ -124,14 +129,24 @@ public class MatrixService {
                 cell.getTopic(), outcomes.toString(), source, SourceType.TEXT));
     }
 
+    /** Chi tiết ma trận của chính người gọi; của người khác thì 404 như không tồn tại (W1-1). */
     @Transactional(readOnly = true)
-    public MatrixDto get(Integer id) {
-        ExamMatrix m = matrixRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy ma trận id=" + id));
-        List<ExamMatrixCell> cells = cellRepository.findByMatrixIdOrderByPositionAsc(id);
+    public MatrixDto get(Integer id, Integer ownerId) {
+        return toDto(getOwnedMatrix(id, ownerId));
+    }
+
+    private MatrixDto toDto(ExamMatrix m) {
+        List<ExamMatrixCell> cells = cellRepository.findByMatrixIdOrderByPositionAsc(m.getId());
         return new MatrixDto(m.getId(), m.getName(), m.getSubjectId(), m.getGradeLevel(), m.getSource(),
                 JsonStringArray.read(m.getNotes()), m.getSampleKey(), m.getCreatedAt(),
                 cells.stream().map(MatrixService::toDto).toList(), totals(cells));
+    }
+
+    /** Ma trận thuộc {@code ownerId}; không có hoặc của người khác: NoSuchElementException (404, cùng thông báo). */
+    @Transactional(readOnly = true)
+    public ExamMatrix getOwnedMatrix(Integer matrixId, Integer ownerId) {
+        return matrixRepository.findByIdAndCreatedBy(matrixId, ownerId)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy ma trận id=" + matrixId));
     }
 
     /** Các ô của một ma trận theo thứ tự (dùng cho module exam). */
@@ -155,9 +170,10 @@ public class MatrixService {
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy ô ma trận id=" + cellId));
     }
 
+    /** Ma trận của người gọi, mới nhất trước (W1-1). */
     @Transactional(readOnly = true)
-    public List<MatrixSummaryDto> list() {
-        return matrixRepository.findAllByOrderByIdDesc().stream()
+    public List<MatrixSummaryDto> list(Integer ownerId) {
+        return matrixRepository.findAllByCreatedByOrderByIdDesc(ownerId).stream()
                 .map(m -> new MatrixSummaryDto(m.getId(), m.getName(), m.getSubjectId(), m.getGradeLevel(),
                         m.getCreatedAt(), cellRepository.findByMatrixIdOrderByPositionAsc(m.getId()).size()))
                 .toList();
@@ -175,7 +191,7 @@ public class MatrixService {
 
     /** Tạo ma trận từ mẫu; bỏ trống subjectId thì dùng môn "Toán" (tạo nếu chưa có). Giữ nguyên notes của mẫu. */
     @Transactional
-    public MatrixDto createFromSample(String key, CreateFromSampleRequest body) {
+    public MatrixDto createFromSample(String key, CreateFromSampleRequest body, Integer ownerId) {
         Map<String, Object> raw = readSample(key);
         Integer subjectId = body != null && body.subjectId() != null
                 ? body.subjectId()
@@ -188,7 +204,7 @@ public class MatrixService {
             }
         }
         return create(new CreateMatrixRequest((String) raw.get("name"), subjectId, toInteger(raw.get("gradeLevel")),
-                (String) raw.get("source"), toStrings(raw.get("notes")), cells), key);
+                (String) raw.get("source"), toStrings(raw.get("notes")), cells), key, ownerId);
     }
 
     private static Map<String, Object> readSample(String key) {

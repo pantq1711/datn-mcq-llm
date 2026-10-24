@@ -11,10 +11,11 @@ public final class ExamBuildDtos {
     private ExamBuildDtos() {}
 
     /**
-     * @param title     bỏ trống thì lấy tên ma trận
-     * @param teacherId bỏ trống thì dùng giáo viên mặc định
+     * Người tạo đề là người đăng nhập (W1-1, đã bỏ teacherId; client cũ gửi lên thì bị bỏ qua).
+     *
+     * @param title bỏ trống thì lấy tên ma trận
      */
-    public record BuildExamRequest(Integer matrixId, String title, Integer teacherId) {}
+    public record BuildExamRequest(Integer matrixId, String title) {}
 
     /**
      * @param fromBank   số chỗ lấy câu từ ngân hàng

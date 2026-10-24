@@ -5,17 +5,23 @@ import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamItemDto;
+import com.datn.mcq.exam.dto.ExamViewDtos.ExamPageDto;
+import com.datn.mcq.exam.dto.ExamViewDtos.ExamSummaryDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ItemStatementDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.PartDto;
 import com.datn.mcq.exam.entity.Exam;
 import com.datn.mcq.exam.entity.ExamSlot;
+import com.datn.mcq.exam.repository.ExamRepository;
 import com.datn.mcq.exam.repository.ExamSlotRepository;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
 import com.datn.mcq.qc.service.QcSummaryService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,16 +41,19 @@ import java.util.stream.Collectors;
 public class ExamViewService {
 
     private final ExamBuildService buildService;
+    private final ExamRepository examRepository;
     private final ExamSlotRepository slotRepository;
     private final MatrixService matrixService;
     private final GenerationService generationService;
     private final BankService bankService;
     private final QcSummaryService qcSummaryService;
 
-    public ExamViewService(ExamBuildService buildService, ExamSlotRepository slotRepository,
-                           MatrixService matrixService, GenerationService generationService, BankService bankService,
+    public ExamViewService(ExamBuildService buildService, ExamRepository examRepository,
+                           ExamSlotRepository slotRepository, MatrixService matrixService,
+                           GenerationService generationService, BankService bankService,
                            QcSummaryService qcSummaryService) {
         this.buildService = buildService;
+        this.examRepository = examRepository;
         this.slotRepository = slotRepository;
         this.matrixService = matrixService;
         this.generationService = generationService;
@@ -52,9 +61,56 @@ public class ExamViewService {
         this.qcSummaryService = qcSummaryService;
     }
 
+    static final int MAX_PAGE_SIZE = 50;
+
+    /**
+     * Đề của người gọi, mới nhất trước (W1-1). Chỉ đọc, không đối soát: số chỗ theo lần đối soát gần nhất. Cờ "cần xem
+     * kỹ" tính như {@link #item}: chỗ ready, câu hệ thống sinh, chưa có bản ngân hàng, có lý do cần xem.
+     */
+    @Transactional(readOnly = true)
+    public ExamPageDto list(Integer actorId, int page, int size) {
+        if (page < 0) {
+            throw new IllegalArgumentException("page phải từ 0");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException("size phải từ 1 đến " + MAX_PAGE_SIZE);
+        }
+        Page<Exam> exams = examRepository.findByCreatedBy(actorId, PageRequest.of(page, size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))));
+        List<Integer> ids = exams.getContent().stream().map(Exam::getId).toList();
+        Map<Integer, List<ExamSlot>> slotsByExam = ids.isEmpty() ? Map.of()
+                : slotRepository.findByExamIdIn(ids).stream().collect(Collectors.groupingBy(ExamSlot::getExamId));
+        List<ExamSummaryDto> items = new ArrayList<>();
+        for (Exam e : exams.getContent()) {
+            List<ExamSlot> slots = slotsByExam.getOrDefault(e.getId(), List.of());
+            int ready = 0;
+            int kept = 0;
+            int needsReview = 0;
+            int generating = 0;
+            int failed = 0;
+            for (ExamSlot s : slots) {
+                switch (s.getState()) {
+                    case ExamSlot.READY -> {
+                        ready++;
+                        if (s.getBankItemId() == null && s.getGeneratedQuestionId() != null
+                                && !qcSummaryService.summarize(s.getGeneratedQuestionId()).reviewReasons().isEmpty()) {
+                            needsReview++;
+                        }
+                    }
+                    case ExamSlot.KEPT, ExamSlot.EDITED -> kept++;
+                    case ExamSlot.FAILED -> failed++;
+                    default -> generating++;
+                }
+            }
+            items.add(new ExamSummaryDto(e.getId(), e.getExamCode(), e.getTitle(), e.getMode(), e.getStatus(),
+                    e.getMatrixId(), e.getCreatedAt(), slots.size(), ready, kept, needsReview, generating, failed));
+        }
+        return new ExamPageDto(items, page, size, exams.getTotalElements(), exams.getTotalPages());
+    }
+
     @Transactional
-    public ExamViewDto view(Integer examId) {
-        Exam exam = buildService.getExam(examId);
+    public ExamViewDto view(Integer examId, Integer actorId) {
+        Exam exam = buildService.getOwnedExam(examId, actorId);
         buildService.reconcile(examId);
         List<ExamMatrixCell> cells = exam.getMatrixId() != null ? matrixService.cells(exam.getMatrixId()) : List.of();
         Map<Integer, ExamMatrixCell> cellById = cells.stream()

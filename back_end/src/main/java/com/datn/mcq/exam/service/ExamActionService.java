@@ -8,7 +8,6 @@ import com.datn.mcq.exam.repository.ExamSlotRepository;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.matrix.service.MatrixService;
 import com.datn.mcq.review.service.TeacherReviewService;
-import com.datn.mcq.user.service.UserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,18 +30,16 @@ public class ExamActionService {
     private final ExamViewService viewService;
     private final MatrixService matrixService;
     private final TeacherReviewService teacherReviewService;
-    private final UserService userService;
 
     public ExamActionService(ExamSlotRepository slotRepository, ExamSlotActionRepository actionRepository,
                              ExamBuildService buildService, ExamViewService viewService, MatrixService matrixService,
-                             TeacherReviewService teacherReviewService, UserService userService) {
+                             TeacherReviewService teacherReviewService) {
         this.slotRepository = slotRepository;
         this.actionRepository = actionRepository;
         this.buildService = buildService;
         this.viewService = viewService;
         this.matrixService = matrixService;
         this.teacherReviewService = teacherReviewService;
-        this.userService = userService;
     }
 
     /**
@@ -50,7 +47,8 @@ public class ExamActionService {
      * (TeacherReviewService#keepAssisted) trong cùng transaction.
      */
     @Transactional
-    public ExamItemDto keep(Integer examId, Integer slotId, Integer teacherId) {
+    public ExamItemDto keep(Integer examId, Integer slotId, Integer actorId) {
+        buildService.getOwnedExam(examId, actorId);
         buildService.reconcile(examId);
         ExamSlot slot = loadSlot(examId, slotId);
         if (ExamSlot.KEPT.equals(slot.getState()) || ExamSlot.EDITED.equals(slot.getState())) {
@@ -59,7 +57,6 @@ public class ExamActionService {
         if (!ExamSlot.READY.equals(slot.getState())) {
             throw new IllegalStateException(NO_QUESTION_MESSAGE);
         }
-        Integer actorId = actor(teacherId);
         if (slot.getGeneratedQuestionId() != null) {
             Integer bankItemId = teacherReviewService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
             slot.setBankItemId(bankItemId);
@@ -80,14 +77,14 @@ public class ExamActionService {
      *                    job sinh lại và các lần thử tự động của cùng lượt Đổi, lưu ở nhật ký exam_slot_action (V9)
      */
     @Transactional
-    public ExamItemDto replace(Integer examId, Integer slotId, Integer teacherId, String instruction) {
+    public ExamItemDto replace(Integer examId, Integer slotId, Integer actorId, String instruction) {
+        buildService.getOwnedExam(examId, actorId);
         String cleanInstruction = normalizeInstruction(instruction);
         buildService.reconcile(examId);
         ExamSlot slot = loadSlot(examId, slotId);
         if (ExamSlot.GENERATING.equals(slot.getState()) || ExamSlot.PENDING.equals(slot.getState())) {
             throw new IllegalStateException(GENERATING_MESSAGE);
         }
-        Integer actorId = actor(teacherId);
         ExamSlotAction log = new ExamSlotAction(slot.getId(), ExamSlotAction.REPLACE, slot.getGeneratedQuestionId(),
                 slot.getBankItemId(), null, actorId);
         log.setInstruction(cleanInstruction);
@@ -123,10 +120,5 @@ public class ExamActionService {
             throw new NoSuchElementException("Không tìm thấy câu id=" + slotId + " trong đề");
         }
         return slot;
-    }
-
-    private Integer actor(Integer teacherId) {
-        return teacherId != null ? userService.getById(teacherId).getId()
-                : userService.getOrCreateDefaultTeacher().getId();
     }
 }
