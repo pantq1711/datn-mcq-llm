@@ -1,0 +1,75 @@
+expected 68 đoạn, actual 68 đoạn
+#1: KHỚP  a\times b
+#2: KHỚP  a\div b
+#3: KHỚP  a\cdot b
+#4: KHỚP  a\pm b
+#5: KHỚP  a\mp b
+#6: KHỚP  a\le b
+#7: KHỚP  a\ge b
+#8: KHỚP  a\approx b
+#9: KHỚP  a\equiv b
+#10: KHỚP  a\sim b
+#11: KHỚP  a\cong b
+#12: KHỚP  a\notin B
+#13: KHỚP  A\subset B
+#14: KHỚP  A\subseteq B
+#15: KHỚP  A\cup B
+#16: KHỚP  A\cap B
+#17: KHỚP  x\to\infty
+#18: KHỚP  P\Leftrightarrow Q
+#19: KHỚP  P\Rightarrow Q
+#20: KHỚP  \forall x
+#21: KHỚP  \exists x
+#22: KHỚP  \mathbb{Z}
+#23: KHỚP  \mathbb{Q}
+#24: KHỚP  \mathbb{R}
+#25: KHỚP  \mathbb{N}^*
+#26: KHỚP  a\,b
+#27: KHỚP  a\;b
+#28: KHỚP  a\quad b
+#29: KHỚP  a\ b
+#30: MathType Toggle TeX không tạo đối tượng (spike có)  1,5
+#31: MathType Toggle TeX không tạo đối tượng (spike có)  2.5
+#32: MathType Toggle TeX không tạo đối tượng (spike có)  3!
+#33: KHỚP  f'(x)
+#34: KHỚP  f''(x)
+#35: KHỚP  a/b
+#36: KHỚP  50\%
+#37: KHỚP  x_1+\ldots+x_n
+#38: KHỚP  x_1+\cdots+x_n
+#39: KHỚP  \alpha\beta\gamma\delta\varepsilon\theta\lambda\mu\rho\sigma\varphi\omega
+#40: KHỚP  \Gamma\Lambda\Omega\Sigma\Phi\Pi\Theta
+#41: KHÁC  \text{Vậy } x=2
+    @@ -3,3 +3,3 @@
+       CHAR TEXT 'V' U+0056
+    -  CHAR TEXT '?' U+003F
+    +  CHAR TEXT 'ậ' U+1EAD
+       CHAR TEXT 'y' U+0079
+#42: KHỚP  \log_2 8
+#43: KHỚP  \overline{AB}
+#44: KHỚP  \vec{a}
+#45: KHỚP  \hat{A}
+#46: KHỚP  \tilde{x}
+#47: KHỚP  \bar{x}
+#48: KHỚP  \dot{x}
+#49: KHỚP  \angle ABC
+#50: KHỚP  \sqrt[n]{a}
+#51: KHỚP  x^{-1}
+#52: KHỚP  \frac{1}{\frac{1}{2}}
+#53: KHỚP  \left|x\right|
+#54: KHỚP  \left\{x\right\}
+#55: KHỚP  \left[x\right]
+#56: spike giữ OMML  \lfloor x\rfloor
+#57: KHỚP  \binom{n}{k}
+#58: KHỚP  \int_0^1 x\,dx
+#59: KHỚP  \lim_{x\to 0}
+#60: KHỚP  (x_1)^2
+#61: KHỚP  a_{n+1}
+#62: KHỚP  x_1^2
+#63: KHỚP  \left(\frac{1}{2}\right)
+#64: KHỚP  AB//CD
+#65: KHỚP  x>0
+#66: KHỚP  a<b
+#67: KHỚP  \sqrt{a}\sqrt{b}
+#68: KHỚP  \frac{1}{2}x
+Tổng: {'KHỚP': 63, 'KHÁC': 1, 'MathType không tạo': 3, 'spike giữ OMML': 1}
