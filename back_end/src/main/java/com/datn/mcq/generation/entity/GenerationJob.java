@@ -87,7 +87,24 @@ public class GenerationJob {
     @Column(name = "prompt_note", columnDefinition = "TEXT")
     private String promptNote;
 
+    /** Job sinh câu (mọi job trước V13). */
+    public static final String TYPE_GENERATE = "generate";
+    /** V13 (W1-2): chạy lại Solver cho một bản giáo viên sửa; có question_id, không gắn chỗ. */
+    public static final String TYPE_ANSWER_CHECK = "answer_check";
+
+    /** V13: loại job, luôn có trong JSON. */
+    @Column(name = "job_type", nullable = false, length = 20, updatable = false)
+    private String jobType = TYPE_GENERATE;
+
     public GenerationJob() {}
+
+    public String getJobType() {
+        return jobType;
+    }
+
+    public void setJobType(String jobType) {
+        this.jobType = jobType;
+    }
 
     public LocalDateTime getStartedAt() {
         return startedAt;

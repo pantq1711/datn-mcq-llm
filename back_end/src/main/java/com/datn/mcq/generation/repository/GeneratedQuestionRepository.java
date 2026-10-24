@@ -15,5 +15,8 @@ public interface GeneratedQuestionRepository extends JpaRepository<GeneratedQues
     /** Độ đa dạng: 10 câu giải mã được gần nhất cùng template và dạng câu, ở mọi run và mọi trạng thái. */
     List<GeneratedQuestion> findTop10ByTemplateIdAndQuestionTypeAndParseSuccessTrueOrderByCreatedAtDescIdDesc(
             Integer templateId, QuestionType questionType);
+
+    /** V13 (W1-2): câu đã có bản giáo viên sửa tiếp (đã bị thay). */
+    boolean existsByEditedFromQuestionId(Integer questionId);
 }
 

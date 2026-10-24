@@ -161,7 +161,10 @@ Mã dùng theo dạng câu (service kiểm, DB không chặn): `options_out_of_s
 | `pending` | Đang chờ chạy (hoặc chờ thử lại tại `next_run_at`) |
 | `running` | Đang gọi LLM |
 | `done` | Hoàn tất, đã có `question_id` |
-| `failed` | Thất bại hẳn sau khi hết số lần thử, lỗi ghi ở `last_error` |
+| `failed` | Thất bại hẳn sau khi hết số lần thử, lỗi ghi ở `last_error` (job `answer_check` bị hủy vì bản sửa mới: `superseded`) |
+
+`generation_job.job_type` (V13, cột chuỗi, không có enum Java riêng): `generate` (sinh câu, mặc định) hoặc `answer_check`
+(chạy lại Solver cho bản giáo viên sửa).
 
 ### `SourceType`
 
@@ -277,16 +280,27 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - `exam.mode`: `manual` (mọi đề cũ) hoặc `teacher` (tạo theo ma trận, bắt buộc có `matrix_id`).
   - `exam_slot.state`: `pending`, `generating`, `ready`, `failed`, `kept`, `edited`. `ready`/`kept`/`edited` phải có câu;
     `kept`/`edited` phải có `bank_item_id`.
-  - `exam_slot_action.action`: `keep`, `edit`, `replace` (`edit_distance` chỉ với `edit`). `instruction` (V9): yêu cầu bổ sung của giáo viên khi Đổi câu, 1–500 ký tự, chỉ dòng `replace`; NULL khi không có.
+  - `exam_slot_action.action`: `keep`, `edit`, `replace` (`edit_distance` chỉ với `edit`). `instruction` (V9): yêu cầu bổ sung của giáo viên khi Đổi câu, 1–500 ký tự, chỉ dòng `replace`; NULL khi không có. `changed_fields` (V13): chỉ dòng `edit` (xem mục "Giáo viên sửa câu trong đề").
   - `teacher_review.review_mode`: `blind` (mặc định, mọi dữ liệu cũ) hoặc `assisted` (Giữ/Sửa ở chế độ giáo viên). Đánh
     giá `assisted` bị loại khỏi mọi chỉ số chấm mù (`answer_correct`, duyệt không sửa).
   - Run sinh câu theo ô: `purpose = 'production'`, `strategy = 'zero-shot'`, `prompt_version` `matrix-mcq-v1-draft`,
     `matrix-tf-v2-draft` hoặc `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`; `tf` có thêm `v1`); `hyperparams` là thông số ô (chủ đề, nội dung, yêu cầu cần đạt, mức).
     Không thuộc thực nghiệm C1/C2/C3.
-  - `generation_job.exam_slot_id`: job sinh câu cho một chỗ trong đề; job thường để NULL.
+  - `generation_job.exam_slot_id`: job sinh câu cho một chỗ trong đề; job thường và job `answer_check` (V13) để NULL.
   - Hàng đợi `generation_job` (đợt A, ngày 23/10): worker và `POST /api/generation/jobs/process-next` nhận job bằng `SELECT ... WHERE status = 'pending' AND (next_run_at IS NULL OR next_run_at <= :now) ORDER BY next_run_at, id LIMIT 1 FOR UPDATE SKIP LOCKED` rồi đổi sang `running` trong cùng transaction, nên hai luồng hoặc hai instance không nhận trùng job (`:now` là giờ JVM, cùng đồng hồ ghi `next_run_at`). `started_at` (V10) ghi lúc nhận job. Khi worker bật, lúc khởi động và mỗi `WORKER_STALE_CHECK_MS` (mặc định 120000), job `running` có `started_at` (dòng trước V10: `updated_at`) quá `WORKER_STALE_AFTER_SECONDS` (mặc định 300) được trả về `pending`, `next_run_at` = lúc đó, `last_error = 'stale: reset'`, hoàn lại lượt `attempt` đã tăng lúc nhận (không tính vào attempt). Lỗi ở phần sau lời gọi LLM (giải mã, lưu câu, QC) đi cùng đường thử lại/`failed` như lỗi gọi LLM, `last_error` bắt đầu bằng `Lỗi sau lời gọi LLM:`.
   - Câu `tf` trong đề theo ma trận (ngày 23/10, đợt 2): mỗi job có một mẫu nhãn bắt buộc chọn ngẫu nhiên trong 14 mẫu có 1–3 ý Đúng, khác mẫu của job `tf` gần nhất cùng đề; lưu ở `generation_job.prompt_note` dạng `Mẫu nhãn bắt buộc (T,F,F,T): ý a phải Đúng, ý b phải Sai, ...` (truy vấn: `prompt_note LIKE '%Mẫu nhãn bắt buộc (%'`). Nhãn trả về khác mẫu thì thêm cảnh báo `label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)` vào `warnings`, câu vẫn được dùng nhưng gắn cờ "cần xem kỹ". Chỉ luồng ma trận (run `production`).
   - Cờ "cần xem kỹ" bỏ qua cảnh báo `json: đã sửa ... escape LaTeX` (vẫn lưu ở `warnings`); cảnh báo `<trường>: đã tự đóng $` và các cảnh báo khác vẫn bật cờ.
+
+- Giáo viên sửa câu trong đề (W1-2, V13, ngày 24/10):
+  - Chỉ sửa được chỗ `ready` có câu hệ thống sinh (chưa Giữ). Chỗ `kept`/`edited`, chỗ đang sinh/hỏng và chỗ lấy câu từ ngân hàng không sửa được (sửa câu ngân hàng là việc riêng, chưa làm).
+  - Mỗi lần sửa tạo **một dòng `generated_question` mới** (bản sửa), không bao giờ sửa dòng cũ: `edited_from_question_id` trỏ bản ngay trước (bản gốc LLM là đầu chuỗi, `edited_from_question_id IS NULL`). Bản sửa cùng `template_id`, `run_id`, `question_type`; chép `llm_difficulty` (mcq/sa) và mức từng ý (tf) của bản trước (không sửa mức độ, không định nghĩa lại `llm_difficulty`, Q-5); `raw_llm_output = ''`, `parse_success = TRUE`, token/độ trễ/chi phí NULL. Câu tf: nhãn giáo viên ghi ở `generated_question_statement.llm_label` của bản sửa. Nội dung một bản không đổi sau khi tạo, nên kết quả QC (`quality_check_result` theo `question_id`) luôn gắn đúng bản. DB chặn bản sửa khác dạng câu (khóa ngoại kép) và hai bản sửa từ cùng một bản (UNIQUE).
+  - **Mọi truy vấn thống kê về đầu ra LLM** (số câu sinh, tỉ lệ `qc_passed`, kết quả Solver, dedup, chi phí...) **phải lọc `generated_question.edited_from_question_id IS NULL`**; bản giáo viên sửa không phải đầu ra LLM. Thống kê sửa câu lấy từ `exam_slot_action` (`action = 'edit'`).
+  - QC của bản sửa: format (FormatChecker, như câu sinh ra) và dedup chạy ngay trong request; dedup loại trừ cả chuỗi bản trước (gồm bản gốc LLM). Trước đó các trường văn bản được trim và tự đóng `$` quên ở cuối trường (cảnh báo `<trường>: đã tự đóng $` trong `warnings`, bật cờ cần xem kỹ). Lỗi format chặn thì từ chối (400), không ghi gì. Trạng thái luôn do `QcStatusDecider` quyết (Q-2).
+  - Solver: đổi đề, phương án/ý hoặc đáp án/đáp số/nhãn thì xếp job `generation_job.job_type = 'answer_check'` (có `question_id` là bản sửa, `exam_slot_id` NULL); chỉ đổi lời giải thì không gọi LLM mà chép dòng `answer_check` của bản trước (Solver không thấy lời giải; quyết định D5 ngày 24/10). Job `answer_check` dùng cùng hàng đợi, claim, thử lại (`max-attempts`, backoff) và phục hồi job kẹt như job sinh câu; thiếu API key thì `failed` ngay. Kết quả Solver chỉ ghi vào QC, không bao giờ đổi đáp án giáo viên; lệch thì `solver_inconsistent`, lỗi/hết lượt thì `solver_failed`, không bao giờ coi là đạt. Sửa tiếp khi job của bản trước còn chờ: job đó `failed`, `last_error = 'superseded'`; kết quả về muộn của bản đã bị thay không được ghi (job `done`, `last_error = 'skipped: superseded'`).
+  - Bản sửa trùng câu khác: câu `duplicate`, lý do `duplicate: <id>`, không gọi Solver, không Giữ được (sửa tiếp hoặc Đổi câu khác).
+  - Giữ: bị chặn (409 `QC_CHECKING`) khi job `answer_check` của câu còn `pending`/`running`; job `failed` thì Giữ được kèm cờ. Giữ bản sửa thì chỗ thành `edited` (câu chưa sửa vẫn `kept`); `bank_item.source_question_id` là bản sửa, truy ngược bản gốc LLM qua `edited_from_question_id`.
+  - `generation_job.job_type`: `generate` (mặc định, mọi dòng trước V13) hoặc `answer_check`. `answer_check` bắt buộc có `question_id`, không có `exam_slot_id`.
+  - `exam_slot_action.changed_fields` (V13, JSONB mảng): tên trường đã đổi khi Sửa, theo thứ tự `question_text`, `option_a`..`option_d`, `correct_option`, `sa_answer`, `statement_a`..`statement_d`, `label_a`..`label_d`, `explanation`; bắt buộc với dòng `edit`, NULL với dòng khác. `edit_distance` của dòng `edit` so với bản ngay trước, như chấm mù: `mcq` đề và 4 phương án, `sa` đề, `tf` đề dẫn và 4 ý; không tính lời giải, đáp án, nhãn.
 
 ## 4. JSON mà LLM phải trả
 

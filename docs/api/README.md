@@ -23,7 +23,8 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 - **Cần đăng nhập** cho mọi `/api/**` trừ `POST /api/auth/login|refresh|logout` (mục 8). Gửi header
   `Authorization: Bearer <accessToken>`. Vai trò: `teacher`, `admin`. Form chấm `/api/reviews/**` vẫn lấy `reviewerId`
   từ body như cũ (chưa đổi, chờ Q-6).
-- Lỗi do backend chủ động trả có dạng `{"error": "thông báo tiếng Việt"}`; lỗi xác thực có thêm `"code"`:
+- Lỗi do backend chủ động trả có dạng `{"error": "thông báo tiếng Việt"}`; lỗi xác thực và lỗi của Sửa câu / Giữ khi đang
+  kiểm (W1-2, mục 7.5a) có thêm `"code"`, lỗi định dạng bản sửa có thêm `"errors"` (danh sách lỗi từng trường):
 
 | Mã | Khi nào |
 |---|---|
@@ -70,8 +71,8 @@ Quyền của các dòng dưới: `catalog` GET và `bank-items` cho GV và AD; 
 | POST | `/api/catalog/templates` | Tạo template cho môn đã tồn tại (không tạo môn) |
 | POST | `/api/generation/generate-sync` | Sinh 1 câu (mọi dạng) và chạy QC ngay. Gọi Gemini, có thể tốn phí |
 | POST | `/api/generation/jobs/enqueue` | Tạo job sinh câu bất đồng bộ (tối đa 50, mọi dạng) |
-| POST | `/api/generation/jobs/process-next?runAnswerCheck=true` | Xử lý ngay 1 job đến hạn (khóa `FOR UPDATE SKIP LOCKED`, không nhận trùng với worker). Gọi Gemini |
-| GET | `/api/generation/jobs` | Danh sách job |
+| POST | `/api/generation/jobs/process-next?runAnswerCheck=true` | Xử lý ngay 1 job đến hạn (khóa `FOR UPDATE SKIP LOCKED`, không nhận trùng với worker). Gọi Gemini. `runAnswerCheck=false` không nhận job `answer_check` |
+| GET | `/api/generation/jobs` | Danh sách job; mỗi job có `jobType` (`generate` hoặc `answer_check`, V13) |
 | GET | `/api/reviews/questions` | Danh sách câu để chấm, mọi dạng (không có tham số lọc trạng thái) |
 | GET | `/api/reviews/questions/{id}` | Form chấm một câu |
 | POST | `/api/reviews/questions/{id}` | Nộp đánh giá |
@@ -87,6 +88,7 @@ Quyền của các dòng dưới: `catalog` GET và `bank-items` cho GV và AD; 
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
 | POST | `/api/exams/{id}/slots/{slotId}/keep` | Giữ câu (vào ngân hàng) |
 | POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác (sinh lại đúng ô), có thể kèm yêu cầu của giáo viên |
+| PUT | `/api/exams/{id}/slots/{slotId}/question` | Sửa câu của chỗ chưa Giữ (mục 7.5a); QC chạy lại, Solver qua hàng đợi |
 | GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; cần pandoc trên máy chủ |
 
 Chạy lại QC cho câu `generated` (quy tắc QC-RERUN, quyết định 6 ngày 22/10) đã có ở tầng service (`QcRerunService`, cả ba
@@ -219,8 +221,10 @@ POST /api/generation/jobs/enqueue
 - Cùng quy tắc trường như sinh đồng bộ (`strategy`, `targetDifficulty`, `targetStatementDifficulties` theo dạng câu);
   `count` bỏ trống là 1; giá trị ngoài khoảng 1-50 được đưa về 1 hoặc 50. Câu `mcq`: `{"templateId": 3, "strategy": "zero-shot", "targetDifficulty": "easy",
   "count": 5}`; câu `sa`: `{"templateId": 3, "questionType": "sa", "targetDifficulty": "medium", "count": 5}`.
-- Trả về danh sách job vừa tạo; mỗi job có `questionType` và với `tf` thêm `targetStatementDifficulties` dạng chuỗi
-  `"easy,easy,medium,hard"` (job `tf` có `targetDifficulty = null`).
+- Trả về danh sách job vừa tạo; mỗi job có `questionType`, `jobType` (`generate`) và với `tf` thêm
+  `targetStatementDifficulties` dạng chuỗi `"easy,easy,medium,hard"` (job `tf` có `targetDifficulty = null`).
+- `jobType = "answer_check"` (V13, W1-2) là job chạy lại Solver cho bản giáo viên sửa (mục 7.5a): có `questionId` ngay
+  khi tạo, không có `examSlotId`.
 
 ### Form chấm
 
@@ -652,7 +656,12 @@ khác để sinh lại).
   `statement_undecidable` (`tf`), `solver_not_run` (Solver chưa chạy hoặc lỗi), `dedup_not_run`, và
   `warning: <cảnh báo format>` (ví dụ `warning: label: 4 ý cùng nhãn T`, `warning: option_a: đã tự đóng $`,
   `warning: label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)`). Cảnh báo `json: đã sửa ... escape LaTeX` không phải lý
-  do (vẫn lưu trong `warnings`). `needsReview` đúng khi danh sách khác rỗng.
+  do (vẫn lưu trong `warnings`). `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
+  `solver_pending` (Solver đang kiểm lại, thay `solver_not_run`), `solver_failed` (kiểm lại thất bại) và
+  `duplicate: <id>` (bản sửa trùng câu khác).
+- W1-2: câu hệ thống sinh chưa Giữ có `qcState`: `checking` (Solver đang kiểm lại bản sửa), `passed` (không còn lý do cần
+  xem kỹ), `needs_review` (có lý do). Chỗ khác không có trường này. Mọi câu có `edited` (câu hiện tại là bản giáo viên
+  sửa, kể cả khi đã Giữ) và, khi `edited`, `originalQuestionId` (bản gốc LLM).
 
 ### 7.5. Giữ / Đổi câu khác
 
@@ -669,7 +678,10 @@ POST /api/exams/12/slots/104/replace  {"instruction": "Dùng ngữ cảnh tính 
     nguyên trạng theo đáp án/nhãn của LLM) và `bank_item` trong cùng transaction; câu chuyển `in_bank`;
   - câu lệch Solver cũng Giữ được, vì giáo viên đã thấy cờ;
   - câu lấy từ ngân hàng thì chỉ đánh dấu `kept`, không tạo đánh giá mới;
-  - Giữ lần hai trả 409 `Câu hỏi này đã được giữ.`; chỗ chưa có câu trả 409.
+  - Giữ lần hai trả 409 `Câu hỏi này đã được giữ.`; chỗ chưa có câu trả 409;
+  - W1-2: câu giáo viên đã sửa được chép đúng bản sửa vào ngân hàng và chỗ thành `edited` (thay vì `kept`); khi Solver
+    còn đang kiểm lại bản sửa (`qcState = checking`) trả 409 `{"code": "QC_CHECKING"}`; kiểm lại thất bại
+    (`solver_failed`) thì Giữ được, kèm cờ đã thấy.
 - **Đổi câu khác** (dùng được cả cho chỗ `failed`, khi đó đặt lại số lần thử): bỏ câu hiện tại khỏi chỗ (câu cũ giữ nguyên trạng thái; câu đã Giữ vẫn ở ngân hàng) và sinh lại đúng
   ô qua hàng đợi; prompt liệt kê các câu đã sinh của ô, kể cả câu vừa bị đổi. Chỗ đang sinh trả 409.
 - **Yêu cầu của giáo viên khi Đổi** (`instruction`, tùy chọn, ngày 23/10): trim, tối đa 500 ký tự (dài hơn trả 400
@@ -681,9 +693,62 @@ POST /api/exams/12/slots/104/replace  {"instruction": "Dùng ngữ cảnh tính 
   lượt Đổi đó (gồm các lần thử tự động khi lần sinh ấy bị loại), không thành ghi chú cố định của ô; lượt Đổi sau không
   mang theo. Lưu ở `exam_slot_action.instruction` (V9).
 - Chỗ không thuộc đề trong đường dẫn trả 404.
-- Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại khỏi chỉ số
-  chấm mù (`answer_correct`, duyệt không sửa).
-- **Chưa có:** Sửa câu (nội dung, đáp án, lời giải), ráp đề, trộn mã đề, đề dự phòng, xuất PDF.
+- Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`, `edit`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại
+  khỏi chỉ số chấm mù (`answer_correct`, duyệt không sửa).
+- **Chưa có:** sửa câu đã nằm trong ngân hàng, ráp đề, trộn mã đề, đề dự phòng, xuất PDF.
+
+### 7.5a. Sửa câu (W1-2)
+
+```http
+PUT /api/exams/12/slots/101/question
+```
+
+```json
+// mcq
+{"baseQuestionId": 345, "questionText": "…", "optionA": "…", "optionB": "…", "optionC": "…", "optionD": "…",
+ "correctOption": "B", "explanation": "…"}
+// sa
+{"baseQuestionId": 346, "questionText": "…", "saAnswer": "3,5", "explanation": "…"}
+// tf
+{"baseQuestionId": 347, "questionText": "…", "explanation": "…",
+ "statements": [{"key": "a", "text": "…", "label": "T"}, {"key": "b", "text": "…", "label": "F"},
+                {"key": "c", "text": "…", "label": "F"}, {"key": "d", "text": "…", "label": "T"}]}
+```
+
+- Chỉ chỗ `ready` có câu hệ thống sinh (chưa Giữ). Gửi đủ nội dung theo dạng câu (thay thế toàn bộ, không sửa mức độ);
+  trường của dạng khác để trống. `baseQuestionId` là `questionId` đang hiển thị lúc bắt đầu sửa.
+- Mỗi lần sửa tạo một bản mới (`questionId` mới), bản gốc LLM giữ nguyên. Nội dung giống hệt câu hiện tại (sau trim) thì
+  trả câu hiện tại, không ghi gì.
+- QC chạy ngay: trim, tự đóng `$` quên ở cuối trường (ghi `warning: <trường>: đã tự đóng $`), kiểm định dạng như câu
+  sinh ra (mục 6), dedup (không so với chính câu này và các bản trước của nó).
+- Đổi đề, phương án/ý hoặc đáp án/đáp số/nhãn: Solver chạy lại qua hàng đợi, request không chờ (`qcState = checking`,
+  `reviewReasons` có `solver_pending`). Theo dõi bằng `GET /api/exams/{id}`. Chỉ đổi lời giải: không gọi Solver, giữ
+  kết quả Solver của bản trước.
+- Solver lệch: `solver_inconsistent`, đáp án giáo viên giữ nguyên, Giữ được. Solver lỗi hoặc hết lượt thử:
+  `solver_failed`, không bao giờ coi là đạt, Giữ được kèm cờ. Kết quả Solver của bản cũ về muộn không ảnh hưởng bản mới.
+- Bản sửa trùng câu khác: `qcState = needs_review`, `reviewReasons: ["duplicate: <id>"]`, không Giữ được (sửa tiếp hoặc
+  Đổi câu khác).
+- Response 200: câu như 7.4, ví dụ:
+
+```json
+{"slotId": 101, "state": "ready", "source": "generated", "questionId": 402, "questionText": "…", "correctOption": "B",
+ "explanation": "…", "needsReview": true, "reviewReasons": ["solver_pending", "warning: option_c: đã tự đóng $"],
+ "qcState": "checking", "edited": true, "originalQuestionId": 345}
+```
+
+| Mã | `code` | Khi nào |
+|---|---|---|
+| 400 | `INVALID_REQUEST` | Thiếu trường (kể cả `baseQuestionId`), gửi trường của dạng khác, `correctOption` ngoài A-D, nhãn ý ngoài T/F, `tf` không đủ 4 ý a-d |
+| 400 | `FORMAT_INVALID` | Bản sửa không qua kiểm tra định dạng; `errors` liệt kê từng lỗi, ví dụ `["option_a: nội dung trống"]` |
+| 404 | — | Đề không có hoặc của giáo viên khác; chỗ không thuộc đề |
+| 409 | `SLOT_KEPT` | Chỗ đã Giữ (sửa câu ngân hàng chưa hỗ trợ) |
+| 409 | `SLOT_NOT_READY` | Chỗ đang sinh hoặc hỏng |
+| 409 | `SLOT_FROM_BANK` | Chỗ lấy câu từ ngân hàng |
+| 409 | `VERSION_CONFLICT` | `baseQuestionId` khác câu hiện tại (đã có người sửa hoặc Đổi, hoặc trang đã cũ): tải lại rồi sửa tiếp |
+
+- Mỗi lần sửa ghi `exam_slot_action` `edit`: bản mới, người sửa, thời điểm, `changed_fields`, `edit_distance` (so với bản
+  trước; không tính lời giải). Thống kê về đầu ra LLM phải lọc `generated_question.edited_from_question_id IS NULL`
+  (`enums.md` mục 3).
 
 ### 7.6. Xuất đề ra Word
 

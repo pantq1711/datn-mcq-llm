@@ -1,7 +1,9 @@
 package com.datn.mcq.generation.worker;
 
 import com.datn.mcq.enums.Purpose;
+import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
+import com.datn.mcq.qc.dto.SolverVerdict;
 import com.datn.mcq.generation.dto.ParsedMcqDto;
 import com.datn.mcq.generation.dto.ParsedSaDto;
 import com.datn.mcq.generation.dto.ParsedTfDto;
@@ -74,12 +76,18 @@ public class GenerationJobPoller {
         processNextJob(true);
     }
 
+    /**
+     * @param runAnswerCheck false: không gọi Solver; job answer_check (W1-2) khi đó không được nhận
+     */
     public ProcessedJobSummary processNextJob(boolean runAnswerCheck) {
-        Optional<GenerationJobProcessor.ClaimedJobContext> claimedOpt = processor.claimNextPendingJob();
+        Optional<GenerationJobProcessor.ClaimedJobContext> claimedOpt = processor.claimNextPendingJob(runAnswerCheck);
         if (claimedOpt.isEmpty()) {
             return new ProcessedJobSummary(false, null, null, "idle", null, null);
         }
         GenerationJobProcessor.ClaimedJobContext ctx = claimedOpt.get();
+        if (ctx.answerCheck()) {
+            return processAnswerCheck(ctx);
+        }
         boolean shortAnswer = ctx.questionType() == QuestionType.SA;
         boolean trueFalse = ctx.questionType() == QuestionType.TF;
         // Chế độ sửa đầu ra (escape LaTeX, tự đóng $) và schema MCQ chỉ cho run production; experiment giữ nguyên.
@@ -128,6 +136,51 @@ public class GenerationJobPoller {
             LOG.warn("Job {}: {}", ctx.jobId(), error, ex);
             var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
             return new ProcessedJobSummary(true, ctx.jobId(), null, failedJob.getStatus().getDbValue(), null, error);
+        }
+    }
+
+    /**
+     * W1-2: job answer_check của một bản giáo viên sửa. (1) transaction ngắn dựng đầu vào (bản đã bị thay thì bỏ, không
+     * gọi LLM); (2) gọi Solver NGOÀI transaction; (3) transaction ngắn ghi kết quả, trạng thái câu và job done cùng lúc.
+     * Lỗi Solver (mạng, hết thời gian chờ, phản hồi hỏng) đi đường thử lại có giới hạn ({@code max-attempts}, backoff)
+     * rồi failed; thiếu API key thì failed ngay. Không bao giờ coi lỗi là đạt.
+     */
+    private ProcessedJobSummary processAnswerCheck(GenerationJobProcessor.ClaimedJobContext ctx) {
+        Optional<QuestionQcInput> input;
+        try {
+            input = processor.prepareAnswerCheck(ctx);
+        } catch (RuntimeException ex) {
+            var failedJob = processor.recordJobFailure(ctx.jobId(), "Lỗi trước lời gọi Solver: " + ex.getMessage(),
+                    maxAttempts);
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(),
+                    null, ex.getMessage());
+        }
+        if (input.isEmpty()) {
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "done", null, "skipped");
+        }
+        if (!qcOrchestrator.solverAvailable()) {
+            processor.failJobNow(ctx.jobId(), QcOrchestrator.SOLVER_NOT_CONFIGURED);
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "failed", null,
+                    QcOrchestrator.SOLVER_NOT_CONFIGURED);
+        }
+        SolverVerdict verdict;
+        try {
+            verdict = qcOrchestrator.callSolver(input.get());
+        } catch (RuntimeException ex) {
+            String error = "Không hoàn tất answer_check: " + ex.getMessage();
+            var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(),
+                    null, error);
+        }
+        try {
+            QuestionStatus status = processor.completeAnswerCheck(ctx, verdict);
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "done", status.getDbValue(), null);
+        } catch (RuntimeException ex) {
+            String error = "Lỗi sau lời gọi LLM: " + ex.getMessage();
+            LOG.warn("Job {}: {}", ctx.jobId(), error, ex);
+            var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(),
+                    null, error);
         }
     }
 

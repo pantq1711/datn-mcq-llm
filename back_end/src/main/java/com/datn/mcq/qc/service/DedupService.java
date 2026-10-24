@@ -70,6 +70,8 @@ public class DedupService {
             return DedupOutcome.error("Dedup chưa hỗ trợ dạng câu " + subject.questionType().getDbValue());
         }
 
+        // W1-2: bản giáo viên sửa không so với các bản trước của chính nó (gồm bản gốc LLM).
+        candidates.removeIf(c -> scope.excludedQuestionIds().contains(c.questionId()));
         DedupOutcome outcome = DedupChecker.check(subject, candidates, DedupChecker.PROVISIONAL_THRESHOLD);
 
         QualityCheckResult result = repository

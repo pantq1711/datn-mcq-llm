@@ -3,6 +3,7 @@ package com.datn.mcq.exam.service;
 import com.datn.mcq.bank.dto.BankItemDto;
 import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.enums.Difficulty;
+import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamItemDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamPageDto;
@@ -15,6 +16,7 @@ import com.datn.mcq.exam.entity.ExamSlot;
 import com.datn.mcq.exam.repository.ExamRepository;
 import com.datn.mcq.exam.repository.ExamSlotRepository;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
+import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
@@ -30,6 +32,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -62,6 +65,11 @@ public class ExamViewService {
     }
 
     static final int MAX_PAGE_SIZE = 50;
+
+    /** W1-2: lý do "cần xem kỹ" khi Solver đang kiểm lại bản giáo viên sửa (thay solver_not_run). */
+    public static final String SOLVER_PENDING = "solver_pending";
+    /** W1-2: job kiểm lại bằng Solver thất bại (hết lượt thử, thiếu cấu hình); thay solver_not_run. */
+    public static final String SOLVER_FAILED = "solver_failed";
 
     /**
      * Đề của người gọi, mới nhất trước (W1-1). Chỉ đọc, không đối soát: số chỗ theo lần đối soát gần nhất. Cờ "cần xem
@@ -157,10 +165,14 @@ public class ExamViewService {
             BankItemDto b = bankService.getItem(slot.getBankItemId());
             List<ItemStatementDto> statements = b.statements() == null ? null : b.statements().stream()
                     .map(s -> new ItemStatementDto(s.key(), s.text(), s.label(), s.difficulty())).toList();
+            Integer original = slot.getGeneratedQuestionId() == null ? null
+                    : generationService.originalQuestionId(slot.getGeneratedQuestionId());
+            boolean edited = original != null && !original.equals(slot.getGeneratedQuestionId());
             return new ExamItemDto(slot.getId(), slot.getCellId(), slot.getSlotNo(), cell.getPart(), cell.getTopic(),
                     slot.getQuestionType(), slot.getState(), source, slot.getBankItemId(), slot.getGeneratedQuestionId(),
                     b.questionText(), b.optionA(), b.optionB(), b.optionC(), b.optionD(), b.correctOption(),
-                    b.saAnswer(), statements, b.explanation(), b.difficulty(), false, List.of());
+                    b.saAnswer(), statements, b.explanation(), b.difficulty(), false, List.of(), null, edited,
+                    edited ? original : null);
         }
         if (hasQuestion && slot.getGeneratedQuestionId() != null) {
             GeneratedQuestion q = generationService.getQuestionById(slot.getGeneratedQuestionId());
@@ -170,11 +182,29 @@ public class ExamViewService {
                                     s.getFinalDifficulty() != null ? s.getFinalDifficulty() : s.getLlmDifficulty()))
                             .toList();
             Difficulty difficulty = q.getFinalDifficulty() != null ? q.getFinalDifficulty() : q.getLlmDifficulty();
-            List<String> reasons = qcSummaryService.summarize(q.getId()).reviewReasons();
+            List<String> reasons = new ArrayList<>(qcSummaryService.summarize(q.getId()).reviewReasons());
+            // W1-2: bản giáo viên sửa chờ Solver kiểm lại (job answer_check) thì "đang kiểm", job thất bại thì nói rõ;
+            // cả hai không bao giờ là đạt.
+            String qcState = null;
+            Optional<GenerationJob> check = generationService.latestAnswerCheckJob(q.getId());
+            if (check.isPresent() && reasons.contains(QcSummaryService.SOLVER_NOT_RUN)) {
+                JobStatus js = check.get().getStatus();
+                if (js == JobStatus.PENDING || js == JobStatus.RUNNING) {
+                    reasons.set(reasons.indexOf(QcSummaryService.SOLVER_NOT_RUN), SOLVER_PENDING);
+                    qcState = ExamItemDto.QC_CHECKING;
+                } else if (js == JobStatus.FAILED) {
+                    reasons.set(reasons.indexOf(QcSummaryService.SOLVER_NOT_RUN), SOLVER_FAILED);
+                }
+            }
+            if (qcState == null) {
+                qcState = reasons.isEmpty() ? ExamItemDto.QC_PASSED : ExamItemDto.QC_NEEDS_REVIEW;
+            }
+            Integer original = q.getEditedFromQuestionId() == null ? null : generationService.originalQuestionId(q.getId());
             return new ExamItemDto(slot.getId(), slot.getCellId(), slot.getSlotNo(), cell.getPart(), cell.getTopic(),
                     slot.getQuestionType(), slot.getState(), source, null, q.getId(), q.getQuestionText(),
                     q.getOptionA(), q.getOptionB(), q.getOptionC(), q.getOptionD(), q.getCorrectOption(),
-                    q.getSaAnswer(), statements, q.getExplanation(), difficulty, !reasons.isEmpty(), reasons);
+                    q.getSaAnswer(), statements, q.getExplanation(), difficulty, !reasons.isEmpty(), reasons, qcState,
+                    original != null, original);
         }
         return new ExamItemDto(slot.getId(), slot.getCellId(), slot.getSlotNo(), cell.getPart(), cell.getTopic(),
                 slot.getQuestionType(), slot.getState(), null, null, null, null, null, null, null, null, null, null,

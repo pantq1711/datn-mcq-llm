@@ -5,6 +5,7 @@ import com.datn.mcq.exam.dto.ExamBuildDtos.BuildExamRequest;
 import com.datn.mcq.exam.dto.ExamBuildDtos.BuildResultDto;
 import com.datn.mcq.exam.dto.ExamBuildDtos.ProgressDto;
 import com.datn.mcq.exam.dto.ExamBuildDtos.SlotDto;
+import com.datn.mcq.exam.dto.ExamEditDtos.EditQuestionRequest;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamItemDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamPageDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
@@ -20,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -113,6 +115,18 @@ public class ExamController {
     public ExamItemDto replace(CurrentUser user, @PathVariable Integer examId, @PathVariable Integer slotId,
                                @RequestBody(required = false) ReplaceRequest request) {
         return examActionService.replace(examId, slotId, user.id(), request != null ? request.instruction() : null);
+    }
+
+    /**
+     * W1-2: sửa câu của một chỗ chưa Giữ (đề, phương án/ý, đáp án, lời giải theo dạng câu). Tạo bản sửa mới, bản gốc
+     * LLM giữ nguyên; QC không cần LLM chạy ngay, Solver chạy lại qua hàng đợi khi đề, phương án/ý hoặc đáp án đổi
+     * (response có {@code qcState = "checking"}). 400 INVALID_REQUEST / FORMAT_INVALID; 409 SLOT_KEPT, SLOT_NOT_READY,
+     * SLOT_FROM_BANK, VERSION_CONFLICT; đề của người khác 404.
+     */
+    @PutMapping("/{examId}/slots/{slotId}/question")
+    public ExamItemDto editQuestion(CurrentUser user, @PathVariable Integer examId, @PathVariable Integer slotId,
+                                    @RequestBody(required = false) EditQuestionRequest request) {
+        return examActionService.editQuestion(examId, slotId, user.id(), request);
     }
 
     /** Các chỗ của một ô (tóm tắt). */

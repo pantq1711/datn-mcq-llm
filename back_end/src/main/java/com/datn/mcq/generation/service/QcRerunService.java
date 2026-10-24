@@ -7,7 +7,6 @@ import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
-import com.datn.mcq.generation.entity.GeneratedQuestionStatement;
 import com.datn.mcq.generation.worker.GenerationJobProcessor;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
@@ -15,7 +14,6 @@ import com.datn.mcq.qc.entity.QualityCheckResult;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -89,49 +87,13 @@ public class QcRerunService {
         QuestionTemplate tpl = catalogService.getTemplateById(gq.getTemplateId());
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
         boolean validateLatex = GenerationJobProcessor.isMathSubject(subject.getName());
-        QuestionQcInput input = gq.getQuestionType() == QuestionType.TF
-                ? trueFalseInput(gq, validateLatex)
-                : gq.getQuestionType() == QuestionType.SA
-                // sa_answer lưu dạng TEXT là chuỗi JSON đã giải mã, nên coi là chuỗi.
-                ? QuestionQcInput.shortAnswer(
-                        gq.getId(),
-                        Boolean.TRUE.equals(gq.getParseSuccess()),
-                        gq.getQuestionText(),
-                        gq.getExplanation(),
-                        gq.getSaAnswer(),
-                        true,
-                        validateLatex,
-                        true,
-                        null)
-                : new QuestionQcInput(
-                        gq.getId(),
-                        Boolean.TRUE.equals(gq.getParseSuccess()),
-                        gq.getQuestionText(),
-                        gq.getOptionA(),
-                        gq.getOptionB(),
-                        gq.getOptionC(),
-                        gq.getOptionD(),
-                        gq.getCorrectOption(),
-                        gq.getExplanation(),
-                        validateLatex,
-                        true
-                );
+        QuestionQcInput input = StoredQcInput.of(gq,
+                gq.getQuestionType() == QuestionType.TF ? generationService.getStatements(gq.getId()) : List.of(),
+                validateLatex, true);
         QcPipelineReport report = qcOrchestrator.evaluateAndSave(input, dedupScopeResolver.resolve(gq.getRunId()));
 
         GeneratedQuestion updated = generationService.updateStatusAndDifficulty(
                 gq.getId(), report.resultingStatus(), null);
         return new QcRerunResult(gq.getId(), previous, updated.getStatus(), report);
-    }
-
-    /** Câu tf (GĐ3): đề dẫn, 4 ý và 4 nhãn đã lưu ở generated_question_statement. */
-    private QuestionQcInput trueFalseInput(GeneratedQuestion gq, boolean validateLatex) {
-        List<String> statements = new ArrayList<>();
-        List<String> labels = new ArrayList<>();
-        for (GeneratedQuestionStatement s : generationService.getStatements(gq.getId())) {
-            statements.add(s.getStatementText());
-            labels.add(s.getLlmLabel() != null ? s.getLlmLabel().getDbValue() : null);
-        }
-        return QuestionQcInput.trueFalse(gq.getId(), Boolean.TRUE.equals(gq.getParseSuccess()), gq.getQuestionText(),
-                statements, labels, gq.getExplanation(), validateLatex, true, null);
     }
 }

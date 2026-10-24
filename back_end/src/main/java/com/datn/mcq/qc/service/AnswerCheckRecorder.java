@@ -33,6 +33,14 @@ public class AnswerCheckRecorder {
         this.answerCheckStatementRepository = answerCheckStatementRepository;
     }
 
+    /** W1-2: nhãn Solver 4 ý (a-d) của một dòng answer_check câu tf. */
+    @Transactional(readOnly = true)
+    public List<TruthChoice> judgeLabels(Integer qcResultId) {
+        return answerCheckStatementRepository.findByQcResultIdOrderByPositionAsc(qcResultId).stream()
+                .map(AnswerCheckStatement::getJudgeLabel)
+                .toList();
+    }
+
     /**
      * @param judgeLabels nhãn Solver cho 4 ý theo thứ tự a-d
      */
