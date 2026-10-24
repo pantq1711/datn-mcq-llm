@@ -1,0 +1,178 @@
+expected 50 đoạn, actual 50 đoạn
+#1: KHỚP  \frac{3}{4}
+#2: KHỚP  \sqrt{x^2+1}
+#3: KHỚP  x_1
+#4: KHỚP  2^{10}
+#5: KHỚP  \widehat{ABC}=60^\circ
+#6: KHỚP  \Delta ABC
+#7: KHỚP  a\ne b
+#8: KHỚP  \left(x+\frac12\right)^2
+#9: KHỚP  \begin{cases}x+y=3\\x-y=1\end{cases}
+#10: KHỚP  \pi r^2
+#11: KHỚP  \sqrt[3]{27}
+#12: KHỚP  x^2-5x+6=0
+#13: KHỚP  \Delta=b^2-4ac
+#14: KHÁC  x_{1,2}=\frac{-b\pm\sqrt{\Delta}}{2a}
+    @@ -7,3 +7,3 @@
+           CHAR NUM '1' U+0031
+    -      CHAR FUNC ',' U+002C
+    +      CHAR SYM ',' U+002C fontpos=0x2C
+           CHAR NUM '2' U+0032
+#15: KHÁC  |x-2|\le 3
+    @@ -2,3 +2,3 @@
+     LINE
+    -  CHAR FUNC '|' U+007C
+    +  CHAR SYM '|' U+007C fontpos=0x7C
+       CHAR VAR 'x' U+0078
+    @@ -6,3 +6,3 @@
+       CHAR NUM '2' U+0032
+    -  CHAR FUNC '|' U+007C
+    +  CHAR SYM '|' U+007C fontpos=0x7C
+       CHAR SYM '≤' U+2264 fontpos=0xA3
+#16: KHÁC  \frac{a}{b}:\frac{c}{d}=\frac{a}{b}\cdot\frac{d}{c}
+    @@ -7,3 +7,3 @@
+           CHAR VAR 'b' U+0062
+    -  CHAR FUNC ':' U+003A
+    +  CHAR SYM ':' U+003A fontpos=0x3A
+       TMPL tmFRACT var=0x0 opt=0
+#17: KHÁC  \sin\alpha=\frac{3}{5}
+    @@ -2,3 +2,3 @@
+     LINE
+    -  CHAR FUNC 's' U+0073 ['funcstart']
+    +  CHAR FUNC 's' U+0073
+       CHAR FUNC 'i' U+0069
+#18: KHÁC  \tan 30^\circ=\frac{\sqrt3}{3}
+    @@ -2,3 +2,3 @@
+     LINE
+    -  CHAR FUNC 't' U+0074 ['funcstart']
+    +  CHAR FUNC 't' U+0074
+       CHAR FUNC 'a' U+0061
+#19: KHÁC  \triangle ABC\sim\triangle DEF
+    @@ -2,3 +2,3 @@
+     LINE
+    -  CHAR MTEXTRA '△' U+25B3 fontpos=0x56
+    +  CHAR SYM '△' U+25B3
+       CHAR VAR 'A' U+0041
+    @@ -6,4 +6,4 @@
+       CHAR VAR 'C' U+0043
+    -  CHAR FUNC '~' U+007E
+    -  CHAR MTEXTRA '△' U+25B3 fontpos=0x56
+    +  CHAR SYM '∼' U+223C fontpos=0x7E
+    +  CHAR SYM '△' U+25B3
+       CHAR VAR 'D' U+0044
+#20: KHÁC  AB\parallel CD
+    @@ -4,3 +4,3 @@
+       CHAR VAR 'B' U+0042
+    -  CHAR MTEXTRA '∥' U+2225 fontpos=0x50
+    +  CHAR SYM '∥' U+2225
+       CHAR VAR 'C' U+0043
+#21: KHÁC  AB\perp CD
+    @@ -4,3 +4,3 @@
+       CHAR VAR 'B' U+0042
+    -  CHAR SYM '⊥' U+22A5 fontpos=0x5E
+    +  CHAR SYM '⟂' U+27C2
+       CHAR VAR 'C' U+0043
+#22: KHỚP  \overline{abc}
+#23: KHỚP  \overrightarrow{AB}
+#24: KHÁC  x\in\mathbb{N}
+    @@ -4,3 +4,3 @@
+       CHAR SYM '∈' U+2208 fontpos=0xCE
+    -  CHAR MTEXTRA 'ℕ' U+2115 fontpos=0xA5
+    +  CHAR TEXT 'N' U+004E
+     END
+#25: KHÁC  A\cap B=\varnothing
+    @@ -6,3 +6,3 @@
+       CHAR SYM '=' U+003D fontpos=0x3D
+    -  CHAR SYM '∅' U+2205 fontpos=0xC6
+    +  CHAR SYM '⌀' U+2300
+     END
+#26: KHÁC  \{1;2;3\}
+    @@ -2,9 +2,9 @@
+     LINE
+    -  CHAR FUNC '{' U+007B
+    +  CHAR SYM '{' U+007B fontpos=0x7B
+       CHAR NUM '1' U+0031
+    -  CHAR FUNC ';' U+003B
+    +  CHAR SYM ';' U+003B fontpos=0x3B
+       CHAR NUM '2' U+0032
+    -  CHAR FUNC ';' U+003B
+    +  CHAR SYM ';' U+003B fontpos=0x3B
+       CHAR NUM '3' U+0033
+    -  CHAR FUNC '}' U+007D
+    +  CHAR SYM '}' U+007D fontpos=0x7D
+     END
+#27: MathType Toggle TeX không tạo đối tượng (spike có)  [a;b]
+#28: KHÁC  y=ax+b\ (a\ne 0)
+    @@ -8,4 +8,3 @@
+       CHAR VAR 'b' U+0062
+    -  CHAR SPACE 'U+EF04' U+EF04
+    -  CHAR FUNC '(' U+0028
+    +  CHAR SYM '(' U+0028 fontpos=0x28
+       CHAR VAR 'a' U+0061
+    @@ -13,3 +12,3 @@
+       CHAR NUM '0' U+0030
+    -  CHAR FUNC ')' U+0029
+    +  CHAR SYM ')' U+0029 fontpos=0x29
+     END
+#29: KHỚP  S=\frac12 ah
+#30: KHÁC  \sqrt{2}\approx 1{,}414
+    @@ -10,3 +10,3 @@
+       CHAR NUM '1' U+0031
+    -  CHAR FUNC ',' U+002C
+    +  CHAR SYM ',' U+002C fontpos=0x2C
+       CHAR NUM '4' U+0034
+#31: KHỚP  x\geq -\frac{1}{2}
+#32: KHỚP  2x+3y\le 12
+#33: KHỚP  \frac{x+1}{x-1}-\frac{x-1}{x+1}
+#34: KHỚP  \left[\begin{array}{l}x=1\\x=2\end{array}\right.
+#35: KHÁC  (a+b)^2=a^2+2ab+b^2
+    @@ -2,3 +2,3 @@
+     LINE
+    -  CHAR FUNC '(' U+0028
+    +  CHAR SYM '(' U+0028 fontpos=0x28
+       CHAR VAR 'a' U+0061
+    @@ -6,3 +6,3 @@
+       CHAR VAR 'b' U+0062
+    -  CHAR FUNC ')' U+0029
+    +  CHAR SYM ')' U+0029 fontpos=0x29
+       TMPL tmSUP var=0x0 opt=0
+#36: KHỚP  \text{cm}^2
+#37: KHỚP  \angle xOy
+#38: spike giữ OMML  \overset\frown{AB}
+#39: KHỚP  a^m\cdot a^n=a^{m+n}
+#40: KHỚP  \sqrt{\frac{a}{b}}=\frac{\sqrt a}{\sqrt b}
+#41: KHÁC  \cos^2\alpha+\sin^2\alpha=1
+    @@ -2,3 +2,3 @@
+     LINE
+    -  CHAR FUNC 'c' U+0063 ['funcstart']
+    +  CHAR FUNC 'c' U+0063
+       CHAR FUNC 'o' U+006F
+    @@ -13,3 +13,3 @@
+       CHAR SYM '+' U+002B fontpos=0x2B
+    -  CHAR FUNC 's' U+0073 ['funcstart']
+    +  CHAR FUNC 's' U+0073
+       CHAR FUNC 'i' U+0069
+#42: KHỚP  x=\pm 3
+#43: KHÁC  3{,}5
+    @@ -3,3 +3,3 @@
+       CHAR NUM '3' U+0033
+    -  CHAR FUNC ',' U+002C
+    +  CHAR SYM ',' U+002C fontpos=0x2C
+       CHAR NUM '5' U+0035
+#44: KHỚP  \frac{1}{2}<\frac{2}{3}
+#45: spike giữ OMML  \sum_{i=1}^n i
+#46: KHỚP  1\le x\le 5
+#47: KHỚP  \dfrac{1}{x}
+#48: KHỚP  P\Rightarrow Q
+#49: KHÁC  AB=5\text{ cm}
+    @@ -6,3 +6,2 @@
+       CHAR NUM '5' U+0035
+    -  CHAR TEXT ' ' U+0020
+       CHAR TEXT 'c' U+0063
+#50: KHÁC  a\vdots b
+    @@ -3,3 +3,3 @@
+       CHAR VAR 'a' U+0061
+    -  CHAR MTEXTRA '⋮' U+22EE fontpos=0x4D
+    +  CHAR SYM '⋮' U+22EE
+       CHAR VAR 'b' U+0062
+Tổng: {'KHỚP': 29, 'KHÁC': 18, 'MathType không tạo': 1, 'spike giữ OMML': 2}

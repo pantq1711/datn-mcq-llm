@@ -1,0 +1,12 @@
+expected 10 đoạn, actual 10 đoạn
+#1: KHỚP  \frac{3}{4}
+#2: KHỚP  \sqrt{x^2+1}
+#3: KHỚP  x_1
+#4: KHỚP  2^{10}
+#5: KHỚP  \widehat{ABC}=60^\circ
+#6: KHỚP  \Delta ABC
+#7: KHỚP  a\ne b
+#8: KHỚP  \left(x+\frac12\right)^2
+#9: KHỚP  \begin{cases}x+y=3\\x-y=1\end{cases}
+#10: KHỚP  \pi r^2
+Tổng: {'KHỚP': 10, 'KHÁC': 0, 'MathType không tạo': 0, 'spike giữ OMML': 0}

@@ -1,0 +1,133 @@
+===== out/01_omml_converter.docx :: word/embeddings/oleObject1.bin
+MTEF v5 plat=1 prod=0 6.0 key=DSMT6 opts=0
+FULL
+LINE
+  SIZE explicit=-320
+  TMPL tmFRACT var=0x0 opt=0
+    LINE
+      CHAR NUM '3' U+0033
+    FULL
+    LINE
+      CHAR NUM '4' U+0034
+===== out/01_omml_converter.docx :: word/embeddings/oleObject2.bin
+MTEF v5 plat=1 prod=0 6.0 key=DSMT6 opts=0
+FULL
+LINE
+  SIZE explicit=-320
+  TMPL tmROOT var=0x0 opt=0
+    LINE
+      CHAR VAR 'x' U+0078
+      FULL
+      TMPL tmSUP var=0x0 opt=0
+        SUB
+        LINE
+          CHAR NUM '2' U+0032
+        LINE(null)
+      CHAR TEXT '+' U+002B
+      CHAR NUM '1' U+0031
+===== out/01_omml_converter.docx :: word/embeddings/oleObject3.bin
+MTEF v5 plat=1 prod=0 6.0 key=DSMT6 opts=0
+FULL
+LINE
+  SIZE explicit=-320
+  CHAR VAR 'x' U+0078
+  FULL
+  TMPL tmSUB var=0x0 opt=0
+    SUB
+    LINE
+      CHAR NUM '1' U+0031
+    LINE(null)
+===== out/01_omml_converter.docx :: word/embeddings/oleObject4.bin
+MTEF v5 plat=1 prod=0 6.0 key=DSMT6 opts=0
+FULL
+LINE
+  SIZE explicit=-320
+  CHAR NUM '2' U+0032
+  FULL
+  TMPL tmSUP var=0x0 opt=0
+    SUB
+    LINE
+      CHAR NUM '1' U+0031
+      CHAR NUM '0' U+0030
+    LINE(null)
+===== out/01_omml_converter.docx :: word/embeddings/oleObject5.bin
+MTEF v5 plat=1 prod=0 6.0 key=DSMT6 opts=0
+FULL
+LINE
+  SIZE explicit=-320
+  CHAR VAR 'A' U+0041
+  CHAR VAR 'B' U+0042
+  CHAR VAR 'C' U+0043
+  FULL
+  TMPL tmSUP var=0x0 opt=0
+    SUB
+    LINE
+      CHAR SYM '̂' U+0302
+    LINE(null)
+  CHAR TEXT '=' U+003D
+  CHAR NUM '6' U+0036
+  CHAR NUM '0' U+0030
+  FULL
+  TMPL tmSUP var=0x0 opt=0
+    SUB
+    LINE
+      CHAR TEXT '∘' U+2218
+    LINE(null)
+===== out/01_omml_converter.docx :: word/embeddings/oleObject6.bin
+MTEF v5 plat=1 prod=0 6.0 key=DSMT6 opts=0
+FULL
+LINE
+  SIZE explicit=-320
+  CHAR TEXT 'Δ' U+0394
+  CHAR VAR 'A' U+0041
+  CHAR VAR 'B' U+0042
+  CHAR VAR 'C' U+0043
+===== out/01_omml_converter.docx :: word/embeddings/oleObject7.bin
+MTEF v5 plat=1 prod=0 6.0 key=DSMT6 opts=0
+FULL
+LINE
+  SIZE explicit=-320
+  CHAR VAR 'a' U+0061
+  CHAR TEXT '≠' U+2260
+  CHAR VAR 'b' U+0062
+===== out/01_omml_converter.docx :: word/embeddings/oleObject8.bin
+MTEF v5 plat=1 prod=0 6.0 key=DSMT6 opts=0
+FULL
+LINE
+  SIZE explicit=-320
+  CHAR SYM '(' U+0028
+  CHAR VAR 'x' U+0078
+  CHAR TEXT '+' U+002B
+  TMPL tmFRACT var=0x0 opt=0
+    LINE
+      CHAR NUM '1' U+0031
+    FULL
+    LINE
+      CHAR NUM '2' U+0032
+  CHAR SYM ')' U+0029
+  FULL
+  TMPL tmSUP var=0x0 opt=0
+    SUB
+    LINE
+      CHAR NUM '2' U+0032
+    LINE(null)
+===== out/01_omml_converter.docx :: word/embeddings/oleObject9.bin
+MTEF v5 plat=1 prod=0 6.0 key=DSMT6 opts=0
+FULL
+LINE
+  SIZE explicit=-320
+  CHAR SYM '{' U+007B
+  CHAR SYM ';' U+003B
+===== out/01_omml_converter.docx :: word/embeddings/oleObject10.bin
+MTEF v5 plat=1 prod=0 6.0 key=DSMT6 opts=0
+FULL
+LINE
+  SIZE explicit=-320
+  CHAR LCGREEK 'π' U+03C0
+  CHAR VAR 'r' U+0072
+  FULL
+  TMPL tmSUP var=0x0 opt=0
+    SUB
+    LINE
+      CHAR NUM '2' U+0032
+    LINE(null)

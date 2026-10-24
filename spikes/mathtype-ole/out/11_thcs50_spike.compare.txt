@@ -1,0 +1,52 @@
+expected 50 đoạn, actual 50 đoạn
+#1: KHỚP  \frac{3}{4}
+#2: KHỚP  \sqrt{x^2+1}
+#3: KHỚP  x_1
+#4: KHỚP  2^{10}
+#5: KHỚP  \widehat{ABC}=60^\circ
+#6: KHỚP  \Delta ABC
+#7: KHỚP  a\ne b
+#8: KHỚP  \left(x+\frac12\right)^2
+#9: KHỚP  \begin{cases}x+y=3\\x-y=1\end{cases}
+#10: KHỚP  \pi r^2
+#11: KHỚP  \sqrt[3]{27}
+#12: KHỚP  x^2-5x+6=0
+#13: KHỚP  \Delta=b^2-4ac
+#14: KHỚP  x_{1,2}=\frac{-b\pm\sqrt{\Delta}}{2a}
+#15: KHỚP  |x-2|\le 3
+#16: KHỚP  \frac{a}{b}:\frac{c}{d}=\frac{a}{b}\cdot\frac{d}{c}
+#17: KHỚP  \sin\alpha=\frac{3}{5}
+#18: KHỚP  \tan 30^\circ=\frac{\sqrt3}{3}
+#19: KHỚP  \triangle ABC\sim\triangle DEF
+#20: KHỚP  AB\parallel CD
+#21: KHỚP  AB\perp CD
+#22: KHỚP  \overline{abc}
+#23: KHỚP  \overrightarrow{AB}
+#24: KHỚP  x\in\mathbb{N}
+#25: KHỚP  A\cap B=\varnothing
+#26: KHỚP  \{1;2;3\}
+#27: MathType Toggle TeX không tạo đối tượng (spike có)  [a;b]
+#28: KHỚP  y=ax+b\ (a\ne 0)
+#29: KHỚP  S=\frac12 ah
+#30: KHỚP  \sqrt{2}\approx 1{,}414
+#31: KHỚP  x\geq -\frac{1}{2}
+#32: KHỚP  2x+3y\le 12
+#33: KHỚP  \frac{x+1}{x-1}-\frac{x-1}{x+1}
+#34: KHỚP  \left[\begin{array}{l}x=1\\x=2\end{array}\right.
+#35: KHỚP  (a+b)^2=a^2+2ab+b^2
+#36: KHỚP  \text{cm}^2
+#37: KHỚP  \angle xOy
+#38: KHỚP  \overset\frown{AB}
+#39: KHỚP  a^m\cdot a^n=a^{m+n}
+#40: KHỚP  \sqrt{\frac{a}{b}}=\frac{\sqrt a}{\sqrt b}
+#41: KHỚP  \cos^2\alpha+\sin^2\alpha=1
+#42: KHỚP  x=\pm 3
+#43: KHỚP  3{,}5
+#44: KHỚP  \frac{1}{2}<\frac{2}{3}
+#45: KHỚP  \sum_{i=1}^n i
+#46: KHỚP  1\le x\le 5
+#47: KHỚP  \dfrac{1}{x}
+#48: KHỚP  P\Rightarrow Q
+#49: KHỚP  AB=5\text{ cm}
+#50: KHỚP  a\vdots b
+Tổng: {'KHỚP': 49, 'KHÁC': 0, 'MathType không tạo': 1, 'spike giữ OMML': 0}

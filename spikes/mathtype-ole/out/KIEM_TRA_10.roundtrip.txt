@@ -1,0 +1,16 @@
+InlineShapes truoc=10 sau=0
+1	Spike: công thức là đối tượng MathType (OLE), 10 biểu thức mẫu
+2	Mỗi dòng có chữ trước và sau công thức để xem công thức có nằm đúng dòng chữ không.
+3	Phân số $\frac{3}{4}$ của số đó.
+4	Căn thức $\sqrt{{{x}^{2}}+1}$ luôn dương.
+5	Nghiệm ${{x}_{1}}$ là số nguyên.
+6	Lũy thừa ${{2}^{10}}$ bằng 1024.
+7	Biết $\widehat{ABC}={{60}^{{}^\circ }}$ nên tam giác đều.
+8	Xét tam giác $\Delta ABC$ vuông tại A.
+9	Giả sử $a\ne b$ thì phân số xác định.
+10	Bình phương ${{\left( x+\frac{1}{2} \right)}^{2}}$ không âm.
+11	Giải hệ $\left\{ \begin{array}{*{35}{l}}
+12	x+y=3  \\
+13	x-y=1  \\
+14	\end{array} \right.$ ta được nghiệm.
+15	Diện tích hình tròn là $\pi {{r}^{2}}$ (đơn vị diện tích).

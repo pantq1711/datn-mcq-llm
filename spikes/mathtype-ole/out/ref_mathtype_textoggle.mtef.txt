@@ -1,0 +1,262 @@
+===== ref_mathtype_textoggle.docx :: word/embeddings/oleObject1.bin
+MTEF v5 plat=1 prod=0 7.12 key=DSMT7 opts=1
+FUTURE type=102 len=31
+ENCODING_DEF 'WinAllBasicCodePages'
+FONT_DEF enc=5 'Times New Roman'
+FONT_DEF enc=3 'Symbol'
+FONT_DEF enc=5 'Courier New'
+FONT_DEF enc=4 'MT Extra'
+EQN_PREFS sizes=8 spaces=30 styles=12
+FULL
+LINE
+  COLOR_DEF
+  COLOR 1
+  TMPL tmFRACT var=0x0 opt=0
+    COLOR 0
+    LINE
+      COLOR 1
+      CHAR NUM '3' U+0033
+    COLOR 0
+    LINE
+      COLOR 1
+      CHAR NUM '4' U+0034
+END
+===== ref_mathtype_textoggle.docx :: word/embeddings/oleObject2.bin
+MTEF v5 plat=1 prod=0 7.12 key=DSMT7 opts=1
+FUTURE type=102 len=32
+ENCODING_DEF 'WinAllBasicCodePages'
+FONT_DEF enc=5 'Times New Roman'
+FONT_DEF enc=3 'Symbol'
+FONT_DEF enc=5 'Courier New'
+FONT_DEF enc=4 'MT Extra'
+EQN_PREFS sizes=8 spaces=30 styles=12
+FULL
+LINE
+  COLOR_DEF
+  COLOR 1
+  TMPL tmROOT var=0x0 opt=0
+    COLOR 0
+    LINE
+      COLOR 1
+      CHAR VAR 'x' U+0078
+      COLOR 0
+      TMPL tmSUP var=0x0 opt=0
+        SUB
+        LINE(null)
+        LINE
+          COLOR 1
+          CHAR NUM '2' U+0032
+      FULL
+      CHAR SYM '+' U+002B fontpos=0x2B
+      CHAR NUM '1' U+0031
+    SUB
+    LINE(null)
+END
+===== ref_mathtype_textoggle.docx :: word/embeddings/oleObject3.bin
+MTEF v5 plat=1 prod=0 7.12 key=DSMT7 opts=1
+FUTURE type=102 len=23
+ENCODING_DEF 'WinAllBasicCodePages'
+FONT_DEF enc=5 'Times New Roman'
+FONT_DEF enc=3 'Symbol'
+FONT_DEF enc=5 'Courier New'
+FONT_DEF enc=4 'MT Extra'
+EQN_PREFS sizes=8 spaces=30 styles=12
+FULL
+LINE
+  COLOR_DEF
+  COLOR 1
+  CHAR VAR 'x' U+0078
+  COLOR 0
+  TMPL tmSUB var=0x0 opt=0
+    SUB
+    LINE
+      COLOR 1
+      CHAR NUM '1' U+0031
+    COLOR 0
+    LINE(null)
+END
+===== ref_mathtype_textoggle.docx :: word/embeddings/oleObject4.bin
+MTEF v5 plat=1 prod=0 7.12 key=DSMT7 opts=1
+FUTURE type=102 len=26
+ENCODING_DEF 'WinAllBasicCodePages'
+FONT_DEF enc=5 'Times New Roman'
+FONT_DEF enc=3 'Symbol'
+FONT_DEF enc=5 'Courier New'
+FONT_DEF enc=4 'MT Extra'
+EQN_PREFS sizes=8 spaces=30 styles=12
+FULL
+LINE
+  COLOR_DEF
+  COLOR 1
+  CHAR NUM '2' U+0032
+  COLOR 0
+  TMPL tmSUP var=0x0 opt=0
+    SUB
+    LINE(null)
+    LINE
+      COLOR 1
+      CHAR NUM '1' U+0031
+      CHAR NUM '0' U+0030
+END
+===== ref_mathtype_textoggle.docx :: word/embeddings/oleObject5.bin
+MTEF v5 plat=1 prod=0 7.12 key=DSMT7 opts=1
+FUTURE type=102 len=42
+ENCODING_DEF 'WinAllBasicCodePages'
+FONT_DEF enc=5 'Times New Roman'
+FONT_DEF enc=3 'Symbol'
+FONT_DEF enc=5 'Courier New'
+FONT_DEF enc=4 'MT Extra'
+EQN_PREFS sizes=8 spaces=30 styles=12
+FULL
+LINE
+  COLOR_DEF
+  COLOR 1
+  TMPL tmHAT var=0x0 opt=0
+    COLOR 0
+    LINE
+      COLOR 1
+      CHAR VAR 'A' U+0041
+      CHAR VAR 'B' U+0042
+      CHAR VAR 'C' U+0043
+    CHAR EXPAND '̂' U+0302
+  CHAR SYM '=' U+003D fontpos=0x3D
+  CHAR NUM '6' U+0036
+  CHAR NUM '0' U+0030
+  COLOR 0
+  TMPL tmSUP var=0x0 opt=0
+    SUB
+    LINE(null)
+    LINE
+      COLOR 1
+      CHAR SYM '°' U+00B0 fontpos=0xB0
+END
+===== ref_mathtype_textoggle.docx :: word/embeddings/oleObject6.bin
+MTEF v5 plat=1 prod=0 7.12 key=DSMT7 opts=1
+FUTURE type=102 len=30
+ENCODING_DEF 'WinAllBasicCodePages'
+FONT_DEF enc=5 'Times New Roman'
+FONT_DEF enc=3 'Symbol'
+FONT_DEF enc=5 'Courier New'
+FONT_DEF enc=4 'MT Extra'
+EQN_PREFS sizes=8 spaces=30 styles=12
+FULL
+LINE
+  COLOR_DEF
+  COLOR 1
+  CHAR UCGREEK 'Δ' U+0394 fontpos=0x44
+  CHAR VAR 'A' U+0041
+  CHAR VAR 'B' U+0042
+  CHAR VAR 'C' U+0043
+END
+===== ref_mathtype_textoggle.docx :: word/embeddings/oleObject7.bin
+MTEF v5 plat=1 prod=0 7.12 key=DSMT7 opts=1
+FUTURE type=102 len=26
+ENCODING_DEF 'WinAllBasicCodePages'
+FONT_DEF enc=5 'Times New Roman'
+FONT_DEF enc=3 'Symbol'
+FONT_DEF enc=5 'Courier New'
+FONT_DEF enc=4 'MT Extra'
+EQN_PREFS sizes=8 spaces=30 styles=12
+FULL
+LINE
+  COLOR_DEF
+  COLOR 1
+  CHAR VAR 'a' U+0061
+  CHAR SYM '≠' U+2260 fontpos=0xB9
+  CHAR VAR 'b' U+0062
+END
+===== ref_mathtype_textoggle.docx :: word/embeddings/oleObject8.bin
+MTEF v5 plat=1 prod=0 7.12 key=DSMT7 opts=1
+FUTURE type=102 len=44
+ENCODING_DEF 'WinAllBasicCodePages'
+FONT_DEF enc=5 'Times New Roman'
+FONT_DEF enc=3 'Symbol'
+FONT_DEF enc=5 'Courier New'
+FONT_DEF enc=4 'MT Extra'
+EQN_PREFS sizes=8 spaces=30 styles=12
+FULL
+LINE
+  COLOR_DEF
+  COLOR 1
+  TMPL tmPAREN var=0x3 opt=0
+    COLOR 0
+    LINE
+      COLOR 1
+      CHAR VAR 'x' U+0078
+      CHAR SYM '+' U+002B fontpos=0x2B
+      TMPL tmFRACT var=0x0 opt=0
+        COLOR 0
+        LINE
+          COLOR 1
+          CHAR NUM '1' U+0031
+        COLOR 0
+        LINE
+          COLOR 1
+          CHAR NUM '2' U+0032
+    CHAR EXPAND '(' U+0028
+    CHAR EXPAND ')' U+0029
+  COLOR 0
+  TMPL tmSUP var=0x0 opt=0
+    SUB
+    LINE(null)
+    LINE
+      COLOR 1
+      CHAR NUM '2' U+0032
+END
+===== ref_mathtype_textoggle.docx :: word/embeddings/oleObject9.bin
+MTEF v5 plat=1 prod=0 7.12 key=DSMT7 opts=1
+FUTURE type=102 len=56
+ENCODING_DEF 'WinAllBasicCodePages'
+FONT_DEF enc=5 'Times New Roman'
+FONT_DEF enc=3 'Symbol'
+FONT_DEF enc=5 'Courier New'
+FONT_DEF enc=4 'MT Extra'
+EQN_PREFS sizes=8 spaces=30 styles=12
+FULL
+LINE
+  COLOR_DEF
+  COLOR 1
+  TMPL tmBRACE var=0x1 opt=0
+    COLOR 0
+    LINE
+      MATRIX 2x1 valign=1 hjust=0 vjust=1
+        LINE
+          COLOR 1
+          CHAR VAR 'x' U+0078
+          CHAR SYM '+' U+002B fontpos=0x2B
+          CHAR VAR 'y' U+0079
+          CHAR SYM '=' U+003D fontpos=0x3D
+          CHAR NUM '3' U+0033
+        COLOR 0
+        LINE
+          COLOR 1
+          CHAR VAR 'x' U+0078
+          CHAR SYM '−' U+2212 fontpos=0x2D
+          CHAR VAR 'y' U+0079
+          CHAR SYM '=' U+003D fontpos=0x3D
+          CHAR NUM '1' U+0031
+    CHAR EXPAND '{' U+007B
+END
+===== ref_mathtype_textoggle.docx :: word/embeddings/oleObject10.bin
+MTEF v5 plat=1 prod=0 7.12 key=DSMT7 opts=1
+FUTURE type=102 len=27
+ENCODING_DEF 'WinAllBasicCodePages'
+FONT_DEF enc=5 'Times New Roman'
+FONT_DEF enc=3 'Symbol'
+FONT_DEF enc=5 'Courier New'
+FONT_DEF enc=4 'MT Extra'
+EQN_PREFS sizes=8 spaces=30 styles=12
+FULL
+LINE
+  COLOR_DEF
+  COLOR 1
+  CHAR LCGREEK 'π' U+03C0 fontpos=0x70
+  CHAR VAR 'r' U+0072
+  COLOR 0
+  TMPL tmSUP var=0x0 opt=0
+    SUB
+    LINE(null)
+    LINE
+      COLOR 1
+      CHAR NUM '2' U+0032
+END
