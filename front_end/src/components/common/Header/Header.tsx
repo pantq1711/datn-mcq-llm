@@ -1,18 +1,5 @@
-import {
-    Avatar,
-    Badge,
-    Button,
-    Dropdown,
-    Layout,
-    Space,
-    Typography,
-} from "antd";
-import {
-    BellOutlined,
-    LogoutOutlined,
-    MenuOutlined,
-    UserOutlined,
-} from "@ant-design/icons";
+import { Avatar, Badge, Button, Dropdown, Layout, Space, Typography, } from "antd";
+import { BellOutlined, LogoutOutlined, MenuOutlined, UserOutlined, } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
 import "./Header.css";
@@ -21,8 +8,9 @@ const { Header: AntHeader } = Layout;
 const { Text } = Typography;
 
 interface HeaderProps {
-    collapsed: boolean;
-    onToggleSidebar: () => void;
+    collapsed?: boolean;
+    onToggleSidebar?: () => void;
+    variant?: "default" | "auth";
 }
 
 const userMenuItems: MenuProps["items"] = [
@@ -43,17 +31,21 @@ const userMenuItems: MenuProps["items"] = [
 
 export default function Header({
     onToggleSidebar,
+    variant = "default",
 }: HeaderProps) {
     const navigate = useNavigate();
+
     return (
-        <AntHeader className="app-header">
+        <AntHeader className={`app-header ${variant === "auth" ? "app-header-auth" : ""}`}>
             <div className="app-header-left">
-                <Button
-                    type="text"
-                    icon={<MenuOutlined />}
-                    onClick={onToggleSidebar}
-                    className="app-header-sidebar-toggle"
-                />
+                {variant === "default" && (
+                    <Button
+                        type="text"
+                        icon={<MenuOutlined />}
+                        onClick={onToggleSidebar}
+                        className="app-header-sidebar-toggle"
+                    />
+                )}
 
                 <div className="app-header-brand" onClick={() => navigate("/")}>
                     <img
@@ -71,42 +63,44 @@ export default function Header({
                 </div>
             </div>
 
-            <div className="app-header-right">
-                <Button
-                    type="text"
-                    shape="circle"
-                    className="app-header-notification"
-                >
-                    <Badge count={3} size="small">
-                        <BellOutlined />
-                    </Badge>
-                </Button>
-
-                <Dropdown
-                    menu={{ items: userMenuItems }}
-                    trigger={["click"]}
-                    placement="bottomRight"
-                >
-                    <Button type="text" className="app-header-user">
-                        <Space size={10}>
-                            <Avatar icon={<UserOutlined />} />
-
-                            <div className="app-header-user-info">
-                                <Text className="app-header-user-name">
-                                    Nguyễn Văn A
-                                </Text>
-
-                                <Text
-                                    type="secondary"
-                                    className="app-header-user-role"
-                                >
-                                    Giáo viên
-                                </Text>
-                            </div>
-                        </Space>
+            {variant === "default" && (
+                <div className="app-header-right">
+                    <Button
+                        type="text"
+                        shape="circle"
+                        className="app-header-notification"
+                    >
+                        <Badge count={3} size="small">
+                            <BellOutlined />
+                        </Badge>
                     </Button>
-                </Dropdown>
-            </div>
+
+                    <Dropdown
+                        menu={{ items: userMenuItems }}
+                        trigger={["click"]}
+                        placement="bottomRight"
+                    >
+                        <Button type="text" className="app-header-user">
+                            <Space size={10}>
+                                <Avatar icon={<UserOutlined />} />
+
+                                <div className="app-header-user-info">
+                                    <Text className="app-header-user-name">
+                                        Nguyễn Văn A
+                                    </Text>
+
+                                    <Text
+                                        type="secondary"
+                                        className="app-header-user-role"
+                                    >
+                                        Giáo viên
+                                    </Text>
+                                </div>
+                            </Space>
+                        </Button>
+                    </Dropdown>
+                </div>
+            )}
         </AntHeader>
     );
 }

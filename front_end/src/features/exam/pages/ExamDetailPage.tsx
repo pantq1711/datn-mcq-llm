@@ -1,5 +1,5 @@
 import { Button, Card, Space, Tag, Typography } from "antd";
-import { ArrowLeftOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, EditOutlined, DeleteOutlined, FileWordOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 import ExamPreview from "../components/ExamPreview";
@@ -34,7 +34,6 @@ export default function ExamDetailPage() {
         hardCount: 1,
     };
 
-    // Bổ sung mock data câu hỏi để ExamQuestionList hiển thị
     const questions: ExamQuestionItem[] = [
         {
             id: 1,
@@ -156,6 +155,18 @@ export default function ExamDetailPage() {
                         size={8}
                         className="exam-detail-page-actions"
                     >
+                        <Button
+                            type="primary"
+                            icon={<FileWordOutlined />}
+                            onClick={() =>
+                                console.log(
+                                    "Export Word",
+                                )
+                            }
+                        >
+                            Xuất file Word
+                        </Button>
+
                         <Button
                             icon={<EditOutlined />}
                             onClick={() =>
