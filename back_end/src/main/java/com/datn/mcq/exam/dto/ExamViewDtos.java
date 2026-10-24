@@ -71,4 +71,33 @@ public final class ExamViewDtos {
             int needsReviewCount,
             List<PartDto> parts
     ) {}
+
+    /**
+     * Một đề trong danh sách "đề của tôi" (W1-1, GET /api/exams). Số chỗ theo trạng thái tại lần đối soát gần nhất
+     * (danh sách không đối soát).
+     *
+     * @param readySlots       chỗ đã có câu, chưa Giữ (state ready)
+     * @param keptSlots        chỗ đã Giữ (kept, edited)
+     * @param needsReviewSlots trong số readySlots, câu hệ thống sinh có cờ "cần xem kỹ" (như needsReview khi xem đề)
+     * @param generatingSlots  pending, generating
+     * @param failedSlots      failed
+     */
+    public record ExamSummaryDto(
+            Integer examId,
+            String examCode,
+            String title,
+            String mode,
+            ExamStatus status,
+            Integer matrixId,
+            LocalDateTime createdAt,
+            int totalSlots,
+            int readySlots,
+            int keptSlots,
+            int needsReviewSlots,
+            int generatingSlots,
+            int failedSlots
+    ) {}
+
+    /** @param page trang hiện tại (từ 0) */
+    public record ExamPageDto(List<ExamSummaryDto> items, int page, int size, long totalItems, int totalPages) {}
 }

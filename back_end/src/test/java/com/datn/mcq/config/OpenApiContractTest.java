@@ -148,6 +148,27 @@ class OpenApiContractTest {
                         "Không được mở endpoint chạy lại QC khi chưa có xác thực: " + path));
     }
 
+    /** W1-1: Swagger có nút Authorize (bearer JWT); API đăng nhập công khai; người dùng hiện tại không lộ thành tham số. */
+    @Test
+    void bearerJwtSecuritySchemeIsDocumented() throws Exception {
+        JsonNode doc = objectMapper.readTree(apiDocs());
+        JsonNode scheme = doc.path("components").path("securitySchemes").path("bearerAuth");
+        assertEquals("http", scheme.path("type").asText());
+        assertEquals("bearer", scheme.path("scheme").asText());
+        assertEquals("JWT", scheme.path("bearerFormat").asText());
+        assertTrue(doc.path("security").toString().contains("bearerAuth"), "mặc định mọi API cần bearer");
+
+        JsonNode login = doc.path("paths").path("/api/auth/login").path("post");
+        assertFalse(login.isMissingNode(), "Thiếu POST /api/auth/login");
+        assertTrue(login.has("security") && login.path("security").isEmpty(), "đăng nhập không cần token: " + login);
+        assertFalse(doc.path("paths").path("/api/exams").path("get").isMissingNode(), "Thiếu GET /api/exams");
+
+        JsonNode view = doc.path("paths").path("/api/exams/{examId}").path("get").path("parameters");
+        Set<String> names = new LinkedHashSet<>();
+        view.forEach(p -> names.add(p.path("name").asText()));
+        assertEquals(Set.of("examId"), names, "người dùng hiện tại lấy từ token, không phải tham số");
+    }
+
     @Test
     void exportOpenApiWhenRequested() throws Exception {
         String target = System.getProperty("openapi.export.path");

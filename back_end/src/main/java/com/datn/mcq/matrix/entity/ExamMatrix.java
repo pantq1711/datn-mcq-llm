@@ -44,7 +44,19 @@ public class ExamMatrix {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    /** V11: chủ sở hữu (users.id); chỉ người này xem và tạo đề từ ma trận. */
+    @Column(name = "created_by", nullable = false)
+    private Integer createdBy;
+
     public ExamMatrix() {}
+
+    public Integer getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(Integer createdBy) {
+        this.createdBy = createdBy;
+    }
 
     public Integer getId() {
         return id;

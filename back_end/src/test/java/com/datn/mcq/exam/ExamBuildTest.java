@@ -1,6 +1,7 @@
 package com.datn.mcq.exam;
 
 import com.datn.mcq.common.util.SimpleJson;
+import com.datn.mcq.config.AuthTestSupport;
 import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
 import com.datn.mcq.enums.Strategy;
@@ -28,9 +29,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
@@ -44,7 +47,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -220,7 +225,8 @@ class ExamBuildTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+        // W1-1: đi qua filter chain thật; mọi request mang JWT của giáo viên {@code teacher} (xem perform).
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).apply(springSecurity()).build();
         TestDataCleaner.cleanAll(dataSource, jdbc, "ExamBuildTest.setUp");
         SOLVER.saJudge = "5";
         SOLVER.tfJudges = null;
@@ -247,8 +253,13 @@ class ExamBuildTest {
         return jdbc.queryForObject(sql + " RETURNING id", Integer.class, args);
     }
 
+    /** Gọi API với tư cách giáo viên {@code teacher} (chủ sở hữu ma trận và đề trong test này). */
+    private ResultActions perform(MockHttpServletRequestBuilder request) throws Exception {
+        return mockMvc.perform(request.with(AuthTestSupport.teacher(teacher)));
+    }
+
     private ResultActions postJson(String url, String body) throws Exception {
-        return mockMvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content(body));
+        return perform(post(url).contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
     private JsonNode json(ResultActions actions) throws Exception {
@@ -278,7 +289,7 @@ class ExamBuildTest {
     }
 
     private JsonNode progress(int examId) throws Exception {
-        return json(mockMvc.perform(get("/api/exams/" + examId + "/progress")).andExpect(status().isOk()));
+        return json(perform(get("/api/exams/" + examId + "/progress")).andExpect(status().isOk()));
     }
 
     /** Xử lý mọi job đến hạn (đặt lại next_run_at về quá khứ trước mỗi vòng). */
@@ -366,7 +377,7 @@ class ExamBuildTest {
         assertEquals("ready", after.get("status").asText());
         assertEquals(4, after.get("ready").asInt());
         assertEquals(0, after.get("failed").asInt());
-        JsonNode mcqSlots = json(mockMvc.perform(get("/api/exams/" + examId + "/cells/" + cellId(1)))
+        JsonNode mcqSlots = json(perform(get("/api/exams/" + examId + "/cells/" + cellId(1)))
                 .andExpect(status().isOk()));
         assertEquals("bank", mcqSlots.get(0).get("source").asText());
         assertEquals("generated", mcqSlots.get(1).get("source").asText());
@@ -443,11 +454,24 @@ class ExamBuildTest {
     @Test
     void duLieuSaiTra404() throws Exception {
         postJson("/api/exams/build", "{\"matrixId\": 999999}").andExpect(status().isNotFound());
-        postJson("/api/exams/build", "{\"matrixId\": " + matrixId + ", \"teacherId\": 999999}")
-                .andExpect(status().isNotFound());
         postJson("/api/exams/build", "{}").andExpect(status().isBadRequest());
-        mockMvc.perform(get("/api/exams/999999/progress")).andExpect(status().isNotFound());
+        perform(get("/api/exams/999999/progress")).andExpect(status().isNotFound());
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM exam", Integer.class));
+    }
+
+    /**
+     * W1-1: worker (poller, xử lý job, QC) không đi qua HTTP nên chạy được khi không có ai đăng nhập; chỉ API xem tiến
+     * độ mới cần token của chủ đề.
+     */
+    @Test
+    void workerChayKhongCanNguoiDangNhap() throws Exception {
+        int examId = build("{\"matrixId\": " + matrixId + "}").get("examId").asInt();
+        SecurityContextHolder.clearContext();
+        processAll();
+        assertNull(SecurityContextHolder.getContext().getAuthentication(), "worker không cần SecurityContext");
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM generation_job WHERE exam_slot_id IS NOT NULL"
+                + " AND status IN ('pending', 'running')", Integer.class), "mọi job đã được xử lý");
+        assertEquals("ready", progress(examId).get("status").asText());
     }
 
     // ---------- xem đề ở chế độ giáo viên (phần C mục 3) ----------
@@ -463,7 +487,7 @@ class ExamBuildTest {
             processAll();
             progress(examId);
         }
-        JsonNode view = json(mockMvc.perform(get("/api/exams/" + examId)).andExpect(status().isOk()));
+        JsonNode view = json(perform(get("/api/exams/" + examId)).andExpect(status().isOk()));
         assertEquals("Đề giữa kì", view.get("title").asText());
         assertEquals("teacher", view.get("mode").asText());
         assertEquals("ready", view.get("buildStatus").asText());
@@ -506,13 +530,13 @@ class ExamBuildTest {
     @Test
     void xemDeDangSinhChiCoDinhDanh() throws Exception {
         int examId = build("{\"matrixId\": " + matrixId + "}").get("examId").asInt();
-        JsonNode view = json(mockMvc.perform(get("/api/exams/" + examId)).andExpect(status().isOk()));
+        JsonNode view = json(perform(get("/api/exams/" + examId)).andExpect(status().isOk()));
         assertEquals("generating", view.get("buildStatus").asText());
         JsonNode item = view.get("parts").get(0).get("items").get(0);
         assertEquals("generating", item.get("state").asText());
         assertFalse(item.has("questionText"));
         assertFalse(item.has("correctOption"));
-        mockMvc.perform(get("/api/exams/999999")).andExpect(status().isNotFound());
+        perform(get("/api/exams/999999")).andExpect(status().isNotFound());
     }
 
     // ---------- Giữ / Đổi câu khác (phần C mục 4) ----------
@@ -533,7 +557,7 @@ class ExamBuildTest {
     }
 
     private ResultActions action(int examId, int slotId, String action) throws Exception {
-        return postJson("/api/exams/" + examId + "/slots/" + slotId + "/" + action, "{\"teacherId\": " + teacher + "}");
+        return postJson("/api/exams/" + examId + "/slots/" + slotId + "/" + action, "{}");
     }
 
     @Test
@@ -624,7 +648,7 @@ class ExamBuildTest {
         int prompts = generator.prompts.size();
         processAll();
         assertTrue(generator.prompts.get(prompts).contains(oldText), "prompt sinh lại liệt kê câu cũ của ô");
-        JsonNode view = json(mockMvc.perform(get("/api/exams/" + examId)).andExpect(status().isOk()));
+        JsonNode view = json(perform(get("/api/exams/" + examId)).andExpect(status().isOk()));
         JsonNode item = view.get("parts").get(0).get("items").get(1);
         assertEquals("ready", item.get("state").asText());
         assertNotEquals(oldQuestion, item.get("questionId").asInt());
@@ -736,7 +760,7 @@ class ExamBuildTest {
             assertFalse(prompt.contains("Không bắt buộc số ý Đúng hay số ý Sai"), prompt);
             assertTrue(prompt.contains("ý d (Vận dụng) phải cần suy luận thêm"), prompt);
         }
-        JsonNode view = json(mockMvc.perform(get("/api/exams/" + examId)).andExpect(status().isOk()));
+        JsonNode view = json(perform(get("/api/exams/" + examId)).andExpect(status().isOk()));
         assertEquals("ready", view.get("buildStatus").asText());
         assertEquals(0, view.get("needsReviewCount").asInt(), "nhãn khớp mẫu thì không gắn cờ");
     }
@@ -750,7 +774,7 @@ class ExamBuildTest {
         processAll();
         progress(examId);
 
-        JsonNode view = json(mockMvc.perform(get("/api/exams/" + examId)).andExpect(status().isOk()));
+        JsonNode view = json(perform(get("/api/exams/" + examId)).andExpect(status().isOk()));
         assertEquals("ready", view.get("buildStatus").asText());
         JsonNode tf = view.get("parts").get(1).get("items").get(0);
         assertEquals("ready", tf.get("state").asText(), "không loại câu");
@@ -769,8 +793,8 @@ class ExamBuildTest {
             + " cách hỏi; KHÔNG thay đổi dạng câu, mức độ, số ý, mẫu nhãn, định dạng JSON và các quy tắc ở trên): ";
 
     private ResultActions replaceWith(int examId, int slotId, String instruction) throws Exception {
-        return postJson("/api/exams/" + examId + "/slots/" + slotId + "/replace", "{\"teacherId\": " + teacher
-                + ", \"instruction\": " + SimpleJson.quote(instruction) + "}");
+        return postJson("/api/exams/" + examId + "/slots/" + slotId + "/replace", "{\"instruction\": "
+                + SimpleJson.quote(instruction) + "}");
     }
 
     private String latestNote(int slotId) {
@@ -875,7 +899,7 @@ class ExamBuildTest {
         int examId = readyExam();
         progress(examId);
         String code = jdbc.queryForObject("SELECT exam_code FROM exam WHERE id = ?", String.class, examId);
-        var response = mockMvc.perform(get("/api/exams/" + examId + "/export/docx")).andReturn().getResponse();
+        var response = perform(get("/api/exams/" + examId + "/export/docx")).andReturn().getResponse();
         if (PandocTestSupport.find().isPresent()) {
             assertEquals(200, response.getStatus(), response.getContentAsString(StandardCharsets.UTF_8));
             assertEquals("application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -893,7 +917,7 @@ class ExamBuildTest {
             assertEquals(503, response.getStatus());
             assertTrue(response.getContentAsString(StandardCharsets.UTF_8).contains("pandoc"));
         }
-        mockMvc.perform(get("/api/exams/999999/export/docx")).andExpect(status().isNotFound());
+        perform(get("/api/exams/999999/export/docx")).andExpect(status().isNotFound());
     }
 
     /** Giữ câu tf có nhãn LLM khác mẫu bắt buộc: ngân hàng lưu nhãn LLM (khớp lời giải), không lấy từ mẫu. */
@@ -937,7 +961,7 @@ class ExamBuildTest {
         assertEquals(expected, kept.get("explanation").asText(), "Giữ trả lời giải");
         assertEquals(expected, jdbc.queryForObject("SELECT explanation FROM bank_item WHERE id = ?", String.class,
                 kept.get("bankItemId").asInt()), "bank_item giữ lời giải");
-        JsonNode item = json(mockMvc.perform(get("/api/exams/" + examId)).andExpect(status().isOk()))
+        JsonNode item = json(perform(get("/api/exams/" + examId)).andExpect(status().isOk()))
                 .get("parts").get(0).get("items").get(0);
         assertEquals(kept.get("bankItemId").asInt(), item.get("bankItemId").asInt(), "câu đã Giữ hiển thị bản ngân hàng");
         assertEquals(expected, item.get("explanation").asText(), "xem đề trả lời giải của câu đã Giữ");
@@ -951,7 +975,7 @@ class ExamBuildTest {
         processAll();
         progress(examId);
 
-        JsonNode items = json(mockMvc.perform(get("/api/exams/" + examId)).andExpect(status().isOk()))
+        JsonNode items = json(perform(get("/api/exams/" + examId)).andExpect(status().isOk()))
                 .get("parts").get(0).get("items");
         int checked = 0;
         for (JsonNode item : items) {

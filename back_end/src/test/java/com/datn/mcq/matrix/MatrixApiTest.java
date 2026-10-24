@@ -1,5 +1,6 @@
 package com.datn.mcq.matrix;
 
+import com.datn.mcq.config.AuthTestSupport;
 import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -13,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
@@ -26,6 +28,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -49,16 +52,24 @@ class MatrixApiTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private MockMvc mockMvc;
     private int subject;
+    private int teacher;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+        // W1-1: đi qua filter chain thật; mọi request mang JWT của giáo viên {@code teacher}.
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).apply(springSecurity()).build();
         TestDataCleaner.cleanAll(dataSource, jdbc, "MatrixApiTest.setUp");
         subject = jdbc.queryForObject("INSERT INTO subject (name) VALUES ('Toán') RETURNING id", Integer.class);
+        teacher = jdbc.queryForObject("INSERT INTO users (name, email, role) VALUES ('GV', 'gv.matrix@test', 'teacher')"
+                + " RETURNING id", Integer.class);
+    }
+
+    private ResultActions perform(MockHttpServletRequestBuilder request) throws Exception {
+        return mockMvc.perform(request.with(AuthTestSupport.teacher(teacher)));
     }
 
     private ResultActions postJson(String url, String body) throws Exception {
-        return mockMvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content(body));
+        return perform(post(url).contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
     private JsonNode json(ResultActions actions) throws Exception {
@@ -102,9 +113,11 @@ class MatrixApiTest {
             assertEquals(cell.get("topic").asText(), tpl.get("topic"));
             assertTrue(((String) tpl.get("source_question")).contains(cell.get("topic").asText()));
         }
-        JsonNode again = json(mockMvc.perform(get("/api/exam-matrices/" + m.get("id").asInt())).andExpect(status().isOk()));
+        JsonNode again = json(perform(get("/api/exam-matrices/" + m.get("id").asInt())).andExpect(status().isOk()));
         assertEquals(m, again);
-        assertEquals(1, json(mockMvc.perform(get("/api/exam-matrices")).andExpect(status().isOk())).size());
+        assertEquals(teacher, jdbc.queryForObject("SELECT created_by FROM exam_matrix WHERE id = ?", Integer.class,
+                m.get("id").asInt()), "W1-1: người tạo lấy từ token");
+        assertEquals(1, json(perform(get("/api/exam-matrices")).andExpect(status().isOk())).size());
     }
 
     @Test
@@ -139,7 +152,7 @@ class MatrixApiTest {
 
     @Test
     void mauGiuaKi1Toan8() throws Exception {
-        JsonNode samples = json(mockMvc.perform(get("/api/exam-matrices/samples")).andExpect(status().isOk()));
+        JsonNode samples = json(perform(get("/api/exam-matrices/samples")).andExpect(status().isOk()));
         assertEquals(1, samples.size());
         assertEquals("giuaki1-toan8", samples.get(0).get("key").asText());
         assertEquals("Giữa kì I – Toán 8", samples.get(0).get("name").asText());

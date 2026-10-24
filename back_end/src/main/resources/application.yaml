@@ -22,6 +22,11 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+# Sau nginx: đặt FORWARD_HEADERS_STRATEGY=native để IP người dùng (X-Forwarded-For, chỉ tin proxy nội bộ) dùng cho
+# giới hạn đăng nhập sai; mặc định none (chạy trực tiếp, không tin header do client tự gửi).
+server:
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
+
 management:
   endpoints:
     web:
@@ -29,7 +34,7 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: always   # chỉ dùng khi dev
+      show-details: when-authorized   # W1-1: chỉ người đã đăng nhập thấy chi tiết (DB, ổ đĩa)
 
 app:
   llm:
@@ -45,6 +50,27 @@ app:
     # Job running quá ngưỡng này (giây) được trả về pending khi khởi động và mỗi stale-check-ms (chỉ khi worker bật).
     stale-after-seconds: ${WORKER_STALE_AFTER_SECONDS:300}
     stale-check-ms: ${WORKER_STALE_CHECK_MS:120000}
+  # W1-1: đăng nhập JWT. JWT_SECRET bắt buộc (base64, từ 32 byte, ví dụ `openssl rand -base64 48`); thiếu thì không
+  # khởi động. Admin đầu tiên tạo từ ADMIN_EMAIL/ADMIN_PASSWORD khi chưa có admin (không ghi đè). Mặc định ở SecurityProperties.
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}
+      access-token-ttl: ${JWT_ACCESS_TTL:15m}
+    refresh:
+      ttl: ${REFRESH_TTL:7d}
+      absolute-ttl: ${REFRESH_ABSOLUTE_TTL:30d}
+    cookie-secure: ${COOKIE_SECURE:true}
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+    bootstrap-admin:
+      email: ${ADMIN_EMAIL:}
+      password: ${ADMIN_PASSWORD:}
+      name: ${ADMIN_NAME:Quản trị viên}
+    # Giới hạn đăng nhập sai theo email + IP (trong bộ nhớ): sai max-failures lần trong window thì khóa lock.
+    login-rate-limit:
+      max-failures: ${LOGIN_MAX_FAILURES:5}
+      window: ${LOGIN_FAILURE_WINDOW:15m}
+      lock: ${LOGIN_LOCK_DURATION:15m}
   # Xuất đề ra Word (GET /api/exams/{id}/export/docx) cần pandoc; mặc định tìm "pandoc" trên PATH.
   export:
     pandoc-path: ${PANDOC_PATH:pandoc}

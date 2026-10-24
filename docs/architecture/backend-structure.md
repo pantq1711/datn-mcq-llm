@@ -11,8 +11,12 @@ com.datn.mcq
 ├── enums/                  15 enum + converter (đã có)
 ├── common/
 │   ├── exception/
+│   ├── security/           CurrentUser (người gọi lấy từ JWT) + argument resolver (W1-1)
 │   └── util/
-├── config/                 WebConfig (DbEnum ConverterFactory), cấu hình chung
+├── config/                 WebConfig (DbEnum ConverterFactory), SecurityConfig (filter chain, JWT, CORS),
+│                           JsonSecurityErrorHandler (401/403 JSON), OpenApiConfig (bearer), cấu hình chung
+├── auth/                   refresh_token (W1-1): login, refresh xoay vòng, logout, đổi mật khẩu, admin đầu tiên,
+│                           quản trị tài khoản /api/admin/users
 ├── user/                   users
 ├── catalog/                subject, question_template
 ├── experiment/             experiment_run
@@ -51,8 +55,11 @@ generation  ──► qc, llm
 experiment  ──► generation, catalog
 goldset     ──► qc, user
 qc          ──► llm
+auth        ──► user                                   (W1-1, duyệt ngày 24/10)
 bank, catalog, user, llm ──► (chỉ common/config)
 ```
+
+`common.security.CurrentUser` dùng chung cho controller mọi module (không phải chiều phụ thuộc giữa các module).
 
 Quy tắc:
 1. Controller -> Service -> Repository. Controller không chạm repository.
@@ -65,3 +72,5 @@ Quy tắc:
 8. Quy tắc DB không tự chặn được (xem `docs/contract/enums.md`, mục "Quy tắc đi kèm") đặt trong service của module `review`, `exam`, `goldset`.
 9. DTO trả về form chấm của module `review` không chứa `correct_option`, `llm_difficulty`, kết quả QC. Ngoại lệ có chủ đích: API xem đề của module `exam` ở chế độ giáo viên (`/api/exams/**`) có đáp án, lời giải và cờ từ kết quả QC (quyết định 22/10 trong `docs/ai-development-rules.md`).
 10. `generation` không biết `exam`/`matrix`: run sinh câu theo ô mang thông số ô ở `experiment_run.hyperparams` (`MatrixCellSpec`), worker dựng prompt từ đó; `exam` đối soát kết quả qua `GenerationService.latestJobForSlot`. Ngoại lệ đọc chéo bảng: `ExamSlotRepository.findBankCandidates` là truy vấn native **chỉ đọc** trên `bank_item`, `bank_item_statement`, `generated_question`, `question_template`, `exam_matrix_cell`, `exam_question` để chọn câu ngân hàng khớp ô.
+11. Xác thực và phân quyền (W1-1): quyền thô theo URL và vai trò (TEACHER, ADMIN) đặt ở `config.SecurityConfig`; đường chưa khai báo bị chặn. Quyền sở hữu (giáo viên chỉ thấy ma trận, đề của mình) kiểm tra ở **service**: controller nhận `CurrentUser` rồi truyền `actorId` xuống; service tìm bằng `findByIdAndCreatedBy` và trả 404 giống bản ghi không tồn tại. Kiểm tra chủ sở hữu phải đứng **trước** `reconcile` (đối soát có ghi DB). Service không đọc `SecurityContext`, nên worker, scheduler và job phục hồi (không đi qua HTTP) không cần đăng nhập.
+12. Ngân hàng câu (`bank_item`) dùng chung cho mọi giáo viên (quyết định H1 ngày 24/10): tạo đề lấy câu ngân hàng không lọc theo người.

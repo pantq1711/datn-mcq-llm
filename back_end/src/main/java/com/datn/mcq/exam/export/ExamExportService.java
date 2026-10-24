@@ -25,8 +25,9 @@ public class ExamExportService {
         this.pandocRunner = pandocRunner;
     }
 
-    public DocxFile docx(Integer examId) {
-        ExamViewDto view = viewService.view(examId);
+    /** Chỉ chủ đề xuất được (W1-1): đề của người khác 404 như khi xem đề. */
+    public DocxFile docx(Integer examId, Integer actorId) {
+        ExamViewDto view = viewService.view(examId, actorId);
         byte[] content = pandocRunner.markdownToDocx(ExamMarkdownBuilder.build(view));
         return new DocxFile(fileName(view), content);
     }
