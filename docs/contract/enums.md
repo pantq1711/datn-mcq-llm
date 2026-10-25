@@ -38,7 +38,7 @@ Java: đặt tên hằng kiểu `ZERO_SHOT`, `FEW_SHOT_STRUCTURED`... và có b�
 
 | Giá trị trong DB | Hiển thị / ý nghĩa |
 |---|---|
-| `zero-shot` | C1: không ví dụ |
+| `zero-shot` | C1: không ví dụ (thí nghiệm C1/C2/C3 đã bỏ ngày 25/10; ba giá trị giữ cho dữ liệu và CHECK cũ) |
 | `few-shot` | C2: kèm 3 ví dụ |
 | `few-shot-structured` | C3: kèm ví dụ và đầu ra có cấu trúc |
 
@@ -178,7 +178,7 @@ Mã dùng theo dạng câu (service kiểm, DB không chặn): `options_out_of_s
 
 | Giá trị trong DB | Hiển thị / ý nghĩa |
 |---|---|
-| `teacher` | Giáo viên. Đăng nhập được (W1-1), dùng ma trận, tạo đề, Giữ/Đổi, xuất Word, form chấm |
+| `teacher` | Giáo viên. Đăng nhập được (W1-1), dùng ma trận, tạo đề, Giữ/Đổi, xuất Word (form chấm mù đã gỡ 25/10) |
 | `researcher` | Người nghiên cứu (nhóm đồ án). Chưa được đăng nhập qua API (W1-1) |
 | `admin` | Quản trị (V11, W1-1): quản lý tài khoản, xem thống kê; không dùng chức năng của giáo viên. Tài khoản đầu tiên tạo từ biến môi trường `ADMIN_EMAIL`, `ADMIN_PASSWORD` |
 
@@ -287,8 +287,8 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     dòng `replace`, NULL với `keep`/`edit`; dòng replace trước V16 được điền `generate`. Với dòng `replace`,
     `generated_question_id`/`bank_item_id` là câu bị đổi RA khỏi chỗ.
   - `exam_slot_action.action`: `keep`, `edit`, `replace` (`edit_distance` chỉ với `edit`). `instruction` (V9): yêu cầu bổ sung của giáo viên khi Đổi câu, 1–500 ký tự, chỉ dòng `replace`; NULL khi không có. `changed_fields` (V13): chỉ dòng `edit` (xem mục "Giáo viên sửa câu trong đề").
-  - `teacher_review.review_mode`: `blind` (mặc định, mọi dữ liệu cũ) hoặc `assisted` (Giữ/Sửa ở chế độ giáo viên). Đánh
-    giá `assisted` bị loại khỏi mọi chỉ số chấm mù (`answer_correct`, duyệt không sửa).
+  - `teacher_review.review_mode`: `blind` (mặc định cột; chỉ còn ở dữ liệu cũ vì form chấm mù đã gỡ ngày 25/10) hoặc `assisted` (Giữ/Sửa ở chế độ giáo viên,
+    mọi dòng mới). Đánh giá `assisted` bị loại khỏi mọi chỉ số chấm mù cũ (`answer_correct`, duyệt không sửa).
   - Run sinh câu theo ô: `purpose = 'production'`, `strategy = 'zero-shot'`, `prompt_version` `matrix-mcq-v1-draft`,
     `matrix-tf-v2-draft` hoặc `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`; `tf` có thêm `v1`); `hyperparams` là thông số ô (chủ đề, nội dung, yêu cầu cần đạt, mức).
     Không thuộc thực nghiệm C1/C2/C3.
