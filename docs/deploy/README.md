@@ -14,7 +14,8 @@ Mục tiêu: một VPS Linux có tên miền và HTTPS để giáo viên dùng t
 > | Sao lưu, khôi phục vào DB tạm (so số bản ghi), khôi phục đè (`restore.sh --yes`) | Đã chạy, đạt |
 > | **Image `web` (frontend thật)** | **Chưa build được:** `npm run build` (`tsc -b`) báo 3 lỗi TypeScript có sẵn trong mã frontend (`Header.tsx`, `Sidebar.tsx`, `ReviewQuestionForm.tsx`). Chờ người làm frontend sửa. |
 > | **CI trên GitHub (D7)** | **Chưa chạy.** Job `frontend` sẽ đỏ vì lỗi TypeScript trên; chờ frontend sửa rồi mở PR để kích hoạt. |
-> | `update.sh`, kéo image từ GHCR, Let's Encrypt trên tên miền thật, gọi Gemini thật | Chưa chạy (cần image đã đẩy lên GHCR, máy chủ thật, tên miền) |
+> | Gemini **thật** trong container (`LLM_API_KEY` đặt qua `deploy/.env`): đề 3 câu (1 mcq, 1 tf, 1 sa) | Đã chạy, đạt: 3/3 câu `ready` sau ~2 phút, xuất Word 200. Câu tf có cờ "cần xem kỹ" (`solver_inconsistent`): Solver thật lệch nhãn, đúng thiết kế, không phải lỗi triển khai |
+> | `update.sh`, kéo image từ GHCR, Let's Encrypt trên tên miền thật | Chưa chạy (cần image đã đẩy lên GHCR, máy chủ thật, tên miền) |
 >
 > Lần kiểm chứng dùng một trang tĩnh giả thay cho frontend (Caddyfile là bản thật của repo).
 
@@ -36,8 +37,9 @@ Internet ──443/80──▶ web (Caddy) ──/api/*──▶ app (Spring Boo
 
 ## 2. Chọn máy chủ
 
-Cấu hình đề xuất: **VPS Ubuntu 24.04 LTS, x86_64, 2 vCPU, 4 GB RAM, ≥ 40 GB SSD**, có IPv4 công khai. Nhà cung cấp chọn
-sau; cả hai hướng dưới đây đều phù hợp:
+Cấu hình đề xuất cho giai đoạn dùng thử: **VPS Ubuntu 24.04 LTS, x86_64, 2 vCPU, 2 GB RAM + 2 GB swap, ≥ 40 GB SSD**, có
+IPv4 công khai. Nâng lên **4 GB RAM** nếu có nhiều người dùng đồng thời (xem số đo bên dưới). Nhà cung cấp chọn sau; cả hai
+hướng dưới đây đều phù hợp:
 
 | Tiêu chí | VPS nước ngoài gần VN (ví dụ vùng Singapore) | VPS trong nước |
 |---|---|---|
@@ -60,8 +62,10 @@ nhà cung cấp, cho mở cổng 80 và 443 (Let's Encrypt cần cả hai), tên
 
 - Tổng ba container khoảng 0,5 GiB, thấp hơn nhiều so với ước tính ban đầu (~1,3–1,6 GB). Đây là tải nhẹ và dữ liệu nhỏ:
   khi có nhiều giáo viên và dữ liệu lớn hơn, PostgreSQL và heap sẽ tăng. Đo lại bằng `docker stats` sau vài ngày dùng thật.
-- **4 GB:** thoải mái, khuyến nghị (còn dư cho hệ điều hành, tăng dữ liệu, build image khi cần).
-- **2 GB:** đủ cho giai đoạn dùng thử ít người; bắt buộc có swap 2 GB. Không build image trên máy này.
+- **2 vCPU / 2 GB + swap 2 GB: đủ cho giai đoạn dùng thử.** Ba container dùng khoảng 0,5 GiB, còn lại cho hệ điều hành
+  (~0,3 GiB) và dư địa. Swap 2 GB là bắt buộc (mục 4.3) để chịu được đỉnh bất thường. Không build image trên máy này.
+- **4 GB:** chọn khi nhiều người dùng đồng thời (nhiều đề sinh song song, xuất Word cùng lúc), dữ liệu lớn lên, hoặc muốn
+  build image tại chỗ. Khi tăng RAM có thể tăng `mem_limit` của `app` và `db` trong `compose.prod.yaml`.
 
 ## 3. Chuẩn bị trước
 
@@ -86,7 +90,7 @@ apt update && apt -y upgrade
 apt -y install ufw fail2ban unattended-upgrades
 ufw default deny incoming && ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 443/udp && ufw enable
 
-# 4.3 Swap 2 GB (bắt buộc nếu máy 2 GB, nên có cả khi 4 GB)
+# 4.3 Swap 2 GB (bắt buộc với máy 2 GB, nên có cả khi 4 GB)
 fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
 echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
@@ -145,9 +149,9 @@ https://<tên miền>/actuator/health` phải trả **404** (đã bị chặn); 
 3. Đăng nhập bằng tài khoản admin, tạo tài khoản giáo viên qua API `POST /api/admin/users` (xem `docs/api/README.md`);
    đặt lại mật khẩu bằng `POST /api/admin/users/{id}/reset-password`.
 
-> Môn học: cơ sở dữ liệu mới không có sẵn môn nào (môn `Toán` chỉ có sau khi tạo ma trận từ mẫu hoặc tạo bằng
-> `db/dev-seed`). **Không chạy `db/dev-seed/demo_base.sql` trên máy chủ thật** (nó tạo user `demo@example.com`). Đã kiểm:
-> trên DB trống, tạo ma trận bằng JSON bị từ chối (404/400) cho tới khi có môn; xem mục 12.
+> Môn học: migration `V17` tự thêm hai môn **Toán** và **Giáo dục công dân** khi `app` khởi động (không thêm bản trùng nếu
+> môn đã có, không phân biệt hoa thường), nên giáo viên tạo ma trận bằng JSON được ngay, không cần bước thủ công.
+> **Không chạy `db/dev-seed/demo_base.sql` trên máy chủ thật** (nó tạo user `demo@example.com`).
 
 ## 5. Cấu hình môi trường
 
@@ -316,15 +320,11 @@ nhận cookie Secure qua http).
 
 ## 12. Việc còn mở
 
-- **Môn học trên DB mới:** đã kiểm bằng cách chạy thật trên DB trống (25/10/2026): `GET /api/catalog/subjects` trả `[]`;
-  `POST /api/exam-matrices` với `subjectId: 1` trả 404 "Không tìm thấy môn học id=1", không có `subjectId` trả 400 "Phải
-  truyền subjectId". Môn `Toán` chỉ xuất hiện sau `POST /api/exam-matrices/samples/giuaki1-toan8` (tạo môn nếu chưa có); từ
-  đó tạo ma trận bằng JSON với `subjectId` đó chạy bình thường. Nghĩa là giáo viên đầu tiên phải tạo từ mẫu trước, hoặc
-  thêm môn bằng migration/seed — đang chờ chủ dự án quyết định (migration `V17` hay hướng dẫn thủ công).
+- **Môn học "Giáo dục công dân":** V17 chỉ thêm tên môn. Các prompt sinh câu hiện viết cho giáo viên Toán THCS (một số
+  prompt còn ghi cứng "Toán" khi không có tên môn), nên chất lượng sinh câu cho môn khác chưa được kiểm.
 - **Image `web` và CI (D7):** chờ người làm frontend sửa 3 lỗi TypeScript (xem "Trạng thái kiểm chứng").
 - **Kích thước image backend ~742 MB** (chưa tối ưu): chưa rõ phần nào chiếm nhiều (lớp Ubuntu, font, pandoc, JRE).
   Layered jar (Spring Boot `jarmode=tools`) có thể giảm lượng phải kéo mỗi lần cập nhật — chưa kiểm với Boot 4.1.1.
 - JLaTeXMath: image đã có font và `java.awt.headless=true`; cần smoke test vẽ ảnh công thức khi thêm dependency.
-- Gọi Gemini thật trong container để xác nhận cấu hình khóa: chưa làm.
 - `update.sh` và kéo image từ GHCR: chưa chạy được vì chưa có image trên GHCR.
 - Tự động deploy sau khi merge — chưa làm, quyết định deploy thủ công trong giai đoạn dùng thử.
