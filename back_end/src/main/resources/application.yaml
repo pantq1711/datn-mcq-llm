@@ -80,6 +80,15 @@ app:
   # Xuất đề ra Word (GET /api/exams/{id}/export/docx) cần pandoc; mặc định tìm "pandoc" trên PATH.
   export:
     pandoc-path: ${PANDOC_PATH:pandoc}
+  # Tài liệu bài học đính kèm (W2-3, V18): giới hạn khi trích văn bản docx/pdf/txt. Mặc định ở MaterialProperties;
+  # docx cần pandoc (cùng app.export.pandoc-path), pdf dùng PDFBox. Giá trị ở đây khớp mặc định, đổi bằng biến môi trường.
+  materials:
+    max-file-bytes: ${MATERIAL_MAX_FILE_BYTES:10485760}
+    max-chars: ${MATERIAL_MAX_CHARS:300000}
+    max-pages: ${MATERIAL_MAX_PAGES:200}
+    max-concurrent-extractions: ${MATERIAL_MAX_CONCURRENT:2}
+    extract-timeout: ${MATERIAL_EXTRACT_TIMEOUT:30s}
+    pandoc-heap-mb: ${MATERIAL_PANDOC_HEAP_MB:768}
   # Bảng điểm cho phần tạo đề sau này (V4); luồng sinh câu không dùng. Giá trị mặc định nằm ở ExamScoringProperties.
   exam:
     scoring:

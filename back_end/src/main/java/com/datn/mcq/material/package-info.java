@@ -5,7 +5,8 @@
  * <p>Bảng sở hữu: lesson_material.
  * <br>Được phép phụ thuộc: common.
  *
- * <p>Cấu trúc bên trong khi thêm code: entity, repository, service, controller, dto. Module khác chỉ gọi qua service,
- * không gọi repository của module này.
+ * <p>Cấu trúc bên trong khi thêm code: entity, repository, service, controller, dto, và {@code extract} (trích văn bản:
+ * nhận dạng loại file bằng magic bytes, quét zip, pandoc cho docx, PDFBox cho pdf, giải mã txt; chỉ phụ thuộc common).
+ * Module khác chỉ gọi qua service, không gọi repository của module này.
  */
 package com.datn.mcq.material;
