@@ -31,6 +31,11 @@ public class MaterialProperties {
     /** Tỉ lệ giải nén/nén tối đa của một mục (chỉ xét mục giải nén trên 1 MiB). */
     private int zipMaxRatio = 200;
 
+    /** Số tài liệu tối đa mỗi giáo viên được lưu (tải thêm khi đầy thì 409 MATERIAL_QUOTA_EXCEEDED). */
+    private int maxPerOwner = 50;
+    /** Số lần tải lên tối đa mỗi giờ của một giáo viên (tính cả lần lỗi, vì mỗi lần đều tốn pandoc/PDFBox); quá thì 429. */
+    private int maxUploadsPerHour = 30;
+
     /** Tỉ lệ công thức MathType bị bỏ từ mức này trở lên thì cảnh báo rõ (FORMULA_LOSS_HIGH). */
     private double formulaLossWarnRatio = 0.3;
 
@@ -105,6 +110,22 @@ public class MaterialProperties {
 
     public void setZipMaxRatio(int zipMaxRatio) {
         this.zipMaxRatio = zipMaxRatio;
+    }
+
+    public int getMaxPerOwner() {
+        return maxPerOwner;
+    }
+
+    public void setMaxPerOwner(int maxPerOwner) {
+        this.maxPerOwner = maxPerOwner;
+    }
+
+    public int getMaxUploadsPerHour() {
+        return maxUploadsPerHour;
+    }
+
+    public void setMaxUploadsPerHour(int maxUploadsPerHour) {
+        this.maxUploadsPerHour = maxUploadsPerHour;
     }
 
     public double getFormulaLossWarnRatio() {

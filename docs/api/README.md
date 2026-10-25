@@ -87,6 +87,9 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | POST | `/api/exam-matrices/samples/{key}` | Tạo ma trận từ mẫu có sẵn |
 | POST | `/api/exams/build` | Tạo đề theo ma trận một lần bấm (chế độ giáo viên). Sinh câu qua hàng đợi, có thể tốn phí |
 | POST | `/api/exams/build-by-lesson` | Sinh theo bài (không cần ma trận): môn, khối, bài, số câu theo dạng và mức (mục 7.2a). Có thể tốn phí |
+| POST | `/api/materials` | Tải tài liệu bài học (.docx, .pdf, .txt; multipart, tối đa 10 MB). Chỉ lưu văn bản đã trích (mục 9) |
+| GET | `/api/materials` | Tài liệu của tôi, mới nhất trước, có phân trang, không kèm văn bản (mục 9) |
+| GET, DELETE | `/api/materials/{id}` | Chi tiết kèm 500 ký tự đầu của văn bản / xóa tài liệu của tôi (mục 9) |
 | GET | `/api/exams/{id}/progress` | Tiến độ theo ô |
 | GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
@@ -981,3 +984,86 @@ Retry-After: 873
 `http://localhost`, nên chỉ đặt `false` khi dev qua http với host khác localhost), `CORS_ALLOWED_ORIGINS`,
 `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`. Swagger UI (`/swagger-ui.html`) có nút **Authorize**: đăng nhập bằng
 `POST /api/auth/login`, dán `accessToken`. `GET /actuator/health` công khai nhưng chỉ trả chi tiết cho người đã đăng nhập.
+
+## 9. Tài liệu bài học đính kèm (W2-3)
+
+Giáo viên tải tài liệu bài dạy (.docx, .pdf, .txt) để câu hỏi bám nội dung đã dạy. Bước này mới có API tải lên và quản lý
+tài liệu; việc gắn tài liệu vào yêu cầu sinh câu và bước QC "bám tài liệu" làm ở các bước sau của task. Chỉ giáo viên
+(admin không dùng); tài liệu thuộc người tải lên, của người khác trả 404 như không tồn tại.
+
+**Server chỉ lưu văn bản đã trích và sha256 của file gốc, KHÔNG lưu file gốc** (không tải lại được file đã đưa lên).
+
+### 9.1. Tải lên
+
+```http
+POST /api/materials
+Content-Type: multipart/form-data   (phần "file")
+```
+
+- Loại file nhận dạng từ NỘI DUNG (magic bytes); đuôi file và Content-Type client gửi bị bỏ qua. `.doc` cũ, `.rtf`, ảnh,
+  `.xlsx`, `.pptx`, văn bản UTF-16 hoặc không phải UTF-8 đều bị từ chối (415).
+- Tối đa 10 MB mỗi file, một file mỗi lần gọi (giới hạn 5 tài liệu cho mỗi lần sinh áp dụng ở bước gắn vào đề).
+- **201** tạo mới; **200** và trả lại bản cũ khi chính giáo viên này đã tải đúng file đó (cùng sha256, kể cả đổi tên file).
+
+```json
+{"id": 12, "fileName": "bai3.docx", "kind": "docx", "sizeBytes": 48211, "charCount": 5120, "pageCount": null,
+ "sha256": "9f2c…", "extractMethod": "pandoc",
+ "warnings": [{"code": "MATHTYPE_FORMULAS_DROPPED", "count": 12, "total": 15, "message": "Có 12/15 công thức MathType …"}],
+ "createdAt": "2026-10-25T21:30:00"}
+```
+
+`pageCount` chỉ có với pdf (không có key với loại khác). `kind` là `docx`, `pdf` hoặc `txt`. `warnings` luôn là mảng (có thể rỗng):
+
+| `code` | Ý nghĩa |
+|---|---|
+| `MATHTYPE_FORMULAS_DROPPED` | docx có `count` công thức MathType (đối tượng nhúng) trong tổng `total` công thức mà hệ thống chưa đọc được; chúng KHÔNG có trong văn bản trích |
+| `FORMULA_LOSS_HIGH` | như trên nhưng từ 30% công thức trở lên bị mất: câu hỏi sinh ra có thể thiếu hoặc sai công thức. Frontend nên cảnh báo rõ |
+| `FORMULA_IMAGES_NOT_READ` | docx có `count` ảnh ngoài đối tượng công thức (có thể là công thức dạng ảnh); không OCR |
+| `PDF_TEXT_QUALITY_LOW` | pdf có nhiều ký tự lỗi (thường do công thức hoặc font đặc biệt) |
+
+Mã lỗi (body `{"error", "code"}`):
+
+| HTTP | `code` | Khi nào |
+|---|---|---|
+| 400 | `EMPTY_FILE`, `MISSING_FILE`, `INVALID_MULTIPART` | file rỗng; thiếu phần `file`; multipart hỏng |
+| 409 | `MATERIAL_QUOTA_EXCEEDED` | đã lưu đủ 50 tài liệu (xóa bớt rồi tải lại; tải lại file đã có vẫn được 200) |
+| 413 | `FILE_TOO_LARGE` | quá 10 MB |
+| 415 | `UNSUPPORTED_FILE_TYPE` | không phải docx, pdf hay txt UTF-8 (thông báo nói rõ với `.doc`, UTF-16, sai bảng mã) |
+| 422 | `NO_EXTRACTABLE_TEXT` | không có chữ: PDF scan (không OCR), docx chỉ có ảnh hoặc công thức MathType, txt rỗng |
+| 422 | `INVALID_FILE`, `EXTRACTION_FAILED` | file hỏng, nghi zip bomb, XML có DTD; pandoc không đọc được |
+| 422 | `TEXT_TOO_LONG`, `TOO_MANY_PAGES` | quá 300.000 ký tự hoặc 200 trang (không cắt âm thầm) |
+| 422 | `MATERIAL_ENCRYPTED` | pdf có mật khẩu hoặc cấm sao chép nội dung |
+| 429 | `TOO_MANY_UPLOADS` | quá 30 lần tải mỗi giờ (tính cả lần lỗi; bộ đếm trong bộ nhớ) |
+| 503 | `EXTRACTOR_UNAVAILABLE` | docx cần pandoc mà máy chủ chưa cài (pdf và txt vẫn dùng được) |
+| 503 | `EXTRACTOR_BUSY`, `EXTRACTION_TIMEOUT` | đang trích tối đa 2 tài liệu cùng lúc / một lần trích quá 30 giây |
+
+### 9.2. Danh sách, chi tiết, xóa
+
+- `GET /api/materials?page=0&size=10` → `{"items": [...], "page", "size", "totalItems", "totalPages"}`; `size` từ 1 đến 50
+  (sai thì 400). Mục không có văn bản.
+- `GET /api/materials/{id}` → như trên kèm `textPreview`: tối đa 500 ký tự đầu của văn bản đã trích (để giáo viên kiểm tra
+  dấu tiếng Việt và công thức). Không có API trả văn bản đầy đủ.
+- `DELETE /api/materials/{id}` → 204. Tài liệu đã gắn vào đề sẽ bị chặn bằng 409 `MATERIAL_IN_USE` khi có bước gắn tài liệu
+  vào đề (bước sau của task); hiện chưa có chỗ nào gắn.
+
+### 9.3. Văn bản trích
+
+- docx đọc bằng pandoc: công thức Equation gốc của Word (OMML) thành `$...$`. **Công thức MathType (đối tượng nhúng) bị
+  bỏ**, được đếm và báo trong `warnings`; tách từng công thức ra văn bản là việc của một bước sau (dùng bộ đọc MTEF của
+  `tools/bank-import`).
+- pdf đọc bằng PDFBox, không OCR. Công thức trong PDF thường bị méo khi trích.
+- Văn bản chuẩn hóa Unicode NFC, bỏ ký tự điều khiển và ký tự ẩn (bidi, độ rộng bằng không).
+
+### 9.4. Hạn chế đã biết
+
+- **Rủi ro hết bộ nhớ (OOM) khi trích PDF:** PDFBox không có trần bộ nhớ cho luồng nén khi giải nén. Đã giảm bằng: file tối đa
+  10 MB, tối đa 200 trang, tối đa 30 giây, tối đa 2 lần trích đồng thời, luồng PDF đệm bằng file tạm (không giữ trong heap),
+  và chỉ giáo viên đã đăng nhập mới tải lên được. Nhưng một PDF độc vẫn có thể ăn nhiều heap; image backend đặt
+  `-XX:+ExitOnOutOfMemoryError` nên khi đó tiến trình thoát và container khởi động lại. Chỉ xử lý triệt để bằng cách trích PDF
+  ngoài tiến trình (chưa làm).
+- **Bộ nhớ của pandoc:** mỗi lần đọc docx bị giới hạn heap `MATERIAL_PANDOC_HEAP_MB` (768 MB) và 30 giây. `mem_limit` của
+  `app` là 1 GB và heap JVM chiếm 55%, nên trần này là giới hạn trên, chưa đo với tài liệu lớn: nếu container bị `OOMKilled`
+  khi tải docx lớn, hạ `MATERIAL_PANDOC_HEAP_MB` hoặc tăng `mem_limit`.
+- Cấu hình giới hạn: `app.materials.*` (biến `MATERIAL_MAX_FILE_BYTES`, `MATERIAL_MAX_CHARS`, `MATERIAL_MAX_PAGES`,
+  `MATERIAL_MAX_PER_OWNER`, `MATERIAL_MAX_UPLOADS_PER_HOUR`, `MATERIAL_MAX_CONCURRENT`, `MATERIAL_EXTRACT_TIMEOUT`,
+  `MATERIAL_PANDOC_HEAP_MB`). Caddy cho phép body tới 12 MB; Tomcat đọc bỏ tối đa 25 MB phần thừa để trả được 413.

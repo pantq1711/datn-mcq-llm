@@ -2,6 +2,7 @@ package com.datn.mcq.material.extract;
 
 import com.datn.mcq.material.entity.LessonMaterial;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
@@ -72,7 +73,8 @@ public class PdfTextExtractor {
     }
 
     private ExtractedText doExtract(byte[] content, long deadline, AtomicReference<PDDocument> opened) {
-        try (PDDocument doc = Loader.loadPDF(content, "")) {
+        // Luồng PDF (đã nén) chỉ đệm bằng file tạm, không giữ trong heap; file tạm xóa khi đóng tài liệu.
+        try (PDDocument doc = Loader.loadPDF(content, "", null, null, IOUtils.createTempFileOnlyStreamCache())) {
             opened.set(doc);
             if (doc.isEncrypted() && !doc.getCurrentAccessPermission().canExtractContent()) {
                 throw MaterialErrors.encrypted("PDF không cho phép sao chép nội dung nên không dùng được. Hãy dùng "

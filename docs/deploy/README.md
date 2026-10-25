@@ -314,6 +314,7 @@ nhận cookie Secure qua http).
 | Trình duyệt báo không an toàn / không xin được chứng chỉ | DNS chưa trỏ đúng, cổng 80/443 bị chặn, hoặc đã xin quá nhiều lần (Let's Encrypt giới hạn); xem `docker compose logs web` |
 | Đăng nhập được nhưng bị đăng xuất sau ít phút | cookie không lưu: `COOKIE_SECURE=true` mà truy cập qua http, hoặc frontend gọi API khác domain |
 | API trả 403 "Invalid CORS request" | `CORS_ALLOWED_ORIGINS` không khớp `https://<tên miền>` |
+| Tải tài liệu docx báo 503 `EXTRACTOR_UNAVAILABLE` hoặc container `OOMKilled` khi tải docx/pdf lớn | docx cần pandoc (cùng bản dùng xuất Word): `docker compose exec app pandoc --version`. OOM: hạ `MATERIAL_PANDOC_HEAP_MB` hoặc tăng `mem_limit` của `app`; pdf độc có thể ăn nhiều heap, xem `docs/api/README.md` mục 9.4 |
 | Xuất Word báo 503/500 | `docker compose exec app pandoc --version`; xem log `app`; container có thể bị OOM (`docker inspect` ghi `OOMKilled`) → tăng `mem_limit` của `app` |
 | `app` khởi động lại liên tục | `docker compose logs app`: thường là `JWT_SECRET` thiếu/ngắn, `ADMIN_PASSWORD` dưới 12 ký tự, hoặc sai mật khẩu DB (đổi `DB_PASSWORD` sau khi volume `pgdata` đã tạo không có tác dụng) |
 | Đĩa đầy | `docker system df`; `docker image prune -f`; kiểm thư mục sao lưu |
@@ -323,6 +324,7 @@ nhận cookie Secure qua http).
 - **Môn học "Giáo dục công dân":** V17 chỉ thêm tên môn. Các prompt sinh câu hiện viết cho giáo viên Toán THCS (một số
   prompt còn ghi cứng "Toán" khi không có tên môn), nên chất lượng sinh câu cho môn khác chưa được kiểm.
 - **Image `web` và CI (D7):** chờ người làm frontend sửa 3 lỗi TypeScript (xem "Trạng thái kiểm chứng").
+- **Trích PDF của tài liệu bài học (W2-3):** PDFBox không có trần bộ nhớ cho luồng nén; một PDF độc có thể làm `app` hết heap và thoát (`ExitOnOutOfMemoryError`). Chi tiết và cách đã giảm rủi ro: `docs/api/README.md` mục 9.4.
 - **Kích thước image backend ~742 MB** (chưa tối ưu): chưa rõ phần nào chiếm nhiều (lớp Ubuntu, font, pandoc, JRE).
   Layered jar (Spring Boot `jarmode=tools`) có thể giảm lượng phải kéo mỗi lần cập nhật — chưa kiểm với Boot 4.1.1.
 - JLaTeXMath: image đã có font và `java.awt.headless=true`; cần smoke test vẽ ảnh công thức khi thêm dependency.

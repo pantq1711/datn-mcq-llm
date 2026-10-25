@@ -13,6 +13,9 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -129,6 +132,36 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, String>> handleForbidden(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(Map.of("error", JsonSecurityErrorHandler.FORBIDDEN_MESSAGE, "code", "FORBIDDEN"));
+    }
+
+    /**
+     * W2-3: tải tài liệu vượt giới hạn multipart của máy chủ (spring.servlet.multipart.max-file-size): 413 kèm mã
+     * FILE_TOO_LARGE, cùng mã với lỗi quá lớn do bước trích văn bản.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        long max = ex.getMaxUploadSize();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", max > 0 ? "File quá lớn: tối đa " + (max / (1024 * 1024)) + " MB mỗi file." : "File quá lớn.");
+        body.put("code", "FILE_TOO_LARGE");
+        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE).body(body);
+    }
+
+    /** W2-3: yêu cầu tải lên thiếu phần file (hoặc phần khác): 400 kèm mã. */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<Map<String, String>> handleMissingPart(MissingServletRequestPartException ex) {
+        boolean file = "file".equals(ex.getRequestPartName());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "error", file ? "Thiếu file: gửi multipart với phần \"file\"." : "Thiếu phần \"" + ex.getRequestPartName()
+                        + "\" của yêu cầu.",
+                "code", file ? "MISSING_FILE" : "MISSING_PART"));
+    }
+
+    /** W2-3: yêu cầu multipart hỏng (sai boundary, bị cắt giữa chừng): 400 thay vì 500. */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<Map<String, String>> handleMultipart(MultipartException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "error", "Yêu cầu tải file không hợp lệ.", "code", "INVALID_MULTIPART"));
     }
 
     /** Gemini trả 429 hoặc 503: trả lại đúng mã đó thay vì 500. */

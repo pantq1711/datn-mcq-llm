@@ -61,6 +61,23 @@ class PdfAndFacadeTest {
     }
 
     @Test
+    void pdfDungBoDemChiDungFileTamVaDonSachSauKhiXong() throws Exception {
+        java.nio.file.Path tmp = java.nio.file.Path.of(System.getProperty("java.io.tmpdir"));
+        long before = pdfboxTempFiles(tmp);
+        ExtractedText r = pdfExtractor().extract(pdf("Hang dang thuc dang nho so mot", "Binh phuong cua mot tong so hai"));
+        assertEquals(2, r.pageCount());
+        assertEquals(before, pdfboxTempFiles(tmp), "bộ đệm file tạm của PDFBox được xóa khi đóng tài liệu");
+        assertThrows(ApiErrorException.class, () -> pdfExtractor().extract(passwordPdf("Noi dung bi mat khau")));
+        assertEquals(before, pdfboxTempFiles(tmp), "kể cả khi mở PDF lỗi");
+    }
+
+    private static long pdfboxTempFiles(java.nio.file.Path tmp) throws Exception {
+        try (var s = java.nio.file.Files.list(tmp)) {
+            return s.filter(p -> p.getFileName().toString().startsWith("PDFBox")).count();
+        }
+    }
+
+    @Test
     void pdfScanKhongCoChuBi422NoiRoKhongOcr() {
         ApiErrorException ex = assertThrows(ApiErrorException.class, () -> pdfExtractor().extract(blankPdf(3)));
         assertError(ex, HttpStatus.UNPROCESSABLE_CONTENT, "NO_EXTRACTABLE_TEXT");

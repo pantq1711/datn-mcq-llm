@@ -137,6 +137,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/catalog/templates").hasRole("ADMIN")
                         // Chức năng giáo viên (H4: admin không dùng). Form chấm chỉ cần giáo viên đăng nhập (H5, Q-6).
                         .requestMatchers("/api/exam-matrices", "/api/exam-matrices/**", "/api/exams", "/api/exams/**",
+                                "/api/materials", "/api/materials/**",
                                 "/api/reviews/**").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.GET, "/api/bank-items", "/api/bank-items/**", "/api/catalog/**")
                         .hasAnyRole("TEACHER", "ADMIN")

@@ -22,31 +22,31 @@ import java.util.zip.ZipOutputStream;
  * File mẫu tự dựng trong bộ nhớ cho test trích văn bản (không commit file nhị phân, không dùng tài liệu có bản quyền).
  * Không phải test (tên không khớp mẫu của surefire).
  */
-final class MaterialTestFiles {
+public final class MaterialTestFiles {
 
     private MaterialTestFiles() {}
 
-    static final String CONTENT_TYPES = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+    public static final String CONTENT_TYPES = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
             + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
             + "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
             + "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
             + "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument."
             + "wordprocessingml.document.main+xml\"/></Types>";
 
-    static final String ROOT_RELS = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+    public static final String ROOT_RELS = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
             + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
             + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
             + "officeDocument\" Target=\"word/document.xml\"/></Relationships>";
 
-    static final String DOC_OPEN = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+    public static final String DOC_OPEN = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
             + "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\""
             + " xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:v=\"urn:schemas-microsoft-com:vml\""
             + " xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\""
             + " xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\""
             + " xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><w:body>";
-    static final String DOC_CLOSE = "</w:body></w:document>";
+    public static final String DOC_CLOSE = "</w:body></w:document>";
 
-    static byte[] zip(Map<String, byte[]> entries) {
+    public static byte[] zip(Map<String, byte[]> entries) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(out)) {
             zip.setLevel(Deflater.BEST_COMPRESSION);
@@ -62,7 +62,7 @@ final class MaterialTestFiles {
     }
 
     /** Một mục gồm {@code size} byte 0 (nén rất mạnh), ghi theo từng khối để không giữ cả khối trong bộ nhớ. */
-    static byte[] zipWithZeros(String entryName, long size) {
+    public static byte[] zipWithZeros(String entryName, long size) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(out)) {
             zip.setLevel(Deflater.BEST_COMPRESSION);
@@ -79,7 +79,7 @@ final class MaterialTestFiles {
     }
 
     /** docx tối giản (đủ để pandoc đọc): phần thân là {@code bodyXml}. */
-    static byte[] minimalDocx(String bodyXml) {
+    public static byte[] minimalDocx(String bodyXml) {
         Map<String, byte[]> files = new LinkedHashMap<>();
         files.put("[Content_Types].xml", CONTENT_TYPES.getBytes(StandardCharsets.UTF_8));
         files.put("_rels/.rels", ROOT_RELS.getBytes(StandardCharsets.UTF_8));
@@ -87,12 +87,12 @@ final class MaterialTestFiles {
         return zip(files);
     }
 
-    static String paragraph(String text) {
+    public static String paragraph(String text) {
         return "<w:p><w:r><w:t xml:space=\"preserve\">" + text + "</w:t></w:r></w:p>";
     }
 
     /** Công thức MathType nhúng (đối tượng OLE) kèm ảnh xem trước, trong một đoạn riêng. */
-    static String oleEquation(String progId) {
+    public static String oleEquation(String progId) {
         return "<w:p><w:r><w:object w:dxaOrig=\"800\" w:dyaOrig=\"300\"><v:shape id=\"s1\" type=\"#_x0000_t75\">"
                 + "<v:imagedata r:id=\"rId5\" o:title=\"\"/></v:shape>"
                 + "<o:OLEObject Type=\"Embed\" ProgID=\"" + progId + "\" ShapeID=\"s1\" DrawAspect=\"Content\""
@@ -100,21 +100,21 @@ final class MaterialTestFiles {
     }
 
     /** Công thức Equation gốc của Word (OMML). */
-    static String omml(String latexish) {
+    public static String omml(String latexish) {
         return "<w:p><m:oMath><m:r><m:t>" + latexish + "</m:t></m:r></m:oMath></w:p>";
     }
 
-    static String drawingImage() {
+    public static String drawingImage() {
         return "<w:p><w:r><w:drawing><a:graphic><a:graphicData><a:blip r:embed=\"rId7\"/></a:graphicData></a:graphic>"
                 + "</w:drawing></w:r></w:p>";
     }
 
-    static String vmlImage() {
+    public static String vmlImage() {
         return "<w:p><w:r><w:pict><v:shape id=\"p1\"><v:imagedata r:id=\"rId8\"/></v:shape></w:pict></w:r></w:p>";
     }
 
     /** PDF mỗi trang một dòng chữ (font chuẩn, chỉ ASCII). */
-    static byte[] pdf(String... pageTexts) {
+    public static byte[] pdf(String... pageTexts) {
         try (PDDocument doc = new PDDocument()) {
             PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
             for (String text : pageTexts) {
@@ -137,7 +137,7 @@ final class MaterialTestFiles {
     }
 
     /** PDF chỉ có trang trắng (như bản scan không có lớp chữ). */
-    static byte[] blankPdf(int pages) {
+    public static byte[] blankPdf(int pages) {
         try (PDDocument doc = new PDDocument()) {
             for (int i = 0; i < pages; i++) {
                 doc.addPage(new PDPage());
@@ -149,7 +149,7 @@ final class MaterialTestFiles {
     }
 
     /** PDF mã hóa: mở cần mật khẩu người dùng. */
-    static byte[] passwordPdf(String text) {
+    public static byte[] passwordPdf(String text) {
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage();
             doc.addPage(page);
@@ -171,7 +171,7 @@ final class MaterialTestFiles {
     }
 
     /** PDF mở không cần mật khẩu nhưng cấm sao chép nội dung (chỉ có mật khẩu chủ). */
-    static byte[] copyProtectedPdf(String text) {
+    public static byte[] copyProtectedPdf(String text) {
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage();
             doc.addPage(page);
@@ -199,7 +199,7 @@ final class MaterialTestFiles {
         return out.toByteArray();
     }
 
-    static byte[] utf8(String s) {
+    public static byte[] utf8(String s) {
         return s.getBytes(StandardCharsets.UTF_8);
     }
 }
