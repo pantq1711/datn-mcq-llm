@@ -24,12 +24,15 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -54,13 +57,15 @@ public class MaterialService {
     private final LessonMaterialRepository repository;
     private final MaterialTextExtractor extractor;
     private final MaterialProperties props;
+    private final MaterialUsageLookup usage;
     private final Map<Integer, Deque<Long>> uploadTimes = new ConcurrentHashMap<>();
 
     public MaterialService(LessonMaterialRepository repository, MaterialTextExtractor extractor,
-                           MaterialProperties props) {
+                           MaterialProperties props, MaterialUsageLookup usage) {
         this.repository = repository;
         this.extractor = extractor;
         this.props = props;
+        this.usage = usage;
     }
 
     public UploadResult upload(Integer ownerId, String originalFileName, byte[] content) {
@@ -118,9 +123,39 @@ public class MaterialService {
         return toDto(owned(id, ownerId), true);
     }
 
+    /**
+     * Xóa tài liệu của chính chủ sở hữu; đã gắn vào đề thì 409 {@value #MATERIAL_IN_USE} (quyết định G). Của người khác
+     * hoặc không có: 404.
+     */
     @Transactional
     public void delete(Integer id, Integer ownerId) {
-        repository.delete(owned(id, ownerId));
+        LessonMaterial material = owned(id, ownerId);
+        int exams = usage.examCount(id);
+        if (exams > 0) {
+            throw ApiErrorException.conflict(MATERIAL_IN_USE, "Tài liệu đã dùng cho " + exams
+                    + " đề nên không xóa được.");
+        }
+        repository.delete(material);
+    }
+
+    /** Mã 409 khi xóa tài liệu đã gắn vào đề. */
+    public static final String MATERIAL_IN_USE = "MATERIAL_IN_USE";
+
+    /**
+     * Kiểm tra mọi {@code ids} là tài liệu của {@code ownerId} (không thì 404, thông báo như không tồn tại) và giữ khóa
+     * chia sẻ trên các hàng tới hết transaction của nơi gọi (tạo đề), để lần xóa đồng thời phải chờ.
+     */
+    @Transactional
+    public void requireOwnedShared(Collection<Integer> ids, Integer ownerId) {
+        if (ids.isEmpty()) {
+            return;
+        }
+        Set<Integer> found = new HashSet<>(repository.lockOwnedIds(ids, ownerId));
+        for (Integer id : ids) {
+            if (!found.contains(id)) {
+                throw new NoSuchElementException("Không tìm thấy tài liệu id=" + id);
+            }
+        }
     }
 
     private LessonMaterial owned(Integer id, Integer ownerId) {

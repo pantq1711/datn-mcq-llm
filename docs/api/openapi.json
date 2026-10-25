@@ -1622,6 +1622,38 @@
           },
           "title" : {
             "type" : "string"
+          },
+          "materialIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int32"
+            }
+          },
+          "cells" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CellContextInput"
+            }
+          }
+        }
+      },
+      "CellContextInput" : {
+        "type" : "object",
+        "properties" : {
+          "cellId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "materialIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int32"
+            }
+          },
+          "extraInstruction" : {
+            "type" : "string"
           }
         }
       },
@@ -1690,6 +1722,16 @@
             "items" : {
               "$ref" : "#/components/schemas/LessonCellInput"
             }
+          },
+          "materialIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int32"
+            }
+          },
+          "extraInstruction" : {
+            "type" : "string"
           }
         }
       },

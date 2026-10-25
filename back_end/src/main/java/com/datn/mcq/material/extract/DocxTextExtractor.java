@@ -155,17 +155,37 @@ public class DocxTextExtractor {
         return out;
     }
 
+    /**
+     * Xóa thư mục tạm. Trên Windows, tệp (pandoc.log, in.docx) có thể còn bị giữ thêm chốc lát sau khi tiến trình pandoc
+     * vừa bị dừng, nên thử lại vài lần ngắn trước khi bỏ cuộc (khi đó để hệ điều hành dọn thư mục tạm).
+     */
     private static void deleteQuietly(Path dir) {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            if (tryDelete(dir)) {
+                return;
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    /** @return true khi thư mục không còn tồn tại */
+    private static boolean tryDelete(Path dir) {
         try (Stream<Path> paths = Files.walk(dir)) {
             paths.sorted(Comparator.reverseOrder()).forEach(p -> {
                 try {
                     Files.deleteIfExists(p);
                 } catch (IOException ignored) {
-                    // tệp còn bị giữ (Windows): để hệ điều hành dọn thư mục tạm
+                    // còn bị giữ: vòng thử lại sau xử lý
                 }
             });
         } catch (IOException ignored) {
-            // thư mục đã bị xóa
+            // thư mục đã bị xóa hoặc không đọc được
         }
+        return !Files.exists(dir);
     }
 }

@@ -246,6 +246,12 @@ POST /api/generation/jobs/enqueue
 Ngân hàng là dữ liệu đã duyệt nên có đáp án, đáp số và nhãn cuối. Ngân hàng dùng chung cho mọi
 giáo viên (H1). Giáo viên và admin chỉ ĐỌC; sửa, xóa câu ngân hàng chưa làm (Q-4c).
 
+**Câu riêng tư (W2-3, quyết định E).** Câu sinh từ đề có tài liệu bài học đính kèm, khi giáo viên Giữ, vẫn vào ngân hàng
+nhưng đánh dấu `bank_item.visible_to_user_id` = người Giữ: CHỈ người đó thấy trong danh sách, chủ đề, chi tiết (`GET
+/api/bank-items/{id}` của người khác, kể cả admin, là 404) và dùng lại được; người khác không nhận câu đó làm ứng viên khi tạo
+đề hay Đổi bằng câu ngân hàng. Câu không dựa trên tài liệu (kể cả đề chỉ có "yêu cầu thêm") vẫn dùng chung. Không có cờ riêng
+trong payload: người xem chỉ thấy câu của mình hoặc câu dùng chung.
+
 **Danh sách** (W1-3: thay danh sách không phân trang; đổi hợp đồng so với trước, frontend chưa dùng):
 
 ```http
@@ -527,7 +533,25 @@ POST /api/exams/build
 
 - `title` bỏ trống thì lấy tên ma trận. Người tạo đề là người đăng nhập (`teacherId` đã bỏ khỏi API từ W1-1; gửi lên
   thì bị bỏ qua). Ma trận phải của chính người gọi, không thì 404. Đề có `mode = teacher`, `status = draft`.
-- Ngân hàng câu dùng chung cho mọi giáo viên (H1): câu ngân hàng khớp ô được lấy bất kể ai đã đưa vào.
+- **Tài liệu bài học và "yêu cầu thêm cho AI" (W2-3, tùy chọn).** Body nhận thêm:
+  `materialIds` (tài liệu của chính người gọi, mục 9, áp cho cả ma trận) và `cells`: mảng
+  `{"cellId", "materialIds", "extraInstruction"}` cho từng ô (`cellId` phải thuộc ma trận, mỗi ô tối đa một phần tử).
+  Tài liệu hiệu lực của một ô là hợp của tài liệu cả ma trận và của ô; yêu cầu thêm hiệu lực là của ô.
+  - Tối đa 5 tài liệu KHÁC NHAU trong cả lần tạo đề (trùng id tính một); `extraInstruction` tối đa 1000 ký tự (trim, bỏ
+    ký tự điều khiển và ký tự ẩn). Lưu theo từng đề (không gắn vào ma trận) ở `exam_generation_context`.
+  - **Ô có tài liệu hoặc có yêu cầu thêm thì BỎ QUA ngân hàng khi tạo đề** (câu ngân hàng không theo được tài liệu hay yêu
+    cầu): mọi chỗ của ô sinh qua hàng đợi. Ô không có thì lấy ngân hàng như trên.
+  - Yêu cầu thêm đi vào prompt như DỮ LIỆU: khối riêng có ranh giới `<<< >>>` (bỏ `<<<`, `>>>` trong nội dung, gộp khoảng
+    trắng), đặt sau mọi quy tắc và yêu cầu đầu ra, kèm lời dặn không được đổi dạng câu, mức độ, số lượng, số ý, mẫu nhãn,
+    định dạng JSON hay tắt kiểm tra chất lượng. Các thông số đó và QC do hệ thống quyết định, không do prompt. Lần sinh lại
+    và Đổi câu của ô giữ yêu cầu này (yêu cầu riêng của lượt Đổi câu đặt sau cùng).
+  - Chưa làm (bước sau của task): đưa các đoạn tài liệu vào prompt và bước QC "bám tài liệu". Hiện tài liệu mới được gắn,
+    kiểm tra quyền và dùng để bỏ qua ngân hàng; nội dung tài liệu chưa vào prompt.
+  - Lỗi (không tạo đề, không để lại gì): 400 `TOO_MANY_MATERIALS`, `INSTRUCTION_TOO_LONG`, `INVALID_REQUEST` (ô không thuộc
+    ma trận, ô lặp, id rỗng); 404 nếu có tài liệu không phải của người gọi hoặc không tồn tại.
+- Ngân hàng câu dùng chung cho mọi giáo viên (H1): câu ngân hàng khớp ô được lấy bất kể ai đã đưa vào. Ngoại lệ (W2-3,
+  mục "Ngân hàng câu hỏi"): câu sinh từ tài liệu của một giáo viên chỉ chính giáo viên đó thấy và dùng lại; câu đó không là
+  ứng viên khi người khác tạo đề hay Đổi bằng câu ngân hàng.
 - Mỗi ô lấy câu ngân hàng khớp ô trước: cùng môn, cùng dạng, cùng mức (`tf`: cùng 4 mức theo thứ tự), cùng chủ đề của
   template gốc (so sau trim, không phân biệt hoa thường); nếu câu ngân hàng được sinh từ một ô ma trận thì còn phải cùng
   nội dung. Một câu ngân hàng chỉ vào MỘT chỗ của đề (kể cả khi nhiều ô dùng chung template). Giữa các đề chỉ xếp hạng
@@ -584,6 +608,10 @@ POST /api/exams/build-by-lesson
   (4 mức ý a-d) và KHÔNG có `difficulty`; `tf` bỏ trống `statementDifficulties` thì mặc định dễ, dễ, vừa, khó. Phần I/II/III
   suy từ dạng câu. `questionCount` 1-50 mỗi nhóm. **Tổng số câu tối đa 50 mỗi lần**; vượt thì 400 (`Một lần sinh theo bài
   tối đa 50 câu (hiện N)`).
+- Tùy chọn (W2-3): `materialIds` (tài liệu bài học của chính người gọi, mục 9, tối đa 5 khác nhau) và `extraInstruction`
+  ("yêu cầu thêm cho AI", tối đa 1000 ký tự). Áp cho CẢ lần sinh (mọi nhóm câu). Có tài liệu hoặc yêu cầu thì bỏ qua ngân
+  hàng, sinh mọi chỗ qua hàng đợi; quy tắc, lỗi và cách đưa vào prompt như mục 7.2 (khối "yêu cầu thêm" là DỮ LIỆU, không
+  đổi định dạng, số lượng, mức độ hay QC). Câu sinh từ đề có tài liệu khi Giữ vào ngân hàng thì chỉ người sinh thấy.
 - Yêu cầu cần đạt: giáo viên không phải nhập. Mỗi mức ô dùng có mặc định theo tên bài ("Nhận biết…", "Hiểu và vận dụng
   trực tiếp…", "Vận dụng…"); `learningOutcomes` ghi đè theo mức.
 - Ngân hàng: khớp theo môn, dạng, mức và **chủ đề = tên bài** (so sau trim, không phân biệt hoa thường). Khi không nhập
@@ -594,12 +622,13 @@ POST /api/exams/build-by-lesson
 - Lỗi: 400 `{"error": …}` (dữ liệu sai; không tạo gì), 404 (`subjectId` không tồn tại), 403 (admin), 401. Mọi lỗi đều
   không để lại ma trận, template hay đề (một transaction).
 - Chỉ lọc và thống kê theo loại đề: `kind` có trong danh sách (7.0), xem đề (7.4) và kết quả tạo đề; `GET /api/exams?kind=lesson`.
-- **Việc kế tiếp (chưa làm): danh mục bài `lesson_catalog`** (môn, khối, chương, số bài, tên bài) và tài liệu bài học.
+- **Việc kế tiếp (chưa làm): danh mục bài `lesson_catalog`** (môn, khối, chương, số bài, tên bài). Tài liệu bài học do giáo viên
+  tải lên đã có (mục 9).
   Đề xuất: bảng `lesson_catalog(id, subject_id, grade_level, chapter, lesson_no, title)`; `build-by-lesson` nhận thêm
   `lessonId` TÙY CHỌN, khi có thì `lesson`/`gradeLevel`/`subjectId` lấy từ danh mục (không gửi cũng được). Các trường hiện có
   giữ nguyên nghĩa nên API cũ không vỡ; chỗ lấy tên bài là `MatrixService.resolveLesson`. Tên bài vẫn là chủ đề khớp ngân
-  hàng, nên câu cũ sinh theo chuỗi vẫn dùng lại được nếu tên trùng danh mục. Tài liệu bài học (nội dung SGK) sẽ thêm vào
-  `MatrixCellSpec` (JSON ở `experiment_run.hyperparams`, khóa lạ được bỏ qua nên tương thích ngược).
+  hàng, nên câu cũ sinh theo chuỗi vẫn dùng lại được nếu tên trùng danh mục. "Yêu cầu thêm cho AI" đã nằm ở `MatrixCellSpec`
+  (JSON ở `experiment_run.hyperparams`, khóa `extraInstruction`; run cũ không có khóa này).
 
 ### 7.3. Tiến độ
 
@@ -989,7 +1018,7 @@ Retry-After: 873
 
 Giáo viên tải tài liệu bài dạy (.docx, .pdf, .txt) để câu hỏi bám nội dung đã dạy. Bước này mới có API tải lên và quản lý
 tài liệu; việc gắn tài liệu vào yêu cầu sinh câu và bước QC "bám tài liệu" làm ở các bước sau của task. Chỉ giáo viên
-(admin không dùng); tài liệu thuộc người tải lên, của người khác trả 404 như không tồn tại.
+(admin không dùng); tài liệu thuộc người tải lên, của người khác trả 404 như không tồn tại. Gắn tài liệu vào đề: mục 7.2 và 7.2a.
 
 **Server chỉ lưu văn bản đã trích và sha256 của file gốc, KHÔNG lưu file gốc** (không tải lại được file đã đưa lên).
 
@@ -1027,7 +1056,7 @@ Mã lỗi (body `{"error", "code"}`):
 |---|---|---|
 | 400 | `EMPTY_FILE`, `MISSING_FILE`, `INVALID_MULTIPART` | file rỗng; thiếu phần `file`; multipart hỏng |
 | 409 | `MATERIAL_QUOTA_EXCEEDED` | đã lưu đủ 50 tài liệu (xóa bớt rồi tải lại; tải lại file đã có vẫn được 200) |
-| 413 | `FILE_TOO_LARGE` | quá 10 MB |
+| 413 | `FILE_TOO_LARGE` | quá giới hạn (mặc định 10 MB; thông báo ghi rõ "tối đa N MB", lấy từ `spring.servlet.multipart.max-file-size`) |
 | 415 | `UNSUPPORTED_FILE_TYPE` | không phải docx, pdf hay txt UTF-8 (thông báo nói rõ với `.doc`, UTF-16, sai bảng mã) |
 | 422 | `NO_EXTRACTABLE_TEXT` | không có chữ: PDF scan (không OCR), docx chỉ có ảnh hoặc công thức MathType, txt rỗng |
 | 422 | `INVALID_FILE`, `EXTRACTION_FAILED` | file hỏng, nghi zip bomb, XML có DTD; pandoc không đọc được |
@@ -1043,8 +1072,9 @@ Mã lỗi (body `{"error", "code"}`):
   (sai thì 400). Mục không có văn bản.
 - `GET /api/materials/{id}` → như trên kèm `textPreview`: tối đa 500 ký tự đầu của văn bản đã trích (để giáo viên kiểm tra
   dấu tiếng Việt và công thức). Không có API trả văn bản đầy đủ.
-- `DELETE /api/materials/{id}` → 204. Tài liệu đã gắn vào đề sẽ bị chặn bằng 409 `MATERIAL_IN_USE` khi có bước gắn tài liệu
-  vào đề (bước sau của task); hiện chưa có chỗ nào gắn.
+- `DELETE /api/materials/{id}` → 204. Tài liệu đã gắn vào một đề (mục 7.2, 7.2a) thì 409 `MATERIAL_IN_USE` (thông báo nêu số
+  đề), không xóa được. Gắn tài liệu vào đề giữ khóa chia sẻ trên hàng tài liệu, nên xóa đúng lúc đang gắn thì phải chờ rồi bị
+  chặn (409), không thành lỗi 500.
 
 ### 9.3. Văn bản trích
 

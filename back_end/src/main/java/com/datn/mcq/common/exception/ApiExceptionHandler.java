@@ -4,6 +4,7 @@ import com.datn.mcq.config.JsonSecurityErrorHandler;
 import com.datn.mcq.exam.export.DocumentExportException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -11,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.util.unit.DataSize;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -25,6 +27,19 @@ import java.util.NoSuchElementException;
 public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
+    /** Giới hạn một file khi tải lên, từ cấu hình multipart (ghi trong thông báo 413). */
+    @Value("${spring.servlet.multipart.max-file-size:10MB}")
+    private DataSize maxFileSize = DataSize.ofMegabytes(10);
+
+    void setMaxFileSize(DataSize maxFileSize) {
+        this.maxFileSize = maxFileSize;
+    }
+
+    private static String formatSize(long bytes) {
+        long mb = 1024L * 1024;
+        return bytes % mb == 0 ? bytes / mb + " MB" : bytes % 1024 == 0 ? bytes / 1024 + " KB" : bytes + " byte";
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleBadRequest(IllegalArgumentException ex) {
@@ -140,9 +155,10 @@ public class ApiExceptionHandler {
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Map<String, Object>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
-        long max = ex.getMaxUploadSize();
+        // Tomcat/Spring không báo ngưỡng khi từ chối (getMaxUploadSize() = -1): lấy từ cấu hình multipart.
+        long max = ex.getMaxUploadSize() > 0 ? ex.getMaxUploadSize() : maxFileSize.toBytes();
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("error", max > 0 ? "File quá lớn: tối đa " + (max / (1024 * 1024)) + " MB mỗi file." : "File quá lớn.");
+        body.put("error", "File quá lớn: tối đa " + formatSize(max) + " mỗi file.");
         body.put("code", "FILE_TOO_LARGE");
         return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE).body(body);
     }

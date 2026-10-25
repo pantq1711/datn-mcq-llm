@@ -14,6 +14,8 @@ public final class TestDataCleaner {
 
     public static void cleanAll(DataSource dataSource, JdbcTemplate jdbcTemplate, String stage) {
         TestSafetyConfiguration.TestDatabaseGuard.validateTestDatabase(dataSource, stage);
+        jdbcTemplate.update("DELETE FROM exam_context_material");
+        jdbcTemplate.update("DELETE FROM exam_generation_context");
         jdbcTemplate.update("DELETE FROM exam_slot_action");
         jdbcTemplate.update("UPDATE generation_job SET exam_slot_id = NULL WHERE exam_slot_id IS NOT NULL");
         jdbcTemplate.update("DELETE FROM exam_slot");

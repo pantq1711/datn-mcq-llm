@@ -8,6 +8,7 @@ import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.exam.dto.ExamBuildDtos.BuildExamRequest;
 import com.datn.mcq.exam.dto.ExamBuildDtos.BuildResultDto;
+import com.datn.mcq.exam.dto.ExamBuildDtos.CellContextInput;
 import com.datn.mcq.exam.dto.ExamBuildDtos.CellProgressDto;
 import com.datn.mcq.exam.dto.ExamBuildDtos.ProgressDto;
 import com.datn.mcq.exam.dto.ExamBuildDtos.SlotDto;
@@ -70,16 +71,19 @@ public class ExamBuildService {
     private final GenerationService generationService;
     private final CatalogService catalogService;
     private final QcSummaryService qcSummaryService;
+    private final ExamContextService contextService;
 
     public ExamBuildService(ExamRepository examRepository, ExamSlotRepository slotRepository,
                             MatrixService matrixService, GenerationService generationService,
-                            CatalogService catalogService, QcSummaryService qcSummaryService) {
+                            CatalogService catalogService, QcSummaryService qcSummaryService,
+                            ExamContextService contextService) {
         this.examRepository = examRepository;
         this.slotRepository = slotRepository;
         this.matrixService = matrixService;
         this.generationService = generationService;
         this.catalogService = catalogService;
         this.qcSummaryService = qcSummaryService;
+        this.contextService = contextService;
     }
 
     /**
@@ -91,7 +95,8 @@ public class ExamBuildService {
             throw new IllegalArgumentException("Phải truyền matrixId");
         }
         // W1-4: khóa chia sẻ hàng ma trận tới hết transaction, để xóa/sửa ma trận đồng thời phải chờ (không thành 500).
-        return buildFromMatrix(matrixService.getOwnedMatrixShared(req.matrixId(), actorId), req.title(), actorId);
+        return buildFromMatrix(matrixService.getOwnedMatrixShared(req.matrixId(), actorId), req.title(), actorId,
+                req.materialIds(), null, req.cells());
     }
 
     /**
@@ -102,12 +107,20 @@ public class ExamBuildService {
     @Transactional
     public BuildResultDto buildByLesson(CreateLessonRequest req, Integer actorId) {
         ExamMatrix matrix = matrixService.createLesson(req, actorId);
-        return buildFromMatrix(matrix, null, actorId);
+        return buildFromMatrix(matrix, null, actorId, req.materialIds(), req.extraInstruction(), null);
     }
 
-    /** Tạo đề từ một ma trận (của người gọi, đã kiểm tra); {@code requestedTitle} bỏ trống thì lấy tên ma trận. */
-    private BuildResultDto buildFromMatrix(ExamMatrix matrix, String requestedTitle, Integer actorId) {
+    /**
+     * Tạo đề từ một ma trận (của người gọi, đã kiểm tra); {@code requestedTitle} bỏ trống thì lấy tên ma trận. W2-3: ngữ
+     * cảnh (tài liệu, yêu cầu thêm cho AI) được kiểm tra trước mọi ghi đề, lưu theo đề; ô có tài liệu hoặc yêu cầu thêm
+     * bỏ qua ngân hàng (câu ngân hàng không theo được chúng) và sinh mọi chỗ qua hàng đợi.
+     */
+    private BuildResultDto buildFromMatrix(ExamMatrix matrix, String requestedTitle, Integer actorId,
+                                           List<Integer> materialIds, String extraInstruction,
+                                           List<CellContextInput> cellInputs) {
         List<ExamMatrixCell> cells = matrixService.cells(matrix.getId());
+        ExamContextService.Resolved context = contextService.resolve(actorId, cells, materialIds, extraInstruction,
+                cellInputs);
         Subject subject = catalogService.getSubjectById(matrix.getSubjectId());
         String title = requestedTitle == null || requestedTitle.isBlank() ? matrix.getName() : requestedTitle.trim();
         if (title.length() > 255) {
@@ -124,6 +137,7 @@ public class ExamBuildService {
         exam.setMatrixId(matrix.getId());
         exam.setCreatedAt(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS));
         exam = examRepository.save(exam);
+        contextService.persist(exam.getId(), context);
 
         LocalDateTime start = LocalDateTime.now();
         int total = 0;
@@ -143,7 +157,10 @@ public class ExamBuildService {
             slotRepository.saveAllAndFlush(slots);
             total += slots.size();
 
-            List<Integer> bank = bankCandidates(exam.getId(), matrix, cell, slots.size());
+            String cellInstruction = context.instructionFor(cell.getId());
+            boolean withContext = !context.materialsFor(cell.getId()).isEmpty() || cellInstruction != null;
+            List<Integer> bank = withContext ? List.of()
+                    : bankCandidates(exam.getId(), actorId, matrix, cell, slots.size());
             List<ExamSlot> missing = new ArrayList<>();
             for (int i = 0; i < slots.size(); i++) {
                 if (i < bank.size()) {
@@ -155,7 +172,7 @@ public class ExamBuildService {
                 }
             }
             if (!missing.isEmpty()) {
-                MatrixCellSpec spec = spec(cell, matrix, subject);
+                MatrixCellSpec spec = spec(cell, matrix, subject, cellInstruction);
                 ExperimentRun run = generationService.createMatrixRun(subject.getId(), spec, missing.size());
                 for (ExamSlot slot : missing) {
                     slot.setRunId(run.getId());
@@ -182,10 +199,12 @@ public class ExamBuildService {
      * Câu ngân hàng khớp một ô, đã xếp hạng mềm theo số lần dùng và đã loại câu đã có trong đề {@code examId} hoặc đã bị
      * Đổi khỏi đề (xem {@link ExamSlotRepository#findBankCandidates}). Dùng chung cho tạo đề và Đổi bằng câu ngân hàng
      * (W1-4). W1-4: ô theo bài không nhập nội dung thì không lọc theo nội dung (dùng lại câu sinh từ ô ma trận cùng chủ đề).
+     * W2-3: {@code ownerId} là người tạo đề: câu riêng tư của người khác không là ứng viên.
      */
-    List<Integer> bankCandidates(Integer examId, ExamMatrix matrix, ExamMatrixCell cell, int limit) {
+    List<Integer> bankCandidates(Integer examId, Integer ownerId, ExamMatrix matrix, ExamMatrixCell cell, int limit) {
         boolean anyContent = matrix.isLesson() && (cell.getContent() == null || cell.getContent().isBlank());
-        return slotRepository.findBankCandidates(examId, matrix.getSubjectId(), cell.getQuestionType().getDbValue(),
+        return slotRepository.findBankCandidates(examId, ownerId, matrix.getSubjectId(),
+                cell.getQuestionType().getDbValue(),
                 cell.getTopic(), cell.getContent() != null ? cell.getContent() : "",
                 cell.getDifficulty() != null ? cell.getDifficulty().getDbValue() : "",
                 cell.getStatementDifficulties() != null ? cell.getStatementDifficulties() : "",
@@ -341,7 +360,7 @@ public class ExamBuildService {
         ExamMatrixCell cell = matrixService.getCell(slot.getCellId());
         ExamMatrix matrix = matrixService.getMatrix(cell.getMatrixId());
         Subject subject = catalogService.getSubjectById(matrix.getSubjectId());
-        MatrixCellSpec spec = spec(cell, matrix, subject);
+        MatrixCellSpec spec = spec(cell, matrix, subject, contextService.instructionFor(slot.getExamId(), cell.getId()));
         if (slot.getRunId() == null) {
             slot.setRunId(generationService.createMatrixRun(subject.getId(), spec, 1).getId());
         }
@@ -406,6 +425,11 @@ public class ExamBuildService {
 
     /** Thông số ô cho prompt: chỉ kèm yêu cầu cần đạt của các mức ô dùng. */
     static MatrixCellSpec spec(ExamMatrixCell cell, ExamMatrix matrix, Subject subject) {
+        return spec(cell, matrix, subject, null);
+    }
+
+    /** Như trên, kèm "yêu cầu thêm cho AI" của ô (W2-3); null khi không có. */
+    static MatrixCellSpec spec(ExamMatrixCell cell, ExamMatrix matrix, Subject subject, String extraInstruction) {
         List<Difficulty> levels = cell.getQuestionType() == QuestionType.TF
                 ? MatrixService.statementLevels(cell)
                 : List.of(cell.getDifficulty());
@@ -417,7 +441,7 @@ public class ExamBuildService {
         }
         return new MatrixCellSpec(subject.getName(), matrix.getGradeLevel(), cell.getTopic(), cell.getContent(),
                 outcomes, cell.getQuestionType(), cell.getDifficulty(),
-                cell.getQuestionType() == QuestionType.TF ? levels : null);
+                cell.getQuestionType() == QuestionType.TF ? levels : null, extraInstruction);
     }
 
     /**

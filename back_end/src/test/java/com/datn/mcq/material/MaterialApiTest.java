@@ -392,6 +392,6 @@ class MaterialApiTest {
                 .handleMaxUploadSize(new MaxUploadSizeExceededException(10L << 20));
         assertEquals(413, r.getStatusCode().value());
         assertEquals("FILE_TOO_LARGE", r.getBody().get("code"));
-        assertTrue(String.valueOf(r.getBody().get("error")).contains("MB"));
+        assertTrue(String.valueOf(r.getBody().get("error")).contains("tối đa 10 MB"), String.valueOf(r.getBody().get("error")));
     }
 }

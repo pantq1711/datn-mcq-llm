@@ -301,6 +301,15 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     `application/pdf` (pdf, `pdfbox`, có `page_count`), `text/plain` (txt, `plain`). `char_count = char_length(extracted_text)`;
     trần DB 10 MiB và 1.000.000 ký tự (giới hạn nghiệp vụ chặt hơn ở cấu hình ứng dụng). `warnings`: mảng JSON hoặc NULL.
     `UNIQUE (owner_id, sha256)`; xóa người dùng xóa tài liệu của họ.
+  - `exam_generation_context` (V19, W2-3): ngữ cảnh sinh câu của MỘT đề. `cell_id` NULL là cả đề (sinh theo bài, hoặc "cả ma
+    trận"), khác NULL là một ô; mỗi đề tối đa một dòng cho mỗi phạm vi (`uq_egc_scope`, COALESCE). `extra_instruction`: "yêu cầu
+    thêm cho AI", 1–1000 ký tự, hoặc NULL. Xóa đề xóa dây chuyền. `exam_context_material(context_id, material_id)`: tài liệu của
+    phạm vi; khóa ngoại tới `lesson_material` KHÔNG xóa dây chuyền (xóa tài liệu đang dùng bị chặn, 409 `MATERIAL_IN_USE`).
+    Tài liệu hiệu lực của ô = hợp tài liệu cả đề và của ô; yêu cầu thêm hiệu lực = của ô, không có thì của cả đề.
+  - `generation_job.material_context` / `material_refs` (V19): ảnh chụp đoạn tài liệu đã đưa vào prompt của job và danh sách
+    đoạn (mảng JSON); cùng NULL hoặc cùng có; `material_context` tối đa 12000 ký tự. Chưa có code ghi (bước chọn đoạn).
+  - `bank_item.visible_to_user_id` (V19): NULL là câu dùng chung (mọi câu cũ); khác NULL thì chỉ người dùng đó thấy và dùng
+    lại. Đặt khi Giữ câu sinh từ đề có tài liệu đính kèm. Không xóa dây chuyền theo `users`.
   - Cờ "cần xem kỹ" bỏ qua cảnh báo `json: đã sửa ... escape LaTeX` (vẫn lưu ở `warnings`); cảnh báo `<trường>: đã tự đóng $` và các cảnh báo khác vẫn bật cờ.
 
 - Giáo viên sửa câu trong đề (W1-2, V13, ngày 24/10):

@@ -50,9 +50,9 @@ com.datn.mcq
 ## Hướng phụ thuộc (không được tạo vòng)
 
 ```
-exam        ──► matrix, generation, qc, review, bank, catalog, user   (V7: tạo đề theo ma trận)
+exam        ──► matrix, generation, qc, review, bank, catalog, user, material   (V7: tạo đề theo ma trận; W2-3: material)
 matrix      ──► catalog
-material    ──► (chỉ common)   (V18: chưa có module nào phụ thuộc; bước sau thêm exam ──► material, cần được duyệt, M-35)
+material    ──► (chỉ common)   (W2-3 bước 4: exam ──► material qua MaterialService; material khai báo MaterialUsageLookup, exam cài đặt)
 review      ──► generation, bank, catalog, experiment, user   (25/10: chỉ còn AssistedKeepService)
 generation  ──► qc, llm
 experiment  ──► generation, catalog
@@ -86,3 +86,4 @@ Quy tắc:
 18. Lỗi toàn vẹn dữ liệu (W1-4, K-5): `ApiExceptionHandler` trả 409 `FOREIGN_KEY_CONFLICT` (SQLState 23503) hoặc `UNIQUE_CONFLICT` (23505) cho hai thao tác đồng thời tranh chấp; lỗi toàn vẹn khác là lỗi chương trình, 500 kèm `DATA_INTEGRITY`.
 19. Công cụ thí nghiệm (25/10): `GenerationController` (`/api/generation/*`) và `CatalogTemplateController` (`/api/catalog/templates`) có `@ConditionalOnProperty(app.experiment.enabled=true)`, mặc định tắt; không có bean thì không có đường nên 404 cho mọi vai trò. `GET /api/generation/jobs` và `enqueue` trả `GenerationJobDto`, không trả entity. `SecurityConfig` vẫn khai báo quyền ADMIN cho `/api/generation/**` để khi bật thì chỉ admin gọi được.
 20. Trích văn bản tài liệu bài học (W2-3, `material.extract`): loại file chỉ nhận dạng từ nội dung (magic bytes), không dùng đuôi file hay Content-Type. docx: ghi vào thư mục tạm riêng, `ZipSafetyScanner` quét central directory và đếm byte giải nén thật (số mục, dung lượng mỗi mục và tổng, tỉ lệ nén, tên mục thoát thư mục), `DocxFormulaCounter` đếm công thức/ảnh và từ chối XML có DTD hay thực thể, rồi mới chạy `pandoc --sandbox +RTS -M<heap>` (module `material` tự gọi pandoc, dùng chung `app.export.pandoc-path`, không phụ thuộc `exam`). Đối tượng MathType nhúng (OLE) bị pandoc bỏ qua nên được đếm và báo trong `warnings`. pdf: PDFBox 3.0.8, không OCR, có giới hạn trang, độ dài, thời gian. `MaterialTextExtractor` giới hạn số lần trích đồng thời (`app.materials.max-concurrent-extractions`). Không lưu file gốc.
+21. Ngữ cảnh sinh câu của đề (W2-3, V19): `ExamContextService` (module `exam`) kiểm tra và lưu tài liệu đính kèm và "yêu cầu thêm cho AI" theo từng đề (`exam_generation_context`, `exam_context_material`); kiểm quyền và khóa chia sẻ tài liệu qua `MaterialService.requireOwnedShared` (`exam ──► material`, chiều mới, đã được duyệt cùng phần audit). `material` chặn xóa tài liệu đang dùng qua interface `MaterialUsageLookup` (cài đặt `ExamMaterialUsage` trong `exam`), cùng mẫu với `MatrixUsageLookup`. "Yêu cầu thêm" đi vào `MatrixCellSpec` (`experiment_run.hyperparams`), nên `generation` vẫn không biết `exam`/`matrix`/`material`. Ngân hàng riêng tư: `bank_item.visible_to_user_id` (V19) do `BankService.restrictToUser` đặt khi Giữ câu sinh từ đề có tài liệu; `BankSearchRepository` (mọi truy vấn của người xem) và `ExamSlotRepository.findBankCandidates` lọc theo `visible_to_user_id IS NULL OR = người xem/người tạo đề`.
