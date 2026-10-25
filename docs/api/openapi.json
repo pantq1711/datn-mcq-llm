@@ -333,6 +333,34 @@
         }
       }
     },
+    "/api/exams/build-by-lesson" : {
+      "post" : {
+        "tags" : [ "exam-controller" ],
+        "operationId" : "buildByLesson",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateLessonRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BuildResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/exam-matrices" : {
       "get" : {
         "tags" : [ "matrix-controller" ],
@@ -769,6 +797,13 @@
             "type" : "integer",
             "format" : "int32",
             "default" : 10
+          }
+        }, {
+          "name" : "kind",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
           }
         } ],
         "responses" : {
@@ -2023,6 +2058,67 @@
           "jobsQueued" : {
             "type" : "integer",
             "format" : "int32"
+          },
+          "kind" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CreateLessonRequest" : {
+        "type" : "object",
+        "properties" : {
+          "subjectId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "gradeLevel" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "lesson" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "learningOutcomes" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "string"
+            }
+          },
+          "cells" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LessonCellInput"
+            }
+          }
+        }
+      },
+      "LessonCellInput" : {
+        "type" : "object",
+        "properties" : {
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "difficulty" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          },
+          "statementDifficulties" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "enum" : [ "easy", "medium", "hard" ]
+            }
+          },
+          "questionCount" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },
@@ -2526,6 +2622,9 @@
           "mode" : {
             "type" : "string"
           },
+          "kind" : {
+            "type" : "string"
+          },
           "status" : {
             "type" : "string",
             "enum" : [ "draft", "confirmed" ]
@@ -2604,6 +2703,9 @@
             "items" : {
               "$ref" : "#/components/schemas/PartDto"
             }
+          },
+          "kind" : {
+            "type" : "string"
           }
         }
       },

@@ -48,7 +48,26 @@ public class ExamMatrix {
     @Column(name = "created_by", nullable = false)
     private Integer createdBy;
 
+    /** V15: 'matrix' (giáo viên tạo) hoặc 'lesson' (ma trận ẩn của một lần sinh theo bài). */
+    @Column(name = "kind", nullable = false, length = 10)
+    private String kind = KIND_MATRIX;
+
+    public static final String KIND_MATRIX = "matrix";
+    public static final String KIND_LESSON = "lesson";
+
     public ExamMatrix() {}
+
+    public String getKind() {
+        return kind;
+    }
+
+    public void setKind(String kind) {
+        this.kind = kind;
+    }
+
+    public boolean isLesson() {
+        return KIND_LESSON.equals(kind);
+    }
 
     public Integer getCreatedBy() {
         return createdBy;

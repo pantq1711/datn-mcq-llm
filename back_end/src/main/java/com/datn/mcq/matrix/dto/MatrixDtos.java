@@ -47,6 +47,38 @@ public final class MatrixDtos {
             Integer questionCount
     ) {}
 
+    /**
+     * Một nhóm câu của lần sinh theo bài (W1-4): cùng dạng và mức. Phần I/II/III suy ra từ dạng câu.
+     *
+     * @param difficulty            mức của câu mcq/sa; không gửi với tf
+     * @param statementDifficulties 4 mức của ý a-d (chỉ tf); bỏ trống thì mặc định dễ, dễ, vừa, khó
+     * @param questionCount         số câu, từ 1 đến 50
+     */
+    public record LessonCellInput(
+            QuestionType questionType,
+            Difficulty difficulty,
+            List<Difficulty> statementDifficulties,
+            Integer questionCount
+    ) {}
+
+    /**
+     * Body sinh theo bài (POST /api/exams/build-by-lesson, W1-4): một bài, các nhóm câu theo dạng và mức. Chủ đề của bài
+     * là chuỗi {@code lesson}; về sau có thể thêm {@code lessonId} tùy chọn (danh mục bài) mà không đổi các trường này.
+     *
+     * @param content          phạm vi, nội dung cụ thể trong bài (tùy chọn)
+     * @param title            tên đề; bỏ trống thì lấy tên bài
+     * @param learningOutcomes yêu cầu cần đạt theo mức (khóa easy, medium, hard), ghi đè mặc định; tùy chọn
+     */
+    public record CreateLessonRequest(
+            Integer subjectId,
+            Integer gradeLevel,
+            String lesson,
+            String content,
+            String title,
+            Map<String, String> learningOutcomes,
+            List<LessonCellInput> cells
+    ) {}
+
     /** Body tạo ma trận từ mẫu có sẵn. */
     public record CreateFromSampleRequest(Integer subjectId) {}
 

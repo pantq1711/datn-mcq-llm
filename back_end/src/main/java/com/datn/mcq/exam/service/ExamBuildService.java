@@ -22,6 +22,7 @@ import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
+import com.datn.mcq.matrix.dto.MatrixDtos.CreateLessonRequest;
 import com.datn.mcq.matrix.entity.ExamMatrix;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
@@ -89,10 +90,25 @@ public class ExamBuildService {
         if (req == null || req.matrixId() == null) {
             throw new IllegalArgumentException("Phải truyền matrixId");
         }
-        ExamMatrix matrix = matrixService.getOwnedMatrix(req.matrixId(), actorId);
+        return buildFromMatrix(matrixService.getOwnedMatrix(req.matrixId(), actorId), req.title(), actorId);
+    }
+
+    /**
+     * W1-4: sinh theo bài. Tạo ma trận ẩn của bài (kind = 'lesson') rồi tạo đề y như tạo từ ma trận, cùng một
+     * transaction: ngân hàng trước, phần thiếu xếp hàng sinh câu; mọi bước sau (tiến độ, Giữ/Đổi/Sửa, vết QC, xuất Word)
+     * dùng lại nguyên. Lỗi ở bất kỳ bước nào thì không còn lại ma trận hay template.
+     */
+    @Transactional
+    public BuildResultDto buildByLesson(CreateLessonRequest req, Integer actorId) {
+        ExamMatrix matrix = matrixService.createLesson(req, actorId);
+        return buildFromMatrix(matrix, null, actorId);
+    }
+
+    /** Tạo đề từ một ma trận (của người gọi, đã kiểm tra); {@code requestedTitle} bỏ trống thì lấy tên ma trận. */
+    private BuildResultDto buildFromMatrix(ExamMatrix matrix, String requestedTitle, Integer actorId) {
         List<ExamMatrixCell> cells = matrixService.cells(matrix.getId());
         Subject subject = catalogService.getSubjectById(matrix.getSubjectId());
-        String title = req.title() == null || req.title().isBlank() ? matrix.getName() : req.title().trim();
+        String title = requestedTitle == null || requestedTitle.isBlank() ? matrix.getName() : requestedTitle.trim();
         if (title.length() > 255) {
             throw new IllegalArgumentException("title dài tối đa 255 ký tự");
         }
@@ -126,12 +142,14 @@ public class ExamBuildService {
             slotRepository.saveAllAndFlush(slots);
             total += slots.size();
 
+            // W1-4: ô theo bài không nhập nội dung thì không lọc theo nội dung (dùng lại câu sinh từ ô ma trận cùng chủ đề).
+            boolean anyContent = matrix.isLesson() && (cell.getContent() == null || cell.getContent().isBlank());
             List<Integer> bank = slotRepository.findBankCandidates(exam.getId(), subject.getId(),
                     cell.getQuestionType().getDbValue(), cell.getTopic(),
                     cell.getContent() != null ? cell.getContent() : "",
                     cell.getDifficulty() != null ? cell.getDifficulty().getDbValue() : "",
                     cell.getStatementDifficulties() != null ? cell.getStatementDifficulties() : "",
-                    slots.size());
+                    anyContent, slots.size());
             List<ExamSlot> missing = new ArrayList<>();
             for (int i = 0; i < slots.size(); i++) {
                 if (i < bank.size()) {
@@ -162,8 +180,8 @@ public class ExamBuildService {
             }
             slotRepository.saveAllAndFlush(slots);
         }
-        return new BuildResultDto(exam.getId(), exam.getExamCode(), exam.getTitle(), matrix.getId(), total, fromBank,
-                jobs);
+        return new BuildResultDto(exam.getId(), exam.getExamCode(), exam.getTitle(),
+                matrix.isLesson() ? null : matrix.getId(), total, fromBank, jobs, matrix.getKind());
     }
 
     /** Tiến độ theo ô; kiểm tra chủ sở hữu rồi mới đối soát và đếm. */
