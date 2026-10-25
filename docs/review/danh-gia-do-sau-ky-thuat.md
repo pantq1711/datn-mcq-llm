@@ -232,48 +232,70 @@ prompt". Cả bốn đều chưa có trong code (mục 2.4).
 
 ## Phần 5 – So với mặt bằng đồ án cùng giảng viên hướng dẫn
 
-Dữ liệu 6 đồ án khóa trước do nhóm cung cấp (không có trong repo). Không suy diễn điểm số. Mức Thấp/TB/Cao là đánh
-giá tương đối giữa 7 đồ án theo mô tả, không phải thang chuẩn.
+**Nguyên tắc so sánh.**
+- Với 6 đồ án khóa trước chỉ có **báo cáo**: không có code, không có điểm. Số liệu do nhóm đếm từ báo cáo (số màn hình
+  = số hình giao diện ở chương cài đặt).
+- Với đồ án này, ghi những gì sẽ có trong báo cáo kèm bằng chứng, tách **"đã có trong code"** (đọc tại commit `5fefe87`
+  và nhánh `origin/front-end` commit `aab7dd9`) khỏi **"dự kiến tới 20/12"**.
+- So từng trục riêng, không kết luận tổng "hơn/kém", không suy đoán điểm.
 
-### 5.1 Đặt lên cùng thang
+### 5.1 Bảng 4 trục
 
-| Đồ án | Người | Độ rộng chức năng | Độ sâu kỹ thuật | Thử nghiệm / so sánh định lượng |
-|---|---:|---|---|---|
-| 1. Game STEM | 2 | TB | TB (BKT) | Thấp: kịch bản minh họa, không thống kê |
-| 2. Học tập trực tuyến | 3 | TB–Cao | Thấp | Không có |
-| 3. Tuyển dụng | 2 | TB | Thấp (có CI/CD) | Không có |
-| 4. Học trực tuyến + Stripe | 3 | Cao (thanh toán) | Thấp | Không có |
-| 5. Du lịch (Android) | 2 | TB | Cao (4 thuật toán gợi ý + RRF + tối ưu lộ trình) | **Cao**: P@K/R@K/F1, thời gian chạy, MovieLens 100K |
-| 6. TMĐT khóa tiếng Anh | 4 | Cao | TB–Cao (dự đoán bỏ học) | **Cao**: nhiều mô hình, Group K-Fold |
-| **Đồ án này** | 2 | **TB**. Đã có: 24 endpoint; 3 dạng câu; QC; chấm mù; ngân hàng; ma trận; tạo đề một lần bấm; Giữ/Đổi; xuất Word. Frontend 17 trang, chưa xác minh mức độ nối API (trang đăng nhập chưa nối). Chưa có: đăng nhập/phân quyền, thanh toán, thống kê. | **TB–Cao**: 16 % code là thuật toán/kỹ thuật, 23 % nghiệp vụ không tầm thường (Phần 1); không có mô hình học máy | **Hiện tại: Thấp.** 468 test tự động (kiểm tính đúng của code, không phải thí nghiệm đánh giá) và 1 pilot Solver 20 câu ngoài backend. **Dự kiến:** 4 thí nghiệm của chương mới (Solver bắt lỗi, ngưỡng dedup, so với prompt cộng đồng, khảo sát giáo viên) |
-
-Kết luận: về độ sâu, đồ án này hơn nhóm 1–4 và ngang hoặc gần nhóm 5–6. Về thử nghiệm định lượng, hiện **kém** nhóm 5–6,
-và đây là khoảng cách lớn nhất.
-
-### 5.2 Nhóm 2 người: tối thiểu về độ rộng, phần bù bằng độ sâu
-
-Tối thiểu nên có để không bị chê "thiếu chức năng":
-1. **Đăng nhập và 2 vai trò** (giáo viên, quản trị/nghiên cứu). Bảng `users.role` đã có CHECK `teacher`/`researcher`;
-   frontend đã có trang nhưng chưa nối. Khoảng 1,5–2 ngày.
-2. **Sửa câu trong đề** (hằng số `edit` và cột `edit_distance` đã có). Đây là thao tác giáo viên mong đợi nhất sau Giữ/Đổi.
-3. **Màn thống kê đơn giản**: số đề, số câu, tỷ lệ qua QC, tỷ lệ Giữ/Sửa/Đổi lấy từ `exam_slot_action`, chi phí mỗi đề
-   (ứng viên #12). Màn này cũng là nơi trình bày số liệu.
-4. **Luồng đầu-cuối chạy được khi demo**: ma trận → đề → xem → Giữ/Đổi → Word. Luồng này đã có; cần ổn định.
-
-Không nên cạnh tranh về thanh toán hay nhiều vai trò. Phần bù bằng độ sâu là lớp kiểm soát chất lượng (Phần 1, mục C/D),
-**với điều kiện có số liệu chứng minh** (5.3). Có độ sâu mà không có số liệu thì hội đồng khó phân biệt với "nhiều if-else".
-
-### 5.3 Để đạt mức đồ án 5 và 6
-
-Hai đồ án đó có cùng một mẫu: một mô-đun thông minh, một tập dữ liệu có nhãn chuẩn, nhiều phương án so với nhau theo
-chỉ số chuẩn. Đồ án này cần đúng các thí nghiệm sau:
-
-| Thí nghiệm | So sánh | Chỉ số | Dữ liệu cần | Ứng viên Phần 3 |
+| Đồ án | Độ rộng chức năng | Hạ tầng kỹ thuật | Mô-đun thông minh | Thử nghiệm định lượng |
 |---|---|---|---|---|
-| T1. Bắt lỗi đáp án | Solver LLM vs SymPy vs kết hợp (vs Solver hãng khác nếu kịp) | Recall bắt lỗi, tỷ lệ báo động giả, độ phủ của SymPy | Câu đã kiểm đúng + bản tiêm lỗi (≥ 50 mỗi loại để có khoảng tin cậy) | #10, #1, #4, (#3) |
-| T2. Ngưỡng loại trùng | Vân tay vs 3-gram (quét ngưỡng) vs embedding | Precision/Recall/F1, đường P–R, ngưỡng tối ưu | ~150 cặp tự gán nhãn, lưu vào `dedup_gold_*` | #2 |
-| T3. Hệ thống vs cách giáo viên đang dùng | Pipeline đầy đủ vs prompt mẫu cộng đồng trên Gemini, cùng ma trận | Tỷ lệ câu dùng được (đúng định dạng, đúng đáp án theo kiểm tra của nhóm/SymPy, không trùng), chi phí và thời gian mỗi đề | Cùng một bộ ma trận, đủ số câu mỗi bên | #11, #12, #1 |
-| T4. Khảo sát giáo viên | Định tính, thang Likert | Mức hài lòng, tỷ lệ Giữ/Sửa/Đổi | Giáo viên dùng thử chế độ giáo viên | Ghi rõ giới hạn: giáo viên đã thấy đáp án |
+| 1. Game STEM (2 người, 84 tr) | 6 nhóm màn (Home, Profile, Video, trắc nghiệm, mini game, endgame) | Unity, Firebase Remote Config, thu thập dữ liệu người chơi | BKT tính độ thành thạo, gợi ý bài tiếp | Kịch bản 2 người dùng, 5 trường hợp, bảng mastery; không thống kê |
+| 2. Học trực tuyến (3 người, 93 tr) | ~16 màn, 3 vai trò, thanh toán, tạo khóa học 3 bước, duyệt khóa học | ASP.NET Core, React, SQL Server, JWT, Repository pattern, EF Core | Không | Không |
+| 3. Tuyển dụng (2 người, 99 tr) | ~14 màn, 3+ vai trò, vòng tuyển dụng, thống kê doanh nghiệp, mẫu email, quản trị | **Kafka, Redis, khóa phân tán cho tác vụ nền, WebSocket, email, Docker + GitHub Actions, triển khai thật có tên miền** | Không | Không có số liệu |
+| 4. Học trực tuyến (3 người, 99 tr) | ~15 màn: mua khóa học (Stripe), video, quiz, hỏi đáp, đánh giá, chứng chỉ, flashcard, duyệt | Express, Next, PostgreSQL, JWT, Stripe | Không (chatbot là hướng phát triển) | Không |
+| 5. Du lịch (2 người, 97 tr) | **~30 màn**: đặt vé, khách sạn, VnPay, lộ trình, đánh giá | Android MVVM, Firebase, VnPay | **4 thuật toán gợi ý + tối ưu lộ trình (NN, 2-Opt)** | **Precision/Recall/F1@K trên MovieLens 100K; so 2-Opt với NN** |
+| 6. TMĐT tiếng Anh (4 người, 108 tr) | ~11 màn, 3 vai trò, nạp/rút/hoàn tiền, livestream, affiliate | Thanh toán QR, livestream, affiliate | **Dự đoán bỏ học (học máy)** | **So nhiều mô hình, Group K-Fold, độ quan trọng đặc trưng** |
+| **Đồ án này – đã có trong code** | Backend 24 endpoint: sinh câu 3 dạng (MCQ, Đúng/Sai, Trả lời ngắn), QC, chấm mù, ngân hàng, ma trận đề, tạo đề một lần bấm, Giữ/Đổi kèm yêu cầu, xuất Word. Frontend 17 file trang (React 19, Vite, TS); trên `origin/front-end` các lời gọi khớp backend gồm sinh câu đồng bộ, danh mục, ngân hàng, chấm. **Không có** đăng nhập/vai trò (`authApi.ts` rỗng), thanh toán, thống kê (`dashboardApi.ts` rỗng); luồng tạo đề theo ma trận chưa có trên frontend; một số lời gọi frontend (`/api/exams/generate`, `/api/generate/status`) không có ở backend. Chưa chạy thử giao diện. | Spring Boot 4 / Java 21, PostgreSQL + extension pgvector, Flyway 10 migration kèm test nâng cấp schema; hàng đợi job trên DB (`FOR UPDATE SKIP LOCKED`, trả job kẹt), khóa bi quan khi đối soát đề; OpenAPI + test hợp đồng; guard chặn test chạm DB thật hay gọi Gemini; xuất Word qua pandoc. **Không có**: Dockerfile cho app (Docker chỉ chạy DB), CI, triển khai thật, JWT, cache, message broker, WebSocket | Sinh câu bằng LLM (Gemini) cộng lớp kiểm soát chất lượng: Solver giải độc lập, loại trùng nhiều tầng (3-gram, chốt chặn số liệu/phủ định, ghép ý Đúng/Sai), so đáp số chính xác (`ShortAnswerValue`), kiểm và sửa LaTeX/JSON. Không có mô hình được huấn luyện; không có embedding; độ khó không được đánh giá (Phần 2.3) | 468 phương thức test tự động (kiểm tính đúng của code, **không phải** thí nghiệm đánh giá). 1 pilot Solver ngoài backend: 20 câu, đánh giá được 12 (`llm-probe/m35_lite/solver_m35_lite.txt`) |
+| **Đồ án này – dự kiến tới 20/12** | (đề xuất, chưa chốt) đăng nhập + 2 vai trò; Sửa câu trong đề; màn thống kê; luồng ma trận → đề → Word trên giao diện | (đề xuất, chưa chốt) Dockerfile cho app, triển khai thật có tên miền, GitHub Actions chạy test; phân loại lỗi LLM | (đề xuất Phần 3, chưa chốt) kiểm đáp án bằng SymPy cho 3–4 dạng; dedup bằng embedding để so sánh | (quyết định 23/10) T1 Solver bắt lỗi trên câu đúng + bản lỗi tự tạo; T2 ngưỡng dedup 3-gram vs embedding trên ~150 cặp gán nhãn; T3 so với prompt mẫu cộng đồng trên Gemini; T4 khảo sát giáo viên |
 
-T1 và T2 là hai thí nghiệm tương đương "so sánh nhiều thuật toán theo chỉ số chuẩn" của đồ án 5–6. T3 trả lời trực tiếp
-câu hỏi "khác gì gọi ChatGPT" bằng số liệu. T4 chỉ bổ trợ, không thay được T1–T3.
+### 5.2 Yếu hơn, ngang, mạnh hơn – theo từng trục
+
+| Trục | Yếu hơn (so với ai, vì sao) | Ngang | Mạnh hơn (bằng chứng) |
+|---|---|---|---|
+| Độ rộng chức năng | **Đồ án 2, 4, 5** (15–30 màn, 3 vai trò hoặc thanh toán, luồng nghiệp vụ trọn vẹn trên giao diện); **đồ án 3** (14 màn, 3+ vai trò, email). Đồ án này chưa có vai trò, thanh toán, thống kê, và luồng chính (tạo đề theo ma trận) chưa lên giao diện. | Đồ án 6 và 1 về số màn (11 và 6 nhóm màn, so với 17 file trang), nhưng đồ án 6 có 3 vai trò và giao dịch tiền | Không có trục con nào đủ bằng chứng để nói mạnh hơn |
+| Hạ tầng kỹ thuật | **Đồ án 3 rõ rệt**: Kafka, Redis, khóa phân tán, WebSocket, CI/CD, triển khai thật. **Đồ án 2, 4**: có xác thực JWT, đồ án này không. | Xử lý tác vụ nền đồng thời: đồ án 3 dùng khóa phân tán, đồ án này dùng khóa dòng trên PostgreSQL (`SKIP LOCKED`), có test hai luồng; khác cách, cùng mục đích, và báo cáo đồ án 3 không cho biết có kiểm chứng hay không | Kỷ luật schema: 10 migration có ràng buộc CHECK/khóa ngoại kép và test nâng cấp giữ dữ liệu (`V4UpgradeFromV3Test` … `V9UpgradeFromV8Test`). Báo cáo các đồ án kia không mô tả việc này, nên chỉ nói được là "có bằng chứng", không nói là hơn |
+| Mô-đun thông minh | Về **phương pháp được so sánh**: đồ án 5 (4 thuật toán + 2 thuật toán lộ trình) và 6 (nhiều mô hình học máy) có các phương án so với nhau; đồ án này hiện chỉ có một cấu hình, chưa có phương án đối chứng | Đồ án 1 (BKT, một mô hình có sẵn công thức) cùng loại "một mô-đun, chưa so sánh" | So với **đồ án 2, 3, 4** (không có mô-đun thông minh): đồ án này có. Lớp kiểm soát chất lượng chiếm khoảng 40 % code backend (Phần 1) |
+| Thử nghiệm định lượng | **Đồ án 5, 6** rõ rệt: chỉ số chuẩn, tập dữ liệu, kiểm định chéo. Đồ án này hiện chỉ có pilot 12 câu | Đồ án 1 (kịch bản minh họa, không thống kê) | So với **đồ án 2, 3, 4** (không có): có pilot và 468 test tự động, nhưng test tự động không phải thử nghiệm đánh giá, không nên trình bày như vậy |
+
+Tóm tắt không xếp hạng:
+- đồ án này **yếu** ở độ rộng (so với 2, 3, 4, 5) và hạ tầng triển khai (so với 3, phần xác thực so với 2, 4);
+- **yếu** ở thử nghiệm so với 5, 6 cho tới khi T1–T3 xong;
+- **có lợi thế** ở trục mô-đun thông minh so với 2, 3, 4.
+
+### 5.3 Tối thiểu để không yếu rõ rệt ở trục nào (ưu tiên việc rẻ)
+
+| Thứ tự | Việc | Trục | Công sức (1 người) | Thu hẹp khoảng cách với | Ghi chú |
+|---:|---|---|---:|---|---|
+| 1 | Dockerfile cho backend (kèm pandoc) và frontend, compose đầy đủ, **triển khai thật lên VPS có tên miền và HTTPS** | Hạ tầng | 1–1,5 ngày | 3 | Rẻ, và cũng giúp giáo viên dùng thử ở T4 qua đường link |
+| 2 | **GitHub Actions** chạy `./mvnw test` với service PostgreSQL (đã có guard `datn_mcq_test`) và build frontend | Hạ tầng | 0,5 ngày | 3 | 468 test có sẵn, chỉ cần dựng pipeline |
+| 3 | **Đưa luồng chính lên giao diện**: ma trận → tạo đề → tiến độ → xem đề → Giữ/Đổi → tải Word; sửa các lời gọi không khớp backend | Độ rộng | 2–3 ngày (chưa xác minh, phần của thành viên frontend) | 2, 4, 5 | Không có bước này thì chức năng mạnh nhất của backend không xuất hiện trong chương giao diện |
+| 4 | **Đăng nhập + 2 vai trò** (giáo viên, nghiên cứu; `users.role` đã có CHECK `teacher`/`researcher`), JWT | Độ rộng, hạ tầng | 1,5–2 ngày | 2, 4 | Trang đăng nhập frontend đã có |
+| 5 | **Màn thống kê** từ dữ liệu sẵn có: số đề, tỷ lệ qua QC, tỷ lệ Giữ/Sửa/Đổi (`exam_slot_action`), chi phí mỗi đề | Độ rộng | 1 ngày | 3 (thống kê doanh nghiệp) | Đồng thời là nơi trình bày số liệu |
+| 6 | **T1–T3** (Phần 3: tiêm lỗi + Solver, dedup trên tập gán nhãn, so với prompt cộng đồng) | Thử nghiệm | ~4,5 ngày cho T1–T2; T3 thêm 1–2 ngày | 5, 6 | Đây là trục quan trọng nhất cần thu hẹp |
+| 7 | Sửa câu trong đề | Độ rộng | 1–1,5 ngày | 2, 4 | Làm nếu kịp |
+
+Không nên thêm Kafka/Redis chỉ để ngang đồ án 3. Hệ thống chạy một instance, và hàng đợi trên PostgreSQL với
+`SKIP LOCKED` đủ cho tải dự kiến. Thay vào đó, nên trình bày lý do chọn cách này, kèm test đồng thời và (nếu kịp) số
+liệu thử tải (ứng viên #8). Khi bị hỏi, như vậy có sức thuyết phục hơn một hạ tầng thêm vào mà không dùng tới.
+
+Mục 1–5 cộng lại khoảng 6–8 ngày, nặng hơn ngân sách 10 ngày ở Phần 3 nếu làm cùng lúc. Cần nhóm chia việc: mục 3
+thuộc thành viên frontend; mục 1, 2, 4, 5 và T1–T2 thuộc backend.
+
+### 5.4 Giới hạn của phép so sánh
+
+- **Không cùng loại bằng chứng:** 6 đồ án chỉ có báo cáo, đồ án này có code. Những gì báo cáo khóa trước khẳng định
+  (ví dụ triển khai thật, khóa phân tán) không kiểm chứng được. Ngược lại, điểm yếu của đồ án này được nhìn thấy rõ hơn
+  vì có code.
+- **Không cùng đơn vị đếm:** số màn của đồ án khóa trước là số hình trong báo cáo; của đồ án này là số file trang trong
+  code, và chưa chạy thử giao diện.
+- **Số liệu do nhóm tự đếm** từ báo cáo, có thể sai lệch.
+- **Khác lĩnh vực và loại mô-đun thông minh:** học máy có huấn luyện (đồ án 6), thuật toán gợi ý trên tập dữ liệu công
+  khai (đồ án 5), và LLM kèm luật kiểm tra (đồ án này) không so trực tiếp được về "độ khó".
+- **Khác số người và thời gian thực hiện.**
+- **Cột "dự kiến" chưa phải kết quả:** các mục đánh dấu "đề xuất, chưa chốt" là kiến nghị của bản đánh giá này; chỉ
+  T1–T4 là quyết định của nhóm (ngày 23/10).
+- **Không có dữ liệu điểm**, nên không biết hội đồng coi trọng trục nào hơn.
