@@ -61,7 +61,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * không bao giờ so chéo purpose. Không gọi Gemini: generate-sync dùng rawLlmOutputOverride,
  * worker dùng LlmClient giả, Solver không được cấu hình (BlockingTestLlmClient).
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class DedupPipelineWiringTest {
 

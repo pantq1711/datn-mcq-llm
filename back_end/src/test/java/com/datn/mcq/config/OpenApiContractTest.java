@@ -65,7 +65,9 @@ class OpenApiContractTest {
     @Test
     void newEndpointsAreDocumented() throws Exception {
         JsonNode paths = objectMapper.readTree(apiDocs()).path("paths");
-        assertTrue(paths.path("/api/catalog/templates").has("post"), "Thiếu POST /api/catalog/templates");
+        assertTrue(paths.path("/api/catalog/subjects").has("get"), "Thiếu GET /api/catalog/subjects");
+        // Mặc định app.experiment.enabled=false: công cụ thí nghiệm không được lộ (ExperimentFlagTest kiểm thêm).
+        assertTrue(paths.path("/api/catalog/templates").isMissingNode(), "Template chỉ có khi bật cờ thí nghiệm");
     }
 
     /**

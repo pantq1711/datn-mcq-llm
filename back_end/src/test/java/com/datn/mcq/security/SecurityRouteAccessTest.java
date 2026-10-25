@@ -49,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * liệu giả. Quyết định áp dụng: H4/H6 (admin không dùng chức năng giáo viên; sinh câu tính phí chỉ admin). Form chấm
  * /api/reviews/** đã gỡ ngày 25/10.
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class SecurityRouteAccessTest {
 

@@ -44,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * và cùng dạng câu (mọi run, mọi trạng thái, chỉ câu giải mã được), dùng chung cho sync và job; experiment_run.prompt_text
  * giữ prompt gốc; mcq không đổi. LLM là bản giả (không gọi mạng).
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class PreviousQuestionsPromptTest {
 
