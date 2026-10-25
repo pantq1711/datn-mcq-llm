@@ -113,7 +113,8 @@ POST /api/catalog/templates
 - `subjectId`, `sourceQuestion` bắt buộc. `gradeLevel` bỏ trống hoặc từ 6 đến 9. `topic` tối đa 255 ký tự.
 - `sourceType` bỏ trống thì là `text`. Chuỗi được trim; chuỗi rỗng ở trường không bắt buộc thành `null`.
 - Trả về template vừa tạo: `id, subjectId, gradeLevel, topic, learningOutcome, sourceType, sourceQuestion, version, isActive`.
-- Môn chỉ được tạo qua seed hoặc trực tiếp trong DB; chưa có endpoint tạo môn. Một template dùng được cho cả ba dạng.
+- Môn chỉ được tạo qua seed hoặc trực tiếp trong DB; chưa có endpoint tạo môn. Migration V17 seed sẵn hai môn "Toán" và
+  "Giáo dục công dân" (không thêm bản trùng). Một template dùng được cho cả ba dạng.
 
 ### Sinh câu đồng bộ
 
