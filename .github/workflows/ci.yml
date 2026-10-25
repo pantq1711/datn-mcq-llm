@@ -1,0 +1,175 @@
+# CI (W1-5): chạy toàn bộ test backend trên PostgreSQL pgvector thật, build frontend, build image;
+# đẩy image lên GHCR khi push vào main hoặc tag v*. KHÔNG cần khóa Gemini (test dùng LLM giả) và không dùng secret nào
+# ngoài GITHUB_TOKEN tự có. Deploy lên máy chủ làm thủ công bằng deploy/scripts/update.sh (docs/deploy/README.md).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Khớp ARG trong back_end/Dockerfile (phiên bản pandoc dùng để kiểm tra reference.docx)
+  PANDOC_VERSION: "3.12.1"
+  PANDOC_SHA256: "b4217ac7c54067c442f9d4cd38bcd0c184a43f3e7053431a12263a6f92a33ba2"
+
+jobs:
+  backend:
+    name: Backend (test)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      # Cùng múi giờ với môi trường chạy thật (LocalDateTime.now() + cột TIMESTAMP không múi giờ)
+      JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Bangkok
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: back_end/pom.xml
+
+      # Có pandoc thì PandocRunnerTest/ExamBuildTest chạy phần gọi pandoc thật thay vì bỏ qua (assumeTrue)
+      - name: Cài pandoc
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/pandoc.deb" \
+            "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-amd64.deb"
+          echo "${PANDOC_SHA256}  $RUNNER_TEMP/pandoc.deb" | sha256sum -c -
+          sudo apt-get install -y --no-install-recommends "$RUNNER_TEMP/pandoc.deb"
+          pandoc --version | head -1
+
+      # Test chỉ được kết nối datn_mcq_test (TestSafetyConfiguration); service container không chạy được db/init
+      - name: Tạo database test
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE datn_mcq_test'
+
+      - name: Build và chạy toàn bộ test (bỏ test @Tag("perf"))
+        working-directory: back_end
+        run: sh mvnw -B -ntp verify
+
+      - name: Lưu báo cáo test khi lỗi
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: back_end/target/surefire-reports
+          retention-days: 7
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: front_end
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: front_end/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      # Lint chưa chặn: mã frontend do người khác phụ trách, bật chặn khi đã sạch
+      - run: npm run lint
+        continue-on-error: true
+
+  images:
+    name: Image (build, đẩy GHCR khi push main hoặc tag v*)
+    needs: [backend, frontend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # `push` chỉ kích hoạt cho nhánh main và tag v* (xem `on:`); PR và workflow_dispatch chỉ build để bắt lỗi Dockerfile
+      PUSH: ${{ github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tên image (chữ thường)
+        id: names
+        run: echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Đăng nhập GHCR
+        if: env.PUSH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.names.outputs.repo }}/backend
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build (và đẩy) backend
+        uses: docker/build-push-action@v6
+        with:
+          context: back_end
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Tag web
+        id: meta-web
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.names.outputs.repo }}/web
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build (và đẩy) web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/web/Dockerfile
+          build-args: |
+            VITE_API_BASE_URL=/api
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
