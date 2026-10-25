@@ -53,10 +53,25 @@ public class ExamSlotAction {
     @Column(name = "changed_fields", columnDefinition = "jsonb")
     private String changedFields;
 
+    /** V16: chỉ dòng replace: {@link #SOURCE_BANK} hoặc {@link #SOURCE_GENERATE}; null với keep/edit. */
+    @Column(name = "replace_source", length = 10)
+    private String replaceSource;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    public static final String SOURCE_BANK = "bank";
+    public static final String SOURCE_GENERATE = "generate";
+
     public ExamSlotAction() {}
+
+    public String getReplaceSource() {
+        return replaceSource;
+    }
+
+    public void setReplaceSource(String replaceSource) {
+        this.replaceSource = replaceSource;
+    }
 
     public ExamSlotAction(Integer slotId, String action, Integer generatedQuestionId, Integer bankItemId,
                           Integer editDistance, Integer actorId) {

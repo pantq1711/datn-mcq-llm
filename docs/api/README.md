@@ -92,7 +92,7 @@ Quyền của các dòng dưới: `catalog` GET và `bank-items` cho GV và AD; 
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
 | GET | `/api/exams/{id}/slots/{slotId}/qc-trace` | Vết QC của một chỗ: các lần sinh, phiên bản, từng bước QC, thao tác (mục 7.7). Chỉ đọc |
 | POST | `/api/exams/{id}/slots/{slotId}/keep` | Giữ câu (vào ngân hàng) |
-| POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác (sinh lại đúng ô), có thể kèm yêu cầu của giáo viên |
+| POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác: `source = generate` (mặc định) sinh lại đúng ô, có thể kèm yêu cầu của giáo viên; `source = bank` lấy câu ngân hàng khớp ô, hết thì 409 `BANK_EXHAUSTED` (mục 7.5) |
 | PUT | `/api/exams/{id}/slots/{slotId}/question` | Sửa câu của chỗ chưa Giữ (mục 7.5a); QC chạy lại, Solver qua hàng đợi |
 | GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; cần pandoc trên máy chủ |
 
@@ -790,6 +790,7 @@ khác để sinh lại).
 POST /api/exams/12/slots/101/keep                    → câu (như 7.4) với "state": "kept", "bankItemId": 88
 POST /api/exams/12/slots/104/replace                 → câu với "state": "generating" (chưa có nội dung)
 POST /api/exams/12/slots/104/replace  {"instruction": "Dùng ngữ cảnh tính tiền mua vở"}
+POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hàng khớp ô ("state": "ready", "source": "bank")
 ```
 
 - Không cần body (Đổi có thể kèm `instruction`). Người thao tác (`exam_slot_action.actor_id`, `teacher_review.reviewer_id`
@@ -817,9 +818,22 @@ POST /api/exams/12/slots/104/replace  {"instruction": "Dùng ngữ cảnh tính 
 - Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`, `edit`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại
   khỏi chỉ số chấm mù (`answer_correct`, duyệt không sửa).
 - **Chưa có:** sửa câu đã nằm trong ngân hàng, ráp đề, trộn mã đề, đề dự phòng, xuất PDF.
-- **Việc kế tiếp (D5, chưa làm):** Đổi với `{"source": "bank"}`: lấy câu ngân hàng khớp ô trước (loại các câu đã có trong
-  đề và các câu đã bị Đổi ra khỏi chỗ, đọc từ `exam_slot_action`), hết thì sinh mới như hiện nay. Hiện Đổi luôn sinh câu
-  mới và không bao giờ lấy câu ngân hàng; test `ExamBankSelectionTest.doiCauSinhMoiKhongLayCauNganHang...` khóa hành vi này.
+- **Đổi bằng câu ngân hàng (W1-4, D5-B):** `POST .../replace` nhận `{"source": "bank" | "generate", "instruction"?}`. Bỏ
+  trống `source` (hoặc không gửi body) là `generate`: giữ nguyên hành vi cũ (sinh mới qua hàng đợi), nên client cũ không vỡ.
+  - `bank`: lấy ngay câu ngân hàng khớp ô, cùng tiêu chí và xếp hạng mềm như lúc tạo đề (mục 7.2; đề theo bài: 7.2a).
+    Không có job, không gọi LLM. Trả câu như 7.4 với `state = ready`, `source = bank`, `bankItemId`, không có cờ. Chỗ
+    đã Giữ cũng đổi được (câu đã Giữ vẫn ở ngân hàng).
+  - Loại trừ **trong phạm vi cả đề**: (1) câu ngân hàng đang nằm ở chỗ nào của đề; (2) câu ngân hàng từng bị Đổi ra khỏi
+    BẤT KỲ chỗ nào của đề (đọc từ `exam_slot_action`); (3) bản sao ngân hàng của một câu sinh ra đang nằm trong đề hoặc đã
+    bị Đổi ra (câu có thể vào ngân hàng qua duyệt chấm mù), kể cả bản gốc của một câu giáo viên đã sửa.
+  - Hết câu: **409** `{"code": "BANK_EXHAUSTED", "error": "Ngân hàng không còn câu phù hợp cho chỗ này …"}`. Chỗ giữ
+    nguyên, không ghi nhật ký, không tự sinh ngầm; frontend đề nghị giáo viên "Sinh câu mới" (gọi lại với
+    `source = generate`).
+  - Lỗi khác: 400 `INVALID_REQUEST` khi `source` ngoài `bank`/`generate` hoặc `source = bank` kèm `instruction`; 409 (không
+    có `code`) khi chỗ đang sinh; 404 đề của người khác.
+  - Nhật ký `exam_slot_action` của `replace` có thêm `replace_source` (`bank` hoặc `generate`, V16; dòng cũ là `generate`)
+    để thống kê Đổi sang ngân hàng / sinh mới. `generated_question_id`/`bank_item_id` của dòng là câu BỊ đổi ra.
+  - Ghi chú số liệu: `fromBank` ở tiến độ và `source = bank` đếm cả chỗ Đổi bằng câu ngân hàng, không chỉ chỗ lấy lúc tạo đề.
 
 ### 7.5a. Sửa câu (W1-2)
 
@@ -971,7 +985,8 @@ không có hoặc của giáo viên khác, hoặc chỗ không thuộc đề: 40
 
 - `lineages`: mỗi phần tử là **một lần sinh** (job sinh câu của chỗ, theo thứ tự tạo; các lần sinh lại sau lỗi định dạng,
   trùng, lệch Solver hoặc Đổi câu đều là lineage riêng) và `versions` là câu LLM gốc rồi các bản giáo viên sửa theo thứ tự.
-  Chỗ lấy câu từ ngân hàng có một lineage `origin = "bank"` (`job = null`) gồm chuỗi phiên bản của câu nguồn.
+  Chỗ lấy câu từ ngân hàng có một lineage `origin = "bank"` (`job = null`) gồm chuỗi phiên bản của câu nguồn; W1-4: lineage
+  này cũng xuất hiện (đứng cuối) khi chỗ từng được sinh rồi Đổi bằng câu ngân hàng.
 - `current`: phiên bản đang nằm trong chỗ (`currentQuestionId`). `kind`: `llm` hoặc `teacher_edit`.
 - `qc.format.autoRepairs`: các lần hệ thống tự sửa (`json: đã sửa 1 escape LaTeX (\circ)`, `<trường>: đã tự đóng $`);
   `warnings` là cảnh báo khác. `errors` là lý do không qua format. Mỗi bước là `null` khi câu chưa có dòng QC đó (ví dụ

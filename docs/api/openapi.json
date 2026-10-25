@@ -2013,6 +2013,9 @@
       "ReplaceRequest" : {
         "type" : "object",
         "properties" : {
+          "source" : {
+            "type" : "string"
+          },
           "instruction" : {
             "type" : "string"
           }

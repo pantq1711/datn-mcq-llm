@@ -122,16 +122,22 @@ public class ExamController {
     /**
      * Body tùy chọn của Đổi câu.
      *
+     * @param source      W1-4 (D5-B): "generate" (mặc định khi bỏ trống) sinh câu mới qua hàng đợi; "bank" lấy câu ngân
+     *                    hàng khớp ô, hết câu thì 409 BANK_EXHAUSTED (không tự sinh); giá trị khác thì 400
      * @param instruction yêu cầu bổ sung của giáo viên cho lượt sinh lại này (tùy chọn; trim, tối đa 500 ký tự, dài hơn
-     *                    thì 400; trống thì như không có)
+     *                    thì 400; trống thì như không có); không dùng với source = bank
      */
-    public record ReplaceRequest(String instruction) {}
+    public record ReplaceRequest(String source, String instruction) {}
 
-    /** Đổi câu khác: sinh lại đúng ô qua hàng đợi, có thể kèm yêu cầu của giáo viên. Chỗ đang sinh thì 409. */
+    /**
+     * Đổi câu khác: sinh lại đúng ô qua hàng đợi (có thể kèm yêu cầu của giáo viên) hoặc, với {@code source = "bank"},
+     * lấy câu ngân hàng khớp ô. Chỗ đang sinh thì 409; ngân hàng hết câu thì 409 BANK_EXHAUSTED.
+     */
     @PostMapping("/{examId}/slots/{slotId}/replace")
     public ExamItemDto replace(CurrentUser user, @PathVariable Integer examId, @PathVariable Integer slotId,
                                @RequestBody(required = false) ReplaceRequest request) {
-        return examActionService.replace(examId, slotId, user.id(), request != null ? request.instruction() : null);
+        return examActionService.replace(examId, slotId, user.id(), request != null ? request.source() : null,
+                request != null ? request.instruction() : null);
     }
 
     /**
