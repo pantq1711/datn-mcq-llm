@@ -1,14 +1,11 @@
 import axiosInstance from "../../../services/apiClient";
 
 export interface ProcessNextJobResult {
-  job?: GenerationJob;
-  status: string;
+    job?: GenerationJob;
+    status: string;
 }
 
-
-
-
-import type { QuestionTemplate, Subject, GenerateQuestionPayload, GenerateResponse, GenerationStatusResponse, GenerationResultResponse, GenerationHistoryItem, GenerationJob } from "../types/generation.types";
+import type { QuestionTemplate, Subject, GenerateQuestionPayload, GenerateResponse, GenerationStatusResponse, GenerationResultResponse, GenerationJob } from "../types/generation.types";
 
 export async function createGenerationTask(
     payload: GenerateQuestionPayload
