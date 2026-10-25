@@ -705,19 +705,6 @@ public class GenerationService {
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu hỏi id=" + id));
     }
 
-    @Transactional(readOnly = true)
-    public List<GeneratedQuestion> listQuestions(QuestionStatus status) {
-        if (status != null) {
-            return generatedQuestionRepository.findByStatusOrderByIdDesc(status);
-        }
-        return generatedQuestionRepository.findAllByOrderByIdDesc();
-    }
-
-    @Transactional(readOnly = true)
-    public List<GeneratedQuestion> listQuestionsByRunId(Integer runId) {
-        return generatedQuestionRepository.findByRunIdOrderByIdAsc(runId);
-    }
-
     @Transactional
     public GeneratedQuestion updateStatusAndDifficulty(
             Integer questionId,

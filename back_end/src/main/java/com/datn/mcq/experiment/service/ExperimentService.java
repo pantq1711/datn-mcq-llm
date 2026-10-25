@@ -95,26 +95,5 @@ public class ExperimentService {
         run.setHyperparams(hyperparams);
         return experimentRunRepository.save(run);
     }
-
-    @Transactional
-    public ExperimentRun getOrCreateDemoRun(Integer subjectId, String promptText) {
-        return experimentRunRepository.findFirstBySubjectIdAndPromptVersionOrderByIdAsc(
-                        subjectId, "math-demo-seed-v1")
-                .orElseGet(() -> {
-                    ExperimentRun run = createRun(
-                            subjectId,
-                            Purpose.PRODUCTION,
-                            Strategy.FEW_SHOT_STRUCTURED,
-                            "gemini-3.5-flash-lite",
-                            0.7,
-                            "math-demo-seed-v1",
-                            promptText,
-                            5
-                    );
-                    run.setStatus("completed");
-                    run.setEndedAt(LocalDateTime.now());
-                    return experimentRunRepository.save(run);
-                });
-    }
 }
 
