@@ -99,8 +99,18 @@ class McqApiSnapshotTest {
         Map<String, Object> run = jdbc.queryForMap("SELECT * FROM generated_question g JOIN experiment_run r"
                 + " ON r.id = g.run_id WHERE g.id = ?", questionId);
         assertEquals("mcq", run.get("question_type"));
-        assertEquals("few-shot-structured", run.get("strategy"));
+        assertEquals("zero-shot", run.get("strategy"), "thí nghiệm few-shot đã bỏ (25/10): luôn zero-shot");
         assertEquals("sync-v1", run.get("prompt_version"));
+    }
 
+    @Test
+    void chienLuocFewShotBiTuChoiOCauMcq() throws Exception {
+        for (String strategy : new String[] {"few-shot", "few-shot-structured"}) {
+            mockMvc.perform(post("/api/generation/generate-sync").contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"templateId\": " + template + ", \"strategy\": \"" + strategy
+                                    + "\", \"runAnswerCheck\": false, \"rawLlmOutputOverride\": \"{}\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM experiment_run", Integer.class));
     }
 }

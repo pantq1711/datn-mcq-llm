@@ -73,6 +73,8 @@ public class GenerationService {
         }
     }
 
+    static final String MCQ_STRATEGY_MESSAGE =
+            "Câu trắc nghiệm luôn sinh với strategy zero-shot (thí nghiệm few-shot đã bỏ ngày 25/10).";
     static final String SA_STRATEGY_MESSAGE = "Câu trả lời ngắn luôn sinh với strategy zero-shot.";
     static final String TF_STRATEGY_MESSAGE = "Câu đúng/sai luôn sinh với strategy zero-shot.";
     static final String TF_LEVELS_MESSAGE =
@@ -86,6 +88,9 @@ public class GenerationService {
     static void requireZeroShotForShortAnswer(QuestionType type, Strategy strategy) {
         if (strategy == null || strategy == Strategy.ZERO_SHOT) {
             return;
+        }
+        if (type == QuestionType.MCQ) {
+            throw new IllegalArgumentException(MCQ_STRATEGY_MESSAGE);
         }
         if (type == QuestionType.SA) {
             throw new IllegalArgumentException(SA_STRATEGY_MESSAGE);
@@ -244,7 +249,7 @@ public class GenerationService {
             return generateTrueFalseSync(req, tpl, subject);
         }
 
-        Strategy strategy = req.strategy() != null ? req.strategy() : Strategy.FEW_SHOT_STRUCTURED;
+        Strategy strategy = Strategy.ZERO_SHOT;
         Difficulty targetDiff = req.targetDifficulty() != null ? req.targetDifficulty() : Difficulty.EASY;
         Double temperature = req.temperature() != null ? req.temperature() : 0.7;
         String model = (req.modelName() != null && !req.modelName().isBlank())
@@ -257,7 +262,6 @@ public class GenerationService {
                 tpl.getTopic(),
                 tpl.getLearningOutcome(),
                 tpl.getSourceQuestion(),
-                strategy,
                 targetDiff
         );
 
@@ -644,8 +648,7 @@ public class GenerationService {
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
         boolean trueFalse = questionType == QuestionType.TF;
         boolean shortAnswer = questionType == QuestionType.SA;
-        Strategy chosenStrategy = shortAnswer || trueFalse ? Strategy.ZERO_SHOT
-                : strategy != null ? strategy : Strategy.FEW_SHOT_STRUCTURED;
+        Strategy chosenStrategy = Strategy.ZERO_SHOT;
         Difficulty chosenDiff = trueFalse ? null : targetDifficulty != null ? targetDifficulty : Difficulty.EASY;
         String prompt;
         String promptVersion;
@@ -659,8 +662,9 @@ public class GenerationService {
             promptVersion = SaPromptDraftV0.PROMPT_VERSION;
         } else {
             prompt = promptBuilder.buildGenerationPrompt(subject.getName(), tpl.getGradeLevel(), tpl.getTopic(),
-                    tpl.getLearningOutcome(), tpl.getSourceQuestion(), chosenStrategy, chosenDiff);
-            promptVersion = "async-queue-v1";
+                    tpl.getLearningOutcome(), tpl.getSourceQuestion(), chosenDiff);
+            // async-queue-v1 là run few-shot cũ (C1/C2/C3), worker từ chối; zero-shot dùng bản v2.
+            promptVersion = "async-queue-v2";
         }
         ExperimentRun run = experimentService.createRun(
                 subject.getId(),

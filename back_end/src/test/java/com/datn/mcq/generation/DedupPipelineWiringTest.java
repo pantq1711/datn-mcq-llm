@@ -252,10 +252,6 @@ class DedupPipelineWiringTest {
             return false;
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            return new LlmCallResult(json, 10, 1.0, 0.0, "fake-generator-model");
-        }
 
         @Override
         public LlmCallResult callJsonMode(String prompt, String modelName, Double temperature) {
@@ -264,7 +260,7 @@ class DedupPipelineWiringTest {
 
         @Override
         public LlmCallResult callJsonModeWithSchema(String prompt, String modelName, Double temperature, String schema) {
-            throw new UnsupportedOperationException("Không được gọi Solver trong test này");
+            return new LlmCallResult(json, 10, 1.0, 0.0, "fake-generator-model");
         }
     }
 

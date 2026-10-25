@@ -124,12 +124,6 @@ public class TestSafetyConfiguration {
             return false;
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            throw new UnsupportedOperationException(
-                    "BLOCKED: Real Gemini API calls are strictly forbidden in test executions! " +
-                    "Mock LlmClient or pass rawLlmOutputOverride instead.");
-        }
 
         @Override
         public LlmCallResult callJsonMode(String prompt, String modelName, Double temperature) {

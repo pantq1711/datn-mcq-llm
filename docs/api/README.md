@@ -124,7 +124,7 @@ Công cụ thí nghiệm: chỉ có khi `app.experiment.enabled=true` (xem mục
 |---|---|---|---|
 | `templateId` | bắt buộc | bắt buộc | bắt buộc |
 | `questionType` | bỏ trống hoặc `mcq` | `sa` | `tf` |
-| `strategy` | `zero-shot`, `few-shot-structured`... | bỏ trống hoặc `zero-shot`; khác thì 400 | bỏ trống hoặc `zero-shot`; khác thì 400 |
+| `strategy` | bỏ trống hoặc `zero-shot`; khác thì 400 (few-shot đã bỏ 25/10) | bỏ trống hoặc `zero-shot`; khác thì 400 | bỏ trống hoặc `zero-shot`; khác thì 400 |
 | `targetDifficulty` | tùy chọn (mặc định `easy`) | tùy chọn (mặc định `easy`) | **không gửi** (400) |
 | `targetStatementDifficulties` | không gửi (khác null thì 400) | không gửi (khác null thì 400) | **bắt buộc**, đúng 4 mức cho ý a, b, c, d |
 | `modelName`, `temperature`, `runAnswerCheck`, `rawLlmOutputOverride` | tùy chọn | tùy chọn | tùy chọn |
@@ -152,11 +152,11 @@ Công cụ thí nghiệm: chỉ có khi `app.experiment.enabled=true` (xem mục
 - `answerCheckStatus`: `CONSISTENT` (Solver khớp; với `tf` là khớp đủ 4 ý), `INCONSISTENT`, `ERROR`, `NOT_RUN`. Câu chỉ
   đạt `qc_passed` khi `CONSISTENT`.
 
-Câu `mcq` (không đổi so với trước):
+Câu `mcq` (run `zero-shot`, `prompt_version` `sync-v1`; job `enqueue` mcq dùng `async-queue-v2`, job `async-queue-v1` cũ bị worker đánh dấu `failed`):
 
 ```http
 POST /api/generation/generate-sync
-{"templateId": 3, "strategy": "few-shot-structured", "targetDifficulty": "easy", "runAnswerCheck": true}
+{"templateId": 3, "targetDifficulty": "easy", "runAnswerCheck": true}
 ```
 
 Câu `sa`:
