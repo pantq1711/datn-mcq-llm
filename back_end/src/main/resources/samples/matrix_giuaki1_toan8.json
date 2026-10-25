@@ -1,0 +1,53 @@
+{
+  "name": "Giữa kì I – Toán 8",
+  "source": "MA TRẬN, BẢN ĐẶC TẢ ĐỀ KT GIỮA K1 TOÁN 8.docx (bản đặc tả, phần II). Mức: Biết = easy, Hiểu = medium, Vận dụng = hard.",
+  "gradeLevel": 8,
+  "cells": [
+    {"part": "I", "questionType": "mcq", "difficulty": "easy", "questionCount": 4,
+     "topic": "Đa thức", "content": "Đơn thức, đa thức",
+     "learningOutcomes": {"easy": "Nhận biết được đơn thức, đa thức. Xác định được bậc của đa thức."}},
+    {"part": "I", "questionType": "mcq", "difficulty": "easy", "questionCount": 1,
+     "topic": "Đa thức", "content": "Các phép tính đa thức",
+     "learningOutcomes": {"easy": "Nhận biết được các phép tính cộng, trừ, nhân, chia đa thức."}},
+    {"part": "I", "questionType": "mcq", "difficulty": "easy", "questionCount": 1,
+     "topic": "Hằng đẳng thức đáng nhớ và ứng dụng", "content": "Những hằng đẳng thức đáng nhớ và ứng dụng",
+     "learningOutcomes": {"easy": "Nhận biết được các hằng đẳng thức."}},
+    {"part": "I", "questionType": "mcq", "difficulty": "easy", "questionCount": 2,
+     "topic": "Hằng đẳng thức đáng nhớ và ứng dụng", "content": "Phân tích đa thức thành nhân tử",
+     "learningOutcomes": {"easy": "Nhận biết được cách phân tích đa thức thành nhân tử."}},
+    {"part": "I", "questionType": "mcq", "difficulty": "easy", "questionCount": 4,
+     "topic": "Tứ giác", "content": "Tứ giác, hình thang cân",
+     "learningOutcomes": {"easy": "Nhận biết tính chất của tứ giác, hình thang cân."}},
+
+    {"part": "II", "questionType": "tf", "statementDifficulties": ["easy", "easy", "medium", "hard"], "questionCount": 1,
+     "topic": "Đa thức", "content": "Các phép tính đa thức",
+     "learningOutcomes": {
+       "easy": "Nhận biết được các phép tính cộng, trừ, nhân, chia đa thức.",
+       "medium": "Thu gọn, tính được giá trị của đa thức. Xác định được biểu thức nhân, chia đa thức.",
+       "hard": "Thực hiện được các phép tính cộng, trừ, nhân các đa thức nhiều biến. Vận dụng kiến thức để chứng minh biểu thức không phụ thuộc vào biến, tính giá trị biểu thức."}},
+    {"part": "II", "questionType": "tf", "statementDifficulties": ["easy", "easy", "medium", "hard"], "questionCount": 1,
+     "topic": "Hằng đẳng thức đáng nhớ và ứng dụng", "content": "Những hằng đẳng thức đáng nhớ và ứng dụng",
+     "learningOutcomes": {
+       "easy": "Nhận biết được các hằng đẳng thức.",
+       "medium": "Xác định được hằng đẳng thức, từ đó khai triển được các hằng đẳng thức.",
+       "hard": "Vận dụng hằng đẳng thức để tính giá trị biểu thức, chứng minh đẳng thức, tìm x. Xác định được giá trị của đa thức nhờ vận dụng các hằng đẳng thức."}},
+
+    {"part": "III", "questionType": "sa", "difficulty": "medium", "questionCount": 1,
+     "topic": "Đa thức", "content": "Đơn thức, đa thức",
+     "learningOutcomes": {"medium": "Xác định được giá trị của đa thức."}},
+    {"part": "III", "questionType": "sa", "difficulty": "medium", "questionCount": 1,
+     "topic": "Đa thức", "content": "Các phép tính đa thức",
+     "learningOutcomes": {"medium": "Thu gọn, tính được giá trị của đa thức. Xác định được biểu thức nhân, chia đa thức."}},
+    {"part": "III", "questionType": "sa", "difficulty": "hard", "questionCount": 1,
+     "topic": "Hằng đẳng thức đáng nhớ và ứng dụng", "content": "Phân tích đa thức thành nhân tử",
+     "learningOutcomes": {"hard": "Phân tích được đa thức thành nhân tử ở dạng phức tạp."}},
+    {"part": "III", "questionType": "sa", "difficulty": "medium", "questionCount": 1,
+     "topic": "Tứ giác", "content": "Tứ giác, hình thang cân",
+     "learningOutcomes": {"medium": "Tính được góc trong tứ giác."}}
+  ],
+  "notes": [
+    "Phần I: 12 câu (C1-C12), phần II: 2 câu (C13, C14), phần III: 4 câu (C15-C18) theo bản đặc tả. Tự luận (C19-C21) ngoài phạm vi.",
+    "Bảng ma trận tổng và bản đặc tả trong file gốc không khớp hoàn toàn về mức của phần III; mẫu này theo bản đặc tả. Cần giáo viên xác nhận.",
+    "Câu chủ đề Tứ giác phải làm được không cần hình vẽ (ví dụ cho số đo các góc bằng lời)."
+  ]
+}
