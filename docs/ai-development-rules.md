@@ -1,16 +1,20 @@
-# Quy tắc phát triển có AI hỗ trợ – v1
+# Quy tắc phát triển có AI hỗ trợ – v2
 
 Phạm vi: toàn bộ repository `datn-mcq-llm` (backend Java 21/Spring Boot, PostgreSQL/Flyway, Gemini).
 Áp dụng cho mọi agent/AI client và cho người dùng khi giao việc cho AI.
 
+v2 (2026-10-25): bỏ luồng chấm mù và thí nghiệm C1/C2/C3 khỏi phạm vi, xem "Quyết định ngày 25/10/2026" ở cuối tài
+liệu. Các mục đánh dấu **[NGƯNG 25/10]** không còn áp dụng; nội dung giữ lại để tra cứu lịch sử.
+
 Ký hiệu:
 
+- **[NGƯNG 25/10]** – mục đã ngừng áp dụng theo quyết định 25/10/2026; không viết test hay code mới dựa trên mục đó.
 - **M-x** – quy tắc **bắt buộc**, áp dụng ngay, không cần thay đổi kiến trúc.
 - **K-x** – **khuyến nghị**, triển khai dần khi có thời gian; không phải điều kiện để tuân thủ v1.
 - **Q-x** – **câu hỏi chờ chủ dự án quyết định**. AI không được tự chọn đáp án hay viết code giả định đáp án.
 - **F-x** – phát hiện từ audit (mục 11), kèm mức độ chắc chắn.
 
-Cách tham chiếu trong prompt: `Tuân thủ docs/ai-development-rules.md v1. Lượt này chỉ làm bước <...>.`
+Cách tham chiếu trong prompt: `Tuân thủ docs/ai-development-rules.md v2. Lượt này chỉ làm bước <...>.`
 
 ---
 
@@ -40,19 +44,19 @@ Cách tham chiếu trong prompt: `Tuân thủ docs/ai-development-rules.md v1. L
 
 Chỉ ghi ở đây những điều đã có trong migration/`enums.md`. Phần chưa chốt nằm ở mục 10.
 
-**M-6. Chấm mù – mọi `purpose`:** payload trả về cho người chấm (form, danh sách, phản hồi sau khi nộp) **không** chứa `correct_option` của LLM, **không** chứa `answer_correct`, kể cả trong JSON ẩn. Server tự tính và lưu `answer_correct`. (V1 dòng 136–138, `enums.md` mục 3.) **Ngoại lệ có chủ đích:** chế độ giáo viên khi tạo đề theo ma trận (`/api/exams/**`, production) không chấm mù, xem "Quyết định ngày 22/10/2026 – chế độ giáo viên" ở cuối tài liệu. Form chấm `/api/reviews/**` vẫn theo M-6.
+**M-6. [NGƯNG 25/10] Chấm mù – mọi `purpose`:** payload trả về cho người chấm (form, danh sách, phản hồi sau khi nộp) **không** chứa `correct_option` của LLM, **không** chứa `answer_correct`, kể cả trong JSON ẩn. Server tự tính và lưu `answer_correct`. (V1 dòng 136–138, `enums.md` mục 3.) **Ngoại lệ có chủ đích:** chế độ giáo viên khi tạo đề theo ma trận (`/api/exams/**`, production) không chấm mù, xem "Quyết định ngày 22/10/2026 – chế độ giáo viên" ở cuối tài liệu. Form chấm `/api/reviews/**` vẫn theo M-6.
 
-**M-7. Chấm mù – `experiment`:** ngoài M-6, payload còn không chứa `llm_difficulty`, chiến lược sinh, và mọi kết quả QC (gồm `judge_answer`, similarity, `status`). Không được để lộ gián tiếp qua tham số lọc, thứ tự, hay giá trị giả.
+**M-7. [NGƯNG 25/10] Chấm mù – `experiment`:** ngoài M-6, payload còn không chứa `llm_difficulty`, chiến lược sinh, và mọi kết quả QC (gồm `judge_answer`, similarity, `status`). Không được để lộ gián tiếp qua tham số lọc, thứ tự, hay giá trị giả.
 
-**M-8. Provenance:** `purpose` của một lần chấm phải khớp `experiment_run.purpose` của câu hỏi. Giá trị client gửi lên không được quyết định `purpose`; nếu khác thì từ chối.
+**M-8. [NGƯNG 25/10] Provenance:** `purpose` của một lần chấm phải khớp `experiment_run.purpose` của câu hỏi. Giá trị client gửi lên không được quyết định `purpose`; nếu khác thì từ chối.
 
-**M-9. `bank_item`:** chỉ được tạo/cập nhật từ duyệt thật (`production`), với quyết định `approved_as_is` hoặc `approved_with_edit`, và trong **cùng transaction** với `teacher_review` tương ứng (kể cả Giữ/Sửa ở chế độ giáo viên: `teacher_review.review_mode = 'assisted'`). Câu thuộc run `experiment` không bao giờ vào `bank_item`. Chỉ `bank_item` được đưa vào đề (`exam_question.bank_item_id`).
+**M-9. `bank_item`:** (v2) chỉ được tạo/cập nhật khi giáo viên Giữ câu ở chế độ giáo viên (`production`, `AssistedKeepService`), với quyết định `approved_as_is`, và trong **cùng transaction** với `teacher_review` tương ứng (`teacher_review.review_mode = 'assisted'`, kể cả bản giáo viên đã Sửa). Câu thuộc run `experiment` không bao giờ vào `bank_item`. Chỉ `bank_item` được đưa vào đề (`exam_slot.bank_item_id`; `exam_question.bank_item_id` là dữ liệu cũ, chưa gỡ). Dòng `teacher_review.review_mode = 'blind'` cũ giữ nguyên trong DB.
 
 **M-10. Trạng thái QC:** chỉ chuyển `generated_question.status` theo kết quả pipeline QC hoặc theo duyệt production. Không ép trạng thái (ví dụ đặt thẳng `qc_passed`) ngoài pipeline. Định nghĩa đầy đủ của `qc_passed` đang chờ Q-2.
 
-**M-11. Experiment:** mỗi cặp (`question_id`, `reviewer_id`) chỉ có một lần nộp; không cho ghi đè nhãn thực nghiệm.
+**M-11. [NGƯNG 25/10] Experiment:** mỗi cặp (`question_id`, `reviewer_id`) chỉ có một lần nộp; không cho ghi đè nhãn thực nghiệm.
 
-**M-12.** Mỗi bất biến M-6 → M-11 khi được sửa/chạm vào phải có ít nhất một test bảo vệ (xem mục 4).
+**M-12.** Mỗi bất biến còn hiệu lực (M-9, M-10) khi được sửa/chạm vào phải có ít nhất một test bảo vệ (xem mục 4). M-6, M-7, M-8, M-11 đã ngưng (25/10) nên không cần test bảo vệ.
 
 ---
 
@@ -75,9 +79,9 @@ Chỉ ghi ở đây những điều đã có trong migration/`enums.md`. Phần 
 
 **M-15.** Mỗi yêu cầu nghiệp vụ → một test có thể thất bại trên code hiện tại. Chạy và ghi nhận **FAIL** trước khi sửa (nếu được phép chạy test; nếu không, ghi nhãn theo mục 7). Ngoại lệ: nếu issue là sửa lỗi không compile được (như F-1) hoặc chỉ sửa tài liệu/cấu hình tĩnh, ghi nhận lý do tại bước Test và chạy xác minh sau khi sửa.
 
-**M-16.** Hợp đồng về payload (M-6, M-7) phải được kiểm ở mức HTTP thật: MockMvc (hoặc tương đương) gọi endpoint `/api/...`, assert trên JSON trả về. Test reflection hoặc `ObjectMapper` tự tạo chỉ là bổ sung, không thay thế.
+**M-16.** Hợp đồng về payload API còn hiệu lực phải được kiểm ở mức HTTP thật: MockMvc (hoặc tương đương) gọi endpoint `/api/...`, assert trên JSON trả về. Test reflection hoặc `ObjectMapper` tự tạo chỉ là bổ sung, không thay thế. (Hợp đồng ẩn đáp án của M-6, M-7 đã ngưng 25/10.)
 
-**M-17.** Test cho luồng có ghi DB phải kiểm cả trạng thái sau lỗi (rollback): khi service ném lỗi, `teacher_review`, `generated_question.status`, `bank_item` đều không bị thay đổi dở dang.
+**M-17.** Test cho luồng có ghi DB phải kiểm cả trạng thái sau lỗi (rollback): khi service ném lỗi, `teacher_review`, `generated_question.status`, `bank_item` đều không bị thay đổi dở dang. (Từ 25/10 áp dụng cho Giữ câu: `AssistedKeepService`, test `ExamBuildTest.loiKhiGhiNganHangThiGiuCauRollbackToanBo`.)
 
 **M-18.** Test không được gọi mạng/API tính phí: mock `LlmClient` hoặc dùng `rawLlmOutputOverride`.
 
@@ -113,7 +117,7 @@ Chỉ ghi ở đây những điều đã có trong migration/`enums.md`. Phần 
 **M-26.** Không gọi Gemini, embedding hay dịch vụ tính phí khi chưa có cho phép **rõ ràng trong lượt hiện tại**. Lưu ý: `LlmClient` còn đọc biến hệ thống `GEMINI_API_KEY`/`LLM_API_KEY`, nên `.env` trống **không** đảm bảo không có cuộc gọi tính phí.
 
 **M-27.** Các thao tác sau cần cho phép rõ ràng trước khi chạy, vì có thể chạy Flyway, ghi DB dev hoặc gọi LLM:
-`mvn test` / `mvnw test` (hiện các `@SpringBootTest` dùng datasource từ `.env`), `spring-boot:run`, chạy app, gọi endpoint `/api/generation/*`, `/api/reviews/demo/seed-math`, bật `WORKER_ENABLED=true`, mọi lệnh `psql`/SQL.
+`mvn test` / `mvnw test` (hiện các `@SpringBootTest` dùng datasource từ `.env`), `spring-boot:run`, chạy app, gọi endpoint `/api/generation/*` (chỉ tồn tại khi `app.experiment.enabled=true`), bật `WORKER_ENABLED=true`, mọi lệnh `psql`/SQL. (`/api/reviews/demo/seed-math` đã gỡ ngày 25/10.)
 
 **M-28.** Không xóa/sửa dữ liệu DB, không `flyway clean`/`repair`, không drop schema.
 
@@ -167,14 +171,14 @@ Chưa phải hợp đồng. AI không tự chọn; khi chạm vào → dừng th
 
 | ID | Câu hỏi | Trạng thái |
 |---|---|---|
-| Q-1 | `explanation` có xuất hiện trong payload chấm production không? Nếu có thì khi nào (ví dụ chỉ sau khi giáo viên chọn đáp án)? Lưu ý `explanation` có thể làm lộ đáp án (liên quan M-6). Với experiment, hiện code đang giấu. | **Đã chốt (2026-10-21)**: Form chấm ban đầu tuyệt đối không trả `explanation`, đáp án LLM, `answerCorrect` hay kết quả QC cho cả `EXPERIMENT` và `PRODUCTION`. `SubmitReviewResponse` không trả `explanation` hay `answerCorrect`. Lời giải (`explanation`) chỉ được mở sau khi người chấm đã nộp đánh giá độc lập: với `PRODUCTION` mở sau khi đánh giá độc lập đã được lưu; với `EXPERIMENT` chỉ mở sau khi người chấm hoàn thành toàn bộ câu được giao. Phần mở lời giải này vẫn bị chặn bởi Q-6 (chưa có xác thực danh tính người chấm và chưa chốt việc dùng `label_assignment`). |
+| Q-1 | **[NGƯNG 25/10]** `explanation` có xuất hiện trong payload chấm production không? Nếu có thì khi nào (ví dụ chỉ sau khi giáo viên chọn đáp án)? Lưu ý `explanation` có thể làm lộ đáp án (liên quan M-6). Với experiment, hiện code đang giấu. | **Đã chốt (2026-10-21)**: Form chấm ban đầu tuyệt đối không trả `explanation`, đáp án LLM, `answerCorrect` hay kết quả QC cho cả `EXPERIMENT` và `PRODUCTION`. `SubmitReviewResponse` không trả `explanation` hay `answerCorrect`. Lời giải (`explanation`) chỉ được mở sau khi người chấm đã nộp đánh giá độc lập: với `PRODUCTION` mở sau khi đánh giá độc lập đã được lưu; với `EXPERIMENT` chỉ mở sau khi người chấm hoàn thành toàn bộ câu được giao. Phần mở lời giải này vẫn bị chặn bởi Q-6 (chưa có xác thực danh tính người chấm và chưa chốt việc dùng `label_assignment`). |
 | Q-2 | `qc_passed` nghĩa chính xác là gì: chỉ qua format? Bắt buộc dedup? `answer_check` sai hoặc lỗi có chặn không? | **Đã chốt (2026-10-21)**: `QC_PASSED` yêu cầu đồng thời: format hợp lệ; dedup đã chạy và không phát hiện trùng; `answer_check` thực thi thành công và nhất quán. Logic pipeline hiện tại chưa theo định nghĩa này (xem F-7) và còn chờ triển khai. |
-| Q-3 | Luồng tạo experiment run (endpoint/công cụ nào), và `purpose` lấy từ đâu; có cho phép giá trị mặc định không? | Chờ |
-| Q-4a | Seed demo: giữ, xóa, hay chỉ bật theo profile; run seed mang `purpose` gì; có được ghi kết quả QC không phải từ pipeline thật không? | Chờ |
+| Q-3 | Luồng tạo experiment run (endpoint/công cụ nào), và `purpose` lấy từ đâu; có cho phép giá trị mặc định không? | **Thu hẹp (25/10)**: phần liên quan thí nghiệm C1/C2/C3 ngưng. **Vẫn mở** cho các thử nghiệm mới (Solver bắt lỗi, ngưỡng dedup): cần đường tạo run `experiment` riêng vì `generate-sync` gắn cứng `production`. Giữ `Purpose.EXPERIMENT`, `DedupScope.forExperiment`, `ExperimentService.createRun`. Gặp thì dừng hỏi (M-4). |
+| Q-4a | **[NGƯNG 25/10]** Seed demo: giữ, xóa, hay chỉ bật theo profile; run seed mang `purpose` gì; có được ghi kết quả QC không phải từ pipeline thật không? | **Đã chốt (25/10)**: gỡ hẳn seed demo (`MathDemoSeedService`, `/api/reviews/demo/seed-math`). |
 | Q-4b | Câu production đã `rejected` có được duyệt lại không? | Chờ |
 | Q-4c | `bank_item` đã nằm trong đề có được sửa/gỡ không? | Chờ |
 | Q-5 | `llm_difficulty` là kết quả của bước chấm độ khó riêng (theo comment V1) hay là độ khó mục tiêu khi sinh? | Chờ |
-| Q-6 | Phạm vi xác thực người chấm; có bắt buộc `label_assignment` khi chấm experiment không? | Chờ |
+| Q-6 | **[NGƯNG 25/10]** Phạm vi xác thực người chấm; có bắt buộc `label_assignment` khi chấm experiment không? | **Đã chốt (25/10)**: không còn luồng chấm; xác thực JWT (W1-1) áp dụng cho mọi API; `label_assignment` không dùng. |
 | Q-7 | Cô lập DB test: DB riêng (ví dụ `datn_mcq_test` + profile `test`) hay Testcontainers? | **Đã triển khai (2026-10-21)**: dùng database riêng `datn_mcq_test` kèm guard chặn kết nối tới database khác và `BlockingTestLlmClient`. Smoke test và toàn bộ 33 test đã PASS ngày 2026-10-21 theo báo cáo surefire có sẵn (không chạy lại trong lượt cập nhật tài liệu này). |
 | Q-8 | Ranh giới phụ thuộc module: có cho `bank → exam`, `review → experiment/catalog/generation.worker` không, hay phải đi qua service khác? | Chờ |
 
@@ -192,17 +196,17 @@ Chưa phải hợp đồng. AI không tự chọn; khi chạm vào → dừng th
 | F-2 | Báo cáo "32 test pass" không chứng minh trạng thái hiện tại: surefire reports ghi lúc 01:13:21, file `TeacherReviewService.java` sửa lúc 01:14:59, `.class` lúc 01:10:38. | mtime trong `back_end/target` |
 | F-3 | Các `@SpringBootTest` dùng datasource từ `.env`, không có `@Transactional`/Testcontainers → chạy test sẽ chạy Flyway và ghi dữ liệu vào DB được cấu hình. | `TeacherReviewSecurityAndIntegrityTest`, `BackEndApplicationTests`, `application.yaml` |
 | F-4 | `generateSync` và `enqueueJobs` hardcode `Purpose.PRODUCTION`; `ExperimentService.createRun` mặc định `PRODUCTION` khi null, trong khi DB mặc định `'experiment'` (V2 dòng 7). | `GenerationService`, `ExperimentService` |
-| F-5 | `MathDemoSeedService` tạo run `PRODUCTION`, ghi kết quả `answer_check` dựng sẵn với tên model thật, ép `QC_PASSED`; mở qua `POST /api/reviews/demo/seed-math`. | `MathDemoSeedService` dòng 215–222 |
+| F-5 | **[NGƯNG 25/10: seed đã gỡ]** `MathDemoSeedService` tạo run `PRODUCTION`, ghi kết quả `answer_check` dựng sẵn với tên model thật, ép `QC_PASSED`; mở qua `POST /api/reviews/demo/seed-math`. | `MathDemoSeedService` dòng 215–222 |
 | F-6 | Danh sách review lọc theo `status` không phân biệt `purpose` → với câu experiment, tham số lọc có thể làm lộ kết quả QC dù payload đã giấu `status`. | `TeacherReviewService.listQuestionsForReview` |
 | F-7 | Pipeline QC hiện là format → answer_check; không có dedup; `answer_check` sai hoặc lỗi vẫn trả `QC_PASSED`. | `QcOrchestrator.evaluateAndSave` |
 | F-8 | `llm_difficulty` được gán bằng độ khó mục tiêu khi sinh; `difficulty_judge_model` không được ghi. | `GenerationService.saveParsedQuestion`, `GenerationJobProcessor` |
 | F-9 | Claim job không khóa hàng (không `SKIP LOCKED`, trái comment V2 dòng 27); không xử lý job kẹt `running`; job đánh dấu `done` trước khi QC chạy. | `GenerationJobRepository`, `GenerationJobPoller` |
 | F-10 | `BankService` gọi trực tiếp `ExamQuestionRepository` (trái backend-structure quy tắc 2 và "bank chỉ phụ thuộc common/config"). `review` phụ thuộc `experiment`, `catalog`, `generation.worker` chưa có trong tài liệu. | `BankService`, `TeacherReviewService` |
-| F-11 | Payload production trả `explanation`; fixture test có explanation nêu đáp án và test khẳng định trường này có mặt. Xung đột tiềm ẩn với M-6 → Q-1. | `TeacherReviewSecurityAndIntegrityTest` |
-| F-12 | Test payload hiện gọi service trực tiếp + `ObjectMapper` tự tạo; không có MockMvc cho `/api/reviews`. | Thư mục test |
+| F-11 | **[NGƯNG 25/10]** Payload production trả `explanation`; fixture test có explanation nêu đáp án và test khẳng định trường này có mặt. Xung đột tiềm ẩn với M-6 → Q-1. | `TeacherReviewSecurityAndIntegrityTest` |
+| F-12 | **[NGƯNG 25/10]** Test payload hiện gọi service trực tiếp + `ObjectMapper` tự tạo; không có MockMvc cho `/api/reviews`. | Thư mục test |
 | F-13 | Duyệt lại production cập nhật `bank_item` mà không kiểm tra câu đã nằm trong đề; chỉ đường gỡ có kiểm tra. | `BankService.createOrUpdateFromReview` |
 | F-14 | Sau khi production `rejected`, điều kiện QC chặn việc duyệt lại. | `TeacherReviewService.submitReview` |
-| F-15 | Không có xác thực; `reviewerId` lấy từ body, null → giáo viên mặc định; không kiểm tra `label_assignment`. | `TeacherReviewService.submitReview` |
+| F-15 | **[NGƯNG 25/10: form chấm đã gỡ; xác thực có từ W1-1]** Không có xác thực; `reviewerId` lấy từ body, null → giáo viên mặc định; không kiểm tra `label_assignment`. | `TeacherReviewService.submitReview` |
 | F-16 | `cost_usd` luôn 0.0. | `LlmClient` |
 | F-17 | `LlmClient` dùng biến hệ thống `GEMINI_API_KEY`/`LLM_API_KEY` khi cấu hình trống. | `LlmClient.resolveApiKey` |
 | F-18 | Comment V1 về `exam_question` kiểm tra `in_bank` đã lỗi thời sau V2; README ghi "chưa có code". | V1 dòng 270–271, `README.md` |
@@ -270,6 +274,8 @@ Xác nhận: không chạy lệnh thuộc M-27 / không gọi API tính phí / k
   luồng tạo đề theo ma trận); ghi chú ở M-6, M-9. Không đổi số phiên bản tài liệu.
 - 2026-10-23: thêm "Quyết định ngày 23/10/2026 – bỏ thí nghiệm C1/C2/C3, chương thử nghiệm mới" (bỏ thí nghiệm so sánh
   C1/C2/C3; giáo viên dùng thử và khảo sát qua chế độ giáo viên; 4 thử nghiệm mới). Không đổi số phiên bản tài liệu.
+- v2 (2026-10-25): thêm "Quyết định ngày 25/10/2026 – gỡ chấm mù, seed demo, C1/C2/C3". Ngưng M-6, M-7, M-8, M-11,
+  Q-1, Q-4a, Q-6, F-5, F-11, F-12, F-15; thu hẹp Q-3; cập nhật M-9, M-12, M-16, M-17, M-27.
 ## Quyết định ngày 21/10/2026 (thay thế các comment xung đột trong V1__init_schema.sql)
 
 Không sửa file V1 (đã chạy, sửa sẽ lệch checksum Flyway). Khi comment trong V1 mâu thuẫn với mục này, mục này thắng.
@@ -313,3 +319,25 @@ README ("Phần thực nghiệm so sánh 3 cách sinh"). Không đổi code tron
    2. Ngưỡng dedup: so cách dùng 3-gram với embedding trên khoảng 150 cặp câu do nhóm tự gán nhãn trùng/không trùng.
    3. So sánh với cách dùng hiện tại: hệ thống so với các prompt mẫu mà cộng đồng giáo viên đang dùng trên Gemini.
    4. Khảo sát giáo viên dùng thử (theo mục 2, kèm giới hạn đã nêu).
+
+## Quyết định ngày 25/10/2026 – gỡ chấm mù, seed demo, C1/C2/C3 (v2)
+
+Thay thế phần "vẫn giữ trong code như một chức năng thực nghiệm" của quyết định 23/10 mục 1. Chốt sau audit W2-2 (chủ dự án
+duyệt E1 = A, E2 = A, E3 = A, E4 = A, E5 = A). Chế độ giáo viên (`/api/exams/**`) là chế độ duy nhất.
+
+1. **Gỡ luồng chấm mù.** Xóa khỏi code: `/api/reviews/questions`, `/api/reviews/questions/{id}` (GET, POST),
+   `/api/reviews/demo/seed-math`, `MathDemoSeedService`, phần chấm mù của `TeacherReviewService`, các DTO chấm mù,
+   `TeacherReviewReason` và `ReasonCode`, cùng test của chúng. Lịch sử Git vẫn giữ. Ngưng áp dụng: M-6, M-7, M-8, M-11,
+   Q-1, Q-4a, Q-6, F-5, F-11, F-12, F-15 (đánh dấu ở từng mục). Ngoại lệ của M-6 trong quyết định 22/10 trở thành vô nghĩa.
+2. **`teacher_review` vẫn dùng.** Giữ câu ở chế độ giáo viên ghi `teacher_review` với `review_mode = 'assisted'` và `bank_item`
+   trong cùng transaction (M-9); `bank_item.review_id` vẫn `NOT NULL`. Logic này nằm ở `AssistedKeepService` (module `review`,
+   trước đây là `TeacherReviewService.keepAssisted`). Dòng `review_mode = 'blind'` cũ giữ nguyên, nên `origin.reviewMode` của
+   `/api/bank-items` có thể trả `blind` với dữ liệu cũ.
+3. **Bỏ C1/C2/C3.** Enum `Strategy` giữ cả ba giá trị (CHECK của `experiment_run.strategy` và dữ liệu cũ). Giữ
+   `Purpose.EXPERIMENT`, `DedupScope.forExperiment`, `ExperimentService.createRun`, `AnswerSolverChecker`, nhóm embedding và
+   gold set (cho các thử nghiệm mới). Phần code few-shot, `LlmClient.generateMcq` và nhánh `EXPERIMENT` của worker gỡ ở bước
+   riêng; job cũ có `prompt_version = 'async-queue-v1'` sẽ thất bại với `last_error` rõ ràng.
+4. **`/api/generation/*`, `GET`/`POST /api/catalog/templates` chỉ tồn tại khi `app.experiment.enabled=true`** (mặc định
+   `false`, không bật ở prod). Chúng phục vụ công cụ thí nghiệm (sinh đồng bộ, bơm job, chạy job, thử tải với Gemini giả).
+5. **Việc chưa làm (cố ý):** `exam_question` (F-10) giữ nguyên, xử lý ở task sau. Không DROP bảng hay cột nào; migration chỉ
+   đi tiến. Q-3 còn mở cho thử nghiệm mới (xem bảng mục 10). Q-4b, Q-4c, Q-5, Q-8 không đổi.
