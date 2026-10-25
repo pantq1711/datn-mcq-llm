@@ -1,0 +1,6 @@
+# Spike: không đưa môi trường/thư viện tải về/bản build vào Git
+.venv313/
+_downloads/
+java-proto/target/
+tools/__pycache__/
+out/ref_unz/

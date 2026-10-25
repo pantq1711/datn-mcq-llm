@@ -1,0 +1,8 @@
+# Giữ LF cho file chạy trên Linux (K-9, W1-5). Cố ý không đặt `* text=auto` để không chuẩn hóa lại các file cũ (F-19).
+/deploy/** text eol=lf
+/.github/** text eol=lf
+/back_end/Dockerfile text eol=lf
+/back_end/.dockerignore text eol=lf
+*.sh text eol=lf
+*.docx binary
+*.dump binary

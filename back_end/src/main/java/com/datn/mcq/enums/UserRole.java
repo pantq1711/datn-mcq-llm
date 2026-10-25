@@ -3,10 +3,11 @@ package com.datn.mcq.enums;
 import com.fasterxml.jackson.annotation.JsonValue;
 import jakarta.persistence.Converter;
 
-/** Cột dùng: users.role. */
+/** Cột dùng: users.role. ADMIN thêm ở V11 (W1-1); tên hằng là giá trị claim "role" trong JWT. */
 public enum UserRole implements DbEnum {
     TEACHER("teacher"),
-    RESEARCHER("researcher");
+    RESEARCHER("researcher"),
+    ADMIN("admin");
 
     private final String dbValue;
 

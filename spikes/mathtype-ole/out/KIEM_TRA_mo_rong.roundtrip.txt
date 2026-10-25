@@ -1,0 +1,126 @@
+InlineShapes truoc=116 sau=0
+1	Spike: công thức MathType (OLE), bộ mở rộng
+2	Phần A, B: mỗi dòng một công thức. Phần C: các trường hợp đặc biệt.
+3	Phần A. 40 biểu thức Toán THCS
+4	A11. $\sqrt[3]{27}$
+5	A12. ${{x}^{2}}-5x+6=0$
+6	A13. $\Delta ={{b}^{2}}-4ac$
+7	A14. ${{x}_{1,2}}=\frac{-b\pm \sqrt{\Delta }}{2a}$
+8	A15. $|x-2|\le 3$
+9	A16. $\frac{a}{b}:\frac{c}{d}=\frac{a}{b}\cdot \frac{d}{c}$
+10	A17. $\sin \alpha =\frac{3}{5}$
+11	A18. $\tan {{30}^{{}^\circ }}=\frac{\sqrt{3}}{3}$
+12	A19. $\vartriangle ABC\sim\vartriangle DEF$
+13	A20. $AB\parallel CD$
+14	A21. $AB\bot CD$
+15	A22. $\overline{abc}$
+16	A23. $\overrightarrow{AB}$
+17	A24. $x\in \mathbb{N}$
+18	A25. $A\cap B=\varnothing $
+19	A26. $\{1;2;3\}$
+20	A27. $[a;b]$
+21	A28. $y=ax+b\ (a\ne 0)$
+22	A29. $S=\frac{1}{2}ah$
+23	A30. $\sqrt{2}\approx 1,414$
+24	A31. $x\ge -\frac{1}{2}$
+25	A32. $2x+3y\le 12$
+26	A33. $\frac{x+1}{x-1}-\frac{x-1}{x+1}$
+27	A34. $\left[ \begin{array}{*{35}{l}}
+28	x=1  \\
+29	x=2  \\
+30	\end{array} \right.$
+31	A35. ${{(a+b)}^{2}}={{a}^{2}}+2ab+{{b}^{2}}$
+32	A36. $\text{c}{{\text{m}}^{2}}$
+33	A37. $\angle xOy$
+34	A38. $\overset{\frown }{\mathop{AB}}\,$
+35	A39. ${{a}^{m}}\cdot {{a}^{n}}={{a}^{m+n}}$
+36	A40. $\sqrt{\frac{a}{b}}=\frac{\sqrt{a}}{\sqrt{b}}$
+37	A41. ${{\cos }^{2}}\alpha +{{\sin }^{2}}\alpha =1$
+38	A42. $x=\pm 3$
+39	A43. $3,5$
+40	A44. $\frac{1}{2}<\frac{2}{3}$
+41	A45. $\sum\limits_{i=1}^{n}{i}$
+42	A46. $1\le x\le 5$
+43	A47. $\frac{1}{x}$
+44	A48. $P\Rightarrow Q$
+45	A49. $AB=5\text{ cm}$
+46	A50. $a\vdots b$
+47	Phần B. Ký hiệu và cấu trúc
+48	B1. $a\times b$
+49	B2. $a\div b$
+50	B3. $a\cdot b$
+51	B4. $a\pm b$
+52	B5. $a\mp b$
+53	B6. $a\le b$
+54	B7. $a\ge b$
+55	B8. $a\approx b$
+56	B9. $a\equiv b$
+57	B10. $a\simb$
+58	B11. $a\cong b$
+59	B12. $a\notin B$
+60	B13. $A\subset B$
+61	B14. $A\subseteq B$
+62	B15. $A\cup B$
+63	B16. $A\cap B$
+64	B17. $x\to \infty $
+65	B18. $P\Leftrightarrow Q$
+66	B19. $P\Rightarrow Q$
+67	B20. $\forall x$
+68	B21. $\exists x$
+69	B22. $\mathbb{Z}$
+70	B23. $\mathbb{Q}$
+71	B24. $\mathbb{R}$
+72	B25. ${{\mathbb{N}}^{*}}$
+73	B26. $ab$
+74	B27. $a\ b$
+75	B28. $a\quad b$
+76	B29. $a\ b$
+77	B30. $1,5$
+78	B31. $2.5$
+79	B32. $3!$
+80	B33. ${f}'(x)$
+81	B34. ${f}''(x)$
+82	B35. $a/b$
+83	B36. $50%$
+84	B37. ${{x}_{1}}+\ldots +{{x}_{n}}$
+85	B38. ${{x}_{1}}+\cdots +{{x}_{n}}$
+86	B39. $\alpha \beta \gamma \delta \varepsilon \theta \lambda \mu \rho \sigma \varphi \omega $
+87	B40. $\Gamma \Lambda \Omega \Sigma \Phi \Pi \Theta $
+88	B41. $\text{V}\text{y }x=2$
+89	B42. ${{\log }_{2}}8$
+90	B43. $\overline{AB}$
+91	B44. $\vec{a}$
+92	B45. $\hat{A}$
+93	B46. $\tilde{x}$
+94	B47. $\bar{x}$
+95	B48. $\dot{x}$
+96	B49. $\angle ABC$
+97	B50. $\sqrt[n]{a}$
+98	B51. ${{x}^{-1}}$
+99	B52. $\frac{1}{\frac{1}{2}}$
+100	B53. $\left| x \right|$
+101	B54. $\left\{ x \right\}$
+102	B55. $\left[ x \right]$
+103	B56. ⌊𝑥⌋
+104	B57. $\left( \begin{matrix}
+105	n \\
+106	k \\
+107	\end{matrix} \right)$
+108	B58. $\int_{0}^{1}{x}dx$
+109	B59. $\underset{x\to 0}{\mathop{\lim }}\,$
+110	B60. ${{({{x}_{1}})}^{2}}$
+111	B61. ${{a}_{n+1}}$
+112	B62. $x_{1}^{2}$
+113	B63. $\left( \frac{1}{2} \right)$
+114	B64. $AB//CD$
+115	B65. $x>0$
+116	B66. $a<b$
+117	B67. $\sqrt{a}\sqrt{b}$
+118	B68. $\frac{1}{2}x$
+119	Phần C. Trường hợp đặc biệt
+120	C1. Chữ tiếng Việt trong công thức: $\text{V}\text{y }x=2$ và $S=12\text{ c}{{\text{m}}^{2}}$ và $\text{S}\text{ h}\text{c sinh}=35$.
+121	C2. Công thức hiển thị riêng dòng (căn giữa):
+122	\[{{x}_{1,2}}=\frac{-b\pm \sqrt{\Delta }}{2a}\]
+123	C3. Phương án trắc nghiệm trên một dòng: A. $x=1$ B. $x=-1$ C. $x=\frac{1}{2}$ D. $x=2$
+124	C4. Công thức chưa hỗ trợ, cố ý giữ dạng Equation của Word: ⌊𝑥⌋.
+125	C5. Tích phân có lũy thừa trong thân: $\int_{0}^{1}{{{x}^{2}}}dx$.

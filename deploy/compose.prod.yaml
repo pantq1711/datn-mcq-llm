@@ -1,0 +1,106 @@
+# Triển khai thật (W1-5): db + app (Spring Boot) + web (Caddy: HTTPS, frontend tĩnh, proxy /api).
+# Chạy từ thư mục deploy/ (Compose tự đọc deploy/.env để thay biến ${...}):
+#   cp .env.example .env && chmod 600 .env   # điền giá trị thật
+#   docker compose -f compose.prod.yaml up -d
+# (đặt COMPOSE_FILE=compose.prod.yaml trong .env để bỏ -f). Hướng dẫn đầy đủ: docs/deploy/README.md
+#
+# CHỈ MỘT bản app: giới hạn đăng nhập sai nằm trong bộ nhớ và worker chạy cùng tiến trình. Không dùng --scale app=N.
+# Compose dev (chỉ PostgreSQL, mở cổng 5432) là docker-compose.yml ở gốc repo, không dùng cho server.
+name: datn
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.7-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:?Cần đặt DB_NAME trong deploy/.env}
+      POSTGRES_USER: ${DB_USER:?Cần đặt DB_USER trong deploy/.env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Cần đặt DB_PASSWORD trong deploy/.env}
+      TZ: Asia/Bangkok
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - max_connections=60
+      - -c
+      - timezone=Asia/Bangkok
+      - -c
+      - log_timezone=Asia/Bangkok
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 768m
+    networks: [internal]   # không mở cổng ra ngoài, không ra Internet
+    logging: *logging
+
+  app:
+    image: ${IMAGE_PREFIX:-ghcr.io/pantq1711/datn-mcq-llm}/backend:${APP_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:   # đè lên env_file: các giá trị này không chỉnh qua .env
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: db
+      DB_PORT: "5432"
+      FORWARD_HEADERS_STRATEGY: native   # bắt buộc sau proxy (xem docs/deploy/README.md mục 6)
+      WORKER_ENABLED: "true"             # false thì job sinh câu nằm pending mãi
+      PANDOC_PATH: pandoc
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}   # chỉ đặt false khi chạy thử qua http (xem README mục 9)
+    expose:
+      - "8080"
+    mem_limit: 1g
+    stop_grace_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    tmpfs:
+      - /tmp:size=128m   # thư mục tạm của pandoc khi xuất Word
+    networks: [internal, edge]   # edge: gọi Gemini ra Internet
+    logging: *logging
+
+  web:
+    image: ${IMAGE_PREFIX:-ghcr.io/pantq1711/datn-mcq-llm}/web:${APP_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Cần đặt SITE_ADDRESS (tên miền) trong deploy/.env}
+      HSTS: ${HSTS:-max-age=31536000}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - caddy_data:/data     # chứng chỉ Let's Encrypt: không xóa volume này
+      - caddy_config:/config
+    mem_limit: 128m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    networks: [edge]
+    logging: *logging
+
+networks:
+  internal:
+    internal: true
+  edge: {}
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

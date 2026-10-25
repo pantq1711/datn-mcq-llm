@@ -1,7 +1,7 @@
 /**
  * Ngân hàng câu hỏi: bản chốt cuối cùng do giáo viên duyệt thật (production).
  *
- * <p>Bảng sở hữu: bank_item.
+ * <p>Bảng sở hữu: bank_item, bank_item_statement.
  * <br>Được phép phụ thuộc: common.
  *
  * <p>Cấu trúc bên trong khi thêm code: entity, repository, service, controller, dto.

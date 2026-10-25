@@ -1,10 +1,12 @@
 package com.datn.mcq.enums;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -28,7 +30,13 @@ class DbEnumTest {
                 new ExamStatus.Conv(),
                 new JobStatus.Conv(),
                 new SourceType.Conv(),
-                new UserRole.Conv());
+                new UserRole.Conv(),
+                new QuestionType.Conv(),
+                new StatementKey.Conv(),
+                new TruthValue.Conv(),
+                new TruthChoice.Conv(),
+                new SaAnswerKind.Conv(),
+                new SaJudgeKind.Conv());
 
     private static final List<Class<? extends Enum<?>>> ENUMS = List.of(
                 Strategy.class,
@@ -45,7 +53,13 @@ class DbEnumTest {
                 ExamStatus.class,
                 JobStatus.class,
                 SourceType.class,
-                UserRole.class);
+                UserRole.class,
+                QuestionType.class,
+                StatementKey.class,
+                TruthValue.class,
+                TruthChoice.class,
+                SaAnswerKind.class,
+                SaJudgeKind.class);
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -77,6 +91,42 @@ class DbEnumTest {
         assertEquals(AnswerChoice.MULTIPLE, new AnswerChoice.Conv().convertToEntityAttribute("multiple"));
         assertEquals(Option.B, new Option.Conv().convertToEntityAttribute("B "));
         assertEquals("answer_check", CheckType.ANSWER_CHECK.getDbValue());
+    }
+
+    /** V4: chuỗi DB của các enum mới khớp docs/contract/enums.md và CHECK của V4. */
+    @Test
+    void enumV4KhớpHợpĐồng() {
+        assertEquals(List.of("mcq", "tf", "sa"), dbValues(QuestionType.class));
+        assertEquals(List.of("a", "b", "c", "d"), dbValues(StatementKey.class));
+        assertEquals(List.of("T", "F"), dbValues(TruthValue.class));
+        assertEquals(List.of("T", "F", "undecidable"), dbValues(TruthChoice.class));
+        assertEquals(List.of("number", "ambiguous"), dbValues(SaAnswerKind.class));
+        assertEquals(List.of("number", "ambiguous", "unparseable"), dbValues(SaJudgeKind.class));
+        assertEquals("statement_undecidable", ReasonCode.STATEMENT_UNDECIDABLE.getDbValue());
+        assertEquals("answer_ambiguous", ReasonCode.ANSWER_AMBIGUOUS.getDbValue());
+    }
+
+    /** V4: mã lý do theo dạng câu (quyết định 3 ngày 22/10). */
+    @Test
+    void mãLýDoTheoDạngCâu() {
+        for (ReasonCode code : ReasonCode.values()) {
+            boolean newCode = code == ReasonCode.STATEMENT_UNDECIDABLE || code == ReasonCode.ANSWER_AMBIGUOUS;
+            assertEquals(!newCode, code.allowedFor(QuestionType.MCQ), "mcq: " + code);
+        }
+        assertTrue(ReasonCode.STATEMENT_UNDECIDABLE.allowedFor(QuestionType.TF));
+        assertFalse(ReasonCode.STATEMENT_UNDECIDABLE.allowedFor(QuestionType.SA));
+        assertTrue(ReasonCode.ANSWER_AMBIGUOUS.allowedFor(QuestionType.SA));
+        assertFalse(ReasonCode.ANSWER_AMBIGUOUS.allowedFor(QuestionType.TF));
+        for (ReasonCode code : ReasonCode.MCQ_ONLY) {
+            assertFalse(code.allowedFor(QuestionType.TF), "tf: " + code);
+            assertFalse(code.allowedFor(QuestionType.SA), "sa: " + code);
+        }
+        assertTrue(ReasonCode.CONTENT_INACCURATE.allowedFor(QuestionType.TF));
+        assertTrue(ReasonCode.OTHER.allowedFor(QuestionType.SA));
+    }
+
+    private static List<String> dbValues(Class<? extends Enum<?>> type) {
+        return Arrays.stream(type.getEnumConstants()).map(e -> ((DbEnum) e).getDbValue()).toList();
     }
 
     @Test

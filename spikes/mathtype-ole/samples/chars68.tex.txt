@@ -1,0 +1,68 @@
+a\times b
+a\div b
+a\cdot b
+a\pm b
+a\mp b
+a\le b
+a\ge b
+a\approx b
+a\equiv b
+a\sim b
+a\cong b
+a\notin B
+A\subset B
+A\subseteq B
+A\cup B
+A\cap B
+x\to\infty
+P\Leftrightarrow Q
+P\Rightarrow Q
+\forall x
+\exists x
+\mathbb{Z}
+\mathbb{Q}
+\mathbb{R}
+\mathbb{N}^*
+a\,b
+a\;b
+a\quad b
+a\ b
+1,5
+2.5
+3!
+f'(x)
+f''(x)
+a/b
+50\%
+x_1+\ldots+x_n
+x_1+\cdots+x_n
+\alpha\beta\gamma\delta\varepsilon\theta\lambda\mu\rho\sigma\varphi\omega
+\Gamma\Lambda\Omega\Sigma\Phi\Pi\Theta
+\text{Vậy } x=2
+\log_2 8
+\overline{AB}
+\vec{a}
+\hat{A}
+\tilde{x}
+\bar{x}
+\dot{x}
+\angle ABC
+\sqrt[n]{a}
+x^{-1}
+\frac{1}{\frac{1}{2}}
+\left|x\right|
+\left\{x\right\}
+\left[x\right]
+\lfloor x\rfloor
+\binom{n}{k}
+\int_0^1 x\,dx
+\lim_{x\to 0}
+(x_1)^2
+a_{n+1}
+x_1^2
+\left(\frac{1}{2}\right)
+AB//CD
+x>0
+a<b
+\sqrt{a}\sqrt{b}
+\frac{1}{2}x

@@ -1,0 +1,21 @@
+# Profile prod (W1-5): bật bằng SPRING_PROFILES_ACTIVE=prod (compose.prod.yaml đặt sẵn). Chỉ chứa phần KHÁC application.yaml;
+# bí mật và địa chỉ đi qua biến môi trường như thường lệ.
+spring:
+  # Chuẩn bị cho tài liệu đính kèm (chưa có endpoint upload). Caddy cũng giới hạn thân request /api ở 12MB.
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+  # Dừng nhẹ nhàng khi docker stop: chờ request đang xử lý (stop_grace_period của compose là 40 giây)
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  shutdown: graceful
+
+# Swagger UI và OpenAPI đang permitAll trong SecurityConfig, nên tắt hẳn ở môi trường thật (Caddy cũng chặn các đường này)
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

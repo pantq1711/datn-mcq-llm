@@ -1,0 +1,1 @@
+CREATE DATABASE datn_mcq_test;
