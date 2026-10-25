@@ -4,6 +4,7 @@ import com.datn.mcq.catalog.dto.CreateTemplateRequest;
 import com.datn.mcq.catalog.entity.QuestionTemplate;
 import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.service.CatalogService;
+import com.datn.mcq.common.exception.ApiErrorException;
 import com.datn.mcq.common.util.JsonStringArray;
 import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.enums.DbEnum;
@@ -61,12 +62,14 @@ public class MatrixService {
     private final ExamMatrixRepository matrixRepository;
     private final ExamMatrixCellRepository cellRepository;
     private final CatalogService catalogService;
+    private final MatrixUsageLookup usage;
 
     public MatrixService(ExamMatrixRepository matrixRepository, ExamMatrixCellRepository cellRepository,
-                         CatalogService catalogService) {
+                         CatalogService catalogService, MatrixUsageLookup usage) {
         this.matrixRepository = matrixRepository;
         this.cellRepository = cellRepository;
         this.catalogService = catalogService;
+        this.usage = usage;
     }
 
     /** Tạo ma trận; {@code ownerId} là người đăng nhập (W1-1). */
@@ -189,9 +192,14 @@ public class MatrixService {
         // Postgres lưu tới micro giây: cắt trước để phản hồi lúc tạo giống phản hồi đọc lại.
         matrix.setCreatedAt(LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS));
         matrix = matrixRepository.save(matrix);
+        addCells(matrix, req.cells());
+        return matrix;
+    }
 
+    /** Tạo các ô của ma trận theo thứ tự (vị trí từ 1), mỗi ô một question_template mới. */
+    private void addCells(ExamMatrix matrix, List<CellInput> inputs) {
         int position = 1;
-        for (CellInput in : req.cells()) {
+        for (CellInput in : inputs) {
             ExamMatrixCell cell = new ExamMatrixCell();
             cell.setMatrixId(matrix.getId());
             cell.setPosition(position++);
@@ -213,7 +221,138 @@ public class MatrixService {
             cell.setTemplateId(createTemplate(matrix, cell).getId());
             cellRepository.save(cell);
         }
-        return matrix;
+    }
+
+    // ---------- sửa, xóa, nhân bản (W1-4 bước 3) ----------
+
+    /** Mã 409 khi sửa cấu trúc hoặc xóa ma trận đã có đề. */
+    public static final String MATRIX_IN_USE = "MATRIX_IN_USE";
+
+    /**
+     * Sửa ma trận của chính người gọi (body như tạo, thay toàn bộ). Chưa có đề nào: thay cả môn, khối và các ô (id ô đổi;
+     * template cũ không còn ai tham chiếu bị dọn). Đã có đề: chỉ đổi được tên, nguồn, ghi chú; môn, khối hoặc ô khác bản
+     * đang lưu (so sau chuẩn hóa) thì 409 {@value #MATRIX_IN_USE}, vì đề đã tạo đọc ô sống để Đổi/sinh lại. Khóa hàng ma
+     * trận trước khi đếm đề, nên tạo đề đang dở (đã ghi đề, chưa commit) làm lần sửa chờ rồi thấy đề đó.
+     */
+    @Transactional
+    public MatrixDto update(Integer id, CreateMatrixRequest req, Integer ownerId) {
+        ExamMatrix matrix = lockOwnedForUpdate(id, ownerId);
+        validate(req);
+        Subject subject = catalogService.getSubjectById(req.subjectId());
+        List<ExamMatrixCell> oldCells = cellRepository.findByMatrixIdOrderByPositionAsc(id);
+        int exams = usage.examCount(id);
+        matrix.setName(req.name().trim());
+        matrix.setSource(blankToNull(req.source()));
+        matrix.setNotes(JsonStringArray.write(req.notes()));
+        if (exams > 0) {
+            if (!sameStructure(matrix, oldCells, subject.getId(), req)) {
+                throw ApiErrorException.conflict(MATRIX_IN_USE, "Ma trận đã được dùng cho " + exams + " đề nên không "
+                        + "sửa được môn, khối và các ô (đề đã tạo dùng lại ô để sinh câu). Tên, nguồn và ghi chú vẫn "
+                        + "sửa được; muốn đổi ô hãy nhân bản ma trận hoặc tạo ma trận mới.");
+            }
+            return toDto(matrixRepository.save(matrix));
+        }
+        matrix.setSubjectId(subject.getId());
+        matrix.setGradeLevel(req.gradeLevel());
+        matrix = matrixRepository.save(matrix);
+        List<Integer> oldTemplates = oldCells.stream().map(ExamMatrixCell::getTemplateId).toList();
+        cellRepository.deleteAll(oldCells);
+        cellRepository.flush();
+        addCells(matrix, req.cells());
+        catalogService.deleteUnusedTemplates(oldTemplates);
+        return toDto(matrix);
+    }
+
+    /** Khóa ghi hàng ma trận của người gọi (kind = 'matrix') rồi đọc; không có hoặc của người khác: 404. */
+    private ExamMatrix lockOwnedForUpdate(Integer id, Integer ownerId) {
+        matrixRepository.lockRowForUpdate(id, ownerId, ExamMatrix.KIND_MATRIX)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy ma trận id=" + id));
+        return matrixRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy ma trận id=" + id));
+    }
+
+    /** Môn, khối và danh sách ô của yêu cầu giống bản đang lưu (cùng cách chuẩn hóa như lúc lưu). */
+    private static boolean sameStructure(ExamMatrix matrix, List<ExamMatrixCell> cells, Integer subjectId,
+                                         CreateMatrixRequest req) {
+        if (!matrix.getSubjectId().equals(subjectId) || !java.util.Objects.equals(matrix.getGradeLevel(),
+                req.gradeLevel()) || cells.size() != req.cells().size()) {
+            return false;
+        }
+        for (int i = 0; i < cells.size(); i++) {
+            ExamMatrixCell c = cells.get(i);
+            CellInput in = req.cells().get(i);
+            Map<String, String> outcomes = in.learningOutcomes();
+            boolean tf = in.questionType() == QuestionType.TF;
+            boolean same = c.getPart().equals(in.part().trim())
+                    && c.getQuestionType() == in.questionType()
+                    && c.getTopic().equals(in.topic().trim())
+                    && java.util.Objects.equals(c.getContent(), blankToNull(in.content()))
+                    && java.util.Objects.equals(c.getLearningOutcomeEasy(), blankToNull(outcomes.get("easy")))
+                    && java.util.Objects.equals(c.getLearningOutcomeMedium(), blankToNull(outcomes.get("medium")))
+                    && java.util.Objects.equals(c.getLearningOutcomeHard(), blankToNull(outcomes.get("hard")))
+                    && java.util.Objects.equals(c.getDifficulty(), tf ? null : in.difficulty())
+                    && java.util.Objects.equals(c.getStatementDifficulties(), tf ? String.join(",",
+                            in.statementDifficulties().stream().map(Difficulty::getDbValue).toList()) : null)
+                    && c.getQuestionCount().equals(in.questionCount());
+            if (!same) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Xóa ma trận của chính người gọi. Có đề thì 409 {@value #MATRIX_IN_USE} (đề giữ khóa ngoại tới ma trận và ô). Không
+     * có đề: xóa ô và ma trận, dọn template của các ô nếu không còn câu hay job tham chiếu (câu đã sinh giữ vết nguồn gốc).
+     */
+    @Transactional
+    public void delete(Integer id, Integer ownerId) {
+        ExamMatrix matrix = lockOwnedForUpdate(id, ownerId);
+        int exams = usage.examCount(id);
+        if (exams > 0) {
+            throw ApiErrorException.conflict(MATRIX_IN_USE, "Ma trận đã được dùng cho " + exams + " đề nên không xóa "
+                    + "được.");
+        }
+        List<ExamMatrixCell> cells = cellRepository.findByMatrixIdOrderByPositionAsc(id);
+        List<Integer> templates = cells.stream().map(ExamMatrixCell::getTemplateId).toList();
+        cellRepository.deleteAll(cells);
+        cellRepository.flush();
+        matrixRepository.delete(matrix);
+        matrixRepository.flush();
+        catalogService.deleteUnusedTemplates(templates);
+    }
+
+    /**
+     * Nhân bản ma trận của chính người gọi (kể cả ma trận đã có đề): ma trận mới độc lập, cùng nội dung ô, mỗi ô có
+     * template riêng, không giữ khóa mẫu (sampleKey), người sở hữu là người gọi. {@code name} bỏ trống thì
+     * "&lt;tên&gt; (bản sao)" (cắt phần tên cho vừa 255 ký tự).
+     */
+    @Transactional
+    public MatrixDto duplicate(Integer id, String name, Integer ownerId) {
+        ExamMatrix source = getOwnedMatrix(id, ownerId);
+        String copyName;
+        if (name == null || name.isBlank()) {
+            String suffix = " (bản sao)";
+            String base = source.getName();
+            copyName = (base.length() + suffix.length() > 255 ? base.substring(0, 255 - suffix.length()) : base)
+                    + suffix;
+        } else {
+            copyName = name.trim();
+        }
+        List<CellInput> cells = new ArrayList<>();
+        for (ExamMatrixCell c : cellRepository.findByMatrixIdOrderByPositionAsc(id)) {
+            Map<String, String> outcomes = new LinkedHashMap<>();
+            for (Difficulty level : Difficulty.values()) {
+                if (c.learningOutcome(level) != null) {
+                    outcomes.put(level.getDbValue(), c.learningOutcome(level));
+                }
+            }
+            cells.add(new CellInput(c.getPart(), c.getQuestionType(), c.getTopic(), c.getContent(), outcomes,
+                    c.getDifficulty(), statementLevels(c), c.getQuestionCount()));
+        }
+        return toDto(persist(new CreateMatrixRequest(copyName, source.getSubjectId(), source.getGradeLevel(),
+                source.getSource(), JsonStringArray.read(source.getNotes()), cells), null, ExamMatrix.KIND_MATRIX,
+                ownerId));
     }
 
     /** question_template của ô: source_question ghi ma trận, phần, chủ đề, nội dung và yêu cầu cần đạt. */
@@ -245,7 +384,7 @@ public class MatrixService {
         List<ExamMatrixCell> cells = cellRepository.findByMatrixIdOrderByPositionAsc(m.getId());
         return new MatrixDto(m.getId(), m.getName(), m.getSubjectId(), m.getGradeLevel(), m.getSource(),
                 JsonStringArray.read(m.getNotes()), m.getSampleKey(), m.getCreatedAt(),
-                cells.stream().map(MatrixService::toDto).toList(), totals(cells));
+                cells.stream().map(MatrixService::toDto).toList(), totals(cells), usage.examCount(m.getId()));
     }
 
     /**
@@ -255,6 +394,17 @@ public class MatrixService {
     @Transactional(readOnly = true)
     public ExamMatrix getOwnedMatrix(Integer matrixId, Integer ownerId) {
         return matrixRepository.findByIdAndCreatedByAndKind(matrixId, ownerId, ExamMatrix.KIND_MATRIX)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy ma trận id=" + matrixId));
+    }
+
+    /**
+     * Như {@link #getOwnedMatrix} nhưng giữ khóa chia sẻ (FOR SHARE) trên hàng ma trận tới hết transaction: tạo đề dùng
+     * để một lần xóa/sửa ma trận đồng thời phải chờ (rồi thấy đề mới và trả 409), còn nếu ma trận vừa bị xóa thì 404 thay vì
+     * lỗi khóa ngoại. Gọi trong transaction của nơi tạo đề.
+     */
+    @Transactional
+    public ExamMatrix getOwnedMatrixShared(Integer matrixId, Integer ownerId) {
+        return matrixRepository.lockOwnedForShare(matrixId, ownerId, ExamMatrix.KIND_MATRIX)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy ma trận id=" + matrixId));
     }
 
@@ -292,9 +442,13 @@ public class MatrixService {
     /** Ma trận của người gọi, mới nhất trước (W1-1). */
     @Transactional(readOnly = true)
     public List<MatrixSummaryDto> list(Integer ownerId) {
-        return matrixRepository.findAllByCreatedByAndKindOrderByIdDesc(ownerId, ExamMatrix.KIND_MATRIX).stream()
+        List<ExamMatrix> matrices = matrixRepository.findAllByCreatedByAndKindOrderByIdDesc(ownerId,
+                ExamMatrix.KIND_MATRIX);
+        Map<Integer, Integer> exams = usage.examCounts(matrices.stream().map(ExamMatrix::getId).toList());
+        return matrices.stream()
                 .map(m -> new MatrixSummaryDto(m.getId(), m.getName(), m.getSubjectId(), m.getGradeLevel(),
-                        m.getCreatedAt(), cellRepository.findByMatrixIdOrderByPositionAsc(m.getId()).size()))
+                        m.getCreatedAt(), cellRepository.findByMatrixIdOrderByPositionAsc(m.getId()).size(),
+                        exams.getOrDefault(m.getId(), 0)))
                 .toList();
     }
 

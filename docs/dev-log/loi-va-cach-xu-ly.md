@@ -57,8 +57,9 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-41 | Dedup bỏ sót câu cùng đề ở ô khác chưa qua QC và văn bản câu ngân hàng đã sửa (bổ sung 24/10, W1-3) | QC | Trung bình | Đã sửa |
 | L-42 | Solver lỗi với câu LLM gốc không để lại dấu vết, lẫn với "chưa chạy" (bổ sung 24/10, W1-3) | QC | Thấp | Đã sửa |
 | L-43 | Hai ô dùng chung template có thể nhận cùng một câu ngân hàng (bổ sung 24/10, W1-3) | Dữ liệu/DB | Thấp | Đã sửa |
+| L-44 | Khóa ghi hàng ma trận không chờ tạo đề đang dở (bổ sung 25/10, W1-4) | Hàng đợi/đồng thời | Trung bình | Đã sửa |
 
-**Thống kê theo nhóm** (43 mục):
+**Thống kê theo nhóm** (44 mục):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
@@ -67,11 +68,11 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | Quy trình git | 2 | 2 | 0 | 0 |
 | LLM & parse | 11 | 10 | 0 | 1 |
 | QC | 8 | 7 | 0 | 1 |
-| Hàng đợi/đồng thời | 6 | 5 | 0 | 1 |
+| Hàng đợi/đồng thời | 7 | 6 | 0 | 1 |
 | Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **43** | **40** | **0** | **3** |
+| **Tổng** | **44** | **41** | **0** | **3** |
 
-Theo mức độ: Cao 9, Trung bình 21, Thấp 13.
+Theo mức độ: Cao 9, Trung bình 22, Thấp 13.
 
 ---
 
@@ -700,6 +701,26 @@ Theo mức độ: Cao 9, Trung bình 21, Thấp 13.
   `pending` và sinh câu mới; câu đã lưu nằm lại ở `generated`, không gắn chỗ nào (như ghi chú còn lại của L-34).
 - Bài học: một trạng thái "xong" chỉ được ghi cùng lúc với kết quả cuối mà người khác sẽ đọc; trạng thái trung gian
   không được nhìn giống trạng thái kết luận.
+- Trạng thái: Đã sửa.
+
+### L-44 Khóa ghi hàng ma trận không chờ tạo đề đang dở (bổ sung 25/10, W1-4)
+- Nhóm: Hàng đợi/đồng thời
+- Triệu chứng: xóa ma trận đúng lúc một lần tạo đề đã ghi dòng `exam` nhưng chưa commit không chờ và không thấy đề đó:
+  lần xóa đếm được 0 đề, rồi `DELETE` ma trận bị khóa ngoại chặn và trả `FOREIGN_KEY_CONFLICT` (409 do K-5) thay vì
+  `MATRIX_IN_USE` như thiết kế. Nếu chưa có K-5 thì là 500. Test trước khi sửa:
+  `MatrixManageTest.xoaMaTranLucDangTaoDeChoXongRoiTra409 ==> {"code":"FOREIGN_KEY_CONFLICT"…} expected: <true>`.
+- Nguyên nhân gốc: `@Lock(PESSIMISTIC_WRITE)` của Hibernate trên PostgreSQL sinh `FOR NO KEY UPDATE`, loại khóa này không
+  xung đột với `FOR KEY SHARE` mà khóa ngoại `exam.matrix_id` giữ trên hàng ma trận khi chèn đề. Kết luận suy ra từ kết quả
+  test (hành vi khớp với tài liệu PostgreSQL về ma trận xung đột khóa hàng); chưa đối chiếu câu SQL Hibernate sinh ra.
+- Cách phát hiện: test hai luồng dựng sẵn tình huống tranh chấp (một kết nối thô giữ giao dịch dở, một yêu cầu HTTP bị chặn
+  chờ khóa).
+- Cách sửa: `ExamMatrixRepository.lockRowForUpdate` là `SELECT ... FOR UPDATE` native (xung đột với `FOR KEY SHARE`), đọc
+  entity sau khi có khóa; tạo đề khóa chia sẻ (`PESSIMISTIC_READ`) để gặp ma trận vừa xóa thì 404.
+- Chống tái phát: `MatrixManageTest.xoaMaTranLucDangTaoDeChoXongRoiTra409`, `taoDeLucDangXoaMaTranChoXongRoiTra404`;
+  K-5 trong `ApiExceptionHandler` (409 `FOREIGN_KEY_CONFLICT` / `UNIQUE_CONFLICT`) làm lưới an toàn cho các tranh chấp khác,
+  `ApiExceptionHandlerDataIntegrityTest`, `MatrixManageTest.loiRangBuocThatCuaPostgresDuocAnhXaDungMaHttp`.
+- Bài học: tên chế độ khóa của ORM không nói loại khóa thật ở CSDL; khóa để chặn tranh chấp phải được kiểm bằng test hai
+  luồng, không chỉ đọc code.
 - Trạng thái: Đã sửa.
 
 ## Xuất file

@@ -57,6 +57,86 @@
         }
       }
     },
+    "/api/exam-matrices/{id}" : {
+      "get" : {
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "get",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MatrixDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "update",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateMatrixRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MatrixDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "delete",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        }
+      }
+    },
     "/api/reviews/questions/{id}" : {
       "get" : {
         "tags" : [ "teacher-review-controller" ],
@@ -408,6 +488,42 @@
         }
       }
     },
+    "/api/exam-matrices/{id}/duplicate" : {
+      "post" : {
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "duplicate",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DuplicateMatrixRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MatrixDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/exam-matrices/samples/{key}" : {
       "post" : {
         "tags" : [ "matrix-controller" ],
@@ -700,7 +816,7 @@
     "/api/admin/users/{id}" : {
       "patch" : {
         "tags" : [ "admin-user-controller" ],
-        "operationId" : "update",
+        "operationId" : "update_1",
         "parameters" : [ {
           "name" : "id",
           "in" : "path",
@@ -968,33 +1084,6 @@
                   "items" : {
                     "$ref" : "#/components/schemas/SlotDto"
                   }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/exam-matrices/{id}" : {
-      "get" : {
-        "tags" : [ "matrix-controller" ],
-        "operationId" : "get",
-        "parameters" : [ {
-          "name" : "id",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int32"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/MatrixDto"
                 }
               }
             }
@@ -1405,6 +1494,199 @@
           "difficulty" : {
             "type" : "string",
             "enum" : [ "easy", "medium", "hard" ]
+          }
+        }
+      },
+      "CellInput" : {
+        "type" : "object",
+        "properties" : {
+          "part" : {
+            "type" : "string"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "learningOutcomes" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "string"
+            }
+          },
+          "difficulty" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          },
+          "statementDifficulties" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "enum" : [ "easy", "medium", "hard" ]
+            }
+          },
+          "questionCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "CreateMatrixRequest" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "subjectId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "gradeLevel" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "notes" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "cells" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CellInput"
+            }
+          }
+        }
+      },
+      "CellDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "position" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "part" : {
+            "type" : "string"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "learningOutcomes" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "string"
+            }
+          },
+          "difficulty" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          },
+          "statementDifficulties" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "enum" : [ "easy", "medium", "hard" ]
+            }
+          },
+          "questionCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "templateId" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "MatrixDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "subjectId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "gradeLevel" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "notes" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "sampleKey" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "cells" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CellDto"
+            }
+          },
+          "totals" : {
+            "$ref" : "#/components/schemas/TotalsDto"
+          },
+          "examCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "TotalsDto" : {
+        "type" : "object",
+        "properties" : {
+          "questionsByPart" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "integer",
+              "format" : "int32"
+            }
+          },
+          "commandsByLevel" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "integer",
+              "format" : "int32"
+            }
+          },
+          "totalCommands" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },
@@ -2125,192 +2407,11 @@
           }
         }
       },
-      "CellInput" : {
-        "type" : "object",
-        "properties" : {
-          "part" : {
-            "type" : "string"
-          },
-          "questionType" : {
-            "type" : "string",
-            "enum" : [ "mcq", "tf", "sa" ]
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "content" : {
-            "type" : "string"
-          },
-          "learningOutcomes" : {
-            "type" : "object",
-            "additionalProperties" : {
-              "type" : "string"
-            }
-          },
-          "difficulty" : {
-            "type" : "string",
-            "enum" : [ "easy", "medium", "hard" ]
-          },
-          "statementDifficulties" : {
-            "type" : "array",
-            "items" : {
-              "type" : "string",
-              "enum" : [ "easy", "medium", "hard" ]
-            }
-          },
-          "questionCount" : {
-            "type" : "integer",
-            "format" : "int32"
-          }
-        }
-      },
-      "CreateMatrixRequest" : {
+      "DuplicateMatrixRequest" : {
         "type" : "object",
         "properties" : {
           "name" : {
             "type" : "string"
-          },
-          "subjectId" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "gradeLevel" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "source" : {
-            "type" : "string"
-          },
-          "notes" : {
-            "type" : "array",
-            "items" : {
-              "type" : "string"
-            }
-          },
-          "cells" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/CellInput"
-            }
-          }
-        }
-      },
-      "CellDto" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "position" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "part" : {
-            "type" : "string"
-          },
-          "questionType" : {
-            "type" : "string",
-            "enum" : [ "mcq", "tf", "sa" ]
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "content" : {
-            "type" : "string"
-          },
-          "learningOutcomes" : {
-            "type" : "object",
-            "additionalProperties" : {
-              "type" : "string"
-            }
-          },
-          "difficulty" : {
-            "type" : "string",
-            "enum" : [ "easy", "medium", "hard" ]
-          },
-          "statementDifficulties" : {
-            "type" : "array",
-            "items" : {
-              "type" : "string",
-              "enum" : [ "easy", "medium", "hard" ]
-            }
-          },
-          "questionCount" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "templateId" : {
-            "type" : "integer",
-            "format" : "int32"
-          }
-        }
-      },
-      "MatrixDto" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "subjectId" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "gradeLevel" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "source" : {
-            "type" : "string"
-          },
-          "notes" : {
-            "type" : "array",
-            "items" : {
-              "type" : "string"
-            }
-          },
-          "sampleKey" : {
-            "type" : "string"
-          },
-          "createdAt" : {
-            "type" : "string",
-            "format" : "date-time"
-          },
-          "cells" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/CellDto"
-            }
-          },
-          "totals" : {
-            "$ref" : "#/components/schemas/TotalsDto"
-          }
-        }
-      },
-      "TotalsDto" : {
-        "type" : "object",
-        "properties" : {
-          "questionsByPart" : {
-            "type" : "object",
-            "additionalProperties" : {
-              "type" : "integer",
-              "format" : "int32"
-            }
-          },
-          "commandsByLevel" : {
-            "type" : "object",
-            "additionalProperties" : {
-              "type" : "integer",
-              "format" : "int32"
-            }
-          },
-          "totalCommands" : {
-            "type" : "integer",
-            "format" : "int32"
           }
         }
       },
@@ -3260,6 +3361,10 @@
             "format" : "date-time"
           },
           "cellCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "examCount" : {
             "type" : "integer",
             "format" : "int32"
           }
