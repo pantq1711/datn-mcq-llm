@@ -102,17 +102,6 @@ public class UserService {
         userAccountRepository.save(u);
     }
 
-    /**
-     * Giáo viên mặc định cho các luồng chưa xác định người dùng (form chấm khi bỏ trống reviewerId, seed demo). Luồng
-     * tạo đề theo ma trận không dùng nữa (W1-1: người thao tác lấy từ token).
-     */
-    @Transactional
-    public UserAccount getOrCreateDefaultTeacher() {
-        return userAccountRepository.findFirstByRoleOrderByIdAsc(UserRole.TEACHER)
-                .orElseGet(() -> userAccountRepository.save(
-                        new UserAccount("Giáo viên Toán THCS", "teacher.math@ptit.edu.vn", UserRole.TEACHER)));
-    }
-
     private static LocalDateTime now() {
         return LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
     }

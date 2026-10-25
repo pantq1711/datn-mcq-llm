@@ -30,7 +30,6 @@ import com.datn.mcq.qc.dto.DedupScope;
 import com.datn.mcq.qc.entity.QualityCheckResult;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import com.datn.mcq.qc.repository.QualityCheckResultRepository;
-import com.datn.mcq.review.service.MathDemoSeedService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,7 +56,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Nối dedup vào pipeline thật (GenerationService, GenerationJobPoller, MathDemoSeedService) trên datn_mcq_test.
+ * Nối dedup vào pipeline thật (GenerationService, GenerationJobPoller) trên datn_mcq_test.
  * Phạm vi theo quyết định 9: production so với run production cùng môn; experiment chỉ trong cùng run;
  * không bao giờ so chéo purpose. Không gọi Gemini: generate-sync dùng rawLlmOutputOverride,
  * worker dùng LlmClient giả, Solver không được cấu hình (BlockingTestLlmClient).
@@ -94,8 +93,6 @@ class DedupPipelineWiringTest {
     private QcOrchestrator qcOrchestrator;
     @Autowired
     private DedupScopeResolver dedupScopeResolver;
-    @Autowired
-    private MathDemoSeedService mathDemoSeedService;
 
     private MockMvc mockMvc;
     private Subject subject;
@@ -303,28 +300,6 @@ class DedupPipelineWiringTest {
         for (Integer qid : List.of(sameRun.questionId(), otherRun.questionId(), crossPurpose.questionId())) {
             assertTrue(row(qid, CheckType.ANSWER_CHECK).isEmpty(), "Không có answer_check thật trong test");
             assertTrue(row(qid, CheckType.DEDUP).isPresent());
-        }
-    }
-
-    // ---------- MathDemoSeedService ----------
-
-    @Test
-    void seedGoesThroughFormatAndDedupWithoutForcingQcPassedOrFakeAnswerCheck() {
-        mathDemoSeedService.seedMathDemoQuestions();
-        mathDemoSeedService.seedMathDemoQuestions();
-
-        Subject seedSubject = subjectRepository.findByNameIgnoreCase("Toán Đại số 8").orElseThrow();
-        List<GeneratedQuestion> seeded = questionRepository.findAll().stream()
-                .filter(q -> runRepository.findById(q.getRunId()).orElseThrow().getSubjectId()
-                        .equals(seedSubject.getId()))
-                .toList();
-        assertEquals(5, seeded.size(), "Seed phải idempotent");
-        for (GeneratedQuestion q : seeded) {
-            assertNotEquals(QuestionStatus.QC_PASSED, q.getStatus(), "Seed không được ép QC_PASSED");
-            assertEquals(QuestionStatus.GENERATED, q.getStatus(), "Seed qua format và dedup, không chạy answer_check");
-            assertTrue(row(q.getId(), CheckType.ANSWER_CHECK).isEmpty(), "Seed không được ghi answer_check giả");
-            assertTrue(row(q.getId(), CheckType.DEDUP).orElseThrow().getPassed());
-            assertTrue(row(q.getId(), CheckType.FORMAT).orElseThrow().getPassed());
         }
     }
 }

@@ -13,28 +13,28 @@ class BankExplanationPolicyTest {
 
     @Test
     void explanationWithLatexErrorIsKeptForMathSubjects() {
-        assertEquals("Lời giải hỏng $x = 2", TeacherReviewService.explanationForBank("Toán Đại số 8",
+        assertEquals("Lời giải hỏng $x = 2", AssistedKeepService.explanationForBank("Toán Đại số 8",
                 "Lời giải hỏng $x = 2"));
         String outsideMath = "Ta có \\frac{5x + 3}{y} khi $y \\neq 0$.";
-        assertEquals(outsideMath, TeacherReviewService.explanationForBank("Toán", outsideMath),
+        assertEquals(outsideMath, AssistedKeepService.explanationForBank("Toán", outsideMath),
                 "lệnh LaTeX ngoài $...$ (đề 2, chỗ 20)");
     }
 
     @Test
     void validExplanationIsKept() {
         String valid = "Nhân hai vế với $2$ được $x = 2$.\nVậy chọn A.";
-        assertEquals(valid, TeacherReviewService.explanationForBank("Toán Đại số 8", valid));
+        assertEquals(valid, AssistedKeepService.explanationForBank("Toán Đại số 8", valid));
     }
 
     @Test
     void explanationWithOnlyWarningsIsKept() {
         String warningOnly = "Ta có $\\widehat{ABC} = 60^\\circ$.";
-        assertEquals(warningOnly, TeacherReviewService.explanationForBank("Toán Hình 8", warningOnly));
+        assertEquals(warningOnly, AssistedKeepService.explanationForBank("Toán Hình 8", warningOnly));
     }
 
     @Test
     void nullOrBlankStaysAsIsAndNonMathSubjectsAreNotValidated() {
-        assertNull(TeacherReviewService.explanationForBank("Toán", null));
-        assertEquals("Có $ lẻ", TeacherReviewService.explanationForBank("Ngữ văn", "Có $ lẻ"));
+        assertNull(AssistedKeepService.explanationForBank("Toán", null));
+        assertEquals("Có $ lẻ", AssistedKeepService.explanationForBank("Ngữ văn", "Có $ lẻ"));
     }
 }
