@@ -2,8 +2,21 @@
 
 Mục tiêu: một VPS Linux có tên miền và HTTPS để giáo viên dùng thử; chi phí thấp; vận hành bằng Docker Compose.
 
-> **Trạng thái kiểm chứng:** các file và lệnh trong tài liệu này đã được viết nhưng **chưa được chạy thử** (chưa build
-> image, chưa chạy compose, chưa chạy CI). Sau khi chạy kế hoạch kiểm chứng, cập nhật mục này.
+> **Trạng thái kiểm chứng (25/10/2026, Docker Desktop trên Windows, Gemini giả):**
+>
+> | Phần | Kết quả |
+> |---|---|
+> | Image backend (`back_end/Dockerfile`): build, user non-root, pandoc 3.12.1, font tiếng Việt, múi giờ | Đã chạy, đạt |
+> | Xuất Word trong container (pandoc + `reference.docx`): 10 equation OMML, ĐÁP ÁN, LỜI GIẢI | Đã chạy, đạt |
+> | `caddy validate` Caddyfile; định tuyến, chặn `/actuator` `/swagger-ui` `/v3/api-docs`, proxy `/api`, cookie `Secure; HttpOnly; SameSite=Strict`, khóa đăng nhập theo IP qua `X-Forwarded-For` | Đã chạy, đạt |
+> | Luồng tạo ma trận → tạo đề → Giữ / Sửa / Đổi → xuất Word, bằng Gemini giả qua `LLM_BASE_URL` | Đã chạy, đạt |
+> | Đo bộ nhớ khi worker chạy và khi xuất Word đồng thời (mục 2) | Đã chạy |
+> | Sao lưu, khôi phục vào DB tạm (so số bản ghi), khôi phục đè (`restore.sh --yes`) | Đã chạy, đạt |
+> | **Image `web` (frontend thật)** | **Chưa build được:** `npm run build` (`tsc -b`) báo 3 lỗi TypeScript có sẵn trong mã frontend (`Header.tsx`, `Sidebar.tsx`, `ReviewQuestionForm.tsx`). Chờ người làm frontend sửa. |
+> | **CI trên GitHub (D7)** | **Chưa chạy.** Job `frontend` sẽ đỏ vì lỗi TypeScript trên; chờ frontend sửa rồi mở PR để kích hoạt. |
+> | `update.sh`, kéo image từ GHCR, Let's Encrypt trên tên miền thật, gọi Gemini thật | Chưa chạy (cần image đã đẩy lên GHCR, máy chủ thật, tên miền) |
+>
+> Lần kiểm chứng dùng một trang tĩnh giả thay cho frontend (Caddyfile là bản thật của repo).
 
 > **Trước khi triển khai, toàn bộ thay đổi sẽ được merge vào nhánh `main`.** CI chỉ đẩy image lên GHCR khi push vào
 > `main` hoặc tag `v*`, nên máy chủ chỉ chạy được code đã nằm trên `main`.
@@ -35,18 +48,20 @@ sau; cả hai hướng dưới đây đều phù hợp:
 Cần kiểm trước khi mua: x86_64 (CI build image `linux/amd64`; ARM cần build thêm `arm64`), có snapshot hoặc backup của
 nhà cung cấp, cho mở cổng 80 và 443 (Let's Encrypt cần cả hai), tên miền trỏ được về IP.
 
-**Ước tính bộ nhớ (chưa đo, sẽ đo bằng `docker stats`):**
+**Bộ nhớ đo thực tế** (`docker stats` và cgroup, Gemini giả, dữ liệu rất nhỏ, giới hạn `app` 1 GiB):
 
-| Thành phần | Ước tính |
+| Thành phần | Đo được |
 |---|---|
-| app: heap ~55% của giới hạn 1 GB + metaspace, luồng | ~700–800 MB |
-| pandoc khi xuất Word (tiến trình con, cùng giới hạn với app) | +100–200 MB thoáng qua |
-| db: PostgreSQL (`shared_buffers` 256 MB) | ~300–400 MB |
-| web: Caddy | ~30–50 MB |
-| Hệ điều hành + Docker | ~300 MB |
+| app, nghỉ sau khi khởi động | ~390 MiB |
+| app, worker đang sinh 8 câu | ~400 MiB (đỉnh 409 MiB) |
+| app, xuất Word 6 yêu cầu đồng thời × 4 đợt (24 lần, không lỗi) | đỉnh 466 MiB; không OOM |
+| db (PostgreSQL) | ~70 MiB |
+| web (Caddy) | ~20 MiB |
 
-- **4 GB:** thoải mái, khuyến nghị.
-- **2 GB:** chạy được nhưng sát; bắt buộc có swap 2 GB và nên hạ `mem_limit` của `app`. Không build image trên máy này.
+- Tổng ba container khoảng 0,5 GiB, thấp hơn nhiều so với ước tính ban đầu (~1,3–1,6 GB). Đây là tải nhẹ và dữ liệu nhỏ:
+  khi có nhiều giáo viên và dữ liệu lớn hơn, PostgreSQL và heap sẽ tăng. Đo lại bằng `docker stats` sau vài ngày dùng thật.
+- **4 GB:** thoải mái, khuyến nghị (còn dư cho hệ điều hành, tăng dữ liệu, build image khi cần).
+- **2 GB:** đủ cho giai đoạn dùng thử ít người; bắt buộc có swap 2 GB. Không build image trên máy này.
 
 ## 3. Chuẩn bị trước
 
@@ -83,11 +98,9 @@ usermod -aG docker deploy      # đăng nhập lại để có hiệu lực
 > `db` hay `app`.
 
 ```bash
-# 4.5 Lấy file triển khai (chỉ cần thư mục deploy/). Repo public:
+# 4.5 Lấy file triển khai (chỉ cần thư mục deploy/; repo public nên clone không cần khóa)
 sudo mkdir -p /opt/datn && sudo chown deploy: /opt/datn
 git clone https://github.com/pantq1711/datn-mcq-llm.git /opt/datn
-#   Repo private: tạo "deploy key" chỉ đọc cho máy chủ (GitHub: Settings > Deploy keys) rồi clone qua SSH,
-#   hoặc chép thư mục deploy/ bằng scp:  scp -r deploy deploy@<ip>:/opt/datn/
 chmod +x /opt/datn/deploy/scripts/*.sh
 
 # 4.6 Cấu hình
@@ -103,16 +116,12 @@ nano .env                      # điền: SITE_ADDRESS, CORS_ALLOWED_ORIGINS=htt
 
 Image nằm ở `ghcr.io/pantq1711/datn-mcq-llm/backend` và `.../web` (tên đặt trong `IMAGE_PREFIX`).
 
-- **Repo public:** vào trang package trên GitHub (Your profile > Packages > chọn package > Package settings > Change
-  visibility) và đặt **Public**. Máy chủ kéo được mà không cần đăng nhập. Làm cho cả hai package `backend` và `web`. Image
-  không chứa bí mật (bí mật nằm ở `deploy/.env` trên máy chủ).
-- **Repo private:** package mặc định private. Tạo token để máy chủ kéo image:
-  1. GitHub > Settings > Developer settings > Personal access tokens > **Tokens (classic)** > Generate new token.
-     Chỉ chọn scope **`read:packages`**, đặt thời hạn, đặt tên rõ ràng (ví dụ `datn-server-pull`).
-     (Fine-grained token chưa dùng được cho GHCR.)
-  2. Trên máy chủ: `echo '<TOKEN>' | docker login ghcr.io -u <tên-tài-khoản-GitHub> --password-stdin`
-     (thông tin đăng nhập được Docker lưu ở `~/.docker/config.json`; giữ file này riêng tư).
-  3. Hết hạn token thì tạo token mới và đăng nhập lại.
+Repo `pantq1711/datn-mcq-llm` là **public**. Sau lần CI đầu tiên đẩy image, vào trang package trên GitHub (Your profile >
+Packages > chọn package > Package settings > Change visibility) và đặt **Public** cho cả hai package `backend` và `web`.
+Máy chủ kéo được mà không cần đăng nhập. Image không chứa bí mật (bí mật nằm ở `deploy/.env` trên máy chủ).
+
+> Nếu sau này repo hoặc package chuyển sang private: tạo Personal access token (classic) chỉ với scope `read:packages`,
+> rồi trên máy chủ chạy `echo '<TOKEN>' | docker login ghcr.io -u <tài-khoản-GitHub> --password-stdin`.
 
 ### 4.8 Khởi động lần đầu
 
@@ -137,8 +146,8 @@ https://<tên miền>/actuator/health` phải trả **404** (đã bị chặn); 
    đặt lại mật khẩu bằng `POST /api/admin/users/{id}/reset-password`.
 
 > Môn học: cơ sở dữ liệu mới không có sẵn môn nào (môn `Toán` chỉ có sau khi tạo ma trận từ mẫu hoặc tạo bằng
-> `db/dev-seed`). **Không chạy `db/dev-seed/demo_base.sql` trên máy chủ thật** (nó tạo user `demo@example.com`). Việc có
-> cần thêm môn mặc định bằng migration hay không đang chờ kiểm chứng.
+> `db/dev-seed`). **Không chạy `db/dev-seed/demo_base.sql` trên máy chủ thật** (nó tạo user `demo@example.com`). Đã kiểm:
+> trên DB trống, tạo ma trận bằng JSON bị từ chối (404/400) cho tới khi có môn; xem mục 12.
 
 ## 5. Cấu hình môi trường
 
@@ -262,15 +271,20 @@ Có thể thay bằng `docker compose -f compose.prod.yaml -f compose.build.yaml
 Dùng `deploy/.env` riêng; project Compose tên `datn` có volume riêng, **không đụng** container dev `datn-mcq-db`.
 
 ```ini
-COMPOSE_FILE=compose.prod.yaml:compose.build.yaml
+COMPOSE_FILE=compose.prod.yaml:compose.build.yaml   # Windows: dấu ;
 APP_TAG=local
-SITE_ADDRESS=localhost:8443         # Caddy dùng chứng chỉ tự ký; trình duyệt sẽ cảnh báo (curl -k)
-HTTPS_PORT=8443
+SITE_ADDRESS=localhost              # KHÔNG ghi cổng ở đây (xem lưu ý dưới); Caddy dùng chứng chỉ tự ký (curl -k)
+HTTPS_PORT=8443                     # chỉ là cổng phía máy host, ánh xạ vào cổng 443 của container
 HTTP_PORT=8080
 HSTS=max-age=0                      # tránh trình duyệt nhớ HSTS cho localhost
 CORS_ALLOWED_ORIGINS=https://localhost:8443
 # DB_PASSWORD, JWT_SECRET, ADMIN_*: giá trị thử nghiệm
 ```
+
+> `SITE_ADDRESS=localhost:8443` **không chạy được**: Caddy sẽ lắng nghe cổng 8443 *trong* container, còn compose chỉ ánh xạ
+> cổng host vào cổng 443 của container, nên kết nối bị ngắt. Chỉ đổi cổng phía host bằng `HTTPS_PORT`/`HTTP_PORT`. Hệ quả:
+> chuyển hướng http→https của Caddy trỏ tới `https://localhost/` (không kèm cổng); khi chạy thử hãy mở thẳng
+> `https://localhost:8443`.
 
 Chỉ chạy qua `http://localhost:8080` (không TLS): `SITE_ADDRESS=http://localhost`, và `COOKIE_SECURE=false` (Safari không
 nhận cookie Secure qua http).
@@ -287,7 +301,6 @@ nhận cookie Secure qua http).
 - [ ] `FORWARD_HEADERS_STRATEGY=native` (kiểm bằng cách đăng nhập sai nhiều lần từ hai IP khác nhau: chỉ IP đó bị khóa).
 - [ ] Sao lưu chạy theo lịch, có bản **ngoài máy chủ**, đã thử khôi phục vào DB tạm ít nhất một lần.
 - [ ] `unattended-upgrades` bật; theo dõi bản vá của image gốc (`eclipse-temurin`, `pgvector`, `caddy`) khi cập nhật.
-- [ ] Token `read:packages` (nếu repo private) chỉ có scope đó và có thời hạn.
 
 ## 11. Xử lý sự cố thường gặp
 
@@ -303,7 +316,15 @@ nhận cookie Secure qua http).
 
 ## 12. Việc còn mở
 
-- Môn học mặc định cho cơ sở dữ liệu mới (migration `V17` hay không) — chờ kết quả kiểm chứng.
+- **Môn học trên DB mới:** đã kiểm bằng cách chạy thật trên DB trống (25/10/2026): `GET /api/catalog/subjects` trả `[]`;
+  `POST /api/exam-matrices` với `subjectId: 1` trả 404 "Không tìm thấy môn học id=1", không có `subjectId` trả 400 "Phải
+  truyền subjectId". Môn `Toán` chỉ xuất hiện sau `POST /api/exam-matrices/samples/giuaki1-toan8` (tạo môn nếu chưa có); từ
+  đó tạo ma trận bằng JSON với `subjectId` đó chạy bình thường. Nghĩa là giáo viên đầu tiên phải tạo từ mẫu trước, hoặc
+  thêm môn bằng migration/seed — đang chờ chủ dự án quyết định (migration `V17` hay hướng dẫn thủ công).
+- **Image `web` và CI (D7):** chờ người làm frontend sửa 3 lỗi TypeScript (xem "Trạng thái kiểm chứng").
+- **Kích thước image backend ~742 MB** (chưa tối ưu): chưa rõ phần nào chiếm nhiều (lớp Ubuntu, font, pandoc, JRE).
+  Layered jar (Spring Boot `jarmode=tools`) có thể giảm lượng phải kéo mỗi lần cập nhật — chưa kiểm với Boot 4.1.1.
 - JLaTeXMath: image đã có font và `java.awt.headless=true`; cần smoke test vẽ ảnh công thức khi thêm dependency.
-- Layered jar (Spring Boot `jarmode=tools`) để giảm kích thước kéo image mỗi lần cập nhật — chưa làm.
+- Gọi Gemini thật trong container để xác nhận cấu hình khóa: chưa làm.
+- `update.sh` và kéo image từ GHCR: chưa chạy được vì chưa có image trên GHCR.
 - Tự động deploy sau khi merge — chưa làm, quyết định deploy thủ công trong giai đoạn dùng thử.
