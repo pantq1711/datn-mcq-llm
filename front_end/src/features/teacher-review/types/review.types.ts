@@ -30,16 +30,6 @@ export interface RejectionReasonGroup {
     }[];
 }
 
-export interface ReviewQuestion {
-    id: number;
-    question: string;
-    subject: string;
-    qualityStatus: FormatStatus;
-    reviewStatus: "pending" | ReviewDecisions;
-    difficulty: "easy" | "medium" | "hard";
-    createdAt: string;
-}
-
 export interface ReviewQuestionDetail {
     id: number;
     questionText: string;
@@ -84,3 +74,15 @@ export interface SubmitReviewPayload {
         detail?: string;
     }[];
 }
+
+export interface ReviewQuestionListItem {
+    id: number;
+    templateId?: number;
+    reviewPurpose?: "PRODUCTION" | "EXPERIMENT";
+    subjectName?: string;
+    gradeLevel?: number;
+    topic?: string;
+    questionText: string;
+    createdAt: string;
+}
+

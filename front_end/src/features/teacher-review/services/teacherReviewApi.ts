@@ -1,5 +1,5 @@
 import axiosInstance from "../../../services/apiClient";
-import type { ReviewQuestionDetail, SubmitReviewPayload } from "../types/review.types";
+import type { ReviewQuestionDetail, SubmitReviewPayload, ReviewQuestionListItem } from "../types/review.types";
 
 export async function getReviewQuestionDetail(id: string | number): Promise<ReviewQuestionDetail> {
     const response = await axiosInstance.get<ReviewQuestionDetail>(`/api/reviews/questions/${id}`);
@@ -21,5 +21,10 @@ export async function seedDemoMathQuestions(): Promise<{ count?: number; message
     const response = await axiosInstance.post<{ count?: number; message?: string }>(
         "/api/reviews/demo/seed-math"
     );
+    return response.data;
+}
+
+export async function getReviewQuestions(): Promise<ReviewQuestionListItem[]> {
+    const response = await axiosInstance.get<ReviewQuestionListItem[]>("/api/reviews/questions");
     return response.data;
 }

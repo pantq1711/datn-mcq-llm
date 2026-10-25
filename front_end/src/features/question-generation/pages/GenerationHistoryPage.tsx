@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { message, Alert, Button, Card, Col, Drawer, Form, Input, Row, Select, Space, Statistic, Table, Tag, Typography, } from "antd";
-import { getCatalogSubjects } from "../services/generationApi";
-import type { SubjectOption } from "../types/generation.types";
+import { getCatalogSubjects, getGenerationJobs } from "../services/generationApi";
+import type { GenerationJob, SubjectOption } from "../types/generation.types";
 import { EyeOutlined, FilterOutlined, ReloadOutlined, } from "@ant-design/icons";
 
 import GenerationResult from "../components/GenerationResult";
+import { processNextJob } from "../services/generationApi";
 
 import "./GenerationHistoryPage.css";
 
@@ -258,18 +259,19 @@ const generationColumns = [
         title: "Trạng thái",
         dataIndex: "status",
         key: "status",
-        width: 110,
-        render: (status: GenerationStatus) => {
-            if (status === "COMPLETED") {
-                return <Tag color="success">Hoàn thành</Tag>;
-            }
-
-            if (status === "RUNNING") {
-                return <Tag color="processing">Đang xử lý</Tag>;
-            }
-
-            return <Tag color="error">Thất bại</Tag>;
+        render: (status: string) => {
+            let color = "default";
+            if (status === "COMPLETED") color = "green";
+            if (status === "RUNNING") color = "blue";
+            if (status === "FAILED") color = "red";
+            return <Tag color={color}>{status}</Tag>;
         },
+        filters: [
+            { text: "Completed", value: "COMPLETED" },
+            { text: "Running", value: "RUNNING" },
+            { text: "Failed", value: "FAILED" },
+        ],
+        onFilter: (value, record) => record.status === value,
     },
     {
         title: "Thời gian bắt đầu",
@@ -302,6 +304,8 @@ export default function GenerationHistoryPage() {
     const [subjectOptions, setSubjectOptions] = useState<SubjectOption[]>([]);
     const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
 
+    const [dataSource, setDataSource] = useState<GenerationJob[]>([]);
+
     useEffect(() => {
         const fetchSubjects = async () => {
             setLoadingSubjects(true);
@@ -331,6 +335,46 @@ export default function GenerationHistoryPage() {
     const handleReset = () => {
         form.resetFields();
     };
+
+    const refreshHistory = async (updatedJob?: GenerationJob) => {
+        try {
+            const jobs = await getGenerationJobs(); // API GET /api/generation/jobs
+            let newData = jobs;
+            // Nếu có job vừa được xử lý → merge vào danh sách hiện tại
+            if (updatedJob) {
+                newData = jobs.map((job) =>
+                    job.id === updatedJob.id ? { ...job, ...updatedJob } : job
+                );
+            }
+            setDataSource(newData);
+        } catch (err) {
+            console.error("Lỗi tải lịch sử job:", err);
+            message.error("Không thể tải lịch sử job");
+        }
+    };
+
+    const handleProcessNext = async () => {
+        try {
+            const result = await processNextJob();   // {jobId, status, message}
+            message.success(
+                result.message ?? `Job ${result.jobId} đã được xử lý (${result.status})`
+            );
+            // Gọi refreshHistory và truyền thông tin job mới để merge nhanh
+            await refreshHistory(
+                //     {
+                //     id: result.jobId,
+                //     status: result.status,
+                //     // nếu API trả về thêm thông tin, có thể bổ sung ở đây
+                // }
+            );
+        } catch (err) {
+            console.error("Xử lý job lỗi:", err);
+            message.error("Xử lý job thất bại");
+            // Nếu muốn chắc chắn UI đồng bộ, tải lại toàn bộ lịch sử
+            await refreshHistory();
+        }
+    };
+
 
     return (
         <div className="generation-history-page">

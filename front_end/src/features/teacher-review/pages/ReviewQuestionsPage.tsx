@@ -1,158 +1,157 @@
-import { Button, Card, Input, Select, Table, Tag, Typography } from "antd";
-import { ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { useEffect, useState } from "react";
+import { Button, Card, Input, Select, Table, Tag, Typography, message } from "antd";
+import { ReloadOutlined, SearchOutlined, CheckCircleOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { ColumnsType } from "antd/es/table";
+import dayjs from "dayjs";
 import "./ReviewQuestionsPage.css";
-import type { ReviewQuestion } from "../types/review.types";
+import type { ReviewQuestionListItem } from "../types/review.types";
 
-const { Title } = Typography;
+// Giả lập hàm gọi API lấy danh sách câu hỏi thực tế
+import { getReviewQuestions } from "../services/teacherReviewApi";
 
-const reviewQuestions: ReviewQuestion[] = [
-    {
-        id: 101,
-        question:
-            "Một vật chuyển động thẳng đều với vận tốc 5 m/s. Trong 4 giây, vật đi được quãng đường bao nhiêu?",
-        subject: "Vật lý",
-        qualityStatus: "qc_passed",
-        reviewStatus: "pending",
-        difficulty: "medium",
-        createdAt: "05/10/2026 14:30",
-    },
-    {
-        id: 102,
-        question:
-            "Hành tinh nào nằm gần Mặt Trời nhất trong hệ Mặt Trời?",
-        subject: "Vật lý",
-        qualityStatus: "qc_passed",
-        reviewStatus: "pending",
-        difficulty: "easy",
-        createdAt: "05/10/2026 14:18",
-    },
-    {
-        id: 103,
-        question:
-            "Cơ quan nào giữ vai trò bơm máu đi khắp cơ thể người?",
-        subject: "Sinh học",
-        qualityStatus: "format_failed",
-        reviewStatus: "pending",
-        difficulty: "easy",
-        createdAt: "05/10/2026 13:52",
-    },
-    {
-        // Thêm câu hỏi này để kiểm tra logic: có reviewStatus là "approved_as_is" (khác pending) -> sẽ bị ẩn đi
-        id: 104,
-        question:
-            "Lực hấp dẫn phụ thuộc vào yếu tố nào sau đây?",
-        subject: "Vật lý",
-        qualityStatus: "qc_passed",
-        reviewStatus: "approved_as_is",
-        difficulty: "hard",
-        createdAt: "04/10/2026 10:00",
-    },
-];
+const { Title, Text } = Typography;
 
-// Lọc sẵn danh sách chỉ lấy những câu có reviewStatus là "pending" để kiểm tra logic
-const pendingReviewQuestions = reviewQuestions.filter(
-    (item) => item.reviewStatus === "pending"
-);
-
-const getQualityStatusTag = (
-    status: ReviewQuestion["qualityStatus"],
-) => {
-    if (status === "qc_passed") {
-        return <Tag color="success">Đạt QC</Tag>;
-    }
-
-    return <Tag color="error">Không đạt QC</Tag>;
-};
-
-const getReviewStatusTag = (
-    status: ReviewQuestion["reviewStatus"],
-) => {
-    switch (status) {
-        case "pending":
-            return <Tag color="processing">Chờ duyệt</Tag>;
-
-        case "approved_as_is":
-            return <Tag color="success">Đã duyệt</Tag>;
-
-        case "approved_with_edit":
-            return <Tag color="warning">Đã chỉnh sửa</Tag>;
-
-        case "rejected":
-            return <Tag color="error">Từ chối</Tag>;
-
+const getReviewPurposeTag = (purpose?: string) => {
+    switch (purpose) {
+        case "PRODUCTION":
+            return <Tag color="blue">Sản xuất (PRODUCTION)</Tag>;
+        case "EXPERIMENT":
+            return <Tag color="purple">Thực nghiệm (EXPERIMENT)</Tag>;
         default:
-            return null;
-    }
-};
-
-const getDifficultyTag = (
-    difficulty: ReviewQuestion["difficulty"],
-) => {
-    switch (difficulty) {
-        case "easy":
-            return <Tag>Biết</Tag>;
-
-        case "medium":
-            return <Tag color="blue">Hiểu</Tag>;
-
-        case "hard":
-            return <Tag color="purple">Vận dụng</Tag>;
-
-        default:
-            return null;
+            return <Tag>{purpose || "N/A"}</Tag>;
     }
 };
 
 export default function ReviewQuestionsPage() {
     const navigate = useNavigate();
 
-    const columns: ColumnsType<ReviewQuestion> = [
+    // Quản lý state dữ liệu và loading
+    const [questions, setQuestions] = useState<ReviewQuestionListItem[]>([]);
+    const [loading, setLoading] = useState<boolean>(false);
+
+    // State cho bộ lọc client-side
+    const [searchText, setSearchText] = useState<string>("");
+    const [selectedSubject, setSelectedSubject] = useState<string | undefined>(undefined);
+    const [selectedGrade, setSelectedGrade] = useState<string | undefined>(undefined);
+
+    // Hàm gọi API lấy danh sách câu hỏi
+    const fetchQuestions = async () => {
+        setLoading(true);
+        try {
+            const response = await getReviewQuestions();
+            setQuestions(response);
+        } catch (error) {
+            message.error("Không thể tải danh sách câu hỏi cần duyệt. Vui lòng thử lại sau!");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Gọi API khi mount component
+    useEffect(() => {
+        fetchQuestions();
+    }, []);
+
+    // Xử lý nút Đặt lại / Làm mới: Reset bộ lọc và gọi lại API nạp dữ liệu mới nhất
+    const handleResetFilters = () => {
+        setSearchText("");
+        setSelectedSubject(undefined);
+        setSelectedGrade(undefined);
+        fetchQuestions();
+    };
+
+    // Logic lọc phía client (Client-side filtering)
+    const filteredQuestions = questions.filter((item) => {
+        // 1. Lọc theo từ khóa trong questionText
+        const matchesSearch = searchText
+            ? item.questionText?.toLowerCase().includes(searchText.toLowerCase())
+            : true;
+
+        // 2. Lọc theo Môn học (subjectName)
+        const matchesSubject = selectedSubject
+            ? item.subjectName === selectedSubject
+            : true;
+
+        // 3. Lọc theo Khối lớp (gradeLevel)
+        const matchesGrade = selectedGrade
+            ? String(item.gradeLevel) === String(selectedGrade)
+            : true;
+
+        return matchesSearch && matchesSubject && matchesGrade;
+    });
+
+    const columns: ColumnsType<ReviewQuestionListItem> = [
         {
             title: "ID",
             dataIndex: "id",
             key: "id",
             width: 80,
+            align: "center",
+            render: (id: number | string) => <Text strong>#{id}</Text>,
         },
         {
             title: "Câu hỏi",
-            dataIndex: "question",
-            key: "question",
+            dataIndex: "questionText",
+            key: "questionText",
             ellipsis: true,
+            render: (text: string) => (
+                <span title={text}>
+                    {text}
+                </span>
+            ),
         },
         {
             title: "Môn học",
-            dataIndex: "subject",
-            key: "subject",
+            dataIndex: "subjectName",
+            key: "subjectName",
             width: 130,
         },
         {
-            title: "QC tự động",
-            dataIndex: "qualityStatus",
-            key: "qualityStatus",
-            width: 120,
-            render: (status) => getQualityStatusTag(status),
+            title: "Khối lớp / Chủ đề",
+            key: "gradeAndTopic",
+            width: 160,
+            render: (_, record: any) => (
+                <span>
+                    {record.gradeLevel ? `Khối ${record.gradeLevel}` : ""}
+                    {record.gradeLevel && record.topic ? " - " : ""}
+                    {record.topic || ""}
+                </span>
+            ),
         },
         {
-            title: "Mức độ nhận thức",
-            dataIndex: "difficulty",
-            key: "difficulty",
+            title: "Mục đích",
+            dataIndex: "reviewPurpose",
+            key: "reviewPurpose",
             width: 150,
-            render: (difficulty) => getDifficultyTag(difficulty),
-        },
-        {
-            title: "Trạng thái",
-            dataIndex: "reviewStatus",
-            key: "reviewStatus",
-            width: 120,
-            render: (status) => getReviewStatusTag(status),
+            align: "center",
+            render: (purpose) => getReviewPurposeTag(purpose),
         },
         {
             title: "Ngày tạo",
             dataIndex: "createdAt",
             key: "createdAt",
             width: 160,
+            render: (dateStr: string) =>
+                dateStr ? dayjs(dateStr).format("DD/MM/YYYY HH:mm") : "N/A",
+        },
+        {
+            title: "Hành động",
+            key: "action",
+            width: 130,
+            align: "center",
+            render: (_, record) => (
+                <Button
+                    type="link"
+                    icon={<CheckCircleOutlined />}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/review/${record.id}`);
+                    }}
+                >
+                    Chấm câu hỏi
+                </Button>
+            ),
         },
     ];
 
@@ -168,47 +167,51 @@ export default function ReviewQuestionsPage() {
 
             <Card className="review-filter-card">
                 <div className="review-filter">
+                    {/* Tìm kiếm theo từ khóa trong questionText */}
                     <Input
                         className="review-search"
-                        placeholder="Tìm kiếm câu hỏi..."
+                        placeholder="Tìm kiếm nội dung câu hỏi..."
                         prefix={<SearchOutlined />}
+                        value={searchText}
+                        onChange={(e) => setSearchText(e.target.value)}
+                        allowClear
                     />
 
+                    {/* Lọc theo Môn học */}
                     <Select
                         className="review-filter-select"
-                        placeholder="Môn học"
+                        placeholder="Chọn môn học"
                         allowClear
+                        value={selectedSubject}
+                        onChange={(value) => setSelectedSubject(value)}
                         options={[
-                            { label: "Toán", value: "math" },
-                            { label: "Vật lý", value: "physics" },
-                            { label: "Hóa học", value: "chemistry" },
-                            { label: "Sinh học", value: "biology" },
+                            { label: "Toán", value: "Toán" },
+                            { label: "Vật lý", value: "Vật lý" },
+                            { label: "Hóa học", value: "Hóa học" },
+                            { label: "Sinh học", value: "Sinh học" },
                         ]}
                     />
 
+                    {/* Lọc theo Khối lớp */}
                     <Select
                         className="review-filter-select"
-                        placeholder="Trạng thái QC"
+                        placeholder="Chọn khối lớp"
                         allowClear
+                        value={selectedGrade}
+                        onChange={(value) => setSelectedGrade(value)}
                         options={[
-                            { label: "Đạt QC", value: "qc_passed" },
-                            { label: "Không đạt QC", value: "format_failed" },
+                            { label: "Khối 10", value: "10" },
+                            { label: "Khối 11", value: "11" },
+                            { label: "Khối 12", value: "12" },
                         ]}
                     />
 
-                    <Select
-                        className="review-filter-select"
-                        placeholder="Trạng thái duyệt"
-                        allowClear
-                        options={[
-                            { label: "Chờ duyệt", value: "pending" },
-                            { label: "Đã duyệt", value: "approved_as_is" },
-                            { label: "Đã chỉnh sửa", value: "approved_with_edit" },
-                            { label: "Từ chối", value: "rejected" },
-                        ]}
-                    />
-
-                    <Button icon={<ReloadOutlined />}>
+                    {/* Nút Đặt lại / Làm mới: Xóa bộ lọc và gọi lại API */}
+                    <Button
+                        icon={<ReloadOutlined />}
+                        onClick={handleResetFilters}
+                        loading={loading}
+                    >
                         Đặt lại
                     </Button>
                 </div>
@@ -223,29 +226,23 @@ export default function ReviewQuestionsPage() {
                     </div>
                 </div>
 
-                <Table<ReviewQuestion>
+                <Table<ReviewQuestionListItem>
                     className="review-question-table"
                     rowKey="id"
                     columns={columns}
-                    dataSource={pendingReviewQuestions}
+                    dataSource={filteredQuestions}
+                    loading={loading}
                     pagination={{
                         pageSize: 10,
                         showSizeChanger: true,
                         showTotal: (total) => `Tổng ${total} câu hỏi`,
                     }}
                     scroll={{ x: 1000 }}
-                    rowClassName={(record) =>
-                        record.qualityStatus === "qc_passed"
-                            ? "review-row-clickable"
-                            : "review-row-disabled"
-                    }
                     onRow={(record) => ({
                         onClick: () => {
-                            // Chỉ cho phép chuyển trang khi đạt QC và trạng thái pending
-                            if (record.qualityStatus === "qc_passed" && record.reviewStatus === "pending") {
-                                navigate(`/review/${record.id}`);
-                            }
+                            navigate(`/review/${record.id}`);
                         },
+                        style: { cursor: "pointer" },
                     })}
                 />
             </Card>

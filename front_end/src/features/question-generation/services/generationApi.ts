@@ -1,5 +1,5 @@
 import axiosInstance from "../../../services/apiClient";
-import type { QuestionTemplate, Subject, GenerateQuestionPayload, GenerateResponse, GenerationStatusResponse, GenerationResultResponse } from "../types/generation.types";
+import type { QuestionTemplate, Subject, GenerateQuestionPayload, GenerateResponse, GenerationStatusResponse, GenerationResultResponse, GenerationHistoryItem, GenerationJob } from "../types/generation.types";
 
 export async function createGenerationTask(
     payload: GenerateQuestionPayload
@@ -35,5 +35,17 @@ export async function getCatalogTemplates(subjectId?: number): Promise<QuestionT
     const response = await axiosInstance.get<QuestionTemplate[]>("/api/catalog/templates", {
         params: subjectId ? { subjectId } : undefined,
     });
+    return response.data;
+}
+
+export async function processNextJob(runAnswerCheck = true): Promise<any> {
+    const response = await axiosInstance.post<any>("/api/generation/jobs/process-next", null, {
+        params: { runAnswerCheck },
+    });
+    return response.data;
+}
+
+export async function getGenerationJobs(): Promise<GenerationJob[]> {
+    const response = await axiosInstance.get<GenerationJob[]>("/api/generation/jobs");
     return response.data;
 }

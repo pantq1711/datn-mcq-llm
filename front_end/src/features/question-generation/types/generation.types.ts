@@ -64,6 +64,39 @@ export interface SubjectOption {
     value: string | number;
 }
 
+export type SourceType = "TEXT" | "WORD" | "PDF" | "IMAGE";
+
+export interface GenerationHistoryItem {
+    id: number;
+    sourceName: string;
+    sourceType: SourceType;
+    selectedSegmentCount: number;
+    subject: string;
+    strategy: string;
+    model: string;
+    temperature: number;
+    questionCount: number;
+    status: GenerationStatus;
+    startedAt: string;
+    errorMessage?: string;
+}
+
+export interface GenerationJob {
+    id: number;
+    status: "COMPLETED" | "RUNNING" | "FAILED";
+    run_id: number;
+    template_id: number;
+    question_id: number;
+    target_difficulty: string;
+    attempt: number;
+    last_error: string;
+    token_count: number;
+    latency_ms: number;
+    cost_usd: number;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface GenerateQuestionPayload {
     subjectId?: number;
     templateId?: number;

@@ -7,6 +7,7 @@ import {
     ReadOutlined,
     TableOutlined,
     SafetyCertificateOutlined,
+    OrderedListOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
@@ -24,6 +25,11 @@ const menuItems: MenuItem[] = [
         key: "/generate",
         icon: <FormOutlined />,
         label: "Sinh câu hỏi",
+    },
+    {
+        key: "/job-processor",
+        icon: <OrderedListOutlined />,
+        label: "Quản lý job sinh câu hỏi",
     },
     {
         key: "/review",
