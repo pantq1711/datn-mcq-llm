@@ -42,6 +42,7 @@ com.datn.mcq
 │                           form chấm mù đã gỡ 25/10). label_assignment, teacher_review_reason: bảng cũ, không còn code ghi
 ├── bank/                   bank_item
 ├── matrix/                 exam_matrix, exam_matrix_cell (V6: ma trận đề, mỗi ô một question_template)
+├── material/               lesson_material (V18, W2-3: tài liệu bài học đính kèm, chỉ lưu văn bản đã trích)
 ├── exam/                   exam, exam_question, exam_slot, exam_slot_action (V7: tạo đề theo ma trận)
 └── goldset/                dedup_gold_pair, dedup_gold_label
 ```
@@ -51,6 +52,7 @@ com.datn.mcq
 ```
 exam        ──► matrix, generation, qc, review, bank, catalog, user   (V7: tạo đề theo ma trận)
 matrix      ──► catalog
+material    ──► (chỉ common)   (V18: chưa có module nào phụ thuộc; bước sau thêm exam ──► material, cần được duyệt, M-35)
 review      ──► generation, bank, catalog, experiment, user   (25/10: chỉ còn AssistedKeepService)
 generation  ──► qc, llm
 experiment  ──► generation, catalog

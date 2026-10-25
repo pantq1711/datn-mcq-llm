@@ -39,6 +39,7 @@ public final class TestDataCleaner {
         jdbcTemplate.update("DELETE FROM exam_matrix");
         jdbcTemplate.update("DELETE FROM question_template");
         jdbcTemplate.update("DELETE FROM subject");
+        jdbcTemplate.update("DELETE FROM lesson_material");
         // refresh_token (V11) bị xóa theo users nhờ ON DELETE CASCADE.
         jdbcTemplate.update("DELETE FROM users");
     }
