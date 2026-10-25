@@ -1,7 +1,9 @@
 # Caddy: HTTPS tự động (Let's Encrypt) + phục vụ frontend tĩnh + proxy /api tới backend.
 # SITE_ADDRESS: tên miền thật (ví dụ datn.example.com) -> chứng chỉ Let's Encrypt;
-#               "localhost" hoặc "localhost:8443" -> chứng chỉ tự ký của Caddy (chạy thử local);
+#               "localhost" -> chứng chỉ tự ký của Caddy (chạy thử local);
 #               "http://localhost" -> không TLS.
+# KHÔNG ghi cổng vào SITE_ADDRESS (kiểu "localhost:8443"): Caddy sẽ lắng nghe cổng đó TRONG container trong khi compose
+# chỉ ánh xạ vào cổng 80/443. Muốn đổi cổng phía host thì đặt HTTP_PORT/HTTPS_PORT trong deploy/.env.
 # Caddy tự đặt X-Forwarded-For/Proto/Host cho backend và ghi đè giá trị client tự gửi, nên backend dùng
 # FORWARD_HEADERS_STRATEGY=native để lấy IP thật (giới hạn đăng nhập sai theo email + IP).
 {$SITE_ADDRESS} {
@@ -33,12 +35,17 @@
 		}
 	}
 
+	# Tệp build có hash trong tên: cache lâu. Tệp không tồn tại thì 404 (không rơi về index.html rồi bị cache immutable)
+	handle /assets/* {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# Còn lại là route của SPA: rơi về index.html, không cache để lần triển khai mới có hiệu lực ngay
 	handle {
 		root * /srv
-		@assets path /assets/*
-		header @assets Cache-Control "public, max-age=31536000, immutable"
-		@html not path /assets/*
-		header @html Cache-Control "no-cache"
+		header Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}
