@@ -41,6 +41,8 @@ app:
     api-key: ${LLM_API_KEY:}   # để trống mặc định để smoke test không văng lỗi thiếu biến
     model: ${LLM_MODEL:gemini-3.5-flash-lite}
     solver-model: ${LLM_SOLVER_MODEL:gemini-3.5-flash-lite}
+    # Chỉ đặt khi kiểm chứng bằng Gemini giả (W1-5); để trống thì gọi https://generativelanguage.googleapis.com/v1beta/models/
+    base-url: ${LLM_BASE_URL:}
   embedding:
     model: ${EMBEDDING_MODEL:}
   worker:

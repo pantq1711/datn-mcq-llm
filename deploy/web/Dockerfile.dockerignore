@@ -1,0 +1,9 @@
+# Context của deploy/web/Dockerfile là gốc repo: chỉ giữ phần cần cho build
+*
+!front_end
+!deploy/web
+front_end/node_modules
+front_end/dist
+front_end/.env
+front_end/.env.*
+**/*.log

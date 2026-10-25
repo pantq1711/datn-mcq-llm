@@ -6,6 +6,7 @@ import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -23,8 +24,8 @@ public class LlmClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(LlmClient.class);
 
-    private static final String GEMINI_BASE_URL =
-            "https://generativelanguage.googleapis.com/v1beta/models/";
+    /** Địa chỉ gốc của Gemini; {@code app.llm.base-url} chỉ đổi khi kiểm chứng bằng Gemini giả (W1-5). */
+    static final String DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
 
     private static final String MCQ_RESPONSE_SCHEMA_JSON = """
             {"type":"OBJECT","properties":{
@@ -41,10 +42,18 @@ public class LlmClient {
     private final HttpClient httpClient;
     private final String defaultApiKey;
     private final String defaultModel;
+    private final String baseUrl;
 
+    public LlmClient(String defaultApiKey, String defaultModel) {
+        this(defaultApiKey, defaultModel, null);
+    }
+
+    @Autowired
     public LlmClient(
             @Value("${app.llm.api-key:}") String defaultApiKey,
-            @Value("${app.llm.model:gemini-3.5-flash-lite}") String defaultModel) {
+            @Value("${app.llm.model:gemini-3.5-flash-lite}") String defaultModel,
+            @Value("${app.llm.base-url:}") String baseUrl) {
+        this.baseUrl = normalizeBaseUrl(baseUrl);
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(20))
                 .build();
@@ -52,6 +61,15 @@ public class LlmClient {
         this.defaultModel = (defaultModel != null && !defaultModel.isBlank())
                 ? defaultModel.trim()
                 : "gemini-3.5-flash-lite";
+    }
+
+    /** Trống thì dùng địa chỉ Gemini thật; luôn kết thúc bằng "/" để ghép tên model. */
+    static String normalizeBaseUrl(String configured) {
+        if (configured == null || configured.isBlank()) {
+            return DEFAULT_BASE_URL;
+        }
+        String url = configured.trim();
+        return url.endsWith("/") ? url : url + "/";
     }
 
     public boolean isConfigured() {
@@ -122,7 +140,7 @@ public class LlmClient {
                 + generationConfigFragment + "}";
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(GEMINI_BASE_URL + model + ":generateContent"))
+                .uri(URI.create(baseUrl + model + ":generateContent"))
                 .timeout(Duration.ofSeconds(60))
                 .header("Content-Type", "application/json")
                 .header("x-goog-api-key", apiKey)

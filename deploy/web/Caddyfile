@@ -1,0 +1,45 @@
+# Caddy: HTTPS tự động (Let's Encrypt) + phục vụ frontend tĩnh + proxy /api tới backend.
+# SITE_ADDRESS: tên miền thật (ví dụ datn.example.com) -> chứng chỉ Let's Encrypt;
+#               "localhost" hoặc "localhost:8443" -> chứng chỉ tự ký của Caddy (chạy thử local);
+#               "http://localhost" -> không TLS.
+# Caddy tự đặt X-Forwarded-For/Proto/Host cho backend và ghi đè giá trị client tự gửi, nên backend dùng
+# FORWARD_HEADERS_STRATEGY=native để lấy IP thật (giới hạn đăng nhập sai theo email + IP).
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "{$HSTS:max-age=31536000}"
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		-Server
+	}
+
+	# Không để lộ actuator, Swagger, OpenAPI ra ngoài (backend profile prod cũng đã tắt springdoc)
+	@internal path /actuator /actuator/* /swagger-ui /swagger-ui/* /swagger-ui.html /v3/api-docs /v3/api-docs/*
+	handle @internal {
+		respond 404
+	}
+
+	handle /api/* {
+		# Chuẩn bị cho tài liệu đính kèm: khớp spring.servlet.multipart.max-request-size (application-prod.yaml)
+		request_body {
+			max_size 12MB
+		}
+		reverse_proxy app:8080 {
+			transport http {
+				# Xuất Word tối đa ~30 giây, gọi Gemini tối đa 60 giây mỗi lần
+				response_header_timeout 120s
+			}
+		}
+	}
+
+	handle {
+		root * /srv
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@html not path /assets/*
+		header @html Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}
