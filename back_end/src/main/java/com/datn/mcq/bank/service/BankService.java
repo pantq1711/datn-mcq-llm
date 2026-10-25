@@ -209,8 +209,8 @@ public class BankService {
     }
 
     /**
-     * Chép câu Trả lời ngắn vào ngân hàng (V4, GĐ2): không có phương án và correct_option; sa_answer là đáp số cuối
-     * giáo viên chốt (đã kiểm ở chế độ STRICT). Duyệt lại thì cập nhật dòng cũ.
+     * Chép câu Trả lời ngắn vào ngân hàng (V4, GĐ2): không có phương án và correct_option; sa_answer là đáp số của câu
+     * được Giữ. Chép lại thì cập nhật dòng cũ.
      */
     @Transactional
     public BankItem createOrUpdateShortAnswerFromReview(
