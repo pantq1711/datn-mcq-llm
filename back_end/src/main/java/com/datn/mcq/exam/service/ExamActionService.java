@@ -12,11 +12,13 @@ import com.datn.mcq.exam.entity.ExamSlotAction;
 import com.datn.mcq.exam.repository.ExamSlotActionRepository;
 import com.datn.mcq.exam.repository.ExamSlotRepository;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
+import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
 import com.datn.mcq.review.service.TeacherReviewService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.NoSuchElementException;
 
 /**
@@ -36,6 +38,10 @@ public class ExamActionService {
     public static final String SLOT_FROM_BANK = "SLOT_FROM_BANK";
     public static final String VERSION_CONFLICT = "VERSION_CONFLICT";
     public static final String QC_CHECKING = "QC_CHECKING";
+    /** W1-4 (D5-B): Đổi bằng câu ngân hàng khi ngân hàng hết câu phù hợp (409; chỗ giữ nguyên). */
+    public static final String BANK_EXHAUSTED = "BANK_EXHAUSTED";
+    static final String BANK_EXHAUSTED_MESSAGE = "Ngân hàng không còn câu phù hợp cho chỗ này (cùng môn, dạng, mức, chủ "
+            + "đề; đã loại câu có trong đề và câu đã đổi ra). Hãy sinh câu mới.";
     static final String QC_CHECKING_MESSAGE =
             "Câu vừa sửa đang được kiểm tra lại (Solver), hãy chờ kiểm xong rồi Giữ.";
 
@@ -101,31 +107,69 @@ public class ExamActionService {
      * Đổi câu khác: bỏ câu hiện tại khỏi chỗ (câu cũ giữ nguyên trạng thái để truy vết; câu đã Giữ vẫn ở ngân hàng) và
      * sinh lại đúng ô. Prompt sinh lại liệt kê các câu đã sinh của ô (gồm câu vừa bị đổi) để model không lặp lại.
      *
+     * @param source      W1-4 (D5-B): "generate" (mặc định khi bỏ trống) sinh câu mới qua hàng đợi; "bank" lấy câu ngân
+     *                    hàng khớp ô ngay (không job), hết câu thì 409 {@value #BANK_EXHAUSTED} và chỗ giữ nguyên. Giá trị
+     *                    khác, hoặc "bank" kèm instruction: 400 INVALID_REQUEST (trước mọi thay đổi)
      * @param instruction yêu cầu bổ sung của giáo viên (tùy chọn, trim, tối đa
      *                    {@value MatrixPromptDraftV0#TEACHER_INSTRUCTION_MAX} ký tự): ghép vào cuối prompt_note của
      *                    job sinh lại và các lần thử tự động của cùng lượt Đổi, lưu ở nhật ký exam_slot_action (V9)
      */
     @Transactional
-    public ExamItemDto replace(Integer examId, Integer slotId, Integer actorId, String instruction) {
+    public ExamItemDto replace(Integer examId, Integer slotId, Integer actorId, String source, String instruction) {
         buildService.getOwnedExam(examId, actorId);
+        String replaceSource = normalizeSource(source);
         String cleanInstruction = normalizeInstruction(instruction);
+        if (ExamSlotAction.SOURCE_BANK.equals(replaceSource) && cleanInstruction != null) {
+            throw ApiErrorException.badRequest(QuestionEditService.INVALID_REQUEST,
+                    "instruction chỉ dùng khi source = generate (lấy câu ngân hàng không sinh câu mới).");
+        }
         buildService.reconcile(examId);
         ExamSlot slot = loadSlot(examId, slotId);
         if (ExamSlot.GENERATING.equals(slot.getState()) || ExamSlot.PENDING.equals(slot.getState())) {
             throw new IllegalStateException(GENERATING_MESSAGE);
         }
+        // Chọn câu ngân hàng TRƯỚC mọi thay đổi: hết câu thì chỗ giữ nguyên, không nhật ký. Truy vấn native tự ghi các
+        // thay đổi đang chờ xuống DB, nên không được đã bỏ câu khỏi chỗ (chk_es_ready, L-33).
+        Integer newBankItemId = null;
+        if (ExamSlotAction.SOURCE_BANK.equals(replaceSource)) {
+            ExamMatrixCell cell = matrixService.getCell(slot.getCellId());
+            List<Integer> candidates = buildService.bankCandidates(examId, matrixService.getMatrix(cell.getMatrixId()),
+                    cell, 1);
+            if (candidates.isEmpty()) {
+                throw ApiErrorException.conflict(BANK_EXHAUSTED, BANK_EXHAUSTED_MESSAGE);
+            }
+            newBankItemId = candidates.get(0);
+        }
         ExamSlotAction log = new ExamSlotAction(slot.getId(), ExamSlotAction.REPLACE, slot.getGeneratedQuestionId(),
                 slot.getBankItemId(), null, actorId);
         log.setInstruction(cleanInstruction);
+        log.setReplaceSource(replaceSource);
         actionRepository.save(log);
-        slot.setBankItemId(null);
+        slot.setBankItemId(newBankItemId);
         slot.setGeneratedQuestionId(null);
         slot.setFallbackQuestionId(null);
         slot.setAttempts(0);
         slot.setSolverRetries(0);
-        buildService.enqueueReplace(slot, cleanInstruction);
+        if (newBankItemId != null) {
+            slot.setState(ExamSlot.READY);
+        } else {
+            buildService.enqueueReplace(slot, cleanInstruction);
+        }
         slotRepository.save(slot);
         return viewService.item(slot, matrixService.getCell(slot.getCellId()));
+    }
+
+    /** Bỏ trống thì "generate"; chỉ nhận "bank" hoặc "generate" (không phân biệt hoa thường), còn lại 400. */
+    static String normalizeSource(String source) {
+        if (source == null || source.isBlank()) {
+            return ExamSlotAction.SOURCE_GENERATE;
+        }
+        String s = source.strip().toLowerCase(java.util.Locale.ROOT);
+        if (!s.equals(ExamSlotAction.SOURCE_BANK) && !s.equals(ExamSlotAction.SOURCE_GENERATE)) {
+            throw ApiErrorException.badRequest(QuestionEditService.INVALID_REQUEST,
+                    "source phải là \"bank\" hoặc \"generate\".");
+        }
+        return s;
     }
 
     /**

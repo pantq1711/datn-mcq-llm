@@ -98,7 +98,9 @@ public class ExamQcTraceService {
                     : chainFrom(job.getQuestionId(), ctx);
             lineages.add(new LineageDto("generated", jobDto(job), versions));
         }
-        if (jobs.isEmpty() && slot.getBankItemId() != null) {
+        // Câu hiện tại lấy từ ngân hàng (lúc tạo đề, hoặc Đổi bằng câu ngân hàng sau khi chỗ từng sinh: W1-4) là một lần
+        // "sinh" riêng; câu sinh ra rồi Giữ (có generated_question_id) đã nằm trong lineage của job.
+        if (slot.getBankItemId() != null && slot.getGeneratedQuestionId() == null) {
             int source = bankService.getItem(slot.getBankItemId()).sourceQuestionId();
             lineages.add(new LineageDto("bank", null, chainFrom(generationService.originalQuestionId(source), ctx)));
         }

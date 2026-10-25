@@ -142,14 +142,7 @@ public class ExamBuildService {
             slotRepository.saveAllAndFlush(slots);
             total += slots.size();
 
-            // W1-4: ô theo bài không nhập nội dung thì không lọc theo nội dung (dùng lại câu sinh từ ô ma trận cùng chủ đề).
-            boolean anyContent = matrix.isLesson() && (cell.getContent() == null || cell.getContent().isBlank());
-            List<Integer> bank = slotRepository.findBankCandidates(exam.getId(), subject.getId(),
-                    cell.getQuestionType().getDbValue(), cell.getTopic(),
-                    cell.getContent() != null ? cell.getContent() : "",
-                    cell.getDifficulty() != null ? cell.getDifficulty().getDbValue() : "",
-                    cell.getStatementDifficulties() != null ? cell.getStatementDifficulties() : "",
-                    anyContent, slots.size());
+            List<Integer> bank = bankCandidates(exam.getId(), matrix, cell, slots.size());
             List<ExamSlot> missing = new ArrayList<>();
             for (int i = 0; i < slots.size(); i++) {
                 if (i < bank.size()) {
@@ -182,6 +175,20 @@ public class ExamBuildService {
         }
         return new BuildResultDto(exam.getId(), exam.getExamCode(), exam.getTitle(),
                 matrix.isLesson() ? null : matrix.getId(), total, fromBank, jobs, matrix.getKind());
+    }
+
+    /**
+     * Câu ngân hàng khớp một ô, đã xếp hạng mềm theo số lần dùng và đã loại câu đã có trong đề {@code examId} hoặc đã bị
+     * Đổi khỏi đề (xem {@link ExamSlotRepository#findBankCandidates}). Dùng chung cho tạo đề và Đổi bằng câu ngân hàng
+     * (W1-4). W1-4: ô theo bài không nhập nội dung thì không lọc theo nội dung (dùng lại câu sinh từ ô ma trận cùng chủ đề).
+     */
+    List<Integer> bankCandidates(Integer examId, ExamMatrix matrix, ExamMatrixCell cell, int limit) {
+        boolean anyContent = matrix.isLesson() && (cell.getContent() == null || cell.getContent().isBlank());
+        return slotRepository.findBankCandidates(examId, matrix.getSubjectId(), cell.getQuestionType().getDbValue(),
+                cell.getTopic(), cell.getContent() != null ? cell.getContent() : "",
+                cell.getDifficulty() != null ? cell.getDifficulty().getDbValue() : "",
+                cell.getStatementDifficulties() != null ? cell.getStatementDifficulties() : "",
+                anyContent, limit);
     }
 
     /** Tiến độ theo ô; kiểm tra chủ sở hữu rồi mới đối soát và đếm. */

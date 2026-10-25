@@ -283,6 +283,9 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - `exam.mode`: `manual` (mọi đề cũ) hoặc `teacher` (tạo theo ma trận, bắt buộc có `matrix_id`).
   - `exam_slot.state`: `pending`, `generating`, `ready`, `failed`, `kept`, `edited`. `ready`/`kept`/`edited` phải có câu;
     `kept`/`edited` phải có `bank_item_id`.
+  - `exam_slot_action.replace_source` (V16, W1-4): `bank` (Đổi bằng câu ngân hàng) hoặc `generate` (sinh mới); bắt buộc với
+    dòng `replace`, NULL với `keep`/`edit`; dòng replace trước V16 được điền `generate`. Với dòng `replace`,
+    `generated_question_id`/`bank_item_id` là câu bị đổi RA khỏi chỗ.
   - `exam_slot_action.action`: `keep`, `edit`, `replace` (`edit_distance` chỉ với `edit`). `instruction` (V9): yêu cầu bổ sung của giáo viên khi Đổi câu, 1–500 ký tự, chỉ dòng `replace`; NULL khi không có. `changed_fields` (V13): chỉ dòng `edit` (xem mục "Giáo viên sửa câu trong đề").
   - `teacher_review.review_mode`: `blind` (mặc định, mọi dữ liệu cũ) hoặc `assisted` (Giữ/Sửa ở chế độ giáo viên). Đánh
     giá `assisted` bị loại khỏi mọi chỉ số chấm mù (`answer_correct`, duyệt không sửa).

@@ -36,10 +36,25 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
      * exam_question, exam (ngoại lệ ghi ở docs/architecture/backend-structure.md). {@code difficulty} và
      * {@code levels} truyền chuỗi rỗng khi không dùng.
      *
+     * <p>W1-4 (D5-B, Đổi bằng câu ngân hàng): thêm ba điều kiện loại trừ trong phạm vi đề: câu ngân hàng từng bị Đổi ra
+     * khỏi MỘT chỗ nào của đề ({@code exam_slot_action.bank_item_id}, action replace); bản sao ngân hàng của câu sinh ra
+     * đang nằm trong đề hoặc đã bị Đổi ra ({@code bank_item.source_question_id} thuộc {@code out_of_reach}, gồm cả bản gốc
+     * theo chuỗi {@code edited_from_question_id} của bản giáo viên sửa; câu có thể vào ngân hàng qua duyệt chấm mù, không chỉ
+     * qua Giữ). Đề đang tạo chưa có chỗ hay nhật ký nên không đổi kết quả khi tạo đề.
+     *
      * <p>W1-4: {@code anyContent} = true (chỉ ô của ma trận ẩn sinh theo bài không nhập nội dung) bỏ điều kiện về nội dung
      * của ô nguồn; false giữ nguyên hành vi cũ.
      */
     @Query(value = """
+            WITH RECURSIVE out_of_reach(id) AS (
+                SELECT es.generated_question_id FROM exam_slot es
+                WHERE es.exam_id = :examId AND es.generated_question_id IS NOT NULL
+                UNION
+                SELECT a.generated_question_id FROM exam_slot_action a JOIN exam_slot es ON es.id = a.slot_id
+                WHERE es.exam_id = :examId AND a.action = 'replace' AND a.generated_question_id IS NOT NULL
+                UNION
+                SELECT q.edited_from_question_id FROM generated_question q JOIN out_of_reach r ON q.id = r.id
+                WHERE q.edited_from_question_id IS NOT NULL)
             SELECT b.id
             FROM bank_item b
             JOIN generated_question g ON g.id = b.source_question_id
@@ -63,6 +78,9 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
                                          FROM bank_item_statement s WHERE s.bank_item_id = b.id) = :levels))
               AND b.id NOT IN (SELECT es.bank_item_id FROM exam_slot es
                                WHERE es.exam_id = :examId AND es.bank_item_id IS NOT NULL)
+              AND b.id NOT IN (SELECT a.bank_item_id FROM exam_slot_action a JOIN exam_slot es ON es.id = a.slot_id
+                               WHERE es.exam_id = :examId AND a.action = 'replace' AND a.bank_item_id IS NOT NULL)
+              AND b.source_question_id NOT IN (SELECT id FROM out_of_reach)
             ORDER BY coalesce(us.uses, 0), us.last_used ASC NULLS FIRST, b.id
             LIMIT :limit
             """, nativeQuery = true)
