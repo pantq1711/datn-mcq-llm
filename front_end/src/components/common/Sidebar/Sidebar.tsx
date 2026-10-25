@@ -5,7 +5,9 @@ import {
     FormOutlined,
     HomeOutlined,
     ReadOutlined,
+    TableOutlined,
     SafetyCertificateOutlined,
+    OrderedListOutlined
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
@@ -15,32 +17,42 @@ type MenuItem = Required<MenuProps>["items"][number];
 
 const menuItems: MenuItem[] = [
     {
-        key: "/teacher/dashboard",
+        key: "/",
         icon: <HomeOutlined />,
         label: "Tổng quan",
     },
     {
-        key: "/teacher/generate",
+        key: "/generate",
         icon: <FormOutlined />,
         label: "Sinh câu hỏi",
     },
     {
-        key: "/teacher/review",
+        key: "/job-processor",
+        icon: <OrderedListOutlined />,
+        label: "Quản lý job sinh câu hỏi",
+    },
+    {
+        key: "/review",
         icon: <SafetyCertificateOutlined />,
         label: "Duyệt câu hỏi",
     },
     {
-        key: "/teacher/question-bank",
+        key: "/question-bank",
         icon: <ReadOutlined />,
         label: "Ngân hàng câu hỏi",
     },
     {
-        key: "/teacher/exams",
+        key: "/exam-matrices",
+        icon: <TableOutlined />,
+        label: "Quản lý ma trận",
+    },
+    {
+        key: "/exams",
         icon: <FileTextOutlined />,
         label: "Đề thi",
     },
     {
-        key: "/teacher/experiments",
+        key: "/experiments",
         icon: <ExperimentOutlined />,
         label: "Thực nghiệm",
     },
@@ -63,7 +75,7 @@ export default function Sidebar() {
                     typeof key === "string" &&
                     (location.pathname === key ||
                         location.pathname.startsWith(`${key}/`)),
-            ) ?? "/teacher/dashboard";
+            ) ?? "/";
 
     return (
         <aside className="app-sidebar">

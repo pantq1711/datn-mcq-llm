@@ -1,0 +1,20 @@
+.register-page {
+    width: 100%;
+}
+
+.register-page-header {
+    margin-bottom: 24px;
+    text-align: center;
+}
+
+.register-page-title {
+    margin: 0 0 8px !important;
+}
+
+.register-page-description {
+    display: block;
+}
+
+.register-page-form {
+    width: 100%;
+}

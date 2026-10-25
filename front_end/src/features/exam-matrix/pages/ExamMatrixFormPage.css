@@ -1,0 +1,123 @@
+.exam-matrix-form-page {
+    padding: 24px 24px 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    width: 100%;
+    min-width: 0;
+}
+
+.exam-matrix-form-page__breadcrumb-link:hover {
+    color: #1677ff;
+}
+
+.exam-matrix-form-page__header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.exam-matrix-form-page__back-button {
+    background-color: #ffffff;
+    border-radius: 15px;
+    margin-bottom: 12px;
+    border: 3px solid #f2f2f2;
+}
+
+.exam-matrix-form-page__heading {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+}
+
+.exam-matrix-form-page__title.ant-typography {
+    margin: 0;
+}
+
+.exam-matrix-form-page__header-actions {
+    flex-shrink: 0;
+}
+
+.exam-matrix-form-page__content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    align-items: start;
+    gap: 20px;
+}
+
+.exam-matrix-form-page__main-column,
+.exam-matrix-form-page__sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+}
+
+.exam-matrix-form-page__section-card,
+.exam-matrix-form-page__summary-card,
+.exam-matrix-form-page__help-card {
+    min-width: 0;
+}
+
+.exam-matrix-form-page__section-card>.ant-card-head,
+.exam-matrix-form-page__summary-card>.ant-card-head,
+.exam-matrix-form-page__help-card>.ant-card-head {
+    min-height: 54px;
+}
+
+.exam-matrix-form-page__section-card>.ant-card-body {
+    padding: 20px;
+    min-width: 0;
+}
+
+.exam-matrix-form-page__summary-card>.ant-card-body,
+.exam-matrix-form-page__help-card>.ant-card-body {
+    padding: 16px;
+    min-width: 0;
+}
+
+@media (max-width: 900px) {
+    .exam-matrix-form-page__content {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .exam-matrix-form-page__sidebar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+    }
+}
+
+@media (max-width: 640px) {
+    .exam-matrix-form-page {
+        gap: 16px;
+    }
+
+    .exam-matrix-form-page__header {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .exam-matrix-form-page__header-actions {
+        display: flex;
+        width: 100%;
+    }
+
+    .exam-matrix-form-page__header-actions .ant-btn {
+        flex: 1;
+    }
+
+    .exam-matrix-form-page__sidebar {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .exam-matrix-form-page__section-card>.ant-card-body,
+    .exam-matrix-form-page__summary-card>.ant-card-body,
+    .exam-matrix-form-page__help-card>.ant-card-body {
+        padding: 12px;
+    }
+}

@@ -21,15 +21,15 @@ const decisionOptions: {
     label: string;
 }[] = [
         {
-            value: "EDIT",
+            value: "approved_with_edit",
             label: "Cần chỉnh sửa nhẹ",
         },
         {
-            value: "APPROVE",
+            value: "approved_as_is",
             label: "Chấp thuận",
         },
         {
-            value: "REJECT",
+            value: "rejected",
             label: "Từ chối",
         },
     ];
@@ -44,7 +44,7 @@ export default function ReviewDecision({
         correctAnswer === "MULTIPLE";
 
     const selectedValue = forceReject
-        ? "REJECT"
+        ? "rejected"
         : value ?? undefined;
 
     const handleChange = (
