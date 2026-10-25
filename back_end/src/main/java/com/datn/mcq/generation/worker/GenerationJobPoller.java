@@ -33,7 +33,7 @@ import java.util.Optional;
 /**
  * Poller chạy ngoài transaction DB:
  * 1. Gọi GenerationJobProcessor.claimNextPendingJob() (transaction ngắn #1).
- * 2. Gọi LlmClient.generateMcq(...) ngoài transaction.
+ * 2. Gọi LlmClient (JSON mode kèm schema theo dạng câu) ngoài transaction.
  * 3. Lưu GeneratedQuestion + ghi câu vào GenerationJob, job vẫn running (transaction ngắn #2),
  *    dựng phạm vi dedup theo purpose của run, chạy pipeline QC (format -> dedup -> answer_check).
  * 4. Cập nhật QuestionStatus và đánh dấu job done trong cùng một transaction ngắn (#3, L-39: đối soát không bao giờ thấy
@@ -91,7 +91,7 @@ public class GenerationJobPoller {
         }
         boolean shortAnswer = ctx.questionType() == QuestionType.SA;
         boolean trueFalse = ctx.questionType() == QuestionType.TF;
-        // Chế độ sửa đầu ra (escape LaTeX, tự đóng $) và schema MCQ chỉ cho run production; experiment giữ nguyên.
+        // Chế độ sửa đầu ra (escape LaTeX, tự đóng $) chỉ cho run production; run experiment giữ giải mã chặt.
         boolean production = ctx.purpose() != Purpose.EXPERIMENT;
         LlmCallResult llmResult;
         try {
@@ -105,17 +105,10 @@ public class GenerationJobPoller {
                     ? llmClient.callJsonModeWithSchema(
                             ctx.prompt(), ctx.modelName(), ctx.temperature(),
                             TfPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON)
-                    // Ngày 23/10: run production gọi MCQ kèm schema; run experiment (C1/C2/C3) giữ cấu hình theo strategy.
-                    : production
-                    ? llmClient.callJsonModeWithSchema(
+                    // Câu mcq gọi kèm schema (25/10: không còn cấu hình riêng theo strategy cho run experiment).
+                    : llmClient.callJsonModeWithSchema(
                             ctx.prompt(), ctx.modelName(), ctx.temperature(),
-                            McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON)
-                    : llmClient.generateMcq(
-                            ctx.prompt(),
-                            ctx.modelName(),
-                            ctx.strategy(),
-                            ctx.temperature()
-                    );
+                            McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON);
         } catch (RuntimeException ex) {
             var failedJob = processor.recordJobFailure(ctx.jobId(), ex.getMessage(), maxAttempts);
             return new ProcessedJobSummary(

@@ -66,7 +66,7 @@ public class ExperimentService {
         run.setQuestionType(questionType != null ? questionType : QuestionType.MCQ);
         run.setSubjectId(subjectId);
         run.setPurpose(purpose != null ? purpose : Purpose.PRODUCTION);
-        run.setStrategy(strategy != null ? strategy : Strategy.FEW_SHOT_STRUCTURED);
+        run.setStrategy(strategy != null ? strategy : Strategy.ZERO_SHOT);
         run.setModelName(modelName != null && !modelName.isBlank() ? modelName : "gemini-3.5-flash-lite");
         run.setTemperature(temperature != null ? temperature : 0.7);
         run.setPromptVersion(promptVersion != null ? promptVersion : "v1.0-math-demo");

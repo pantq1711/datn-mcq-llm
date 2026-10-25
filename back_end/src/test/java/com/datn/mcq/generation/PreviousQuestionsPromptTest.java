@@ -4,7 +4,6 @@ import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
 import com.datn.mcq.enums.QuestionType;
-import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.generation.service.DedupScopeResolver;
 import com.datn.mcq.generation.service.PreviousQuestionLookup;
 import com.datn.mcq.generation.worker.GenerationJobPoller;
@@ -62,10 +61,6 @@ class PreviousQuestionsPromptTest {
             return true;
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            throw new UnsupportedOperationException("MCQ production phải gọi kèm schema (ngày 23/10)");
-        }
 
         private LlmCallResult mcq(String prompt, String modelName) {
             prompts.add(prompt);

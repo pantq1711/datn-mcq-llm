@@ -11,7 +11,6 @@ import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.SourceType;
-import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.repository.GeneratedQuestionRepository;
 import com.datn.mcq.llm.client.LlmClient;
@@ -66,10 +65,6 @@ class SolverDuplicateJudgeAnswerTest {
             return true;
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            throw new UnsupportedOperationException("Không được sinh câu trong test này");
-        }
 
         @Override
         public LlmCallResult callJsonMode(String prompt, String modelName, Double temperature) {

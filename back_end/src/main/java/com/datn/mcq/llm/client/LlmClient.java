@@ -2,7 +2,6 @@ package com.datn.mcq.llm.client;
 
 import com.datn.mcq.common.exception.UpstreamServiceException;
 import com.datn.mcq.common.util.SimpleJson;
-import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,18 +25,6 @@ public class LlmClient {
 
     /** Địa chỉ gốc của Gemini; {@code app.llm.base-url} chỉ đổi khi kiểm chứng bằng Gemini giả (W1-5). */
     static final String DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
-
-    private static final String MCQ_RESPONSE_SCHEMA_JSON = """
-            {"type":"OBJECT","properties":{
-              "question_text":{"type":"STRING"},
-              "option_a":{"type":"STRING"},
-              "option_b":{"type":"STRING"},
-              "option_c":{"type":"STRING"},
-              "option_d":{"type":"STRING"},
-              "explanation":{"type":"STRING"},
-              "correct_option":{"type":"STRING","enum":["A","B","C","D"]}
-            },"required":["question_text","option_a","option_b","option_c","option_d","explanation","correct_option"]}
-            """;
 
     private final HttpClient httpClient;
     private final String defaultApiKey;
@@ -80,11 +67,6 @@ public class LlmClient {
         return defaultModel;
     }
 
-    public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-        String generationConfig = buildGenerationConfig(strategy, temperature);
-        return callGemini(prompt, modelName, generationConfig);
-    }
-
     public LlmCallResult callJsonMode(String prompt, String modelName, Double temperature) {
         double temp = temperature != null ? temperature : 0.0;
         String generationConfig = "\"generationConfig\":{\"temperature\":" + temp
@@ -110,20 +92,6 @@ public class LlmClient {
         return "\"generationConfig\":{\"temperature\":" + temp
                 + ",\"responseMimeType\":\"application/json\""
                 + ",\"responseSchema\":" + responseSchemaJson.strip() + "}";
-    }
-
-    private String buildGenerationConfig(Strategy strategy, Double temperature) {
-        double temp = temperature != null ? temperature : 0.7;
-        if (strategy == Strategy.FEW_SHOT_STRUCTURED) {
-            return "\"generationConfig\":{\"temperature\":" + temp
-                    + ",\"responseMimeType\":\"application/json\""
-                    + ",\"responseSchema\":" + MCQ_RESPONSE_SCHEMA_JSON + "}";
-        }
-        if (strategy == Strategy.FEW_SHOT) {
-            return "\"generationConfig\":{\"temperature\":" + temp
-                    + ",\"responseMimeType\":\"application/json\"}";
-        }
-        return "\"generationConfig\":{\"temperature\":" + temp + "}";
     }
 
     @SuppressWarnings("unchecked")
