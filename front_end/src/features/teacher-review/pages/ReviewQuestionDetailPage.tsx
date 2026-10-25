@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Spin, message, Alert, Button, Card, Col, Radio, Row, Space, Tag, Typography } from "antd";
 import { ArrowLeftOutlined, SaveOutlined } from "@ant-design/icons";
 import { useParams, useNavigate } from "react-router-dom";
@@ -15,6 +15,11 @@ import QuestionExplanationCard from "../components/QuestionExplanationCard";
 import "./ReviewQuestionDetailPage.css";
 
 export default function ReviewQuestionDetailPage() {
+
+    // Move handleBackToList before usage to avoid TS18047
+    const handleBackToList = () => {
+        navigate("/review");
+    };
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
 
@@ -64,13 +69,14 @@ export default function ReviewQuestionDetailPage() {
                 // Nếu có sẵn trạng thái format hoặc gợi ý độ khó từ QC/LLM:
                 if (data.formatStatus) setFormatStatus(data.formatStatus);
                 if (data.llmDifficulty) {
-                    const diffUpper = data.llmDifficulty.toUpperCase() as Difficulty;
+                    const diffUpper = data.llmDifficulty as Difficulty;
                     setDifficulty(diffUpper);
                 }
 
             } catch (err) {
                 console.error("Lỗi khi tải chi tiết câu hỏi:", err);
                 message.error("Không thể tải thông tin câu hỏi cần duyệt.");
+                setError(err instanceof Error ? err.message : String(err));
             } finally {
                 setLoading(false);
             }
@@ -97,29 +103,17 @@ export default function ReviewQuestionDetailPage() {
         };
 
         fetchDetail();
-    }, [id]);
+    }, [id, handleBackToList]);
 
-    const handleBackToList = () => {
-        navigate("/review");
-    };
+    // Removed duplicated handleBackToList moved above
 
-    const [correctAnswer, setCorrectAnswer] =
-        useState<CorrectAnswer | null>(null);
-
-    const [formatStatus, setFormatStatus] =
-        useState<FormatStatus | null>(null);
-
-    const [difficulty, setDifficulty] =
-        useState<Difficulty | null>(null);
-
-    const [decision, setDecision] =
-        useState<ReviewDecisions | null>(null);
-
-    const [selectedReasons, setSelectedReasons] =
-        useState<string[]>([]);
-
-    const [otherReason, setOtherReason] =
-        useState("");
+    // State declarations moved above useEffect to avoid using setters before they are defined
+    const [correctAnswer, setCorrectAnswer] = useState<CorrectAnswer | null>(null);
+    const [formatStatus, setFormatStatus] = useState<FormatStatus | null>(null);
+    const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
+    const [decision, setDecision] = useState<ReviewDecisions | null>(null);
+    const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
+    const [otherReason, setOtherReason] = useState("");
 
     const forceReject =
         correctAnswer === "NONE" ||
@@ -214,7 +208,7 @@ export default function ReviewQuestionDetailPage() {
         // 3. Chuẩn bị payload
         const payload: SubmitReviewPayload = {
             reviewerAnswer: backendReviewerAnswer,
-            formatOk: formatStatus === "qc_passed" || formatStatus === ("qc_passed" as any),
+            formatOk: formatStatus === "qc_passed",
             difficultyLabel: (difficulty?.toLowerCase() ?? "medium") as "easy" | "medium" | "hard",
             decision: backendDecision,
             finalOption: backendDecision === "rejected" ? null : (correctAnswer as "A" | "B" | "C" | "D"),

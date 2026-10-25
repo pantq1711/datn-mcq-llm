@@ -66,16 +66,13 @@ export default function Sidebar() {
         navigate(key);
     };
 
-    const selectedKey =
-        menuItems
-            .filter((item) => item && "key" in item)
-            .map((item) => ("key" in item ? item.key : undefined))
-            .find(
-                (key) =>
-                    typeof key === "string" &&
-                    (location.pathname === key ||
-                        location.pathname.startsWith(`${key}/`)),
-            ) ?? "/";
+const selectedKey = menuItems
+    .filter((item): item is MenuItem => !!item && "key" in item)
+    .map((item) => item.key)
+    .find((key) => {
+        if (typeof key !== "string") return false;
+        return location.pathname === key || location.pathname.startsWith(`${key}/`);
+    }) ?? "/";
 
     return (
         <aside className="app-sidebar">

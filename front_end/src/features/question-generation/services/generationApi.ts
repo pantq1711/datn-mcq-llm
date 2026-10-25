@@ -1,4 +1,13 @@
 import axiosInstance from "../../../services/apiClient";
+
+export interface ProcessNextJobResult {
+  job?: GenerationJob;
+  status: string;
+}
+
+
+
+
 import type { QuestionTemplate, Subject, GenerateQuestionPayload, GenerateResponse, GenerationStatusResponse, GenerationResultResponse, GenerationHistoryItem, GenerationJob } from "../types/generation.types";
 
 export async function createGenerationTask(
@@ -38,8 +47,8 @@ export async function getCatalogTemplates(subjectId?: number): Promise<QuestionT
     return response.data;
 }
 
-export async function processNextJob(runAnswerCheck = true): Promise<any> {
-    const response = await axiosInstance.post<any>("/api/generation/jobs/process-next", null, {
+export async function processNextJob(runAnswerCheck = true): Promise<ProcessNextJobResult> {
+    const response = await axiosInstance.post<ProcessNextJobResult>("/api/generation/jobs/process-next", null, {
         params: { runAnswerCheck },
     });
     return response.data;

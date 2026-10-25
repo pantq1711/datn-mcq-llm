@@ -21,7 +21,6 @@ export default function TeacherLayout() {
         <MainLayout>
             <div className="teacher-layout">
                 <Header
-                    collapsed={collapsed}
                     onToggleSidebar={handleToggleSidebar}
                 />
 

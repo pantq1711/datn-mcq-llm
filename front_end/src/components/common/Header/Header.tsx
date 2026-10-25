@@ -8,7 +8,7 @@ const { Header: AntHeader } = Layout;
 const { Text } = Typography;
 
 interface HeaderProps {
-    collapsed?: boolean;
+
     onToggleSidebar?: () => void;
     variant?: "default" | "auth";
 }

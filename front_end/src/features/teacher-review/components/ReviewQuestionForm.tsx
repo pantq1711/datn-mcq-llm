@@ -43,10 +43,10 @@ interface ReviewQuestionFormProps {
     onOtherReasonChange: (value: string) => void;
 }
 
-const difficultyOptions = [
-    { label: "Dễ", value: "easy" as Difficulty },
-    { label: "Trung bình", value: "medium" as Difficulty },
-    { label: "Khó", value: "hard" as Difficulty },
+const difficultyOptions: { label: string; value: Difficulty }[] = [
+    { label: "Dễ", value: "easy" },
+    { label: "Trung bình", value: "medium" },
+    { label: "Khó", value: "hard" },
 ];
 
 export default function ReviewQuestionForm({
