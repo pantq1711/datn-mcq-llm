@@ -46,7 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * câu giữ generated, không ghi dòng answer_check, và generate-sync vẫn trả 200.
  * Solver là LlmClient giả (không gọi mạng), phản hồi đi qua AnswerSolverChecker.parseAndCompare thật.
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class SolverDuplicateJudgeAnswerTest {
 

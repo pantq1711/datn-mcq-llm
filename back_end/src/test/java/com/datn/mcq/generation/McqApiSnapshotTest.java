@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * duyệt, mục 8); kết quả QC của câu mcq giữ đúng bộ key cũ, không có trường SA. (Phần form chấm và nộp đánh giá đã gỡ
  * ngày 25/10.)
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class McqApiSnapshotTest {
 

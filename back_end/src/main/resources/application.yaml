@@ -45,6 +45,10 @@ app:
     base-url: ${LLM_BASE_URL:}
   embedding:
     model: ${EMBEDDING_MODEL:}
+  # Công cụ thí nghiệm (quyết định 25/10): /api/generation/* và /api/catalog/templates chỉ tồn tại khi bật. Mặc định tắt;
+  # không bật ở prod (admin gọi các đường này sẽ gọi Gemini tính phí).
+  experiment:
+    enabled: ${EXPERIMENT_ENABLED:false}
   worker:
     enabled: ${WORKER_ENABLED:false}
     poll-delay-ms: ${WORKER_POLL_DELAY_MS:15000}

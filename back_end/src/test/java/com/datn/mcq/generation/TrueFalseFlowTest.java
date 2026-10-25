@@ -57,7 +57,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Luồng Đúng/Sai trọn vẹn qua HTTP thật trên datn_mcq_test (GĐ3): generate-sync với rawLlmOutputOverride, format,
  * dedup, Solver giả (không gọi mạng); job bất đồng bộ; chạy lại QC.
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class TrueFalseFlowTest {
 

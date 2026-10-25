@@ -54,7 +54,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Luồng Trả lời ngắn trọn vẹn qua HTTP thật trên datn_mcq_test (GĐ2): generate-sync với rawLlmOutputOverride,
  * format, dedup, Solver giả (không gọi mạng); job bất đồng bộ; chạy lại QC.
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class ShortAnswerFlowTest {
 

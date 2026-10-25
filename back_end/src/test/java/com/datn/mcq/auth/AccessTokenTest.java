@@ -120,12 +120,10 @@ class AccessTokenTest {
     @Test
     void giaoVienGoiApiAdminTra403Json() throws Exception {
         String token = loginToken();
-        for (String url : new String[]{"/api/admin/users", "/api/generation/jobs"}) {
-            mockMvc.perform(get(url).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
-                    .andExpect(status().isForbidden())
-                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.error").value("Bạn không có quyền thực hiện thao tác này"))
-                    .andExpect(jsonPath("$.code").value("FORBIDDEN"));
-        }
+        mockMvc.perform(get("/api/admin/users").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.error").value("Bạn không có quyền thực hiện thao tác này"))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 }

@@ -24,10 +24,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * GET /api/generation/jobs trả thẳng entity GenerationJob. GĐ2 mở questionType (mặc định mcq) theo yêu cầu đã duyệt;
- * targetStatementDifficulties chỉ có với tf nên bị bỏ khỏi JSON của job mcq. Các key cũ giữ nguyên.
+ * GET /api/generation/jobs trả GenerationJobDto (W2-2; trước đó là entity GenerationJob). GĐ2 mở questionType (mặc định
+ * mcq) theo yêu cầu đã duyệt; targetStatementDifficulties chỉ có với tf nên bị bỏ khỏi JSON của job mcq. Các key cũ
+ * giữ nguyên; promptNote không được trả.
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class GenerationJobsApiSnapshotTest {
 
@@ -54,8 +55,9 @@ class GenerationJobsApiSnapshotTest {
                 + " VALUES (?, 'Mẫu', TRUE)", subject);
         int run = insert("INSERT INTO experiment_run (subject_id, strategy, model_name, temperature, prompt_text,"
                 + " purpose) VALUES (?, 'few-shot-structured', 'm', 0.7, 'p', 'production')", subject);
-        insert("INSERT INTO generation_job (run_id, template_id, target_difficulty) VALUES (?, ?, 'easy')",
-                run, template);
+        // prompt_note (yêu cầu tự do của giáo viên) có giá trị nhưng DTO không được trả ra
+        insert("INSERT INTO generation_job (run_id, template_id, target_difficulty, prompt_note)"
+                + " VALUES (?, ?, 'easy', 'Ghi chú riêng của giáo viên')", run, template);
     }
 
     private Integer insert(String sql, Object... args) {
