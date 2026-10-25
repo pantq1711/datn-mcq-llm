@@ -1,6 +1,7 @@
 # API backend: tóm tắt cho frontend
 
-Cập nhật 2026-10-24 (W1-3: ngân hàng có lọc, phân trang, chi tiết kèm nguồn gốc; vết QC theo ô; chống trùng trong đề;
+Cập nhật 2026-10-25 (W2-2: gỡ form chấm mù và seed demo; `/api/generation/*` và `/api/catalog/templates` chỉ có khi
+`app.experiment.enabled=true`; `GET /api/generation/jobs` trả DTO). Trước đó 2026-10-24 (W1-3: ngân hàng có lọc, phân trang, chi tiết kèm nguồn gốc; vết QC theo ô; chống trùng trong đề;
 mục "Ngân hàng câu hỏi" và 7.7). Cùng ngày (W1-1: đăng nhập JWT, phân quyền, quyền sở hữu, `GET /api/exams`; mục 8). Trước đó 2026-10-22
 (thêm câu Đúng/Sai `tf` và Trả lời ngắn `sa`). Nguồn chuẩn là code trong `back_end/` và các
 migration Flyway; file này chỉ tóm tắt.
@@ -22,8 +23,7 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
   proxy `/api` cùng domain. CORS vẫn bật cho các origin trong `CORS_ALLOWED_ORIGINS` (mặc định `http://localhost:5173`,
   `http://127.0.0.1:5173`), có `allowCredentials`.
 - **Cần đăng nhập** cho mọi `/api/**` trừ `POST /api/auth/login|refresh|logout` (mục 8). Gửi header
-  `Authorization: Bearer <accessToken>`. Vai trò: `teacher`, `admin`. Form chấm `/api/reviews/**` vẫn lấy `reviewerId`
-  từ body như cũ (chưa đổi, chờ Q-6).
+  `Authorization: Bearer <accessToken>`. Vai trò: `teacher`, `admin`.
 - Lỗi do backend chủ động trả có dạng `{"error": "thông báo tiếng Việt"}`; lỗi xác thực và lỗi của Sửa câu / Giữ khi đang
   kiểm (W1-2, mục 7.5a) có thêm `"code"`, lỗi định dạng bản sửa có thêm `"errors"` (danh sách lỗi từng trường):
 
@@ -40,7 +40,7 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 
 Dạng câu (`questionType`): `mcq` (trắc nghiệm 4 phương án, mặc định khi bỏ trống), `tf` (Đúng/Sai: đề dẫn và đúng 4 ý
 a-d), `sa` (Trả lời ngắn: đề và một đáp số). Câu `tf` và `sa` chỉ sinh cho `production`, chiến lược `zero-shot`, prompt
-bản nháp (`tf-v2-draft`, `sa-v1-draft`; run cũ là `v0`, `tf-v1-draft`). Thực nghiệm C1/C2/C3 chỉ dùng `mcq`.
+bản nháp (`tf-v2-draft`, `sa-v1-draft`; run cũ là `v0`, `tf-v1-draft`). Thí nghiệm so sánh C1/C2/C3 đã bỏ (25/10).
 Khi sinh câu `tf`/`sa` (sync và job), prompt gửi model kèm tối đa 10 câu gần nhất cùng template và cùng dạng để model
 không lặp lại bài toán hay số liệu; xem `enums.md` mục 3, "Độ đa dạng".
 
@@ -61,23 +61,21 @@ Cột "Quyền": `công khai`, `đăng nhập` (mọi vai trò), `GV` (giáo vi�
 | PATCH | `/api/admin/users/{id}` | Sửa tên, email, bật/khóa (đổi email hoặc khóa thì thu hồi phiên) | AD |
 | POST | `/api/admin/users/{id}/reset-password` | Đặt lại mật khẩu (thu hồi phiên) | AD |
 
-Quyền của các dòng dưới: `catalog` GET và `bank-items` cho GV và AD; `POST /api/catalog/templates`, `/api/generation/**`,
-`/api/reviews/demo/seed-math` chỉ AD; `/api/reviews/**` khác, `/api/exam-matrices/**`, `/api/exams/**` chỉ GV (ma trận,
-đề chỉ của chính người gọi).
+Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và AD; `/api/exam-matrices/**`, `/api/exams/**` chỉ GV
+(ma trận, đề chỉ của chính người gọi). Các dòng đánh dấu **[Thí nghiệm]** (`GET`/`POST /api/catalog/templates`,
+`/api/generation/**`) là công cụ thí nghiệm: chỉ tồn tại khi `app.experiment.enabled=true` (biến `EXPERIMENT_ENABLED`, mặc
+định `false`, không bật ở prod); khi tắt, các đường này trả 404 cho mọi vai trò. Khi bật: `POST /api/catalog/templates` và
+`/api/generation/**` chỉ AD, `GET /api/catalog/templates` cho GV và AD.
 
 | Phương thức | Đường dẫn | Việc |
 |---|---|---|
 | GET | `/api/catalog/subjects` | Danh sách môn |
-| GET | `/api/catalog/templates?subjectId=` | Danh sách template, lọc theo môn nếu có |
-| POST | `/api/catalog/templates` | Tạo template cho môn đã tồn tại (không tạo môn) |
-| POST | `/api/generation/generate-sync` | Sinh 1 câu (mọi dạng) và chạy QC ngay. Gọi Gemini, có thể tốn phí |
-| POST | `/api/generation/jobs/enqueue` | Tạo job sinh câu bất đồng bộ (tối đa 50, mọi dạng) |
-| POST | `/api/generation/jobs/process-next?runAnswerCheck=true` | Xử lý ngay 1 job đến hạn (khóa `FOR UPDATE SKIP LOCKED`, không nhận trùng với worker). Gọi Gemini. `runAnswerCheck=false` không nhận job `answer_check` |
-| GET | `/api/generation/jobs` | Danh sách job; mỗi job có `jobType` (`generate` hoặc `answer_check`, V13) |
-| GET | `/api/reviews/questions` | Danh sách câu để chấm, mọi dạng (không có tham số lọc trạng thái) |
-| GET | `/api/reviews/questions/{id}` | Form chấm một câu |
-| POST | `/api/reviews/questions/{id}` | Nộp đánh giá |
-| POST | `/api/reviews/demo/seed-math` | Tạo 5 câu `mcq` demo; đi qua format và dedup, không chạy answer_check, nên giữ `generated` |
+| GET | `/api/catalog/templates?subjectId=` | **[Thí nghiệm]** Danh sách template, lọc theo môn nếu có |
+| POST | `/api/catalog/templates` | **[Thí nghiệm]** Tạo template cho môn đã tồn tại (không tạo môn) |
+| POST | `/api/generation/generate-sync` | **[Thí nghiệm]** Sinh 1 câu (mọi dạng) và chạy QC ngay. Gọi Gemini, có thể tốn phí |
+| POST | `/api/generation/jobs/enqueue` | **[Thí nghiệm]** Tạo job sinh câu bất đồng bộ (tối đa 50, mọi dạng) |
+| POST | `/api/generation/jobs/process-next?runAnswerCheck=true` | **[Thí nghiệm]** Xử lý ngay 1 job đến hạn (khóa `FOR UPDATE SKIP LOCKED`, không nhận trùng với worker). Gọi Gemini. `runAnswerCheck=false` không nhận job `answer_check` |
+| GET | `/api/generation/jobs` | **[Thí nghiệm]** Danh sách job (DTO, không có `promptNote`); mỗi job có `jobType` (`generate` hoặc `answer_check`, V13) |
 | GET | `/api/bank-items?...` | Ngân hàng câu hỏi đã duyệt: lọc, tìm, sắp xếp, phân trang; mỗi câu kèm số đề đã dùng (mục "Ngân hàng câu hỏi") |
 | GET | `/api/bank-items/{id}` | Chi tiết một câu ngân hàng: đáp án, lời giải, nguồn gốc, đề đã dùng |
 | GET | `/api/bank-items/topics?subjectId=` | Chủ đề có câu trong ngân hàng kèm số câu, để dựng bộ lọc |
@@ -99,9 +97,11 @@ Quyền của các dòng dưới: `catalog` GET và `bank-items` cho GV và AD; 
 | GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; cần pandoc trên máy chủ |
 
 Chạy lại QC cho câu `generated` (quy tắc QC-RERUN, quyết định 6 ngày 22/10) đã có ở tầng service (`QcRerunService`, cả ba
-dạng) nhưng CHƯA có endpoint (chưa chốt ai được gọi Solver tính phí cho câu tùy ý).
+dạng) cho công cụ thí nghiệm, không có endpoint HTTP.
 
 ### Tạo template
+
+Công cụ thí nghiệm: chỉ có khi `app.experiment.enabled=true` (xem mục 2).
 
 ```http
 POST /api/catalog/templates
@@ -118,6 +118,8 @@ POST /api/catalog/templates
 
 ### Sinh câu đồng bộ
 
+Công cụ thí nghiệm: chỉ có khi `app.experiment.enabled=true` (xem mục 2).
+
 | Trường | `mcq` | `sa` | `tf` |
 |---|---|---|---|
 | `templateId` | bắt buộc | bắt buộc | bắt buộc |
@@ -130,7 +132,7 @@ POST /api/catalog/templates
 - Thử offline không tốn phí: truyền `rawLlmOutputOverride` là chuỗi JSON theo hợp đồng ở mục 4 của
   [`enums.md`](../contract/enums.md) (7 trường `mcq`, 3 trường `sa`, 10 trường `tf`) VÀ `"runAnswerCheck": false`.
   Nếu không tắt answer-check, backend vẫn gọi Solver Gemini.
-- Response: `{"question": {...}, "qcReport": {...}}`. Response này dành cho người nghiên cứu, không phải form chấm: nó có
+- Response: `{"question": {...}, "qcReport": {...}}`. Response này dành cho người nghiên cứu, không phải màn giáo viên: nó có
   kết quả QC. `question` không có đáp án, đáp số hay nhãn của LLM ở cả ba dạng.
 - `question`: `id, templateId, runId, questionText, optionA..optionD, parseSuccess, status, tokenCount, latencyMs,
   createdAt, questionType`; câu `tf` giải mã được có thêm `statements: [{key, text}]` (không có nhãn). `optionA..optionD`
@@ -221,6 +223,8 @@ POST /api/generation/generate-sync
 
 ### Tạo job sinh câu
 
+Công cụ thí nghiệm: chỉ có khi `app.experiment.enabled=true` (xem mục 2). Job trả dạng DTO (`GenerationJobDto`).
+
 ```http
 POST /api/generation/jobs/enqueue
 {"templateId": 3, "questionType": "tf", "targetStatementDifficulties": ["easy", "easy", "medium", "hard"], "count": 5}
@@ -234,136 +238,9 @@ POST /api/generation/jobs/enqueue
 - `jobType = "answer_check"` (V13, W1-2) là job chạy lại Solver cho bản giáo viên sửa (mục 7.5a): có `questionId` ngay
   khi tạo, không có `examSlotId`.
 
-### Form chấm
-
-`GET /api/reviews/questions` trả danh sách: `id, templateId, reviewPurpose, subjectName, gradeLevel, topic, questionText,
-createdAt, questionType`. Danh sách không có phương án hay ý; mở chi tiết để chấm.
-
-`GET /api/reviews/questions/{id}` trả form chấm; trường `null` bị bỏ khỏi JSON:
-
-```json
-{"id": 42, "templateId": 3, "reviewPurpose": "production", "subjectName": "Toán", "gradeLevel": 8,
- "topic": "Căn bậc hai", "questionText": "Kết quả của phép tính $\\sqrt{(-5)^2}$ là:",
- "optionA": "$-5$", "optionB": "$5$", "optionC": "$25$", "optionD": "$\\pm 5$",
- "createdAt": "2026-10-22T15:00:00", "questionType": "mcq"}
-```
-
-```json
-{"id": 101, "templateId": 3, "reviewPurpose": "production", "subjectName": "Toán", "gradeLevel": 8,
- "topic": "Định lí Pythagore",
- "questionText": "Cho tam giác $ABC$ vuông cân tại $A$ có $AB = AC = 3$. Tính độ dài cạnh $BC$.",
- "createdAt": "2026-10-22T16:00:00", "questionType": "sa"}
-```
-
-```json
-{"id": 205, "templateId": 3, "reviewPurpose": "production", "subjectName": "Toán", "gradeLevel": 8,
- "topic": "Phân thức đại số", "questionText": "Cho biểu thức $P = \\frac{x^2 - 1}{x^2 - x}$.",
- "createdAt": "2026-10-22T16:05:00", "questionType": "tf",
- "statements": [
-   {"key": "a", "text": "Điều kiện xác định của $P$ là $x \\neq 0$ và $x \\neq 1$."},
-   {"key": "b", "text": "Với điều kiện xác định, $P = \\frac{x+1}{x}$."},
-   {"key": "c", "text": "Tại $x = 2$ thì $P = 2$."},
-   {"key": "d", "text": "Có đúng hai giá trị nguyên của $x$ để $P$ nhận giá trị nguyên."}
- ]}
-```
-
-### Nộp đánh giá
-
-Quy tắc chung cho cả ba dạng:
-
-- `decision`: `approved_as_is`, `approved_with_edit`, `rejected`. `formatOk` và `decision` bắt buộc.
-- `rejected` cần ít nhất một `reasonCodes`; mã `other` cần `otherReasonDetail`. Mã dùng theo dạng câu: xem `ReasonCode` trong
-  [`enums.md`](../contract/enums.md) (`statement_undecidable` chỉ `tf`, `answer_ambiguous` chỉ `sa`, mã về phương án chỉ `mcq`).
-- Nên gửi `questionType`; khác dạng thật của câu thì 400 `Dữ liệu đánh giá không khớp dạng câu hỏi.`. Khi không gửi
-  `questionType`, backend suy dạng từ body: có `statements` (khác null) là `tf`, có trường SA (khác null) là `sa`, còn lại là
-  `mcq`; dạng suy ra khác dạng thật cũng trả 400 như trên.
-- Trường thừa, một quy tắc cho cả ba dạng (kể cả khi body có `questionType`): trường thuộc dạng câu khác mà khác null
-  trả 400 `Dữ liệu đánh giá không khớp dạng câu hỏi.`; trường đó mang giá trị `null` thì bị bỏ qua. Trường riêng của từng dạng:
-
-  | Dạng | Trường riêng |
-  |---|---|
-  | `mcq` | `reviewerAnswer`, `finalOption`, `editedOptionA..D` |
-  | `sa` | `reviewerSaKind`, `reviewerSaAnswer`, `finalSaAnswer` |
-  | `tf` | `statements` (kể cả danh sách rỗng `[]`) |
-  | `mcq` và `sa` | `difficultyLabel` cấp câu (câu `tf` chấm mức theo từng ý) |
-
-  Ví dụ câu `mcq` gửi `"statements": []`, câu `sa` gửi `"finalOption": "A"`, câu `tf` gửi `"difficultyLabel": "easy"` đều trả
-  400 như trên; gửi `"finalSaAnswer": null` cho câu `mcq` thì được chấp nhận.
-- Request có `editedExplanation` khác null trả 400 với thông điệp trung tính (bước chấm không nhận sửa lời giải).
-- Duyệt production chỉ nhận câu `qc_passed` hoặc `in_bank`; câu khác trả 400 với thông báo chung, không nêu trạng thái.
-- Câu `duplicate` hoặc `format_failed` (cả hai purpose) trả 404 `{"error": "Không tìm thấy câu hỏi"}`, giống câu không tồn tại.
-- Duyệt production thì câu vào ngân hàng (`in_bank`); lỗi ở bất kỳ bước nào làm rollback toàn bộ lần nộp.
-
-Câu `mcq` (không đổi):
-
-```http
-POST /api/reviews/questions/42
-{"reviewerId": 1, "reviewPurpose": "production", "reviewerAnswer": "B", "formatOk": true,
- "difficultyLabel": "easy", "decision": "approved_with_edit", "finalOption": "B",
- "editedQuestionText": "Kết quả của phép tính $\\sqrt{(-5)^2}$ là:"}
-```
-
-- `reviewerAnswer`: `A`..`D`, `multiple`, `none`. Duyệt thì bắt buộc `finalOption`; `rejected` thì `finalOption` phải trống.
-- Response: `reviewId, questionId, reviewPurpose, reviewerAnswer, formatOk, difficultyLabel, decision, finalOption, edited,
-  editDistance, questionStatus (chỉ production), bankItemId, reviewedAt`. Không có `answerCorrect`, `explanation`.
-
-Câu `sa`:
-
-```http
-POST /api/reviews/questions/101
-{"reviewerId": 1, "reviewPurpose": "production", "questionType": "sa", "formatOk": true,
- "difficultyLabel": "medium", "reviewerSaKind": "number", "reviewerSaAnswer": "√18",
- "decision": "approved_with_edit", "finalSaAnswer": "$3\\sqrt{2}$"}
-```
-
-```json
-{"reviewId": 77, "questionId": 101, "reviewPurpose": "production", "reviewerAnswer": null, "formatOk": true,
- "difficultyLabel": "medium", "decision": "approved_with_edit", "finalOption": null, "edited": false,
- "editDistance": null, "questionStatus": "in_bank", "bankItemId": 31, "reviewedAt": "2026-10-22T16:20:00",
- "reviewerSaKind": "number", "reviewerSaAnswer": "√18", "finalSaAnswer": "$3\\sqrt{2}$"}
-```
-
-- Không gửi `reviewerAnswer`, `finalOption`, `editedOptionA..D`.
-- `difficultyLabel` (cấp câu) bắt buộc. Sửa được đề qua `editedQuestionText`; `editDistance` chỉ tính trên đề, đổi đáp số
-  không tính.
-- Response chỉ lặp lại đáp số do giáo viên nhập; không có đáp số LLM, không có `answerCorrect`.
-
-Câu `tf`:
-
-```http
-POST /api/reviews/questions/205
-{"reviewerId": 1, "reviewPurpose": "production", "questionType": "tf", "formatOk": true,
- "decision": "approved_with_edit",
- "statements": [
-   {"key": "a", "reviewerLabel": "T", "difficultyLabel": "easy", "finalLabel": "T"},
-   {"key": "b", "reviewerLabel": "T", "difficultyLabel": "easy", "finalLabel": "T"},
-   {"key": "c", "reviewerLabel": "F", "difficultyLabel": "medium", "finalLabel": "F"},
-   {"key": "d", "reviewerLabel": "undecidable", "difficultyLabel": "hard", "finalLabel": "T",
-    "editedText": "Có đúng một giá trị nguyên của $x$ để $P$ nhận giá trị nguyên."}
- ]}
-```
-
-```json
-{"reviewId": 78, "questionId": 205, "reviewPurpose": "production", "reviewerAnswer": null, "formatOk": true,
- "difficultyLabel": null, "decision": "approved_with_edit", "finalOption": null, "edited": true, "editDistance": 3,
- "questionStatus": "in_bank", "bankItemId": 32, "reviewedAt": "2026-10-22T16:25:00",
- "statements": [
-   {"key": "a", "reviewerLabel": "T", "difficultyLabel": "easy", "finalLabel": "T"},
-   {"key": "b", "reviewerLabel": "T", "difficultyLabel": "easy", "finalLabel": "T"},
-   {"key": "c", "reviewerLabel": "F", "difficultyLabel": "medium", "finalLabel": "F"},
-   {"key": "d", "reviewerLabel": "undecidable", "difficultyLabel": "hard", "finalLabel": "T"}
- ]}
-```
-
-- Không gửi `reviewerAnswer`, `finalOption`, `difficultyLabel` (cấp câu), `editedOptionA..D`, các trường SA.
-- `statements` phải có đủ 4 phần tử, mỗi `key` a-d đúng một lần (thứ tự gửi tùy ý; response luôn theo a-d).
-- Sửa được đề dẫn (`editedQuestionText`) và nội dung từng ý (`editedText`, chỉ khi `approved_with_edit`); `editDistance`
-  tính trên đề dẫn cộng 4 ý, đổi nhãn không tính.
-- Response lặp lại nhãn, mức và nhãn cuối do giáo viên nhập; không có nhãn LLM và không có đúng/sai từng ý.
-
 ### Ngân hàng câu hỏi
 
-Ngân hàng là dữ liệu đã duyệt, không phải form chấm, nên có đáp án, đáp số và nhãn cuối. Ngân hàng dùng chung cho mọi
+Ngân hàng là dữ liệu đã duyệt nên có đáp án, đáp số và nhãn cuối. Ngân hàng dùng chung cho mọi
 giáo viên (H1). Giáo viên và admin chỉ ĐỌC; sửa, xóa câu ngân hàng chưa làm (Q-4c).
 
 **Danh sách** (W1-3: thay danh sách không phân trang; đổi hợp đồng so với trước, frontend chưa dùng):
@@ -408,7 +285,7 @@ questionText, optionA..optionD, correctOption, explanation, difficulty, createdA
  "usageCount": 3, "lastUsedAt": "2026-10-23T09:00:00"}
 ```
 
-- `origin.reviewMode`: `assisted` (Giữ trong đề ở chế độ giáo viên) hoặc `blind` (duyệt ở form chấm mù);
+- `origin.reviewMode`: `assisted` (Giữ trong đề ở chế độ giáo viên) hoặc `blind` (dữ liệu cũ từ form chấm mù, đã gỡ ngày 25/10);
   `origin.edited`: câu đã qua tay giáo viên sửa (bản sửa trong đề hoặc sửa lúc duyệt).
 - `usageCount`: số đề khác nhau (của mọi giáo viên) đang có câu này; `lastUsedAt`: ngày tạo đề mới nhất trong số đó, `null`
   nếu chưa dùng. Câu bị Đổi ra khỏi một chỗ thì đề đó không còn tính.
@@ -446,26 +323,7 @@ GET /api/bank-items/88
 Hiệu năng: với khoảng 3000 câu và 12000 lượt dùng, mọi tổ hợp lọc/tìm/sắp xếp trên chạy dưới 110 ms trên máy phát triển
 (`BankSearchPerformanceTest`, tag `perf`, không chạy mặc định) nên chưa cần chỉ mục mới.
 
-## 3. Trường bị giấu khỏi form chấm
-
-Form chấm gồm `GET /api/reviews/questions`, `GET /api/reviews/questions/{id}` và response sau khi nộp, cả production lẫn
-experiment. Test `OpenApiContractTest` chặn các trường này trong schema (quét cả schema lồng nhau, kể cả trong
-`statements`); `BlindReviewContractTest` và các test luồng `sa`/`tf` quét mọi key của JSON thật.
-
-| Dạng | Không bao giờ có |
-|---|---|
-| Mọi dạng | `explanation` (lời giải), `llmDifficulty`, `answerCorrect`, chiến lược sinh (`strategy`), `status`, `latexValid`, `latexErrors`, `qcReport` và mọi kết quả QC: answer-check (`judgeAnswer`, `judgeModel`, `answerCheckStatus`), dedup (`dedupStatus`, `similarityScore`, `comparedToQuestionId`, `thresholdUsed`) |
-| `mcq` | `correctOption` (đáp án LLM) |
-| `sa` | `saAnswer` (đáp số LLM), kết quả Solver (`judgeSaKind`, `judgeSaAnswer`), `answerWarnings` |
-| `tf` | Nhãn LLM của từng ý (`label`, `llmLabel`), mức của từng ý (`difficulty`, `llmDifficulty`, `finalDifficulty`), nhãn Solver (`judgeLabel`, `tfJudgements`), đúng/sai từng ý do server tính (`labelCorrect`). Mỗi phần tử `statements` chỉ có `key` và `text` |
-
-- **Phản hồi nộp production** giữ `questionStatus` và `bankItemId` (kết quả hành động của giáo viên); experiment không có
-  `questionStatus`.
-- **Vòng chấm:** danh sách production chỉ gồm câu `qc_passed` (câu chưa được chấm); danh sách experiment loại `duplicate`
-  và `format_failed`, không lọc theo kết quả answer-check. Danh sách không nhận `?status=` (tham số lạ bị bỏ qua) để không
-  suy ra được kết quả QC.
-- **Sửa bài:** `mcq` sửa đề và 4 phương án (`editDistance` trên 5 trường đó); `sa` sửa đề (`editDistance` trên đề); `tf` sửa đề
-  dẫn và 4 ý (`editDistance` trên 5 trường đó). Không dạng nào nhận sửa lời giải.
+## 3. Trạng thái câu
 
 Trạng thái câu (`status`): `generated`, `format_failed`, `duplicate`, `qc_passed`, `rejected`, `in_bank`.
 Câu sinh thật chỉ đạt `qc_passed` khi format đạt, dedup không trùng và answer_check (Solver Gemini) chạy thành công và khớp
@@ -504,56 +362,16 @@ thì nhập `1500` hoặc `1 500`; muốn viết 1,125 thì nhập `1,125`. Dấ
 
 | Chế độ | Áp dụng cho | Chặn thêm |
 |---|---|---|
-| Chặt (STRICT) | `answer` do LLM sinh (bước format); đáp số cuối vào ngân hàng: `finalSaAnswer`, hoặc `reviewerSaAnswer` khi chọn `approved_as_is` | Chữ số 0 thừa ở đầu (`05`, `-007,5`, `\frac{05}{2}`, `\sqrt{012}`) và số 0 mang dấu âm (`-0`, `-0,0`, `-\frac{0}{3}`) |
-| Rộng (LENIENT) | `reviewerSaAnswer` khi chấm mù; `judge_answer` của Solver | Chỉ cần phân tích được |
+| Chặt (STRICT) | `answer` do LLM sinh (bước format) | Chữ số 0 thừa ở đầu (`05`, `-007,5`, `\frac{05}{2}`, `\sqrt{012}`) và số 0 mang dấu âm (`-0`, `-0,0`, `-\frac{0}{3}`) |
+| Rộng (LENIENT) | `judge_answer` của Solver; so khớp đáp số khi dedup | Chỉ cần phân tích được |
 
-- Khi đáp số cuối có chữ số 0 thừa, thông báo nêu cách sửa, tính từ chính chuỗi giáo viên nhập: `Đáp số có chữ số 0 thừa ở
-  đầu, hãy nhập 5`. Lỗi chế độ chặt khác có dạng `Đáp số cuối không hợp lệ: <lý do>`.
-- `reviewerSaAnswer` không phân tích được trả 400 `Đáp số giáo viên nhập không đọc được thành một số.`
-- Server so `reviewerSaAnswer` với đáp số LLM theo giá trị để ra `answerCorrect` (không trả về). `reviewerSaKind = ambiguous`
-  luôn tính là lệch.
+- Đáp số LLM sinh có chữ số 0 thừa hoặc không phân tích được là lỗi format: câu thành `format_failed`.
+- `reviewerSaAnswer`, `finalSaAnswer` và so khớp `answerCorrect` thuộc form chấm mù đã gỡ (25/10).
 
-## 5. Hướng dẫn frontend cho form chấm `sa` và `tf`
+## 5. Form chấm mù (đã gỡ)
 
-Chung: dựng form theo `questionType` của chi tiết câu; gửi lại `questionType` khi nộp. Form là chấm mù: không có và không
-được tìm cách hiện đáp án, đáp số, nhãn hay mức của LLM, kể cả sau khi nộp. Hiện nguyên thông điệp `error` khi nhận 400.
-Mức độ dùng `easy`, `medium`, `hard` (`Difficulty`).
-
-### Câu Trả lời ngắn (`sa`)
-
-1. Hiện `questionText` (render LaTeX như mục 6). Không có phương án.
-2. Chọn `reviewerSaKind`: "Một đáp số" (`number`) kèm ô nhập `reviewerSaAnswer`, hoặc "Đề có nhiều cách hiểu" (`ambiguous`),
-   khi đó ô đáp số phải để trống (gửi `null`).
-3. Ô nhập đáp số nhận các dạng ở mục 4. Nên gợi ý dùng dấu phẩy thập phân (`-0,75`) để tránh lỗi dấu chấm hàng nghìn.
-   Frontend có thể kiểm sơ bộ, nhưng backend là nguồn chuẩn.
-4. Chọn `difficultyLabel` (cấp câu), `formatOk`, `decision`.
-5. Theo `decision`:
-   - `approved_as_is`: không cho chọn khi `reviewerSaKind = ambiguous`. `finalSaAnswer` bỏ trống hoặc trùng `reviewerSaAnswer`;
-     đáp số này phải qua chế độ chặt (nếu giáo viên nhập `05`, backend trả 400 kèm gợi ý nhập `5`).
-   - `approved_with_edit`: bắt buộc ô `finalSaAnswer` (chế độ chặt); có thể sửa đề (`editedQuestionText`).
-   - `rejected`: `finalSaAnswer` để trống; bắt buộc chọn lý do (có `answer_ambiguous`; không có các mã về phương án).
-6. Không gửi `reviewerAnswer`, `finalOption`, `editedOptionA..D`, `statements`, `editedExplanation`.
-
-### Câu Đúng/Sai (`tf`)
-
-1. Hiện `questionText` là đề dẫn, rồi 4 ý theo `statements` (key `a`-`d`). Frontend tự thêm nhãn "a)", "b)"... khi hiển thị;
-   `text` không chứa tiền tố này.
-2. Mỗi ý có hai lựa chọn bắt buộc:
-   - `reviewerLabel`: Đúng (`T`), Sai (`F`), Không kết luận được (`undecidable`);
-   - `difficultyLabel`: mức độ của riêng ý đó.
-   Không có mức độ cấp câu: không gửi `difficultyLabel` ở cấp ngoài.
-3. Chọn `formatOk`, `decision`.
-4. Theo `decision`:
-   - `approved_as_is`: không cho chọn khi có ý `undecidable`. `finalLabel` bỏ trống (server lấy theo `reviewerLabel`) hoặc
-     trùng `reviewerLabel`.
-   - `approved_with_edit`: bắt buộc `finalLabel` (`T`/`F`) cho cả 4 ý, kể cả ý không sửa; có thể sửa đề dẫn
-     (`editedQuestionText`) và từng ý (`editedText`).
-   - `rejected`: `finalLabel` của mọi ý để trống; bắt buộc chọn lý do (có `statement_undecidable`; không có các mã về phương
-     án và `answer_ambiguous`).
-5. Luôn gửi đủ 4 phần tử `statements`, mỗi `key` một lần. Thiếu ý, trùng ý hoặc thiếu `reviewerLabel`/`difficultyLabel` của
-   một ý đều trả 400 nêu ý đó, ví dụ `Ý c: phải chọn difficultyLabel`.
-6. Không gửi `reviewerAnswer`, `finalOption`, `difficultyLabel` cấp câu, `editedOptionA..D`, `reviewerSaKind`,
-   `reviewerSaAnswer`, `finalSaAnswer`, `editedExplanation`.
+Form chấm mù `/api/reviews/**`, nộp đánh giá và seed demo đã gỡ ngày 25/10/2026 (`docs/ai-development-rules.md` v2). Giáo viên duyệt
+câu bằng Giữ / Đổi / Sửa trong màn đề (mục 7). Số mục giữ nguyên để các tham chiếu chéo không vỡ.
 
 ## 6. Định dạng công thức toán
 
@@ -597,7 +415,7 @@ KaTeX ở chế độ `strict: "error"` có thể từ chối chữ tiếng Vi�
 ## 7. Tạo đề theo ma trận (chế độ giáo viên, V6-V7)
 
 Luồng dành cho giáo viên ra đề, production. **Không chấm mù**: API `/api/exams/**` trả đáp án, lời giải và cờ "cần xem
-kỹ" (quyết định 22/10, `docs/ai-development-rules.md`). Form chấm mù `/api/reviews/**` và chế độ experiment không đổi.
+kỹ" (quyết định 22/10, `docs/ai-development-rules.md`). Form chấm mù `/api/reviews/**` đã gỡ ngày 25/10; đây là chế độ duy nhất.
 
 Cách dùng: chọn hoặc tạo ma trận → `POST /api/exams/build` → gọi `GET /api/exams/{id}/progress` vài giây một lần
 cho tới khi `status` khác `generating` → `GET /api/exams/{id}` để xem đề → Giữ hoặc Đổi từng câu.
@@ -716,7 +534,7 @@ POST /api/exams/build
   `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`, `tf` có thêm `v1`; prompt nháp `MatrixPromptDraftV0`: sinh từ chủ đề, nội dung, yêu cầu cần đạt, không có câu
   mẫu; quy tắc đa dạng và danh sách tối đa 10 câu đã sinh của ô; chủ đề hình học như Tứ giác dặn câu phải làm được
   không cần hình vẽ). Mỗi chỗ một job, giãn cách 13 giây. Job chạy bằng worker (`app.worker.enabled=true`) hoặc
-  `POST /api/generation/jobs/process-next`. Một đề 18 câu khi ngân hàng còn trống mất khoảng 7-8 phút trên Free Tier.
+  `POST /api/generation/jobs/process-next` (công cụ thí nghiệm, chỉ khi `app.experiment.enabled=true`). Một đề 18 câu khi ngân hàng còn trống mất khoảng 7-8 phút trên Free Tier.
 - Mỗi job của một chỗ có ghi chú riêng trong prompt (`generation_job.prompt_note`, V8): "Đây là câu thứ k/n của ô
   này" (dạng hỏi khác các câu còn lại, phủ các ý khác nhau của yêu cầu cần đạt) khi ô có từ 2 câu; khi sinh lại sau
   một lần `format_failed`, thêm "Lần sinh trước bị loại vì: <lỗi>. Tránh lặp lại lỗi này." (tối đa 300 ký tự). Prompt
@@ -853,7 +671,7 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
   mang theo. Lưu ở `exam_slot_action.instruction` (V9).
 - Chỗ không thuộc đề trong đường dẫn trả 404.
 - Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`, `edit`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại
-  khỏi chỉ số chấm mù (`answer_correct`, duyệt không sửa).
+  khỏi chỉ số của form chấm mù cũ (`answer_correct`, duyệt không sửa).
 - **Chưa có:** sửa câu đã nằm trong ngân hàng, ráp đề, trộn mã đề, đề dự phòng, xuất PDF.
 - **Đổi bằng câu ngân hàng (W1-4, D5-B):** `POST .../replace` nhận `{"source": "bank" | "generate", "instruction"?}`. Bỏ
   trống `source` (hoặc không gửi body) là `generate`: giữ nguyên hành vi cũ (sinh mới qua hàng đợi), nên client cũ không vỡ.
@@ -862,7 +680,7 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
     đã Giữ cũng đổi được (câu đã Giữ vẫn ở ngân hàng).
   - Loại trừ **trong phạm vi cả đề**: (1) câu ngân hàng đang nằm ở chỗ nào của đề; (2) câu ngân hàng từng bị Đổi ra khỏi
     BẤT KỲ chỗ nào của đề (đọc từ `exam_slot_action`); (3) bản sao ngân hàng của một câu sinh ra đang nằm trong đề hoặc đã
-    bị Đổi ra (câu có thể vào ngân hàng qua duyệt chấm mù), kể cả bản gốc của một câu giáo viên đã sửa.
+    bị Đổi ra (câu đã vào ngân hàng khi Giữ ở một đề khác), kể cả bản gốc của một câu giáo viên đã sửa.
   - Hết câu: **409** `{"code": "BANK_EXHAUSTED", "error": "Ngân hàng không còn câu phù hợp cho chỗ này …"}`. Chỗ giữ
     nguyên, không ghi nhật ký, không tự sinh ngầm; frontend đề nghị giáo viên "Sinh câu mới" (gọi lại với
     `source = generate`).
