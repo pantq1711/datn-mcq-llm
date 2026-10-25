@@ -1,25 +1,9 @@
 import { useEffect, useState } from "react";
-import {
-    Alert,
-    Button,
-    Card,
-    Divider,
-    Modal,
-    Space,
-    Tag,
-    Typography,
-} from "antd";
-import {
-    CheckCircleOutlined,
-    CloseOutlined,
-    SwapOutlined,
-} from "@ant-design/icons";
+import { Alert, Button, Card, Divider, message, Modal, Space, Tag, Typography, } from "antd";
+import { CheckCircleOutlined, CloseOutlined, SwapOutlined, } from "@ant-design/icons";
 
-import type {
-    ExamQuestionDifficulty,
-    ExamQuestionItem,
-    QuestionReplacementCandidate,
-} from "../types/exam.types";
+import type { ExamQuestionDifficulty, ExamQuestionItem, QuestionReplacementCandidate, } from "../types/exam.types";
+import { replaceQuestion } from '../services/examApi';
 
 import "./QuestionReplacementPreview.css";
 
@@ -71,7 +55,9 @@ interface QuestionReplacementPreviewProps {
     originalQuestion: PreviewQuestionItem | null;
     replacementQuestion: PreviewQuestionItem | null;
     onCancel: () => void;
-    onConfirm: () => void | Promise<void>;
+    examId: string;
+    slotId: string;
+    onConfirm?: () => Promise<void>;
     confirmLoading?: boolean;
     qualityStatus?: "passed" | "warning" | "failed" | "pending";
     qualityMessage?: string;
@@ -288,10 +274,10 @@ function QuestionContent({
                                         `statement-${index}`
                                     }
                                     className={`replacement-preview-statement${answer === null
-                                            ? ""
-                                            : answer
-                                                ? " is-true"
-                                                : " is-false"
+                                        ? ""
+                                        : answer
+                                            ? " is-true"
+                                            : " is-false"
                                         }`}
                                 >
                                     <div className="replacement-preview-statement-content">
@@ -396,6 +382,8 @@ export default function QuestionReplacementPreview({
     originalQuestion,
     replacementQuestion,
     onCancel,
+    examId,
+    slotId,
     onConfirm,
     confirmLoading = false,
     qualityStatus,
@@ -412,19 +400,26 @@ export default function QuestionReplacementPreview({
     }, [open, replacementQuestion]);
 
     const handleConfirm = async () => {
-        if (
-            !originalQuestion ||
-            !replacementQuestion ||
-            isBusy
-        ) {
+        if (!originalQuestion || !replacementQuestion || isBusy) {
             return;
         }
 
         setSubmitting(true);
-
         try {
-            // Component cha chịu trách nhiệm gọi API và xử lý lỗi.
-            await onConfirm();
+            // Gọi API thay thế
+            await replaceQuestion(
+                examId,
+                slotId,
+                originalQuestion.id,
+                replacementQuestion.id
+            );
+
+            message.success('Thay thế câu hỏi thành công');
+            // Thông báo cho component cha (có thể là reload danh sách)
+            await onConfirm?.();
+        } catch (e) {
+            console.error(e);
+            message.error(e instanceof Error ? e.message : 'Gặp lỗi khi thay thế câu hỏi');
         } finally {
             setSubmitting(false);
         }

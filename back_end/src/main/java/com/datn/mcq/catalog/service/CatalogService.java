@@ -89,34 +89,24 @@ public class CatalogService {
         return questionTemplateRepository.save(tpl);
     }
 
+    /**
+     * W1-4: dọn các template không còn ô ma trận, câu sinh ra hay job nào tham chiếu (khi sửa/xóa ma trận). Template còn
+     * được tham chiếu giữ nguyên. Trả số template đã xóa.
+     */
+    @Transactional
+    public int deleteUnusedTemplates(java.util.Collection<Integer> templateIds) {
+        if (templateIds == null || templateIds.isEmpty()) {
+            return 0;
+        }
+        return questionTemplateRepository.deleteUnreferenced(templateIds);
+    }
+
     private static String blankToNull(String value) {
         if (value == null) {
             return null;
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    @Transactional
-    public QuestionTemplate getOrCreateTemplate(
-            Integer subjectId,
-            Integer gradeLevel,
-            String topic,
-            String learningOutcome,
-            String sourceQuestion) {
-        return questionTemplateRepository.findFirstBySubjectIdAndTopicOrderByIdAsc(subjectId, topic)
-                .orElseGet(() -> {
-                    QuestionTemplate tpl = new QuestionTemplate();
-                    tpl.setSubjectId(subjectId);
-                    tpl.setGradeLevel(gradeLevel);
-                    tpl.setTopic(topic);
-                    tpl.setLearningOutcome(learningOutcome);
-                    tpl.setSourceType(SourceType.TEXT);
-                    tpl.setSourceQuestion(sourceQuestion);
-                    tpl.setVersion(1);
-                    tpl.setIsActive(Boolean.TRUE);
-                    return questionTemplateRepository.save(tpl);
-                });
     }
 }
 

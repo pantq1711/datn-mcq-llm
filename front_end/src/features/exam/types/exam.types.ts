@@ -21,6 +21,7 @@ export interface ExamQuestionItem {
     correctOption: "A" | "B" | "C" | "D";
     explanation?: string;
     difficulty?: ExamQuestionDifficulty;
+    message?: string;
 }
 
 export interface ExamGenerationValues {

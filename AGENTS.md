@@ -1,7 +1,7 @@
 # Hướng dẫn cho AI agent
 
 Trước khi làm bất kỳ việc gì trong repository này, hãy đọc và tuân thủ
-[`docs/ai-development-rules.md`](docs/ai-development-rules.md) (hiện là v1).
+[`docs/ai-development-rules.md`](docs/ai-development-rules.md) (hiện là v2).
 Nếu tài liệu đó mâu thuẫn với file này, tài liệu đó thắng.
 
 ## Tóm tắt bắt buộc
@@ -20,5 +20,5 @@ Nếu tài liệu đó mâu thuẫn với file này, tài liệu đó thắng.
 ## Lưu ý cho người dùng
 
 Không phải AI client nào cũng tự động đọc `AGENTS.md`. Khi giao việc, hãy tham chiếu rõ trong prompt,
-ví dụ: `Tuân thủ docs/ai-development-rules.md v1. Lượt này chỉ làm bước inspect và plan.`,
+ví dụ: `Tuân thủ docs/ai-development-rules.md v2. Lượt này chỉ làm bước inspect và plan.`,
 hoặc cấu hình client để nạp tài liệu này.

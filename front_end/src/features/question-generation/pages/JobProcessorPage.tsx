@@ -2,21 +2,15 @@ import { useState, useEffect } from "react";
 import { Button, Card, message, Typography, Table, Tag } from "antd";
 import { ThunderboltOutlined } from "@ant-design/icons";
 import { processNextJob, getGenerationJobs } from "../services/generationApi";
+import "./JobProcessorPage.css";
 
 const { Title } = Typography;
-
-interface ProcessedJobSummary {
-    job?: { id: number; templateId?: number };
-    status: "PROCESSED" | "SKIPPED" | "FAILED";
-    // các trường khác tùy backend
-}
 
 export default function JobProcessorPage() {
     const [jobs, setJobs] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [processing, setProcessing] = useState(false);
 
-    // Load danh sách job
     const loadJobs = async () => {
         setLoading(true);
         try {
@@ -29,15 +23,13 @@ export default function JobProcessorPage() {
         }
     };
 
-    // Xử lý job tiếp theo
     const handleProcessNext = async () => {
         setProcessing(true);
         try {
-            const result: ProcessedJobSummary = await processNextJob();
+            const result: any = await processNextJob();
             message.success(
                 `Job ${result.job?.id ?? "unknown"} đã được xử lý (status: ${result.status})`
             );
-            // Refresh danh sách để phản ánh thay đổi
             await loadJobs();
         } catch (e) {
             console.error(e);
@@ -46,12 +38,6 @@ export default function JobProcessorPage() {
             setProcessing(false);
         }
     };
-
-    // (Tùy chọn) Polling tự động mỗi 10s
-    // useEffect(() => {
-    //     const interval = setInterval(handleProcessNext, 10_000);
-    //     return () => clearInterval(interval);
-    // }, []);
 
     useEffect(() => {
         loadJobs();
@@ -77,32 +63,41 @@ export default function JobProcessorPage() {
                 </Tag>
             )
         },
-        // …các cột khác tùy nhu cầu
     ];
 
     return (
         <div className="job-processor-page">
-            <Card>
-                <Title level={2}>Quản lý job sinh câu hỏi</Title>
+            <div className="job-processor-page-header">
+                <div className="job-processor-page-header-content">
+                    <div>
+                        <Title level={2} className="job-processor-page-title">
+                            Quản lý job sinh câu hỏi
+                        </Title>
+                    </div>
 
-                <Button
-                    type="primary"
-                    icon={<ThunderboltOutlined />}
-                    onClick={handleProcessNext}
-                    loading={processing}
-                    style={{ marginBottom: 16 }}
-                >
-                    Xử lý job tiếp theo
-                </Button>
+                    <Button
+                        type="primary"
+                        icon={<ThunderboltOutlined />}
+                        onClick={handleProcessNext}
+                        loading={processing}
+                    >
+                        Xử lý job tiếp theo
+                    </Button>
+                </div>
+            </div>
 
-                <Table
-                    columns={columns}
-                    dataSource={jobs}
-                    loading={loading}
-                    rowKey="id"
-                    pagination={{ pageSize: 10 }}
-                />
-            </Card>
+            <div className="job-processor-page-table">
+                <Card>
+                    <Table
+                        columns={columns}
+                        dataSource={jobs}
+                        loading={loading}
+                        rowKey="id"
+                        pagination={{ pageSize: 10 }}
+                        scroll={{ x: "max-content" }}
+                    />
+                </Card>
+            </div>
         </div>
     );
 }

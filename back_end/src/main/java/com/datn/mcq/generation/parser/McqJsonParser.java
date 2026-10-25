@@ -5,6 +5,8 @@ import com.datn.mcq.enums.DbEnum;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.generation.dto.ParsedMcqDto;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -19,11 +21,21 @@ public final class McqJsonParser {
         return SimpleJson.stripMarkdownFence(raw);
     }
 
+    /** Giải mã chặt (không sửa gì): dùng cho run experiment C1/C2/C3 và dữ liệu demo. */
     public static ParsedMcqDto parse(String rawLlmOutput) {
+        return parse(rawLlmOutput, false);
+    }
+
+    /**
+     * @param repair true (run production, ngày 23/10): sửa escape LaTeX chưa nhân đôi và tự đóng "$" ở cuối trường
+     *               ({@link LlmOutputRepair}), mỗi lần sửa ghi một cảnh báo vào parseWarnings
+     */
+    public static ParsedMcqDto parse(String rawLlmOutput, boolean repair) {
         if (rawLlmOutput == null || rawLlmOutput.isBlank()) {
             return new ParsedMcqDto(false, null, null, null, null, null, null, null, "Phản hồi LLM rỗng");
         }
-        String cleaned = stripMarkdownFence(rawLlmOutput);
+        List<String> warnings = new ArrayList<>();
+        String cleaned = LlmOutputRepair.repairJson(stripMarkdownFence(rawLlmOutput), repair, warnings);
         Map<String, Object> obj;
         try {
             obj = SimpleJson.parseObject(cleaned);
@@ -32,12 +44,12 @@ public final class McqJsonParser {
         }
 
         // raw_llm_output được lưu nguyên bản ở nơi gọi; chỉ các trường văn bản đã giải mã được chuẩn hóa.
-        String questionText = asText(obj.get("question_text"));
-        String optionA = asText(obj.get("option_a"));
-        String optionB = asText(obj.get("option_b"));
-        String optionC = asText(obj.get("option_c"));
-        String optionD = asText(obj.get("option_d"));
-        String explanation = asText(obj.get("explanation"));
+        String questionText = LlmOutputRepair.textField("question_text", obj.get("question_text"), repair, true, warnings);
+        String optionA = LlmOutputRepair.textField("option_a", obj.get("option_a"), repair, true, warnings);
+        String optionB = LlmOutputRepair.textField("option_b", obj.get("option_b"), repair, true, warnings);
+        String optionC = LlmOutputRepair.textField("option_c", obj.get("option_c"), repair, true, warnings);
+        String optionD = LlmOutputRepair.textField("option_d", obj.get("option_d"), repair, true, warnings);
+        String explanation = LlmOutputRepair.textField("explanation", obj.get("explanation"), repair, true, warnings);
         String correctOptRaw = asString(obj.get("correct_option"));
 
         Option correctOption = null;
@@ -58,7 +70,8 @@ public final class McqJsonParser {
                 optionD,
                 correctOption,
                 explanation,
-                null
+                null,
+                warnings
         );
     }
 
@@ -67,14 +80,6 @@ public final class McqJsonParser {
             return null;
         }
         return String.valueOf(val).trim();
-    }
-
-    /** Trường văn bản: đổi "\n" theo nghĩa đen ngoài công thức thành xuống dòng, rồi trim. */
-    private static String asText(Object val) {
-        if (val == null) {
-            return null;
-        }
-        return normalizeLiteralNewlines(String.valueOf(val)).trim();
     }
 
     /** Lệnh LaTeX bắt đầu bằng chữ n: nếu gặp ngoài công thức thì giữ nguyên để bộ kiểm tra báo "lệnh nằm ngoài $...$". */

@@ -1,18 +1,66 @@
 {
   "openapi" : "3.1.0",
   "info" : {
-    "title" : "OpenAPI definition",
-    "version" : "v0"
+    "title" : "DATN MCQ API",
+    "description" : "Đăng nhập POST /api/auth/login lấy accessToken, bấm Authorize và dán token.",
+    "version" : "v1"
   },
   "servers" : [ {
     "url" : "http://localhost",
     "description" : "Generated server url"
   } ],
+  "security" : [ {
+    "bearerAuth" : [ ]
+  } ],
   "paths" : {
-    "/api/reviews/questions/{id}" : {
+    "/api/exams/{examId}/slots/{slotId}/question" : {
+      "put" : {
+        "tags" : [ "exam-controller" ],
+        "operationId" : "editQuestion",
+        "parameters" : [ {
+          "name" : "examId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "slotId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EditQuestionRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExamItemDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exam-matrices/{id}" : {
       "get" : {
-        "tags" : [ "teacher-review-controller" ],
-        "operationId" : "getQuestionForBlindReview",
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "get",
         "parameters" : [ {
           "name" : "id",
           "in" : "path",
@@ -28,16 +76,16 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/BlindQuestionReviewDto"
+                  "$ref" : "#/components/schemas/MatrixDto"
                 }
               }
             }
           }
         }
       },
-      "post" : {
-        "tags" : [ "teacher-review-controller" ],
-        "operationId" : "submitReview",
+      "put" : {
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "update",
         "parameters" : [ {
           "name" : "id",
           "in" : "path",
@@ -51,7 +99,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/SubmitReviewRequest"
+                "$ref" : "#/components/schemas/CreateMatrixRequest"
               }
             }
           },
@@ -63,28 +111,69 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/SubmitReviewResponse"
+                  "$ref" : "#/components/schemas/MatrixDto"
                 }
               }
             }
           }
         }
+      },
+      "delete" : {
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "delete",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        }
       }
     },
-    "/api/reviews/demo/seed-math" : {
+    "/api/exams/{examId}/slots/{slotId}/replace" : {
       "post" : {
-        "tags" : [ "teacher-review-controller" ],
-        "operationId" : "seedMathDemo",
+        "tags" : [ "exam-controller" ],
+        "operationId" : "replace",
+        "parameters" : [ {
+          "name" : "examId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "slotId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReplaceRequest"
+              }
+            }
+          }
+        },
         "responses" : {
           "200" : {
             "description" : "OK",
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/ReviewQuestionListItemDto"
-                  }
+                  "$ref" : "#/components/schemas/ExamItemDto"
                 }
               }
             }
@@ -92,17 +181,25 @@
         }
       }
     },
-    "/api/generation/jobs/process-next" : {
+    "/api/exams/{examId}/slots/{slotId}/keep" : {
       "post" : {
-        "tags" : [ "generation-controller" ],
-        "operationId" : "processNextJob",
+        "tags" : [ "exam-controller" ],
+        "operationId" : "keep",
         "parameters" : [ {
-          "name" : "runAnswerCheck",
-          "in" : "query",
-          "required" : false,
+          "name" : "examId",
+          "in" : "path",
+          "required" : true,
           "schema" : {
-            "type" : "boolean",
-            "default" : true
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "slotId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         } ],
         "responses" : {
@@ -111,7 +208,7 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ProcessedJobSummary"
+                  "$ref" : "#/components/schemas/ExamItemDto"
                 }
               }
             }
@@ -119,20 +216,66 @@
         }
       }
     },
-    "/api/generation/jobs/enqueue" : {
+    "/api/exams/build" : {
       "post" : {
-        "tags" : [ "generation-controller" ],
-        "operationId" : "enqueueJobs",
+        "tags" : [ "exam-controller" ],
+        "operationId" : "build",
         "requestBody" : {
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/EnqueueJobsRequest"
+                "$ref" : "#/components/schemas/BuildExamRequest"
               }
             }
           },
           "required" : true
         },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BuildResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exams/build-by-lesson" : {
+      "post" : {
+        "tags" : [ "exam-controller" ],
+        "operationId" : "buildByLesson",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateLessonRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BuildResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exam-matrices" : {
+      "get" : {
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "list",
         "responses" : {
           "200" : {
             "description" : "OK",
@@ -141,24 +284,22 @@
                 "schema" : {
                   "type" : "array",
                   "items" : {
-                    "$ref" : "#/components/schemas/GenerationJob"
+                    "$ref" : "#/components/schemas/MatrixSummaryDto"
                   }
                 }
               }
             }
           }
         }
-      }
-    },
-    "/api/generation/generate-sync" : {
+      },
       "post" : {
-        "tags" : [ "generation-controller" ],
-        "operationId" : "generateSync",
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "create",
         "requestBody" : {
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/SyncGenerationRequest"
+                "$ref" : "#/components/schemas/CreateMatrixRequest"
               }
             }
           },
@@ -170,7 +311,7 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/SyncGenerationResponse"
+                  "$ref" : "#/components/schemas/MatrixDto"
                 }
               }
             }
@@ -178,14 +319,489 @@
         }
       }
     },
-    "/api/catalog/templates" : {
-      "get" : {
-        "tags" : [ "catalog-controller" ],
-        "operationId" : "listTemplates",
+    "/api/exam-matrices/{id}/duplicate" : {
+      "post" : {
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "duplicate",
         "parameters" : [ {
-          "name" : "subjectId",
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DuplicateMatrixRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MatrixDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exam-matrices/samples/{key}" : {
+      "post" : {
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "createFromSample",
+        "parameters" : [ {
+          "name" : "key",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateFromSampleRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MatrixDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "operationId" : "refresh",
+        "parameters" : [ {
+          "name" : "refresh_token",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "User-Agent",
+          "in" : "header",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ ]
+      }
+    },
+    "/api/auth/password" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "operationId" : "changePassword",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/api/auth/logout" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "operationId" : "logout",
+        "parameters" : [ {
+          "name" : "refresh_token",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "security" : [ ]
+      }
+    },
+    "/api/auth/login" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "operationId" : "login",
+        "parameters" : [ {
+          "name" : "User-Agent",
+          "in" : "header",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ ]
+      }
+    },
+    "/api/admin/users" : {
+      "get" : {
+        "tags" : [ "admin-user-controller" ],
+        "operationId" : "list_1",
+        "parameters" : [ {
+          "name" : "role",
           "in" : "query",
           "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "teacher", "researcher", "admin" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/AdminUserDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "admin-user-controller" ],
+        "operationId" : "create_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateTeacherRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminUserDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}/reset-password" : {
+      "post" : {
+        "tags" : [ "admin-user-controller" ],
+        "operationId" : "resetPassword",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}" : {
+      "patch" : {
+        "tags" : [ "admin-user-controller" ],
+        "operationId" : "update_1",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminUserDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exams" : {
+      "get" : {
+        "tags" : [ "exam-controller" ],
+        "operationId" : "list_2",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 0
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 10
+          }
+        }, {
+          "name" : "kind",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExamPageDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exams/{examId}" : {
+      "get" : {
+        "tags" : [ "exam-controller" ],
+        "operationId" : "view",
+        "parameters" : [ {
+          "name" : "examId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExamViewDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exams/{examId}/slots/{slotId}/qc-trace" : {
+      "get" : {
+        "tags" : [ "exam-controller" ],
+        "operationId" : "qcTrace",
+        "parameters" : [ {
+          "name" : "examId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "slotId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/QcTraceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exams/{examId}/progress" : {
+      "get" : {
+        "tags" : [ "exam-controller" ],
+        "operationId" : "progress",
+        "parameters" : [ {
+          "name" : "examId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProgressDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exams/{examId}/export/docx" : {
+      "get" : {
+        "tags" : [ "exam-controller" ],
+        "operationId" : "exportDocx",
+        "parameters" : [ {
+          "name" : "examId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "byte"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/exams/{examId}/cells/{cellId}" : {
+      "get" : {
+        "tags" : [ "exam-controller" ],
+        "operationId" : "cellSlots",
+        "parameters" : [ {
+          "name" : "examId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "cellId",
+          "in" : "path",
+          "required" : true,
           "schema" : {
             "type" : "integer",
             "format" : "int32"
@@ -199,54 +815,7 @@
                 "schema" : {
                   "type" : "array",
                   "items" : {
-                    "$ref" : "#/components/schemas/QuestionTemplate"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post" : {
-        "tags" : [ "catalog-controller" ],
-        "operationId" : "createTemplate",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreateTemplateRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/QuestionTemplate"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/reviews/questions" : {
-      "get" : {
-        "tags" : [ "teacher-review-controller" ],
-        "operationId" : "listQuestions",
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/ReviewQuestionListItemDto"
+                    "$ref" : "#/components/schemas/SlotDto"
                   }
                 }
               }
@@ -255,10 +824,10 @@
         }
       }
     },
-    "/api/generation/jobs" : {
+    "/api/exam-matrices/samples" : {
       "get" : {
-        "tags" : [ "generation-controller" ],
-        "operationId" : "listJobs",
+        "tags" : [ "matrix-controller" ],
+        "operationId" : "samples",
         "responses" : {
           "200" : {
             "description" : "OK",
@@ -267,7 +836,7 @@
                 "schema" : {
                   "type" : "array",
                   "items" : {
-                    "$ref" : "#/components/schemas/GenerationJob"
+                    "$ref" : "#/components/schemas/SampleDto"
                   }
                 }
               }
@@ -300,7 +869,161 @@
     "/api/bank-items" : {
       "get" : {
         "tags" : [ "bank-controller" ],
-        "operationId" : "listBankItems",
+        "operationId" : "list_3",
+        "parameters" : [ {
+          "name" : "subjectId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "gradeLevel",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "questionType",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          }
+        }, {
+          "name" : "topic",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "content",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "difficulty",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          }
+        }, {
+          "name" : "levels",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "origin",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "q",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "usage",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 0
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 20
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BankPageDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bank-items/{id}" : {
+      "get" : {
+        "tags" : [ "bank-controller" ],
+        "operationId" : "detail",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BankItemDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bank-items/topics" : {
+      "get" : {
+        "tags" : [ "bank-controller" ],
+        "operationId" : "topics",
+        "parameters" : [ {
+          "name" : "subjectId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
         "responses" : {
           "200" : {
             "description" : "OK",
@@ -309,8 +1032,26 @@
                 "schema" : {
                   "type" : "array",
                   "items" : {
-                    "$ref" : "#/components/schemas/BankItem"
+                    "$ref" : "#/components/schemas/TopicDto"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me" : {
+      "get" : {
+        "tags" : [ "auth-controller" ],
+        "operationId" : "me",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserDto"
                 }
               }
             }
@@ -321,70 +1062,91 @@
   },
   "components" : {
     "schemas" : {
-      "SubmitReviewRequest" : {
+      "EditQuestionRequest" : {
         "type" : "object",
         "properties" : {
-          "reviewerId" : {
+          "baseQuestionId" : {
             "type" : "integer",
             "format" : "int32"
           },
-          "reviewPurpose" : {
-            "type" : "string",
-            "enum" : [ "experiment", "production" ]
-          },
-          "reviewerAnswer" : {
-            "type" : "string",
-            "enum" : [ "A", "B", "C", "D", "multiple", "none" ]
-          },
-          "formatOk" : {
-            "type" : "boolean"
-          },
-          "difficultyLabel" : {
-            "type" : "string",
-            "enum" : [ "easy", "medium", "hard" ]
-          },
-          "decision" : {
-            "type" : "string",
-            "enum" : [ "approved_as_is", "approved_with_edit", "rejected" ]
-          },
-          "finalOption" : {
-            "type" : "string",
-            "enum" : [ "A", "B", "C", "D" ]
-          },
-          "editedQuestionText" : {
+          "questionText" : {
             "type" : "string"
           },
-          "editedOptionA" : {
+          "optionA" : {
             "type" : "string"
           },
-          "editedOptionB" : {
+          "optionB" : {
             "type" : "string"
           },
-          "editedOptionC" : {
+          "optionC" : {
             "type" : "string"
           },
-          "editedOptionD" : {
+          "optionD" : {
             "type" : "string"
           },
-          "editedExplanation" : {
+          "correctOption" : {
             "type" : "string"
           },
-          "reasonCodes" : {
+          "saAnswer" : {
+            "type" : "string"
+          },
+          "statements" : {
             "type" : "array",
             "items" : {
-              "type" : "string",
-              "enum" : [ "content_inaccurate", "content_off_curriculum", "content_insufficient_info", "content_unclear", "options_out_of_scope", "options_indistinct", "presentation_question_hard_to_read", "presentation_options_hard_to_read", "presentation_missing_question", "presentation_grammar", "presentation_formula_symbol_error", "answer_multiple_correct", "answer_none_correct", "other" ]
+              "$ref" : "#/components/schemas/StatementEdit"
             }
           },
-          "otherReasonDetail" : {
+          "explanation" : {
             "type" : "string"
           }
         }
       },
-      "SubmitReviewResponse" : {
+      "StatementEdit" : {
         "type" : "object",
         "properties" : {
-          "reviewId" : {
+          "key" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ExamItemDto" : {
+        "type" : "object",
+        "properties" : {
+          "slotId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "cellId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "slotNo" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "part" : {
+            "type" : "string"
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "state" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "bankItemId" : {
             "type" : "integer",
             "format" : "int32"
           },
@@ -392,145 +1154,1177 @@
             "type" : "integer",
             "format" : "int32"
           },
-          "reviewPurpose" : {
+          "questionText" : {
+            "type" : "string"
+          },
+          "optionA" : {
+            "type" : "string"
+          },
+          "optionB" : {
+            "type" : "string"
+          },
+          "optionC" : {
+            "type" : "string"
+          },
+          "optionD" : {
+            "type" : "string"
+          },
+          "correctOption" : {
             "type" : "string",
-            "enum" : [ "experiment", "production" ]
+            "enum" : [ "A", "B", "C", "D" ]
           },
-          "reviewerAnswer" : {
-            "type" : "string",
-            "enum" : [ "A", "B", "C", "D", "multiple", "none" ]
+          "saAnswer" : {
+            "type" : "string"
           },
-          "formatOk" : {
-            "type" : "boolean"
+          "statements" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ItemStatementDto"
+            }
           },
-          "difficultyLabel" : {
+          "explanation" : {
+            "type" : "string"
+          },
+          "difficulty" : {
             "type" : "string",
             "enum" : [ "easy", "medium", "hard" ]
           },
-          "decision" : {
-            "type" : "string",
-            "enum" : [ "approved_as_is", "approved_with_edit", "rejected" ]
+          "needsReview" : {
+            "type" : "boolean"
           },
-          "finalOption" : {
-            "type" : "string",
-            "enum" : [ "A", "B", "C", "D" ]
+          "reviewReasons" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "qcState" : {
+            "type" : "string"
           },
           "edited" : {
             "type" : "boolean"
           },
-          "editDistance" : {
+          "originalQuestionId" : {
             "type" : "integer",
             "format" : "int32"
-          },
-          "questionStatus" : {
-            "type" : "string",
-            "enum" : [ "generated", "format_failed", "duplicate", "qc_passed", "rejected", "in_bank" ]
-          },
-          "bankItemId" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "reviewedAt" : {
-            "type" : "string",
-            "format" : "date-time"
           }
         }
       },
-      "ReviewQuestionListItemDto" : {
+      "ItemStatementDto" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string",
+            "enum" : [ "a", "b", "c", "d" ]
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string",
+            "enum" : [ "T", "F" ]
+          },
+          "difficulty" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          }
+        }
+      },
+      "CellInput" : {
+        "type" : "object",
+        "properties" : {
+          "part" : {
+            "type" : "string"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "learningOutcomes" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "string"
+            }
+          },
+          "difficulty" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          },
+          "statementDifficulties" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "enum" : [ "easy", "medium", "hard" ]
+            }
+          },
+          "questionCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "CreateMatrixRequest" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "subjectId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "gradeLevel" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "notes" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "cells" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CellInput"
+            }
+          }
+        }
+      },
+      "CellDto" : {
         "type" : "object",
         "properties" : {
           "id" : {
             "type" : "integer",
             "format" : "int32"
           },
-          "templateId" : {
+          "position" : {
             "type" : "integer",
             "format" : "int32"
           },
-          "reviewPurpose" : {
-            "type" : "string",
-            "enum" : [ "experiment", "production" ]
-          },
-          "subjectName" : {
+          "part" : {
             "type" : "string"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "learningOutcomes" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "string"
+            }
+          },
+          "difficulty" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          },
+          "statementDifficulties" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "enum" : [ "easy", "medium", "hard" ]
+            }
+          },
+          "questionCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "templateId" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "MatrixDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "subjectId" : {
+            "type" : "integer",
+            "format" : "int32"
           },
           "gradeLevel" : {
             "type" : "integer",
             "format" : "int32"
           },
-          "topic" : {
+          "source" : {
             "type" : "string"
           },
-          "questionText" : {
+          "notes" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "sampleKey" : {
             "type" : "string"
           },
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "cells" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CellDto"
+            }
+          },
+          "totals" : {
+            "$ref" : "#/components/schemas/TotalsDto"
+          },
+          "examCount" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },
-      "ProcessedJobSummary" : {
+      "TotalsDto" : {
         "type" : "object",
         "properties" : {
-          "processed" : {
-            "type" : "boolean"
+          "questionsByPart" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "integer",
+              "format" : "int32"
+            }
           },
-          "jobId" : {
+          "commandsByLevel" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "integer",
+              "format" : "int32"
+            }
+          },
+          "totalCommands" : {
             "type" : "integer",
             "format" : "int32"
+          }
+        }
+      },
+      "ReplaceRequest" : {
+        "type" : "object",
+        "properties" : {
+          "source" : {
+            "type" : "string"
+          },
+          "instruction" : {
+            "type" : "string"
+          }
+        }
+      },
+      "BuildExamRequest" : {
+        "type" : "object",
+        "properties" : {
+          "matrixId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        }
+      },
+      "BuildResultDto" : {
+        "type" : "object",
+        "properties" : {
+          "examId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "examCode" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "matrixId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "slots" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "fromBank" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "jobsQueued" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "kind" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CreateLessonRequest" : {
+        "type" : "object",
+        "properties" : {
+          "subjectId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "gradeLevel" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "lesson" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "learningOutcomes" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "string"
+            }
+          },
+          "cells" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LessonCellInput"
+            }
+          }
+        }
+      },
+      "LessonCellInput" : {
+        "type" : "object",
+        "properties" : {
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "difficulty" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          },
+          "statementDifficulties" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "enum" : [ "easy", "medium", "hard" ]
+            }
+          },
+          "questionCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "DuplicateMatrixRequest" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CreateFromSampleRequest" : {
+        "type" : "object",
+        "properties" : {
+          "subjectId" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "ChangePasswordRequest" : {
+        "type" : "object",
+        "properties" : {
+          "currentPassword" : {
+            "type" : "string"
+          },
+          "newPassword" : {
+            "type" : "string"
+          }
+        }
+      },
+      "LoginRequest" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "password" : {
+            "type" : "string"
+          }
+        }
+      },
+      "TokenResponse" : {
+        "type" : "object",
+        "properties" : {
+          "accessToken" : {
+            "type" : "string"
+          },
+          "tokenType" : {
+            "type" : "string"
+          },
+          "expiresIn" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "user" : {
+            "$ref" : "#/components/schemas/UserDto"
+          }
+        }
+      },
+      "UserDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "role" : {
+            "type" : "string",
+            "enum" : [ "teacher", "researcher", "admin" ]
+          }
+        }
+      },
+      "CreateTeacherRequest" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "password" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AdminUserDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "role" : {
+            "type" : "string",
+            "enum" : [ "teacher", "researcher", "admin" ]
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "hasPassword" : {
+            "type" : "boolean"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "lastLoginAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "ResetPasswordRequest" : {
+        "type" : "object",
+        "properties" : {
+          "newPassword" : {
+            "type" : "string"
+          }
+        }
+      },
+      "UpdateUserRequest" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "enabled" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "ExamPageDto" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ExamSummaryDto"
+            }
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "size" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalItems" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalPages" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "ExamSummaryDto" : {
+        "type" : "object",
+        "properties" : {
+          "examId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "examCode" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "mode" : {
+            "type" : "string"
+          },
+          "kind" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "draft", "confirmed" ]
+          },
+          "matrixId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "totalSlots" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "readySlots" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "keptSlots" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "needsReviewSlots" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "generatingSlots" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failedSlots" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "ExamViewDto" : {
+        "type" : "object",
+        "properties" : {
+          "examId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "examCode" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "mode" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "draft", "confirmed" ]
+          },
+          "matrixId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "buildStatus" : {
+            "type" : "string"
+          },
+          "needsReviewCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "parts" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PartDto"
+            }
+          },
+          "kind" : {
+            "type" : "string"
+          }
+        }
+      },
+      "PartDto" : {
+        "type" : "object",
+        "properties" : {
+          "part" : {
+            "type" : "string"
+          },
+          "required" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "ready" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ExamItemDto"
+            }
+          }
+        }
+      },
+      "ActionDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "action" : {
+            "type" : "string"
+          },
+          "at" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "actor" : {
+            "$ref" : "#/components/schemas/UserRef"
           },
           "questionId" : {
             "type" : "integer",
             "format" : "int32"
           },
-          "jobStatus" : {
+          "bankItemId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "changedFields" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "editDistance" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "instruction" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AnswerCheckDto" : {
+        "type" : "object",
+        "properties" : {
+          "state" : {
             "type" : "string"
           },
-          "questionStatus" : {
+          "reason" : {
             "type" : "string"
+          },
+          "judgeModel" : {
+            "type" : "string"
+          },
+          "judgeAnswer" : {
+            "type" : "string",
+            "enum" : [ "A", "B", "C", "D", "multiple", "none" ]
+          },
+          "judgeSaKind" : {
+            "type" : "string",
+            "enum" : [ "number", "ambiguous", "unparseable" ]
+          },
+          "judgeSaAnswer" : {
+            "type" : "string"
+          },
+          "judgeLabels" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/JudgeLabelDto"
+            }
+          },
+          "solverReasoning" : {
+            "type" : "string"
+          },
+          "error" : {
+            "type" : "string"
+          },
+          "checkedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "job" : {
+            "$ref" : "#/components/schemas/JobDto"
+          }
+        }
+      },
+      "AnswerDto" : {
+        "type" : "object",
+        "properties" : {
+          "correctOption" : {
+            "type" : "string",
+            "enum" : [ "A", "B", "C", "D" ]
+          },
+          "saAnswer" : {
+            "type" : "string"
+          },
+          "labels" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LabelDto"
+            }
+          }
+        }
+      },
+      "ComparedToDto" : {
+        "type" : "object",
+        "properties" : {
+          "questionId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "inThisExam" : {
+            "type" : "boolean"
+          },
+          "inBank" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "DedupDto" : {
+        "type" : "object",
+        "properties" : {
+          "passed" : {
+            "type" : "boolean"
+          },
+          "similarity" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "threshold" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "checkedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "comparedTo" : {
+            "$ref" : "#/components/schemas/ComparedToDto"
+          }
+        }
+      },
+      "FormatDto" : {
+        "type" : "object",
+        "properties" : {
+          "passed" : {
+            "type" : "boolean"
+          },
+          "errors" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "warnings" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "autoRepairs" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "checkedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "JobDto" : {
+        "type" : "object",
+        "properties" : {
+          "jobId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "attempt" : {
+            "type" : "integer",
+            "format" : "int32"
           },
           "error" : {
             "type" : "string"
           }
         }
       },
-      "EnqueueJobsRequest" : {
+      "JudgeLabelDto" : {
         "type" : "object",
         "properties" : {
-          "templateId" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "strategy" : {
+          "key" : {
             "type" : "string",
-            "enum" : [ "zero-shot", "few-shot", "few-shot-structured" ]
+            "enum" : [ "a", "b", "c", "d" ]
           },
-          "targetDifficulty" : {
+          "judgeLabel" : {
             "type" : "string",
-            "enum" : [ "easy", "medium", "hard" ]
-          },
-          "modelName" : {
-            "type" : "string"
-          },
-          "count" : {
-            "type" : "integer",
-            "format" : "int32"
+            "enum" : [ "T", "F", "undecidable" ]
           }
         }
       },
-      "GenerationJob" : {
+      "LabelDto" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string",
+            "enum" : [ "a", "b", "c", "d" ]
+          },
+          "label" : {
+            "type" : "string",
+            "enum" : [ "T", "F" ]
+          }
+        }
+      },
+      "LineageDto" : {
+        "type" : "object",
+        "properties" : {
+          "origin" : {
+            "type" : "string"
+          },
+          "job" : {
+            "$ref" : "#/components/schemas/JobDto"
+          },
+          "versions" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/VersionDto"
+            }
+          }
+        }
+      },
+      "QcDto" : {
+        "type" : "object",
+        "properties" : {
+          "format" : {
+            "$ref" : "#/components/schemas/FormatDto"
+          },
+          "dedup" : {
+            "$ref" : "#/components/schemas/DedupDto"
+          },
+          "answerCheck" : {
+            "$ref" : "#/components/schemas/AnswerCheckDto"
+          }
+        }
+      },
+      "QcTraceDto" : {
+        "type" : "object",
+        "properties" : {
+          "examId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "slotId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "cellId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "slotNo" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "part" : {
+            "type" : "string"
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "state" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "currentQuestionId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "bankItemId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "attempts" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "solverRetries" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "lineages" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LineageDto"
+            }
+          },
+          "actions" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ActionDto"
+            }
+          }
+        }
+      },
+      "UserRef" : {
         "type" : "object",
         "properties" : {
           "id" : {
             "type" : "integer",
             "format" : "int32"
           },
-          "runId" : {
+          "name" : {
+            "type" : "string"
+          }
+        }
+      },
+      "VersionDto" : {
+        "type" : "object",
+        "properties" : {
+          "questionId" : {
             "type" : "integer",
             "format" : "int32"
           },
-          "templateId" : {
+          "kind" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "current" : {
+            "type" : "boolean"
+          },
+          "editedBy" : {
+            "$ref" : "#/components/schemas/UserRef"
+          },
+          "changedFields" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "editDistance" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "answer" : {
+            "$ref" : "#/components/schemas/AnswerDto"
+          },
+          "qc" : {
+            "$ref" : "#/components/schemas/QcDto"
+          },
+          "reviewReasons" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "CellProgressDto" : {
+        "type" : "object",
+        "properties" : {
+          "cellId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "position" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "part" : {
+            "type" : "string"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "needed" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "fromBank" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "ready" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "generating" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failed" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "ProgressDto" : {
+        "type" : "object",
+        "properties" : {
+          "examId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "examCode" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "total" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "ready" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "generating" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failed" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "fromBank" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "cells" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CellProgressDto"
+            }
+          }
+        }
+      },
+      "SlotDto" : {
+        "type" : "object",
+        "properties" : {
+          "slotId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "cellId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "slotNo" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "state" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "bankItemId" : {
             "type" : "integer",
             "format" : "int32"
           },
@@ -538,315 +2332,65 @@
             "type" : "integer",
             "format" : "int32"
           },
-          "targetDifficulty" : {
-            "type" : "string",
-            "enum" : [ "easy", "medium", "hard" ]
-          },
-          "status" : {
-            "type" : "string",
-            "enum" : [ "pending", "running", "done", "failed" ]
-          },
-          "attempt" : {
+          "attempts" : {
             "type" : "integer",
             "format" : "int32"
-          },
-          "nextRunAt" : {
-            "type" : "string",
-            "format" : "date-time"
-          },
-          "lastError" : {
-            "type" : "string"
-          },
-          "tokenCount" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "latencyMs" : {
-            "type" : "number",
-            "format" : "double"
-          },
-          "costUsd" : {
-            "type" : "number",
-            "format" : "double"
-          },
-          "createdAt" : {
-            "type" : "string",
-            "format" : "date-time"
-          },
-          "updatedAt" : {
-            "type" : "string",
-            "format" : "date-time"
           }
         }
       },
-      "SyncGenerationRequest" : {
-        "type" : "object",
-        "properties" : {
-          "templateId" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "strategy" : {
-            "type" : "string",
-            "enum" : [ "zero-shot", "few-shot", "few-shot-structured" ]
-          },
-          "targetDifficulty" : {
-            "type" : "string",
-            "enum" : [ "easy", "medium", "hard" ]
-          },
-          "modelName" : {
-            "type" : "string"
-          },
-          "temperature" : {
-            "type" : "number",
-            "format" : "double"
-          },
-          "runAnswerCheck" : {
-            "type" : "boolean"
-          },
-          "rawLlmOutputOverride" : {
-            "type" : "string"
-          }
-        }
-      },
-      "DedupOutcome" : {
-        "type" : "object",
-        "properties" : {
-          "status" : {
-            "type" : "string",
-            "enum" : [ "NOT_RUN", "NO_DUPLICATE", "DUPLICATE", "ERROR" ]
-          },
-          "similarity" : {
-            "type" : "number",
-            "format" : "double"
-          },
-          "comparedToQuestionId" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "thresholdUsed" : {
-            "type" : "number",
-            "format" : "double"
-          },
-          "layer" : {
-            "type" : "string",
-            "enum" : [ "NONE", "FINGERPRINT", "TRIGRAM" ]
-          },
-          "detail" : {
-            "type" : "string"
-          }
-        }
-      },
-      "GeneratedQuestionSummaryDto" : {
+      "MatrixSummaryDto" : {
         "type" : "object",
         "properties" : {
           "id" : {
             "type" : "integer",
             "format" : "int32"
           },
-          "templateId" : {
+          "name" : {
+            "type" : "string"
+          },
+          "subjectId" : {
             "type" : "integer",
             "format" : "int32"
           },
-          "runId" : {
+          "gradeLevel" : {
             "type" : "integer",
             "format" : "int32"
-          },
-          "questionText" : {
-            "type" : "string"
-          },
-          "optionA" : {
-            "type" : "string"
-          },
-          "optionB" : {
-            "type" : "string"
-          },
-          "optionC" : {
-            "type" : "string"
-          },
-          "optionD" : {
-            "type" : "string"
-          },
-          "parseSuccess" : {
-            "type" : "boolean"
-          },
-          "status" : {
-            "type" : "string",
-            "enum" : [ "generated", "format_failed", "duplicate", "qc_passed", "rejected", "in_bank" ]
-          },
-          "tokenCount" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "latencyMs" : {
-            "type" : "number",
-            "format" : "double"
           },
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "cellCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "examCount" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },
-      "QcPipelineReport" : {
+      "SampleDto" : {
         "type" : "object",
         "properties" : {
-          "resultingStatus" : {
-            "type" : "string",
-            "enum" : [ "generated", "format_failed", "duplicate", "qc_passed", "rejected", "in_bank" ]
+          "key" : {
+            "type" : "string"
           },
-          "formatPassed" : {
-            "type" : "boolean"
+          "name" : {
+            "type" : "string"
           },
-          "formatErrors" : {
+          "gradeLevel" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "notes" : {
             "type" : "array",
             "items" : {
               "type" : "string"
             }
-          },
-          "answerCheckPassed" : {
-            "type" : "boolean"
-          },
-          "judgeAnswer" : {
-            "type" : "string",
-            "enum" : [ "A", "B", "C", "D", "multiple", "none" ]
-          },
-          "judgeModel" : {
-            "type" : "string"
-          },
-          "solverReasoning" : {
-            "type" : "string"
-          },
-          "answerCheckStatus" : {
-            "type" : "string",
-            "enum" : [ "NOT_RUN", "ERROR", "INCONSISTENT", "CONSISTENT" ]
-          },
-          "dedupStatus" : {
-            "type" : "string",
-            "enum" : [ "NOT_RUN", "NO_DUPLICATE", "DUPLICATE", "ERROR" ]
-          },
-          "dedup" : {
-            "$ref" : "#/components/schemas/DedupOutcome"
-          }
-        }
-      },
-      "SyncGenerationResponse" : {
-        "type" : "object",
-        "properties" : {
-          "question" : {
-            "$ref" : "#/components/schemas/GeneratedQuestionSummaryDto"
-          },
-          "qcReport" : {
-            "$ref" : "#/components/schemas/QcPipelineReport"
-          }
-        }
-      },
-      "CreateTemplateRequest" : {
-        "type" : "object",
-        "properties" : {
-          "subjectId" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "gradeLevel" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "learningOutcome" : {
-            "type" : "string"
-          },
-          "sourceQuestion" : {
-            "type" : "string"
-          },
-          "sourceType" : {
-            "type" : "string",
-            "enum" : [ "text", "pdf", "image" ]
-          }
-        }
-      },
-      "QuestionTemplate" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "subjectId" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "gradeLevel" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "learningOutcome" : {
-            "type" : "string"
-          },
-          "sourceType" : {
-            "type" : "string",
-            "enum" : [ "text", "pdf", "image" ]
-          },
-          "sourceQuestion" : {
-            "type" : "string"
-          },
-          "version" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "isActive" : {
-            "type" : "boolean"
-          }
-        }
-      },
-      "BlindQuestionReviewDto" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "templateId" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "reviewPurpose" : {
-            "type" : "string",
-            "enum" : [ "experiment", "production" ]
-          },
-          "subjectName" : {
-            "type" : "string"
-          },
-          "gradeLevel" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "topic" : {
-            "type" : "string"
-          },
-          "questionText" : {
-            "type" : "string"
-          },
-          "optionA" : {
-            "type" : "string"
-          },
-          "optionB" : {
-            "type" : "string"
-          },
-          "optionC" : {
-            "type" : "string"
-          },
-          "optionD" : {
-            "type" : "string"
-          },
-          "createdAt" : {
-            "type" : "string",
-            "format" : "date-time"
           }
         }
       },
@@ -862,7 +2406,7 @@
           }
         }
       },
-      "BankItem" : {
+      "BankListItemDto" : {
         "type" : "object",
         "properties" : {
           "id" : {
@@ -906,8 +2450,322 @@
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "saAnswer" : {
+            "type" : "string"
+          },
+          "statements" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/StatementDto"
+            }
+          },
+          "subjectId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "subjectName" : {
+            "type" : "string"
+          },
+          "gradeLevel" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "origin" : {
+            "$ref" : "#/components/schemas/OriginDto"
+          },
+          "usageCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "lastUsedAt" : {
+            "type" : "string",
+            "format" : "date-time"
           }
         }
+      },
+      "BankPageDto" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/BankListItemDto"
+            }
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "size" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalItems" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalPages" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "OriginDto" : {
+        "type" : "object",
+        "properties" : {
+          "type" : {
+            "type" : "string"
+          },
+          "reviewMode" : {
+            "type" : "string"
+          },
+          "edited" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "StatementDto" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string",
+            "enum" : [ "a", "b", "c", "d" ]
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string",
+            "enum" : [ "T", "F" ]
+          },
+          "difficulty" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          }
+        }
+      },
+      "BankItemDetailDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sourceQuestionId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "reviewId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "questionText" : {
+            "type" : "string"
+          },
+          "optionA" : {
+            "type" : "string"
+          },
+          "optionB" : {
+            "type" : "string"
+          },
+          "optionC" : {
+            "type" : "string"
+          },
+          "optionD" : {
+            "type" : "string"
+          },
+          "correctOption" : {
+            "type" : "string",
+            "enum" : [ "A", "B", "C", "D" ]
+          },
+          "explanation" : {
+            "type" : "string"
+          },
+          "difficulty" : {
+            "type" : "string",
+            "enum" : [ "easy", "medium", "hard" ]
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "questionType" : {
+            "type" : "string",
+            "enum" : [ "mcq", "tf", "sa" ]
+          },
+          "saAnswer" : {
+            "type" : "string"
+          },
+          "statements" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/StatementDto"
+            }
+          },
+          "subjectId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "subjectName" : {
+            "type" : "string"
+          },
+          "gradeLevel" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "origin" : {
+            "$ref" : "#/components/schemas/OriginDto"
+          },
+          "usageCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "lastUsedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "provenance" : {
+            "$ref" : "#/components/schemas/ProvenanceDto"
+          },
+          "usage" : {
+            "$ref" : "#/components/schemas/UsageDto"
+          }
+        }
+      },
+      "ExamRef" : {
+        "type" : "object",
+        "properties" : {
+          "examId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "examCode" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "ProvenanceDto" : {
+        "type" : "object",
+        "properties" : {
+          "llmQuestionId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "runId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "versions" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/VersionDto"
+            }
+          },
+          "review" : {
+            "$ref" : "#/components/schemas/ReviewDto"
+          }
+        }
+      },
+      "ReviewDto" : {
+        "type" : "object",
+        "properties" : {
+          "reviewId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "mode" : {
+            "type" : "string"
+          },
+          "decision" : {
+            "type" : "string"
+          },
+          "reviewer" : {
+            "$ref" : "#/components/schemas/UserRef"
+          },
+          "reviewedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "UsageDto" : {
+        "type" : "object",
+        "properties" : {
+          "usageCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "lastUsedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "myExams" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ExamRef"
+            }
+          }
+        }
+      },
+      "TopicDto" : {
+        "type" : "object",
+        "properties" : {
+          "subjectId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "subjectName" : {
+            "type" : "string"
+          },
+          "gradeLevel" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "topic" : {
+            "type" : "string"
+          },
+          "count" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      }
+    },
+    "securitySchemes" : {
+      "bearerAuth" : {
+        "type" : "http",
+        "scheme" : "bearer",
+        "bearerFormat" : "JWT"
       }
     }
   }

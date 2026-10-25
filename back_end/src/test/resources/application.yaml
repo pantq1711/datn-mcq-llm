@@ -12,6 +12,11 @@ spring:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/datn_mcq_test
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
+    # W1-3: bộ test có nhiều ApplicationContext cùng sống (mỗi @TestBean/cấu hình khác là một context). Pool mặc định 10
+    # kết nối/context làm PostgreSQL báo "too many clients already" (max_connections 100); test chỉ cần vài kết nối.
+    hikari:
+      maximum-pool-size: 4
+      minimum-idle: 1
 
   jpa:
     open-in-view: false
@@ -37,3 +42,8 @@ app:
     model: ""
   worker:
     enabled: false        # Tắt poller worker khi chạy test
+  security:
+    jwt:
+      # Khóa giả CHỈ dùng cho test (trùng AuthTestSupport.TEST_JWT_SECRET_BASE64), không phải secret thật.
+      secret: "dGVzdC1vbmx5LWp3dC1zZWNyZXQtZm9yLWRhdG4tbWNxLW5vdC1mb3ItcHJvZHVjdGlvbg=="
+    # Không đặt bootstrap-admin: AdminBootstrap không tạo tài khoản khi chạy test.

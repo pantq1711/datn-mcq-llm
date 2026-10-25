@@ -1,12 +1,16 @@
 package com.datn.mcq.user.entity;
 
 import com.datn.mcq.enums.UserRole;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 @Entity
 @Table(name = "users")
@@ -24,6 +28,24 @@ public class UserAccount {
 
     @Column(name = "role", length = 50)
     private UserRole role;
+
+    /** V11: mật khẩu băm ("{bcrypt}..."); null = chưa đăng nhập được. Không bao giờ trả ra API. */
+    @JsonIgnore
+    @Column(name = "password_hash", length = 100)
+    private String passwordHash;
+
+    /** V11: false = tài khoản bị khóa. */
+    @Column(name = "enabled", nullable = false)
+    private Boolean enabled = Boolean.TRUE;
+
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+
+    @Column(name = "password_changed_at")
+    private LocalDateTime passwordChangedAt;
+
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
 
     public UserAccount() {}
 
@@ -64,5 +86,40 @@ public class UserAccount {
     public void setRole(UserRole role) {
         this.role = role;
     }
-}
 
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
+    public Boolean getEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(Boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public LocalDateTime getPasswordChangedAt() {
+        return passwordChangedAt;
+    }
+
+    public void setPasswordChangedAt(LocalDateTime passwordChangedAt) {
+        this.passwordChangedAt = passwordChangedAt;
+    }
+
+    public LocalDateTime getLastLoginAt() {
+        return lastLoginAt;
+    }
+
+    public void setLastLoginAt(LocalDateTime lastLoginAt) {
+        this.lastLoginAt = lastLoginAt;
+    }
+}

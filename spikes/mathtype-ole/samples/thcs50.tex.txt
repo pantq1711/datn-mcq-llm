@@ -1,0 +1,50 @@
+\frac{3}{4}
+\sqrt{x^2+1}
+x_1
+2^{10}
+\widehat{ABC}=60^\circ
+\Delta ABC
+a\ne b
+\left(x+\frac12\right)^2
+\begin{cases}x+y=3\\x-y=1\end{cases}
+\pi r^2
+\sqrt[3]{27}
+x^2-5x+6=0
+\Delta=b^2-4ac
+x_{1,2}=\frac{-b\pm\sqrt{\Delta}}{2a}
+|x-2|\le 3
+\frac{a}{b}:\frac{c}{d}=\frac{a}{b}\cdot\frac{d}{c}
+\sin\alpha=\frac{3}{5}
+\tan 30^\circ=\frac{\sqrt3}{3}
+\triangle ABC\sim\triangle DEF
+AB\parallel CD
+AB\perp CD
+\overline{abc}
+\overrightarrow{AB}
+x\in\mathbb{N}
+A\cap B=\varnothing
+\{1;2;3\}
+[a;b]
+y=ax+b\ (a\ne 0)
+S=\frac12 ah
+\sqrt{2}\approx 1{,}414
+x\geq -\frac{1}{2}
+2x+3y\le 12
+\frac{x+1}{x-1}-\frac{x-1}{x+1}
+\left[\begin{array}{l}x=1\\x=2\end{array}\right.
+(a+b)^2=a^2+2ab+b^2
+\text{cm}^2
+\angle xOy
+\overset\frown{AB}
+a^m\cdot a^n=a^{m+n}
+\sqrt{\frac{a}{b}}=\frac{\sqrt a}{\sqrt b}
+\cos^2\alpha+\sin^2\alpha=1
+x=\pm 3
+3{,}5
+\frac{1}{2}<\frac{2}{3}
+\sum_{i=1}^n i
+1\le x\le 5
+\dfrac{1}{x}
+P\Rightarrow Q
+AB=5\text{ cm}
+a\vdots b

@@ -53,7 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * V4 (quyết định 6 ngày 22/10): chạy lại QC cho một câu ở trạng thái generated, đi qua đúng pipeline
+ * Quy tắc QC-RERUN (quyết định 6 ngày 22/10): chạy lại QC cho một câu ở trạng thái generated, đi qua đúng pipeline
  * format -> dedup -> Solver, không ép trạng thái. Kết quả answer_check/dedup cũ được xóa trước khi chạy lại,
  * để lần chạy lỗi không bị hiểu nhầm là thành công. Solver là LlmClient giả, không gọi mạng.
  */
@@ -112,10 +112,6 @@ class QcRerunServiceTest {
             return true;
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            throw new UnsupportedOperationException("Không được sinh câu trong test chạy lại QC");
-        }
 
         @Override
         public LlmCallResult callJsonMode(String prompt, String modelName, Double temperature) {

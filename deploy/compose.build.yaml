@@ -1,0 +1,15 @@
+# Override: build image tại chỗ thay vì kéo từ GHCR (kiểm chứng local, hoặc build trên server nếu cần).
+#   docker compose -f compose.prod.yaml -f compose.build.yaml build
+#   docker compose -f compose.prod.yaml -f compose.build.yaml up -d
+# Đặt APP_TAG=local trong .env để tag image local không trùng tag trên GHCR.
+# Đường dẫn bên dưới tính từ thư mục chứa compose.prod.yaml (deploy/).
+services:
+  app:
+    build:
+      context: ../back_end
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}

@@ -1,25 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-    Alert,
-    Button,
-    Form,
-    Input,
-    Modal,
-    Space,
-    Tag,
-    Typography,
-} from "antd";
-import {
-    BulbOutlined,
-    InfoCircleOutlined,
-    SwapOutlined,
-} from "@ant-design/icons";
+import { Alert, Button, Form, Input, Modal, Space, Tag, Typography } from "antd";
+import { InfoCircleOutlined, SwapOutlined, BulbOutlined } from "@ant-design/icons";
 
-import type {
-    ExamQuestionDifficulty,
-    ExamQuestionItem,
-    ChangeQuestionRequest,
-} from "../types/exam.types";
+import type { ExamQuestionDifficulty, ExamQuestionItem, ChangeQuestionRequest } from "../types/exam.types";
 
 import "./ChangeQuestionModal.css";
 

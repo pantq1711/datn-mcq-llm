@@ -5,6 +5,7 @@ import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.service.CatalogService;
 import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.QuestionStatus;
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.worker.GenerationJobProcessor;
 import com.datn.mcq.qc.dto.QcPipelineReport;
@@ -13,10 +14,11 @@ import com.datn.mcq.qc.entity.QualityCheckResult;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
- * V4 (quyết định 6 ngày 22/10): chạy lại QC cho một câu ở trạng thái generated.
+ * Quy tắc QC-RERUN (quyết định 6 ngày 22/10): chạy lại QC cho một câu ở trạng thái generated.
  *
  * <p>Đi qua đúng pipeline format -> dedup -> answer_check (Solver chỉ chạy khi dedup kết luận không trùng),
  * trạng thái mới lấy từ báo cáo pipeline, không ép. Trước khi chạy, kết quả dedup và answer_check cũ bị xóa
@@ -84,19 +86,11 @@ public class QcRerunService {
 
         QuestionTemplate tpl = catalogService.getTemplateById(gq.getTemplateId());
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
-        QcPipelineReport report = qcOrchestrator.evaluateAndSave(new QuestionQcInput(
-                gq.getId(),
-                Boolean.TRUE.equals(gq.getParseSuccess()),
-                gq.getQuestionText(),
-                gq.getOptionA(),
-                gq.getOptionB(),
-                gq.getOptionC(),
-                gq.getOptionD(),
-                gq.getCorrectOption(),
-                gq.getExplanation(),
-                GenerationJobProcessor.isMathSubject(subject.getName()),
-                true
-        ), dedupScopeResolver.resolve(gq.getRunId()));
+        boolean validateLatex = GenerationJobProcessor.isMathSubject(subject.getName());
+        QuestionQcInput input = StoredQcInput.of(gq,
+                gq.getQuestionType() == QuestionType.TF ? generationService.getStatements(gq.getId()) : List.of(),
+                validateLatex, true);
+        QcPipelineReport report = qcOrchestrator.evaluateAndSave(input, dedupScopeResolver.resolve(gq.getRunId()));
 
         GeneratedQuestion updated = generationService.updateStatusAndDifficulty(
                 gq.getId(), report.resultingStatus(), null);

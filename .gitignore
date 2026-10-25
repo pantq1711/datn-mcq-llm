@@ -27,3 +27,4 @@ llm-probe/test_models/
 Thumbs.db
 __pycache__/
 *.py[cod]
+data/private/

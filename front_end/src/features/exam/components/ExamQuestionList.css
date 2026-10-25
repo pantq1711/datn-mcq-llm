@@ -144,6 +144,15 @@
     background-color: #e6f7ff !important;
 }
 
+.exam-action-btn-edit {
+    color: #faad14 !important;
+    background-color: #ffffff !important;
+}
+
+.exam-action-btn-edit:hover {
+    background-color: #fffbe6 !important;
+}
+
 .exam-action-btn-delete {
     background-color: #ffffff !important;
 }

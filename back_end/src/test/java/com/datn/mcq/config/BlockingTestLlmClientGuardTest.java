@@ -99,7 +99,7 @@ class BlockingTestLlmClientGuardTest {
             assertTrue(String.valueOf(ex.getCause().getMessage()).contains("BLOCKED"));
             invoked++;
         }
-        assertTrue(invoked >= 3, "Kỳ vọng ít nhất generateMcq, callJsonMode, callJsonModeWithSchema bị chặn, thực tế: "
+        assertTrue(invoked >= 2, "Kỳ vọng ít nhất callJsonMode, callJsonModeWithSchema bị chặn, thực tế: "
                 + invoked);
     }
 
@@ -120,7 +120,7 @@ class BlockingTestLlmClientGuardTest {
                 .filter(m -> m.getReturnType() == LlmCallResult.class)
                 .map(Method::getName)
                 .collect(java.util.stream.Collectors.toSet());
-        assertEquals(Set.of("generateMcq", "callJsonMode", "callJsonModeWithSchema"), names,
+        assertEquals(Set.of("callJsonMode", "callJsonModeWithSchema"), names,
                 "Danh sách method gọi mạng của LlmClient đã thay đổi: cập nhật BlockingTestLlmClient và test này");
     }
 

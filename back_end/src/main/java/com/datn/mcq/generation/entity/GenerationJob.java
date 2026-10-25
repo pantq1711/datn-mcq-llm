@@ -2,6 +2,8 @@ package com.datn.mcq.generation.entity;
 
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.JobStatus;
+import com.datn.mcq.enums.QuestionType;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -31,6 +33,18 @@ public class GenerationJob {
     @Column(name = "target_difficulty", length = 10)
     private Difficulty targetDifficulty;
 
+    /** Dạng câu (V4); khóa ngoại kép tới experiment_run(id, question_type). Xuất ra JSON từ GĐ2. */
+    @Column(name = "question_type", nullable = false, length = 10, updatable = false)
+    private QuestionType questionType = QuestionType.MCQ;
+
+    /**
+     * Chỉ với tf: mức mục tiêu của 4 ý a,b,c,d, ví dụ "easy,easy,medium,hard" (CHECK chk_gj_target_statements).
+     * Bỏ khỏi JSON khi null, nên job mcq/sa không có key này.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Column(name = "target_statement_difficulties", length = 40)
+    private String targetStatementDifficulties;
+
     @Column(name = "status", nullable = false, length = 20)
     private JobStatus status = JobStatus.PENDING;
 
@@ -42,6 +56,11 @@ public class GenerationJob {
 
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
+
+    /** V10: lúc worker nhận job; null khi chưa nhận hoặc đã được trả về pending vì quá hạn. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Column(name = "started_at")
+    private LocalDateTime startedAt;
 
     @Column(name = "token_count")
     private Integer tokenCount;
@@ -58,7 +77,58 @@ public class GenerationJob {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
 
+    /** V7: chỗ trong đề (exam_slot) mà job sinh câu cho; null với job thường (khi đó không có trong JSON). */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Column(name = "exam_slot_id")
+    private Integer examSlotId;
+
+    /** V8: ghi chú thêm vào prompt của job (ô ma trận: câu thứ k/n, lý do lần sinh trước bị loại); null với job thường. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Column(name = "prompt_note", columnDefinition = "TEXT")
+    private String promptNote;
+
+    /** Job sinh câu (mọi job trước V13). */
+    public static final String TYPE_GENERATE = "generate";
+    /** V13 (W1-2): chạy lại Solver cho một bản giáo viên sửa; có question_id, không gắn chỗ. */
+    public static final String TYPE_ANSWER_CHECK = "answer_check";
+
+    /** V13: loại job, luôn có trong JSON. */
+    @Column(name = "job_type", nullable = false, length = 20, updatable = false)
+    private String jobType = TYPE_GENERATE;
+
     public GenerationJob() {}
+
+    public String getJobType() {
+        return jobType;
+    }
+
+    public void setJobType(String jobType) {
+        this.jobType = jobType;
+    }
+
+    public LocalDateTime getStartedAt() {
+        return startedAt;
+    }
+
+    public void setStartedAt(LocalDateTime startedAt) {
+        this.startedAt = startedAt;
+    }
+
+    public String getPromptNote() {
+        return promptNote;
+    }
+
+    public void setPromptNote(String promptNote) {
+        this.promptNote = promptNote;
+    }
+
+    public Integer getExamSlotId() {
+        return examSlotId;
+    }
+
+    public void setExamSlotId(Integer examSlotId) {
+        this.examSlotId = examSlotId;
+    }
 
     public Integer getId() {
         return id;
@@ -170,6 +240,22 @@ public class GenerationJob {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public QuestionType getQuestionType() {
+        return questionType;
+    }
+
+    public void setQuestionType(QuestionType questionType) {
+        this.questionType = questionType;
+    }
+
+    public String getTargetStatementDifficulties() {
+        return targetStatementDifficulties;
+    }
+
+    public void setTargetStatementDifficulties(String targetStatementDifficulties) {
+        this.targetStatementDifficulties = targetStatementDifficulties;
     }
 }
 

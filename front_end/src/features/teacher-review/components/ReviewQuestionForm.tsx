@@ -44,9 +44,9 @@ interface ReviewQuestionFormProps {
 }
 
 const difficultyOptions = [
-    { value: "easy", label: "Dễ" },
-    { value: "medium", label: "Trung bình" },
-    { value: "hard", label: "Khó" },
+    { label: "Dễ", value: "easy" as Difficulty },
+    { label: "Trung bình", value: "medium" as Difficulty },
+    { label: "Khó", value: "hard" as Difficulty },
 ];
 
 export default function ReviewQuestionForm({

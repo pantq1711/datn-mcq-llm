@@ -14,22 +14,32 @@ public final class TestDataCleaner {
 
     public static void cleanAll(DataSource dataSource, JdbcTemplate jdbcTemplate, String stage) {
         TestSafetyConfiguration.TestDatabaseGuard.validateTestDatabase(dataSource, stage);
+        jdbcTemplate.update("DELETE FROM exam_slot_action");
+        jdbcTemplate.update("UPDATE generation_job SET exam_slot_id = NULL WHERE exam_slot_id IS NOT NULL");
+        jdbcTemplate.update("DELETE FROM exam_slot");
         jdbcTemplate.update("DELETE FROM exam_question");
         jdbcTemplate.update("UPDATE exam SET parent_exam_id = NULL WHERE parent_exam_id IS NOT NULL");
         jdbcTemplate.update("DELETE FROM exam");
+        jdbcTemplate.update("DELETE FROM bank_item_statement");
         jdbcTemplate.update("DELETE FROM bank_item");
         jdbcTemplate.update("DELETE FROM teacher_review_reason");
+        jdbcTemplate.update("DELETE FROM teacher_review_statement");
         jdbcTemplate.update("DELETE FROM teacher_review");
         jdbcTemplate.update("DELETE FROM label_assignment");
         jdbcTemplate.update("DELETE FROM dedup_gold_label");
         jdbcTemplate.update("DELETE FROM dedup_gold_pair");
+        jdbcTemplate.update("DELETE FROM answer_check_statement");
         jdbcTemplate.update("DELETE FROM quality_check_result");
         jdbcTemplate.update("DELETE FROM question_embedding");
         jdbcTemplate.update("DELETE FROM generation_job");
+        jdbcTemplate.update("DELETE FROM generated_question_statement");
         jdbcTemplate.update("DELETE FROM generated_question");
         jdbcTemplate.update("DELETE FROM experiment_run");
+        jdbcTemplate.update("DELETE FROM exam_matrix_cell");
+        jdbcTemplate.update("DELETE FROM exam_matrix");
         jdbcTemplate.update("DELETE FROM question_template");
         jdbcTemplate.update("DELETE FROM subject");
+        // refresh_token (V11) bị xóa theo users nhờ ON DELETE CASCADE.
         jdbcTemplate.update("DELETE FROM users");
     }
 }

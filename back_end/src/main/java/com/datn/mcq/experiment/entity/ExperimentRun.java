@@ -1,6 +1,7 @@
 package com.datn.mcq.experiment.entity;
 
 import com.datn.mcq.enums.Purpose;
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.Strategy;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -29,6 +30,13 @@ public class ExperimentRun {
 
     @Column(name = "strategy", nullable = false, length = 50)
     private Strategy strategy;
+
+    /**
+     * Dạng câu của run (V4). tf/sa chỉ cho production và strategy = zero-shot (CHECK chk_er_tf_sa_production).
+     * Phân tích C1/C2/C3 lọc question_type = mcq.
+     */
+    @Column(name = "question_type", nullable = false, length = 10, updatable = false)
+    private QuestionType questionType = QuestionType.MCQ;
 
     @Column(name = "model_name", nullable = false, length = 100)
     private String modelName;
@@ -174,6 +182,14 @@ public class ExperimentRun {
 
     public void setEndedAt(LocalDateTime endedAt) {
         this.endedAt = endedAt;
+    }
+
+    public QuestionType getQuestionType() {
+        return questionType;
+    }
+
+    public void setQuestionType(QuestionType questionType) {
+        this.questionType = questionType;
     }
 }
 

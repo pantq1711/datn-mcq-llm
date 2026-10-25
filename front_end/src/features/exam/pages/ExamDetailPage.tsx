@@ -1,20 +1,26 @@
-import { Button, Card, Space, Tag, Typography } from "antd";
+import { useParams } from "react-router-dom";
+import { Button, Card, Space, Tag, Typography, message } from "antd";
 import { ArrowLeftOutlined, EditOutlined, DeleteOutlined, FileWordOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
 import type { ExamPreviewData, ExamQuestionItem, ChangeQuestionRequest, QuestionReplacementCandidate } from "../types/exam.types";
+import { keepQuestion } from '../services/examApi';
 
 import "./ExamDetailPage.css";
 import { useState } from "react";
 import ChangeQuestionModal from "../components/ChangeQuestionModal";
 import QuestionReplacementPreview from "../components/QuestionReplacementPreview";
+import EditQuestionModal from "../components/EditQuestionModal";
 
 const { Title, Text } = Typography;
 
 export default function ExamDetailPage() {
     const navigate = useNavigate();
+
+    // 1. Nhận examId và slotId từ URL
+    const { examId, slotId } = useParams<{ examId: string; slotId: string }>();
 
     const [changeQuestion, setChangeQuestion] = useState<ExamQuestionItem | null>(null);
     const [generatingReplacement, setGeneratingReplacement] = useState(false);
@@ -24,17 +30,10 @@ export default function ExamDetailPage() {
     const [showReplacementPreview, setShowReplacementPreview] = useState(false);
     const [confirmingReplacement, setConfirmingReplacement] = useState(false);
 
-    const exam: ExamPreviewData = {
-        title: "Đề thi giữa kỳ Hóa học",
-        subject: "Hóa học",
-        questionCount: 3,
-        duration: 30,
-        easyCount: 1,
-        mediumCount: 1,
-        hardCount: 1,
-    };
+    const [editingQuestion, setEditingQuestion] = useState<ExamQuestionItem | null>(null);
+    const [savingEdit, setSavingEdit] = useState(false);
 
-    const questions: ExamQuestionItem[] = [
+    const [questions, setQuestions] = useState<ExamQuestionItem[]>([
         {
             id: 1,
             questionText: "Nguyên tố hóa học nào có ký hiệu hóa học là 'H'?",
@@ -68,7 +67,17 @@ export default function ExamDetailPage() {
             explanation: "Al₂O₃ (Nhôm oxit) là oxit lưỡng tính, vừa tác dụng với axit vừa tác dụng với bazơ.",
             difficulty: "hard",
         },
-    ];
+    ]);
+
+    const exam: ExamPreviewData = {
+        title: "Đề thi giữa kỳ Hóa học",
+        subject: "Hóa học",
+        questionCount: questions.length,
+        duration: 30,
+        easyCount: 1,
+        mediumCount: 1,
+        hardCount: 1,
+    };
 
     const mockOriginalQuestion: ExamQuestionItem = {
         id: 1,
@@ -101,17 +110,33 @@ export default function ExamDetailPage() {
         console.log('request: ', request);
     };
 
-    const handleConfirmReplacement = () => {
-        setConfirmingReplacement(true);
-
-        setTimeout(() => {
-            setConfirmingReplacement(false);
-            setShowReplacementPreview(false);
-
-            setOriginalQuestion(null);
-            setReplacementQuestion(null);
-        }, 1500);
+    const handleKeep = async (question: ExamQuestionItem, index: number) => {
+        try {
+            await keepQuestion(examId, slotId, question.id);
+            message.success('Đã giữ câu hỏi thành công');
+            console.log(`Đã giữ câu hỏi số ${index + 1} – ID: ${question.id}`);
+        } catch (e) {
+            console.error(e);
+            message.error(e instanceof Error ? e.message : 'Gặp lỗi khi giữ câu hỏi');
+        }
     };
+
+    const handleSaveEditedQuestion = async (updatedQuestion: ExamQuestionItem) => {
+        setSavingEdit(true);
+        try {
+            // Gọi API ở đây (đã thực hiện trong modal → chỉ cập nhật UI)
+            setQuestions(prev =>
+                prev.map(q => (q.id === updatedQuestion.id ? updatedQuestion : q))
+            );
+            message.success("Cập nhật câu hỏi thành công!");
+            setEditingQuestion(null);
+        } catch (e) {
+            message.error(e instanceof Error ? e.message : "Gặp lỗi khi cập nhật câu hỏi");
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
 
     return (
         <div className="exam-detail-page">
@@ -158,22 +183,14 @@ export default function ExamDetailPage() {
                         <Button
                             type="primary"
                             icon={<FileWordOutlined />}
-                            onClick={() =>
-                                console.log(
-                                    "Export Word",
-                                )
-                            }
+                            onClick={() => console.log("Export Word")}
                         >
                             Xuất file Word
                         </Button>
 
                         <Button
                             icon={<EditOutlined />}
-                            onClick={() =>
-                                console.log(
-                                    "Edit exam",
-                                )
-                            }
+                            onClick={() => console.log("Edit exam")}
                         >
                             Chỉnh sửa
                         </Button>
@@ -181,11 +198,7 @@ export default function ExamDetailPage() {
                         <Button
                             danger
                             icon={<DeleteOutlined />}
-                            onClick={() =>
-                                console.log(
-                                    "Delete exam",
-                                )
-                            }
+                            onClick={() => console.log("Delete exam")}
                         >
                             Xóa
                         </Button>
@@ -203,7 +216,14 @@ export default function ExamDetailPage() {
                 <Card title="Danh sách câu hỏi">
                     <ExamQuestionList
                         questions={questions}
-                        onChangeQuestion={(question) => setChangeQuestion(question)}
+                        onChangeQuestion={(question) => {
+                            setChangeQuestion(question);
+                            // Bạn có thể gán câu hỏi hiện tại cho originalQuestion để xem trước
+                            setOriginalQuestion(question);
+                            setReplacementQuestion(mockReplacementQuestion);
+                        }}
+                        onKeep={handleKeep}
+                        onEdit={(question) => setEditingQuestion(question)}
                     />
 
                     <ChangeQuestionModal
@@ -214,25 +234,29 @@ export default function ExamDetailPage() {
                         onGenerate={handleGenerateReplacement}
                     />
 
-                    <Space>
-                        <Button
-                            type="primary"
-                            onClick={() => setShowReplacementPreview(true)}
-                        >
-                            Xem thử đổi câu
-                        </Button>
-                    </Space>
-
                     <QuestionReplacementPreview
                         open={showReplacementPreview}
                         originalQuestion={mockOriginalQuestion}
-                        replacementQuestion={mockReplacementQuestion}
+                        replacementQuestion={replacementQuestion}
+                        examId={examId}
+                        slotId={slotId}
                         onCancel={() => setShowReplacementPreview(false)}
-                        onConfirm={() => {
-                            console.log("Mock: Đã xác nhận thay câu hỏi");
-
+                        onConfirm={async () => {
+                            // Ví dụ: cập nhật danh sách câu hỏi sau khi thay thế thành công
                             setShowReplacementPreview(false);
+                            // optional: fetch lại danh sách hoặc cập nhật state tại đây
                         }}
+                        confirmLoading={confirmingReplacement}
+                    />
+
+                    <EditQuestionModal
+                        open={editingQuestion !== null}
+                        question={editingQuestion}
+                        loading={savingEdit}
+                        examId={examId!}
+                        slotId={slotId!}
+                        onCancel={() => setEditingQuestion(null)}
+                        onSave={handleSaveEditedQuestion}
                     />
                 </Card>
             </div>

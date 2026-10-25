@@ -1,5 +1,5 @@
 import { Button, Empty, List, Skeleton, Space, Tag, Tooltip, Typography } from "antd";
-import { DeleteOutlined, BulbOutlined, CheckCircleOutlined, SwapOutlined } from "@ant-design/icons";
+import { DeleteOutlined, BulbOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined } from "@ant-design/icons";
 
 import "./ExamQuestionList.css";
 import type { ExamQuestionDifficulty, ExamQuestionItem } from "../types/exam.types";
@@ -12,6 +12,7 @@ interface ExamQuestionListProps {
     onRemove?: (question: ExamQuestionItem, index: number) => void;
     onKeep?: (question: ExamQuestionItem, index: number) => void;
     onChangeQuestion?: (question: ExamQuestionItem, index: number) => void;
+    onEdit?: (question: ExamQuestionItem, index: number) => void; // Thêm prop onEdit
 }
 
 const difficultyConfig: Record<
@@ -43,6 +44,7 @@ export default function ExamQuestionList({
     onRemove,
     onKeep,
     onChangeQuestion,
+    onEdit, // Nhận prop onEdit
 }: ExamQuestionListProps) {
     if (loading) {
         return (
@@ -106,7 +108,7 @@ export default function ExamQuestionList({
                                         )}
                                     </Space>
 
-                                    {/* Nhóm các nút hành động: Giữ, Đổi câu khác, Xóa */}
+                                    {/* Nhóm các nút hành động: Giữ, Đổi câu khác, Sửa, Xóa */}
                                     <Space size={4} align="center">
                                         <Tooltip title="Giữ lại câu hỏi này">
                                             <Button
@@ -129,6 +131,18 @@ export default function ExamQuestionList({
                                                 onClick={() => onChangeQuestion?.(question, index)}
                                             >
                                                 Đổi câu khác
+                                            </Button>
+                                        </Tooltip>
+
+                                        <Tooltip title="Chỉnh sửa nội dung câu hỏi">
+                                            <Button
+                                                type="text"
+                                                size="small"
+                                                icon={<EditOutlined />}
+                                                className="exam-action-btn-edit"
+                                                onClick={() => onEdit?.(question, index)}
+                                            >
+                                                Sửa
                                             </Button>
                                         </Tooltip>
 
