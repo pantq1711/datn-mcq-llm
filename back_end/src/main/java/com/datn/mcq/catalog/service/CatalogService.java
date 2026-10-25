@@ -89,6 +89,18 @@ public class CatalogService {
         return questionTemplateRepository.save(tpl);
     }
 
+    /**
+     * W1-4: dọn các template không còn ô ma trận, câu sinh ra hay job nào tham chiếu (khi sửa/xóa ma trận). Template còn
+     * được tham chiếu giữ nguyên. Trả số template đã xóa.
+     */
+    @Transactional
+    public int deleteUnusedTemplates(java.util.Collection<Integer> templateIds) {
+        if (templateIds == null || templateIds.isEmpty()) {
+            return 0;
+        }
+        return questionTemplateRepository.deleteUnreferenced(templateIds);
+    }
+
     private static String blankToNull(String value) {
         if (value == null) {
             return null;

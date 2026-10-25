@@ -2,6 +2,9 @@ package com.datn.mcq.common.exception;
 
 import com.datn.mcq.config.JsonSecurityErrorHandler;
 import com.datn.mcq.exam.export.DocumentExportException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -17,6 +20,8 @@ import java.util.NoSuchElementException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleBadRequest(IllegalArgumentException ex) {
@@ -46,6 +51,47 @@ public class ApiExceptionHandler {
             body.put("errors", ex.getErrors());
         }
         return ResponseEntity.status(ex.getStatus()).body(body);
+    }
+
+    /** SQLState của khóa ngoại bị vi phạm (PostgreSQL 23503). */
+    static final String FOREIGN_KEY_VIOLATION = "23503";
+    /** SQLState của khóa duy nhất bị vi phạm (PostgreSQL 23505). */
+    static final String UNIQUE_VIOLATION = "23505";
+
+    /**
+     * W1-4 (K-5): lỗi toàn vẹn dữ liệu. Khóa ngoại hoặc khóa duy nhất bị vi phạm thường do hai thao tác đồng thời (ví dụ
+     * tạo đề và xóa ma trận, hai lần tạo cùng mã): 409 kèm mã {@code FOREIGN_KEY_CONFLICT} / {@code UNIQUE_CONFLICT}, không
+     * lộ tên ràng buộc hay câu SQL. Lỗi toàn vẹn khác (CHECK, NOT NULL) là lỗi của chương trình: vẫn 500, kèm mã
+     * {@code DATA_INTEGRITY} và ghi log đầy đủ.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, String>> handleDataIntegrity(DataIntegrityViolationException ex) {
+        String state = sqlState(ex);
+        if (FOREIGN_KEY_VIOLATION.equals(state)) {
+            log.warn("Xung đột khóa ngoại: {}", ex.getMostSpecificCause().getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "FOREIGN_KEY_CONFLICT", "error",
+                    "Dữ liệu vừa bị thay đổi bởi một thao tác khác (bản ghi liên quan không còn hoặc đang được dùng). "
+                            + "Hãy tải lại rồi thử lại."));
+        }
+        if (UNIQUE_VIOLATION.equals(state)) {
+            log.warn("Xung đột khóa duy nhất: {}", ex.getMostSpecificCause().getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "UNIQUE_CONFLICT", "error",
+                    "Dữ liệu bị trùng với một bản ghi vừa được tạo bởi thao tác khác. Hãy tải lại rồi thử lại."));
+        }
+        log.error("Lỗi toàn vẹn dữ liệu không mong đợi (SQLState {})", state, ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", "DATA_INTEGRITY", "error",
+                "Lỗi toàn vẹn dữ liệu không mong đợi."));
+    }
+
+    /** SQLState của nguyên nhân gần nhất có mã (đi theo chuỗi nguyên nhân); null khi không có. */
+    private static String sqlState(Throwable ex) {
+        Throwable t = ex;
+        for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause()) {
+            if (t instanceof java.sql.SQLException sql && sql.getSQLState() != null) {
+                return sql.getSQLState();
+            }
+        }
+        return null;
     }
 
     /** Xuất đề ra Word không thành (thiếu pandoc, quá thời gian, pandoc báo lỗi): trả đúng mã kèm thông báo. */

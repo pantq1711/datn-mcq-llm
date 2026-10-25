@@ -115,9 +115,14 @@ public final class MatrixDtos {
             @JsonInclude(JsonInclude.Include.NON_NULL) String sampleKey,
             LocalDateTime createdAt,
             List<CellDto> cells,
-            TotalsDto totals
+            TotalsDto totals,
+            int examCount
     ) {}
 
+    /** @param examCount số đề đã tạo từ ma trận (W1-4): lớn hơn 0 thì khóa sửa ô và xóa */
     public record MatrixSummaryDto(Integer id, String name, Integer subjectId, Integer gradeLevel,
-                                   LocalDateTime createdAt, int cellCount) {}
+                                   LocalDateTime createdAt, int cellCount, int examCount) {}
+
+    /** Body nhân bản ma trận (tùy chọn): {@code name} bỏ trống thì "&lt;tên&gt; (bản sao)". */
+    public record DuplicateMatrixRequest(String name) {}
 }

@@ -33,10 +33,10 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 | 401 | Chưa đăng nhập (`UNAUTHENTICATED`), token hết hạn (`TOKEN_EXPIRED`), token sai (`TOKEN_INVALID`), đăng nhập sai (`INVALID_CREDENTIALS`), refresh không hợp lệ (`REFRESH_INVALID`) |
 | 403 | Sai vai trò (`FORBIDDEN`), ví dụ giáo viên gọi API quản trị, admin gọi API của giáo viên |
 | 404 | Không tìm thấy bản ghi, ví dụ `subjectId` hoặc `templateId` không tồn tại. Ma trận, đề của giáo viên khác cũng trả 404 (giống id không tồn tại) |
-| 409 | Xung đột trạng thái, ví dụ nộp đánh giá cho câu `duplicate` hoặc nộp lại câu experiment |
+| 409 | Xung đột trạng thái, ví dụ nộp đánh giá cho câu `duplicate` hoặc nộp lại câu experiment. Có mã máy đọc được ở một số luồng: `MATRIX_IN_USE`, `BANK_EXHAUSTED`, `SLOT_*`, `VERSION_CONFLICT`, `QC_CHECKING`. W1-4 (K-5): hai thao tác đồng thời làm vi phạm khóa ngoại hoặc khóa duy nhất trả 409 `FOREIGN_KEY_CONFLICT` / `UNIQUE_CONFLICT` ("hãy tải lại rồi thử lại"), không lộ tên ràng buộc |
 | 429 | Gemini đang giới hạn tần suất gọi; chờ khoảng một phút rồi thử lại. Hoặc đăng nhập sai quá nhiều lần (`TOO_MANY_ATTEMPTS`, header `Retry-After`, mục 8.2) |
 | 503 | Gemini tạm thời quá tải hoặc bảo trì |
-| 500 | Lỗi khác chưa được phân loại, body theo định dạng mặc định của Spring |
+| 500 | Lỗi khác chưa được phân loại, body theo định dạng mặc định của Spring. Lỗi toàn vẹn dữ liệu khác (CHECK, NOT NULL: lỗi của chương trình) có `{"code": "DATA_INTEGRITY"}` |
 
 Dạng câu (`questionType`): `mcq` (trắc nghiệm 4 phương án, mặc định khi bỏ trống), `tf` (Đúng/Sai: đề dẫn và đúng 4 ý
 a-d), `sa` (Trả lời ngắn: đề và một đáp số). Câu `tf` và `sa` chỉ sinh cho `production`, chiến lược `zero-shot`, prompt
@@ -83,6 +83,8 @@ Quyền của các dòng dưới: `catalog` GET và `bank-items` cho GV và AD; 
 | GET | `/api/bank-items/topics?subjectId=` | Chủ đề có câu trong ngân hàng kèm số câu, để dựng bộ lọc |
 | POST | `/api/exam-matrices` | Tạo ma trận đề bằng JSON (mục 7) |
 | GET | `/api/exam-matrices`, `/api/exam-matrices/{id}` | Danh sách ma trận / chi tiết một ma trận |
+| PUT, DELETE | `/api/exam-matrices/{id}` | Sửa / xóa ma trận; đã có đề thì chỉ sửa được tên, nguồn, ghi chú và không xóa được: 409 `MATRIX_IN_USE` (mục 7.1a) |
+| POST | `/api/exam-matrices/{id}/duplicate` | Nhân bản ma trận thành ma trận mới độc lập (mục 7.1a) |
 | GET | `/api/exam-matrices/samples` | Các mẫu ma trận có sẵn (hiện có `giuaki1-toan8`) |
 | POST | `/api/exam-matrices/samples/{key}` | Tạo ma trận từ mẫu có sẵn |
 | POST | `/api/exams/build` | Tạo đề theo ma trận một lần bấm (chế độ giáo viên). Sinh câu qua hàng đợi, có thể tốn phí |
@@ -645,7 +647,8 @@ POST /api/exam-matrices
             "learningOutcomes": {"easy": "Nhận biết được đơn thức, đa thức."}, "difficulty": "easy",
             "questionCount": 2, "templateId": 41}],
  "totals": {"questionsByPart": {"I": 2, "II": 1, "III": 1}, "commandsByLevel": {"easy": 4, "medium": 2, "hard": 1},
-            "totalCommands": 7}}
+            "totalCommands": 7},
+ "examCount": 0}
 ```
 
 - Phần I chỉ chứa `mcq`, phần II chỉ `tf`, phần III chỉ `sa` (DB cũng kiểm). `mcq`/`sa` cần `difficulty`; `tf` cần
@@ -658,6 +661,39 @@ POST /api/exam-matrices
 - Mẫu có sẵn: `GET /api/exam-matrices/samples`; `POST /api/exam-matrices/samples/giuaki1-toan8` với body `{}` (dùng môn
   "Toán") hoặc `{"subjectId": 1}`. Mẫu "Giữa kì I – Toán 8" đọc từ `docs/sample/matrix_giuaki1_toan8.json` (bản chép
   trong `back_end/src/main/resources/samples/`, có test so khớp), giữ nguyên `notes`; tổng I=12, II=2, III=4.
+
+### 7.1a. Sửa, xóa, nhân bản ma trận (W1-4)
+
+```http
+PUT    /api/exam-matrices/3                 body như POST tạo ma trận (thay toàn bộ)  → 200 ma trận
+DELETE /api/exam-matrices/3                                                          → 204
+POST   /api/exam-matrices/3/duplicate       {"name": "Đề thử (cô Lan)"} (body tùy chọn) → 200 ma trận mới
+```
+
+`GET /api/exam-matrices` và `GET /api/exam-matrices/{id}` có thêm `examCount`: số đề đã tạo từ ma trận (UI dùng để báo
+trước ma trận nào đang bị khóa). Quyền như mục 7: chỉ giáo viên, chỉ ma trận của mình.
+
+- **Chưa có đề nào (`examCount = 0`):**
+  - sửa: thay toàn bộ môn, khối, tên, nguồn, ghi chú và các ô (kiểm tra như tạo). Mọi ô được tạo lại nên **id ô và
+    `templateId` đổi** sau mỗi lần sửa; template cũ không còn ô, câu sinh ra hay job nào tham chiếu thì bị xóa;
+  - xóa: xóa ma trận, ô và các template không còn tham chiếu. Template còn câu sinh ra (vết nguồn gốc câu ngân hàng) ở lại.
+- **Đã có đề (`examCount > 0`):** đề đã tạo đọc ô sống để Đổi/sinh lại và giữ khóa ngoại tới ma trận, nên:
+  - sửa chỉ được **tên, nguồn, ghi chú**; gửi lại đúng cấu trúc cũ (môn, khối, mọi ô; khoảng trắng thừa không tính) thì
+    200, id ô và template giữ nguyên; môn, khối hoặc ô khác thì **409** `MATRIX_IN_USE`, không đổi gì;
+  - xóa trả **409** `MATRIX_IN_USE`;
+  - muốn ma trận khác đi: tạo ma trận mới với nội dung đã sửa (`POST /api/exam-matrices`) hoặc nhân bản.
+- **Nhân bản:** làm được cả với ma trận đã có đề. Ma trận mới độc lập (sửa hoặc xóa bản này không đụng bản kia): cùng nội
+  dung ô, nguồn, ghi chú, mỗi ô có template riêng, `sampleKey` bỏ trống, `examCount = 0`, người sở hữu là người gọi. `name`
+  bỏ trống thì "&lt;tên&gt; (bản sao)" (cắt cho vừa 255 ký tự); `name` quá 255 ký tự thì 400.
+- Ma trận ẩn của sinh theo bài (7.2a), ma trận không có hoặc của giáo viên khác: 404 cho cả ba thao tác.
+- Tạo đề và xóa/sửa ma trận đồng thời: tạo đề giữ khóa chia sẻ trên hàng ma trận, sửa/xóa khóa ghi hàng rồi mới đếm đề,
+  nên lần xóa gặp tạo đề đang dở chờ rồi trả 409 `MATRIX_IN_USE`, còn tạo đề gặp ma trận vừa xóa trả 404 (không thành 500).
+
+| Mã | `code` | Khi nào |
+|---|---|---|
+| 400 | — | Dữ liệu sai (`Ô 2: …`, `name dài tối đa 255 ký tự`…), không đổi gì |
+| 404 | — | Ma trận không có, của giáo viên khác hoặc là ma trận ẩn; `subjectId` không tồn tại |
+| 409 | `MATRIX_IN_USE` | Sửa môn/khối/ô hoặc xóa khi `examCount > 0`; thông báo nêu số đề |
 
 ### 7.2. Tạo đề một lần bấm
 
@@ -731,8 +767,8 @@ POST /api/exams/build-by-lesson
 - Ngân hàng: khớp theo môn, dạng, mức và **chủ đề = tên bài** (so sau trim, không phân biệt hoa thường). Khi không nhập
   `content`, không lọc theo nội dung: câu ngân hàng sinh từ ô ma trận cùng chủ đề dùng lại được. Có `content` thì giữ quy
   tắc 7.2 (cùng nội dung). Frontend nên gợi ý tên bài từ chủ đề đã có (`GET /api/bank/topics`) để tăng khả năng dùng lại.
-- Ma trận ẩn không hiện ở `GET /api/exam-matrices`; mọi đường dẫn theo id của nó (xem, `POST /api/exams/build`, và từ
-  bước 3 sửa/xóa/nhân bản) trả 404. Vì vậy `matrixId` của đề theo bài luôn `null` trong API.
+- Ma trận ẩn không hiện ở `GET /api/exam-matrices`; mọi đường dẫn theo id của nó (xem, `POST /api/exams/build`, sửa,
+  xóa, nhân bản; mục 7.1a) trả 404. Vì vậy `matrixId` của đề theo bài luôn `null` trong API.
 - Lỗi: 400 `{"error": …}` (dữ liệu sai; không tạo gì), 404 (`subjectId` không tồn tại), 403 (admin), 401. Mọi lỗi đều
   không để lại ma trận, template hay đề (một transaction).
 - Chỉ lọc và thống kê theo loại đề: `kind` có trong danh sách (7.0), xem đề (7.4) và kết quả tạo đề; `GET /api/exams?kind=lesson`.

@@ -90,7 +90,8 @@ public class ExamBuildService {
         if (req == null || req.matrixId() == null) {
             throw new IllegalArgumentException("Phải truyền matrixId");
         }
-        return buildFromMatrix(matrixService.getOwnedMatrix(req.matrixId(), actorId), req.title(), actorId);
+        // W1-4: khóa chia sẻ hàng ma trận tới hết transaction, để xóa/sửa ma trận đồng thời phải chờ (không thành 500).
+        return buildFromMatrix(matrixService.getOwnedMatrixShared(req.matrixId(), actorId), req.title(), actorId);
     }
 
     /**

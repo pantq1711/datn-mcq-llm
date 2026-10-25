@@ -67,6 +67,9 @@ class SecurityRouteAccessTest {
         RULES.put("POST /api/exam-matrices", Access.TEACHER);
         RULES.put("GET /api/exam-matrices", Access.TEACHER);
         RULES.put("GET /api/exam-matrices/{id}", Access.TEACHER);
+        RULES.put("PUT /api/exam-matrices/{id}", Access.TEACHER);
+        RULES.put("DELETE /api/exam-matrices/{id}", Access.TEACHER);
+        RULES.put("POST /api/exam-matrices/{id}/duplicate", Access.TEACHER);
         RULES.put("GET /api/exam-matrices/samples", Access.TEACHER);
         RULES.put("POST /api/exam-matrices/samples/{key}", Access.TEACHER);
 
