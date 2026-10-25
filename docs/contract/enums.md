@@ -275,6 +275,9 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - `answer_check` của `sa`: `judge_sa_kind` bắt buộc, `judge_sa_answer` có khi kind là `number` hoặc `unparseable`. Của `tf`: nhãn từng ý ở `answer_check_statement`, xóa dây chuyền theo dòng `answer_check`.
 
 - Tạo đề theo ma trận (V6-V7, chế độ giáo viên, quyết định 22/10):
+  - `exam_matrix.kind` (V15, W1-4): `matrix` (ma trận giáo viên tạo, mọi dòng cũ) hoặc `lesson` (ma trận ẩn của một lần
+    sinh theo bài). Loại đề suy ra từ `exam.matrix_id → exam_matrix.kind`, không có cột riêng; thống kê tách đề theo bài
+    bằng join này (đề `mode = 'teacher'` gồm cả hai loại).
   - `exam_matrix_cell.part`: `I` (chỉ `mcq`), `II` (chỉ `tf`), `III` (chỉ `sa`); `difficulty` cho `mcq`/`sa`,
     `statement_difficulties` (`"easy,easy,medium,hard"`, theo ý a-d) cho `tf`. Mỗi ô một `question_template`.
   - `exam.mode`: `manual` (mọi đề cũ) hoặc `teacher` (tạo theo ma trận, bắt buộc có `matrix_id`).

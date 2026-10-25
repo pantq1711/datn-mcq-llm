@@ -18,6 +18,7 @@ import com.datn.mcq.exam.repository.ExamSlotRepository;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.matrix.entity.ExamMatrix;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
 import com.datn.mcq.qc.service.QcSummaryService;
@@ -76,15 +77,21 @@ public class ExamViewService {
      * kỹ" tính như {@link #item}: chỗ ready, câu hệ thống sinh, chưa có bản ngân hàng, có lý do cần xem.
      */
     @Transactional(readOnly = true)
-    public ExamPageDto list(Integer actorId, int page, int size) {
+    public ExamPageDto list(Integer actorId, int page, int size, String kind) {
         if (page < 0) {
             throw new IllegalArgumentException("page phải từ 0");
         }
         if (size < 1 || size > MAX_PAGE_SIZE) {
             throw new IllegalArgumentException("size phải từ 1 đến " + MAX_PAGE_SIZE);
         }
-        Page<Exam> exams = examRepository.findByCreatedBy(actorId, PageRequest.of(page, size,
-                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))));
+        if (kind != null && !kind.equals(ExamMatrix.KIND_LESSON) && !kind.equals(ExamMatrix.KIND_MATRIX)) {
+            throw new IllegalArgumentException("kind phải là lesson hoặc matrix");
+        }
+        PageRequest paging = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+        Page<Exam> exams = kind == null ? examRepository.findByCreatedBy(actorId, paging)
+                : examRepository.findByCreatedByAndMatrixKind(actorId, kind, paging);
+        Map<Integer, String> kinds = matrixService.kindsByIds(exams.getContent().stream().map(Exam::getMatrixId)
+                .filter(java.util.Objects::nonNull).distinct().toList());
         List<Integer> ids = exams.getContent().stream().map(Exam::getId).toList();
         Map<Integer, List<ExamSlot>> slotsByExam = ids.isEmpty() ? Map.of()
                 : slotRepository.findByExamIdIn(ids).stream().collect(Collectors.groupingBy(ExamSlot::getExamId));
@@ -110,8 +117,9 @@ public class ExamViewService {
                     default -> generating++;
                 }
             }
-            items.add(new ExamSummaryDto(e.getId(), e.getExamCode(), e.getTitle(), e.getMode(), e.getStatus(),
-                    e.getMatrixId(), e.getCreatedAt(), slots.size(), ready, kept, needsReview, generating, failed));
+            String examKind = kindOf(e, kinds);
+            items.add(new ExamSummaryDto(e.getId(), e.getExamCode(), e.getTitle(), e.getMode(), examKind,
+                    e.getStatus(), publicMatrixId(e, examKind), e.getCreatedAt(), slots.size(), ready, kept, needsReview, generating, failed));
         }
         return new ExamPageDto(items, page, size, exams.getTotalElements(), exams.getTotalPages());
     }
@@ -152,8 +160,23 @@ public class ExamViewService {
             parts.add(new PartDto(e.getKey(), e.getValue().size(), ready, e.getValue()));
         }
         String buildStatus = generating > 0 ? "generating" : failed > 0 ? "partial" : "ready";
+        String kind = kindOf(exam, exam.getMatrixId() == null ? Map.of()
+                : matrixService.kindsByIds(List.of(exam.getMatrixId())));
         return new ExamViewDto(exam.getId(), exam.getExamCode(), exam.getTitle(), exam.getMode(), exam.getStatus(),
-                exam.getMatrixId(), exam.getCreatedAt(), buildStatus, needsReview, parts);
+                publicMatrixId(exam, kind), exam.getCreatedAt(), buildStatus, needsReview, parts, kind);
+    }
+
+    /** W1-4: loại đề suy ra từ ma trận gốc; đề cũ không có ma trận là "manual". */
+    private static String kindOf(Exam exam, Map<Integer, String> kindsByMatrix) {
+        if (exam.getMatrixId() == null) {
+            return "manual";
+        }
+        return kindsByMatrix.getOrDefault(exam.getMatrixId(), ExamMatrix.KIND_MATRIX);
+    }
+
+    /** Id ma trận cho client: ma trận ẩn của đề theo bài không dùng được theo id nên không lộ. */
+    private static Integer publicMatrixId(Exam exam, String kind) {
+        return ExamMatrix.KIND_LESSON.equals(kind) ? null : exam.getMatrixId();
     }
 
     ExamItemDto item(ExamSlot slot, ExamMatrixCell cell) {

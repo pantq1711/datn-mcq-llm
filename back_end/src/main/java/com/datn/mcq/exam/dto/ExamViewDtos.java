@@ -82,7 +82,11 @@ public final class ExamViewDtos {
     /** @param required số câu ma trận yêu cầu; {@code ready} số câu đã có */
     public record PartDto(String part, int required, int ready, List<ExamItemDto> items) {}
 
-    /** @param buildStatus như {@link ExamBuildDtos.ProgressDto#status()} */
+    /**
+     * @param buildStatus như {@link ExamBuildDtos.ProgressDto#status()}
+     * @param matrixId    null với đề sinh theo bài (ma trận ẩn)
+     * @param kind        (W1-4) "matrix" (tạo từ ma trận), "lesson" (sinh theo bài) hoặc "manual" (đề cũ không có ma trận)
+     */
     public record ExamViewDto(
             Integer examId,
             String examCode,
@@ -93,8 +97,17 @@ public final class ExamViewDtos {
             LocalDateTime createdAt,
             String buildStatus,
             int needsReviewCount,
-            List<PartDto> parts
-    ) {}
+            List<PartDto> parts,
+            String kind
+    ) {
+        /** Chữ ký trước W1-4 (đề tạo từ ma trận). */
+        public ExamViewDto(Integer examId, String examCode, String title, String mode, ExamStatus status,
+                           Integer matrixId, LocalDateTime createdAt, String buildStatus, int needsReviewCount,
+                           List<PartDto> parts) {
+            this(examId, examCode, title, mode, status, matrixId, createdAt, buildStatus, needsReviewCount, parts,
+                    "matrix");
+        }
+    }
 
     /**
      * Một đề trong danh sách "đề của tôi" (W1-1, GET /api/exams). Số chỗ theo trạng thái tại lần đối soát gần nhất
@@ -105,12 +118,14 @@ public final class ExamViewDtos {
      * @param needsReviewSlots trong số readySlots, câu hệ thống sinh có cờ "cần xem kỹ" (như needsReview khi xem đề)
      * @param generatingSlots  pending, generating
      * @param failedSlots      failed
+     * @param kind             (W1-4) "matrix", "lesson" hoặc "manual" (như {@link ExamViewDto#kind()}); matrixId null với "lesson"
      */
     public record ExamSummaryDto(
             Integer examId,
             String examCode,
             String title,
             String mode,
+            String kind,
             ExamStatus status,
             Integer matrixId,
             LocalDateTime createdAt,

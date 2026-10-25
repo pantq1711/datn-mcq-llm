@@ -16,6 +16,7 @@ import com.datn.mcq.exam.service.ExamActionService;
 import com.datn.mcq.exam.service.ExamBuildService;
 import com.datn.mcq.exam.service.ExamQcTraceService;
 import com.datn.mcq.exam.service.ExamViewService;
+import com.datn.mcq.matrix.dto.MatrixDtos.CreateLessonRequest;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -62,11 +63,22 @@ public class ExamController {
      *
      * @param page từ 0
      * @param size từ 1 đến 50
+     * @param kind tùy chọn: "lesson" (sinh theo bài) hoặc "matrix" (từ ma trận); sai thì 400
      */
     @GetMapping
     public ExamPageDto list(CurrentUser user, @RequestParam(defaultValue = "0") int page,
-                            @RequestParam(defaultValue = "10") int size) {
-        return examViewService.list(user.id(), page, size);
+                            @RequestParam(defaultValue = "10") int size,
+                            @RequestParam(required = false) String kind) {
+        return examViewService.list(user.id(), page, size, kind);
+    }
+
+    /**
+     * W1-4: sinh theo bài (không cần ma trận): môn, khối, bài, số câu theo dạng và mức. Dùng lại luồng tạo đề theo ma
+     * trận (ngân hàng trước, phần thiếu xếp hàng sinh câu). Tối đa 50 câu mỗi lần.
+     */
+    @PostMapping("/build-by-lesson")
+    public BuildResultDto buildByLesson(CurrentUser user, @RequestBody CreateLessonRequest request) {
+        return examBuildService.buildByLesson(request, user.id());
     }
 
     /**

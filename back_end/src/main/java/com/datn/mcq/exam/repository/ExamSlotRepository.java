@@ -35,6 +35,9 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
      * <p>Truy vấn native chỉ đọc qua bank_item, generated_question, question_template, exam_matrix_cell, exam_slot,
      * exam_question, exam (ngoại lệ ghi ở docs/architecture/backend-structure.md). {@code difficulty} và
      * {@code levels} truyền chuỗi rỗng khi không dùng.
+     *
+     * <p>W1-4: {@code anyContent} = true (chỉ ô của ma trận ẩn sinh theo bài không nhập nội dung) bỏ điều kiện về nội dung
+     * của ô nguồn; false giữ nguyên hành vi cũ.
      */
     @Query(value = """
             SELECT b.id
@@ -51,7 +54,8 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
             WHERE b.question_type = :type
               AND t.subject_id = :subjectId
               AND lower(btrim(coalesce(t.topic, ''))) = lower(btrim(:topic))
-              AND (NOT EXISTS (SELECT 1 FROM exam_matrix_cell c WHERE c.template_id = t.id)
+              AND (CAST(:anyContent AS boolean)
+                   OR NOT EXISTS (SELECT 1 FROM exam_matrix_cell c WHERE c.template_id = t.id)
                    OR EXISTS (SELECT 1 FROM exam_matrix_cell c WHERE c.template_id = t.id
                               AND lower(btrim(coalesce(c.content, ''))) = lower(btrim(:content))))
               AND ((:type <> 'tf' AND b.difficulty = :difficulty)
@@ -69,5 +73,6 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
                                      @Param("content") String content,
                                      @Param("difficulty") String difficulty,
                                      @Param("levels") String levels,
+                                     @Param("anyContent") boolean anyContent,
                                      @Param("limit") int limit);
 }

@@ -13,6 +13,8 @@ import com.datn.mcq.enums.SourceType;
 import com.datn.mcq.matrix.dto.MatrixDtos.CellDto;
 import com.datn.mcq.matrix.dto.MatrixDtos.CellInput;
 import com.datn.mcq.matrix.dto.MatrixDtos.CreateFromSampleRequest;
+import com.datn.mcq.matrix.dto.MatrixDtos.CreateLessonRequest;
+import com.datn.mcq.matrix.dto.MatrixDtos.LessonCellInput;
 import com.datn.mcq.matrix.dto.MatrixDtos.CreateMatrixRequest;
 import com.datn.mcq.matrix.dto.MatrixDtos.MatrixDto;
 import com.datn.mcq.matrix.dto.MatrixDtos.MatrixSummaryDto;
@@ -50,6 +52,11 @@ public class MatrixService {
     private static final Map<String, QuestionType> PART_TYPES =
             Map.of("I", QuestionType.MCQ, "II", QuestionType.TF, "III", QuestionType.SA);
     private static final Set<String> LEVEL_KEYS = Set.of("easy", "medium", "hard");
+    /** W1-4: tổng số câu tối đa của một lần sinh theo bài (mỗi câu thiếu tốn một job, giãn cách 13 giây). */
+    public static final int MAX_LESSON_QUESTIONS = 50;
+    /** Câu đúng/sai sinh theo bài không nêu mức: ý a-d lần lượt dễ, dễ, vừa, khó. */
+    private static final List<Difficulty> DEFAULT_TF_LEVELS =
+            List.of(Difficulty.EASY, Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD);
 
     private final ExamMatrixRepository matrixRepository;
     private final ExamMatrixCellRepository cellRepository;
@@ -69,12 +76,109 @@ public class MatrixService {
     }
 
     private MatrixDto create(CreateMatrixRequest req, String sampleKey, Integer ownerId) {
+        return toDto(persist(req, sampleKey, ExamMatrix.KIND_MATRIX, ownerId));
+    }
+
+    /**
+     * Chủ đề (bài) của một lần sinh theo bài. Hiện là chuỗi {@code lesson}. Điểm mở rộng: khi có danh mục bài
+     * (lesson_catalog), request nhận thêm {@code lessonId} tùy chọn và hàm này lấy tên bài từ danh mục khi có lessonId;
+     * các trường hiện có giữ nguyên nghĩa nên API cũ không vỡ.
+     */
+    private static String resolveLesson(CreateLessonRequest req) {
+        if (req.lesson() == null || req.lesson().isBlank()) {
+            throw new IllegalArgumentException("lesson (tên bài) không được để trống");
+        }
+        String lesson = req.lesson().trim();
+        if (lesson.length() > 255) {
+            throw new IllegalArgumentException("lesson dài tối đa 255 ký tự");
+        }
+        return lesson;
+    }
+
+    /**
+     * W1-4: ma trận ẩn của một lần sinh theo bài (kind = 'lesson'): mọi ô cùng chủ đề là bài, phần I/II/III suy từ dạng
+     * câu, yêu cầu cần đạt mặc định theo mức (ghi đè được). Không hiện trong danh sách, không xem/sửa/xóa theo id. Gọi
+     * trong transaction của nơi tạo đề (lỗi sau đó thì ma trận cũng rollback).
+     */
+    @Transactional
+    public ExamMatrix createLesson(CreateLessonRequest req, Integer ownerId) {
+        if (ownerId == null) {
+            throw new IllegalArgumentException("Thiếu người tạo ma trận");
+        }
+        if (req == null) {
+            throw new IllegalArgumentException("Thiếu dữ liệu sinh theo bài");
+        }
+        String lesson = resolveLesson(req);
+        String title = req.title() == null || req.title().isBlank() ? lesson : req.title().trim();
+        if (title.length() > 255) {
+            throw new IllegalArgumentException("title dài tối đa 255 ký tự");
+        }
+        Map<String, String> overrides = req.learningOutcomes() == null ? Map.of() : req.learningOutcomes();
+        if (!LEVEL_KEYS.containsAll(overrides.keySet())) {
+            throw new IllegalArgumentException("learningOutcomes chỉ nhận khóa easy, medium, hard");
+        }
+        List<CellInput> cells = new ArrayList<>();
+        int total = 0;
+        List<LessonCellInput> in = req.cells() == null ? List.of() : req.cells();
+        for (int i = 0; i < in.size(); i++) {
+            LessonCellInput c = in.get(i);
+            if (c == null) {
+                throw new IllegalArgumentException("Ô " + (i + 1) + ": ô trống");
+            }
+            if (c.questionType() == null) {
+                throw new IllegalArgumentException("Ô " + (i + 1) + ": thiếu questionType");
+            }
+            boolean tf = c.questionType() == QuestionType.TF;
+            List<Difficulty> levels = tf && c.statementDifficulties() == null ? DEFAULT_TF_LEVELS
+                    : c.statementDifficulties();
+            List<Difficulty> used = tf ? levels : c.difficulty() == null ? List.of() : List.of(c.difficulty());
+            Map<String, String> outcomes = new LinkedHashMap<>();
+            for (Difficulty level : used == null ? List.<Difficulty>of() : used) {
+                if (level != null) {
+                    String text = overrides.get(level.getDbValue());
+                    outcomes.put(level.getDbValue(), text != null && !text.isBlank() ? text.trim()
+                            : defaultOutcome(level, lesson));
+                }
+            }
+            cells.add(new CellInput(partOf(c.questionType()), c.questionType(), lesson, req.content(), outcomes,
+                    c.difficulty(), tf ? levels : c.statementDifficulties(), c.questionCount()));
+            total += c.questionCount() == null ? 0 : c.questionCount();
+        }
+        CreateMatrixRequest matrixRequest = new CreateMatrixRequest(title, req.subjectId(), req.gradeLevel(), null,
+                List.of(), cells);
+        validate(matrixRequest);
+        if (total > MAX_LESSON_QUESTIONS) {
+            throw new IllegalArgumentException("Một lần sinh theo bài tối đa " + MAX_LESSON_QUESTIONS + " câu (hiện "
+                    + total + ")");
+        }
+        return persist(matrixRequest, null, ExamMatrix.KIND_LESSON, ownerId);
+    }
+
+    private static String partOf(QuestionType type) {
+        return switch (type) {
+            case MCQ -> "I";
+            case TF -> "II";
+            case SA -> "III";
+        };
+    }
+
+    /** Yêu cầu cần đạt mặc định của một mức khi giáo viên sinh theo bài và không nhập (nhận biết, thông hiểu, vận dụng). */
+    private static String defaultOutcome(Difficulty level, String lesson) {
+        return switch (level) {
+            case EASY -> "Nhận biết được kiến thức cơ bản của bài: " + lesson + ".";
+            case MEDIUM -> "Hiểu và vận dụng trực tiếp kiến thức của bài: " + lesson + ".";
+            case HARD -> "Vận dụng kiến thức của bài \"" + lesson + "\" để giải quyết bài toán nhiều bước hoặc tình huống mới.";
+        };
+    }
+
+    private ExamMatrix persist(CreateMatrixRequest req, String sampleKey, String kind, Integer ownerId) {
         if (ownerId == null) {
             throw new IllegalArgumentException("Thiếu người tạo ma trận");
         }
         validate(req);
         Subject subject = catalogService.getSubjectById(req.subjectId());
         ExamMatrix matrix = new ExamMatrix();
+        matrix.setKind(kind);
         matrix.setCreatedBy(ownerId);
         matrix.setName(req.name().trim());
         matrix.setSubjectId(subject.getId());
@@ -109,7 +213,7 @@ public class MatrixService {
             cell.setTemplateId(createTemplate(matrix, cell).getId());
             cellRepository.save(cell);
         }
-        return toDto(matrix);
+        return matrix;
     }
 
     /** question_template của ô: source_question ghi ma trận, phần, chủ đề, nội dung và yêu cầu cần đạt. */
@@ -122,9 +226,11 @@ public class MatrixService {
                         .append(text);
             }
         }
-        String source = "Ma trận \"" + matrix.getName() + "\", phần " + cell.getPart() + ", chủ đề: " + cell.getTopic()
-                + (cell.getContent() != null ? "; nội dung: " + cell.getContent() : "")
-                + "; yêu cầu cần đạt: " + outcomes;
+        String content = cell.getContent() != null ? "; nội dung: " + cell.getContent() : "";
+        String source = matrix.isLesson()
+                ? "Sinh theo bài \"" + cell.getTopic() + "\"" + content + "; yêu cầu cần đạt: " + outcomes
+                : "Ma trận \"" + matrix.getName() + "\", phần " + cell.getPart() + ", chủ đề: " + cell.getTopic()
+                        + content + "; yêu cầu cần đạt: " + outcomes;
         return catalogService.createTemplate(new CreateTemplateRequest(matrix.getSubjectId(), matrix.getGradeLevel(),
                 cell.getTopic(), outcomes.toString(), source, SourceType.TEXT));
     }
@@ -142,11 +248,24 @@ public class MatrixService {
                 cells.stream().map(MatrixService::toDto).toList(), totals(cells));
     }
 
-    /** Ma trận thuộc {@code ownerId}; không có hoặc của người khác: NoSuchElementException (404, cùng thông báo). */
+    /**
+     * Ma trận (kind = 'matrix') thuộc {@code ownerId}; không có, của người khác hoặc là ma trận ẩn của sinh theo bài:
+     * NoSuchElementException (404, cùng thông báo).
+     */
     @Transactional(readOnly = true)
     public ExamMatrix getOwnedMatrix(Integer matrixId, Integer ownerId) {
-        return matrixRepository.findByIdAndCreatedBy(matrixId, ownerId)
+        return matrixRepository.findByIdAndCreatedByAndKind(matrixId, ownerId, ExamMatrix.KIND_MATRIX)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy ma trận id=" + matrixId));
+    }
+
+    /** Loại (matrix | lesson) của các ma trận theo id (danh sách đề, xem đề). Id không có thì bỏ qua. */
+    @Transactional(readOnly = true)
+    public Map<Integer, String> kindsByIds(java.util.Collection<Integer> ids) {
+        Map<Integer, String> out = new LinkedHashMap<>();
+        for (ExamMatrix m : matrixRepository.findAllById(ids)) {
+            out.put(m.getId(), m.getKind());
+        }
+        return out;
     }
 
     /** Các ô của một ma trận theo thứ tự (dùng cho module exam). */
@@ -173,7 +292,7 @@ public class MatrixService {
     /** Ma trận của người gọi, mới nhất trước (W1-1). */
     @Transactional(readOnly = true)
     public List<MatrixSummaryDto> list(Integer ownerId) {
-        return matrixRepository.findAllByCreatedByOrderByIdDesc(ownerId).stream()
+        return matrixRepository.findAllByCreatedByAndKindOrderByIdDesc(ownerId, ExamMatrix.KIND_MATRIX).stream()
                 .map(m -> new MatrixSummaryDto(m.getId(), m.getName(), m.getSubjectId(), m.getGradeLevel(),
                         m.getCreatedAt(), cellRepository.findByMatrixIdOrderByPositionAsc(m.getId()).size()))
                 .toList();

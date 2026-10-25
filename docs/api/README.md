@@ -86,6 +86,7 @@ Quyền của các dòng dưới: `catalog` GET và `bank-items` cho GV và AD; 
 | GET | `/api/exam-matrices/samples` | Các mẫu ma trận có sẵn (hiện có `giuaki1-toan8`) |
 | POST | `/api/exam-matrices/samples/{key}` | Tạo ma trận từ mẫu có sẵn |
 | POST | `/api/exams/build` | Tạo đề theo ma trận một lần bấm (chế độ giáo viên). Sinh câu qua hàng đợi, có thể tốn phí |
+| POST | `/api/exams/build-by-lesson` | Sinh theo bài (không cần ma trận): môn, khối, bài, số câu theo dạng và mức (mục 7.2a). Có thể tốn phí |
 | GET | `/api/exams/{id}/progress` | Tiến độ theo ô |
 | GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
@@ -604,13 +605,16 @@ cho tới khi `status` khác `generating` → `GET /api/exams/{id}` để xem đ
 ### 7.0. Đề của tôi
 
 ```http
-GET /api/exams?page=0&size=10
+GET /api/exams?page=0&size=10[&kind=lesson|matrix]
 → {"items": [{"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "mode": "teacher",
-              "status": "draft", "matrixId": 3, "createdAt": "2026-10-22T21:30:00", "totalSlots": 18,
+              "kind": "matrix", "status": "draft", "matrixId": 3, "createdAt": "2026-10-22T21:30:00", "totalSlots": 18,
               "readySlots": 10, "keptSlots": 5, "needsReviewSlots": 2, "generatingSlots": 2, "failedSlots": 1}],
     "page": 0, "size": 10, "totalItems": 1, "totalPages": 1}
 ```
 
+- W1-4: `kind` là loại đề: `matrix` (tạo từ ma trận), `lesson` (sinh theo bài, `matrixId` luôn `null`) hoặc `manual` (đề
+  cũ không có ma trận). Tham số `kind` tùy chọn lọc theo `lesson` hoặc `matrix`; giá trị khác trả 400 (`kind phải là lesson
+  hoặc matrix`). Loại suy ra từ ma trận gốc của đề, không có cột riêng.
 - Chỉ đề do người gọi tạo, mới nhất trước. `page` từ 0 (mặc định 0), `size` từ 1 đến 50 (mặc định 10); sai thì 400.
 - `readySlots`: chỗ đã có câu, chưa Giữ (`ready`); `keptSlots`: đã Giữ (`kept`, `edited`); `needsReviewSlots`: trong số
   `readySlots`, câu hệ thống sinh có cờ "cần xem kỹ" (cùng cách tính `needsReview` ở 7.4); `generatingSlots`: `pending`,
@@ -660,7 +664,7 @@ POST /api/exam-matrices
 ```http
 POST /api/exams/build
 {"matrixId": 3, "title": "Đề giữa kì I"}
-→ {"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "matrixId": 3, "slots": 18, "fromBank": 5, "jobsQueued": 13}
+→ {"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "matrixId": 3, "slots": 18, "fromBank": 5, "jobsQueued": 13, "kind": "matrix"}
 ```
 
 - `title` bỏ trống thì lấy tên ma trận. Người tạo đề là người đăng nhập (`teacherId` đã bỏ khỏi API từ W1-1; gửi lên
@@ -695,6 +699,50 @@ POST /api/exams/build
   lại như trên. Câu đã bị Đổi ra khỏi chỗ không tính. Hạn chế còn lại: hai job của cùng đề chạy đồng thời có thể cùng qua
   dedup (chưa khóa theo phạm vi).
 
+### 7.2a. Sinh theo bài (W1-4)
+
+Kiểm tra thường xuyên, ôn tập, làm bộ câu theo từng bài SGK không cần ma trận. Hệ thống tạo một "ma trận một bài" ẩn
+(`exam_matrix.kind = 'lesson'`, V15) rồi dùng lại nguyên luồng 7.2: ngân hàng trước (xếp hạng mềm), phần thiếu sinh qua
+hàng đợi; tiến độ, xem đề, Giữ/Đổi/Sửa, vết QC và xuất Word y như đề theo ma trận.
+
+```http
+POST /api/exams/build-by-lesson
+{"subjectId": 1, "gradeLevel": 8, "lesson": "Bài 3. Hằng đẳng thức đáng nhớ",
+ "content": "Bình phương của một tổng",
+ "title": "Ôn tập bài 3",
+ "learningOutcomes": {"hard": "Vận dụng hằng đẳng thức để rút gọn biểu thức nhiều bước."},
+ "cells": [
+  {"questionType": "mcq", "difficulty": "easy",   "questionCount": 3},
+  {"questionType": "mcq", "difficulty": "medium", "questionCount": 2},
+  {"questionType": "tf", "statementDifficulties": ["easy", "easy", "medium", "hard"], "questionCount": 1},
+  {"questionType": "sa", "difficulty": "medium", "questionCount": 2}]}
+→ {"examId": 31, "examCode": "MT261025090000123", "title": "Ôn tập bài 3", "matrixId": null, "slots": 8,
+   "fromBank": 3, "jobsQueued": 5, "kind": "lesson"}
+```
+
+- Bắt buộc: `subjectId`, `lesson` (tên bài, tối đa 255 ký tự), `cells` (ít nhất 1). Tùy chọn: `gradeLevel` (6-9), `content`
+  (phạm vi trong bài), `title` (trống thì lấy tên bài, tối đa 255), `learningOutcomes` (khóa `easy`, `medium`, `hard`).
+- `cells`: mỗi phần tử là một nhóm câu cùng dạng và mức: `mcq`/`sa` cần `difficulty`; `tf` dùng `statementDifficulties`
+  (4 mức ý a-d) và KHÔNG có `difficulty`; `tf` bỏ trống `statementDifficulties` thì mặc định dễ, dễ, vừa, khó. Phần I/II/III
+  suy từ dạng câu. `questionCount` 1-50 mỗi nhóm. **Tổng số câu tối đa 50 mỗi lần**; vượt thì 400 (`Một lần sinh theo bài
+  tối đa 50 câu (hiện N)`).
+- Yêu cầu cần đạt: giáo viên không phải nhập. Mỗi mức ô dùng có mặc định theo tên bài ("Nhận biết…", "Hiểu và vận dụng
+  trực tiếp…", "Vận dụng…"); `learningOutcomes` ghi đè theo mức.
+- Ngân hàng: khớp theo môn, dạng, mức và **chủ đề = tên bài** (so sau trim, không phân biệt hoa thường). Khi không nhập
+  `content`, không lọc theo nội dung: câu ngân hàng sinh từ ô ma trận cùng chủ đề dùng lại được. Có `content` thì giữ quy
+  tắc 7.2 (cùng nội dung). Frontend nên gợi ý tên bài từ chủ đề đã có (`GET /api/bank/topics`) để tăng khả năng dùng lại.
+- Ma trận ẩn không hiện ở `GET /api/exam-matrices`; mọi đường dẫn theo id của nó (xem, `POST /api/exams/build`, và từ
+  bước 3 sửa/xóa/nhân bản) trả 404. Vì vậy `matrixId` của đề theo bài luôn `null` trong API.
+- Lỗi: 400 `{"error": …}` (dữ liệu sai; không tạo gì), 404 (`subjectId` không tồn tại), 403 (admin), 401. Mọi lỗi đều
+  không để lại ma trận, template hay đề (một transaction).
+- Chỉ lọc và thống kê theo loại đề: `kind` có trong danh sách (7.0), xem đề (7.4) và kết quả tạo đề; `GET /api/exams?kind=lesson`.
+- **Việc kế tiếp (chưa làm): danh mục bài `lesson_catalog`** (môn, khối, chương, số bài, tên bài) và tài liệu bài học.
+  Đề xuất: bảng `lesson_catalog(id, subject_id, grade_level, chapter, lesson_no, title)`; `build-by-lesson` nhận thêm
+  `lessonId` TÙY CHỌN, khi có thì `lesson`/`gradeLevel`/`subjectId` lấy từ danh mục (không gửi cũng được). Các trường hiện có
+  giữ nguyên nghĩa nên API cũ không vỡ; chỗ lấy tên bài là `MatrixService.resolveLesson`. Tên bài vẫn là chủ đề khớp ngân
+  hàng, nên câu cũ sinh theo chuỗi vẫn dùng lại được nếu tên trùng danh mục. Tài liệu bài học (nội dung SGK) sẽ thêm vào
+  `MatrixCellSpec` (JSON ở `experiment_run.hyperparams`, khóa lạ được bỏ qua nên tương thích ngược).
+
 ### 7.3. Tiến độ
 
 ```json
@@ -711,7 +759,7 @@ khác để sinh lại).
 
 ```json
 {"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "mode": "teacher", "status": "draft",
- "matrixId": 3, "createdAt": "2026-10-22T21:30:00", "buildStatus": "ready", "needsReviewCount": 1,
+ "kind": "matrix", "matrixId": 3, "createdAt": "2026-10-22T21:30:00", "buildStatus": "ready", "needsReviewCount": 1,
  "parts": [{"part": "III", "required": 4, "ready": 4, "items": [
    {"slotId": 101, "cellId": 21, "slotNo": 1, "part": "III", "topic": "Tứ giác", "questionType": "sa", "state": "ready",
     "source": "generated", "questionId": 345, "questionText": "Tứ giác $ABCD$ có ba góc…", "saAnswer": "90",

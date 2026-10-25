@@ -20,9 +20,11 @@ public final class ExamBuildDtos {
     /**
      * @param fromBank   số chỗ lấy câu từ ngân hàng
      * @param jobsQueued số job sinh câu đã xếp hàng cho phần còn thiếu
+     * @param matrixId   null với đề sinh theo bài (ma trận ẩn, không dùng được theo id)
+     * @param kind       "matrix" (tạo từ ma trận) hoặc "lesson" (sinh theo bài), W1-4
      */
     public record BuildResultDto(Integer examId, String examCode, String title, Integer matrixId, int slots,
-                                 int fromBank, int jobsQueued) {}
+                                 int fromBank, int jobsQueued, String kind) {}
 
     /**
      * Tiến độ của một ô.
