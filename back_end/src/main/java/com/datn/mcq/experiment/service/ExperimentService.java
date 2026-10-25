@@ -66,7 +66,7 @@ public class ExperimentService {
         run.setQuestionType(questionType != null ? questionType : QuestionType.MCQ);
         run.setSubjectId(subjectId);
         run.setPurpose(purpose != null ? purpose : Purpose.PRODUCTION);
-        run.setStrategy(strategy != null ? strategy : Strategy.FEW_SHOT_STRUCTURED);
+        run.setStrategy(strategy != null ? strategy : Strategy.ZERO_SHOT);
         run.setModelName(modelName != null && !modelName.isBlank() ? modelName : "gemini-3.5-flash-lite");
         run.setTemperature(temperature != null ? temperature : 0.7);
         run.setPromptVersion(promptVersion != null ? promptVersion : "v1.0-math-demo");
@@ -94,27 +94,6 @@ public class ExperimentService {
                 numQuestionsRequested, questionType);
         run.setHyperparams(hyperparams);
         return experimentRunRepository.save(run);
-    }
-
-    @Transactional
-    public ExperimentRun getOrCreateDemoRun(Integer subjectId, String promptText) {
-        return experimentRunRepository.findFirstBySubjectIdAndPromptVersionOrderByIdAsc(
-                        subjectId, "math-demo-seed-v1")
-                .orElseGet(() -> {
-                    ExperimentRun run = createRun(
-                            subjectId,
-                            Purpose.PRODUCTION,
-                            Strategy.FEW_SHOT_STRUCTURED,
-                            "gemini-3.5-flash-lite",
-                            0.7,
-                            "math-demo-seed-v1",
-                            promptText,
-                            5
-                    );
-                    run.setStatus("completed");
-                    run.setEndedAt(LocalDateTime.now());
-                    return experimentRunRepository.save(run);
-                });
     }
 }
 

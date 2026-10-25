@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * V5: POST /api/catalog/templates tạo question_template cho một subject đã tồn tại.
  * Endpoint không tạo subject; subject không tồn tại thì trả 404.
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class CatalogTemplateCreationTest {
 

@@ -46,10 +46,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * vô tình mở công khai hoặc rơi vào denyAll ngoài ý muốn. Với mỗi endpoint: chưa đăng nhập, giáo viên và admin.
  *
  * <p>"Được qua" nghĩa là lớp bảo mật không chặn (không 403, không 401 do filter); handler có thể trả 400/404/409 vì dữ
- * liệu giả. Quyết định áp dụng: H4/H6 (admin không dùng chức năng giáo viên; sinh câu tính phí chỉ admin), H5 (form chấm
- * /api/reviews/** chỉ yêu cầu giáo viên đăng nhập, chưa đổi cách lấy reviewerId – Q-6).
+ * liệu giả. Quyết định áp dụng: H4/H6 (admin không dùng chức năng giáo viên; sinh câu tính phí chỉ admin). Form chấm
+ * /api/reviews/** đã gỡ ngày 25/10.
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class SecurityRouteAccessTest {
 
@@ -83,11 +83,6 @@ class SecurityRouteAccessTest {
         RULES.put("POST /api/exams/{examId}/slots/{slotId}/keep", Access.TEACHER);
         RULES.put("POST /api/exams/{examId}/slots/{slotId}/replace", Access.TEACHER);
         RULES.put("PUT /api/exams/{examId}/slots/{slotId}/question", Access.TEACHER);
-
-        RULES.put("GET /api/reviews/questions", Access.TEACHER);
-        RULES.put("GET /api/reviews/questions/{id}", Access.TEACHER);
-        RULES.put("POST /api/reviews/questions/{id}", Access.TEACHER);
-        RULES.put("POST /api/reviews/demo/seed-math", Access.ADMIN);
 
         RULES.put("GET /api/bank-items", Access.TEACHER_OR_ADMIN);
         RULES.put("GET /api/bank-items/{id}", Access.TEACHER_OR_ADMIN);

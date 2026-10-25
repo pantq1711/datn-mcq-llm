@@ -18,7 +18,6 @@ import com.datn.mcq.bank.repository.BankSearchRepository;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionType;
-import com.datn.mcq.exam.repository.ExamQuestionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,17 +34,14 @@ public class BankService {
 
     private final BankItemRepository bankItemRepository;
     private final BankItemStatementRepository bankItemStatementRepository;
-    private final ExamQuestionRepository examQuestionRepository;
     private final BankSearchRepository searchRepository;
 
     public BankService(BankItemRepository bankItemRepository,
                        BankItemStatementRepository bankItemStatementRepository,
-                       ExamQuestionRepository examQuestionRepository,
                        BankSearchRepository searchRepository) {
         this.searchRepository = searchRepository;
         this.bankItemRepository = bankItemRepository;
         this.bankItemStatementRepository = bankItemStatementRepository;
-        this.examQuestionRepository = examQuestionRepository;
     }
 
     public static final int MAX_PAGE_SIZE = 50;
@@ -284,17 +280,6 @@ public class BankService {
         }
         bankItemStatementRepository.flush();
         return saved;
-    }
-
-    @Transactional
-    public void removeBankItemIfUnused(Integer sourceQuestionId) {
-        bankItemRepository.findBySourceQuestionId(sourceQuestionId).ifPresent(item -> {
-            if (examQuestionRepository.existsByBankItemId(item.getId())) {
-                throw new IllegalStateException(
-                        "Câu hỏi đã được đưa vào đề thi (exam), không thể từ chối và gỡ khỏi ngân hàng câu hỏi.");
-            }
-            bankItemRepository.delete(item);
-        });
     }
 }
 

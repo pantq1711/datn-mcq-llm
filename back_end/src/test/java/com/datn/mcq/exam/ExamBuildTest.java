@@ -4,7 +4,6 @@ import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.config.AuthTestSupport;
 import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
-import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.exam.export.PandocRunner;
 import com.datn.mcq.exam.export.PandocTestSupport;
 import com.datn.mcq.generation.service.DedupScopeResolver;
@@ -124,10 +123,6 @@ class ExamBuildTest {
             return true;
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            throw new UnsupportedOperationException("MCQ production phải gọi kèm schema (ngày 23/10)");
-        }
 
         private LlmCallResult mcq(String prompt, String modelName) {
             prompts.add(prompt);
@@ -627,6 +622,65 @@ class ExamBuildTest {
         assertEquals(bank, kept.get("bankItemId").asInt());
         assertEquals(reviews, jdbc.queryForObject("SELECT count(*) FROM teacher_review", Integer.class));
         assertEquals("keep", jdbc.queryForObject("SELECT action FROM exam_slot_action", String.class));
+    }
+
+    /**
+     * M-9, M-17: lỗi khi ghi bank_item (trigger tạm ép lỗi ở bước cuối của Giữ) thì Giữ rollback toàn bộ cho cả ba dạng:
+     * teacher_review, ý tf của lần duyệt, trạng thái và mức của câu, nhật ký thao tác và chỗ trong đề không đổi.
+     */
+    @Test
+    void loiKhiGhiNganHangThiGiuCauRollbackToanBo() throws Exception {
+        int examId = readyExam();
+        dropBankItemBlocker();
+        jdbc.execute("CREATE FUNCTION test_block_bank_item() RETURNS trigger AS $$ BEGIN"
+                + " RAISE EXCEPTION 'chan ghi bank_item' USING ERRCODE = '23514'; END $$ LANGUAGE plpgsql");
+        jdbc.execute("CREATE TRIGGER trg_test_block_bank_item BEFORE INSERT ON bank_item FOR EACH ROW"
+                + " EXECUTE FUNCTION test_block_bank_item()");
+        try {
+            for (String type : List.of("mcq", "sa", "tf")) {
+                int slot = slotId(examId, type, 1);
+                int questionId = jdbc.queryForObject("SELECT generated_question_id FROM exam_slot WHERE id = ?",
+                        Integer.class, slot);
+                String statusBefore = jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
+                        String.class, questionId);
+                Object finalDifficultyBefore = jdbc.queryForObject("SELECT final_difficulty FROM generated_question"
+                        + " WHERE id = ?", Object.class, questionId);
+                List<String> levelsBefore = jdbc.queryForList("SELECT final_difficulty FROM generated_question_statement"
+                        + " WHERE question_id = ? ORDER BY position", String.class, questionId);
+
+                try {
+                    action(examId, slot, "keep");
+                } catch (Exception expected) {
+                    // lỗi từ trigger có thể ném ra qua MockMvc hoặc thành phản hồi 500; cả hai đều được
+                }
+
+                assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM teacher_review", Integer.class), type);
+                assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM teacher_review_statement", Integer.class), type);
+                assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM bank_item", Integer.class), type);
+                assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM bank_item_statement", Integer.class), type);
+                assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM exam_slot_action WHERE slot_id = ?",
+                        Integer.class, slot), type);
+                assertEquals(statusBefore, jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
+                        String.class, questionId), type);
+                assertEquals(finalDifficultyBefore, jdbc.queryForObject("SELECT final_difficulty FROM generated_question"
+                        + " WHERE id = ?", Object.class, questionId), type);
+                assertEquals(levelsBefore, jdbc.queryForList("SELECT final_difficulty FROM generated_question_statement"
+                        + " WHERE question_id = ? ORDER BY position", String.class, questionId), type);
+                assertEquals("ready", jdbc.queryForObject("SELECT state FROM exam_slot WHERE id = ?", String.class, slot),
+                        type);
+                assertNull(jdbc.queryForObject("SELECT bank_item_id FROM exam_slot WHERE id = ?", Integer.class, slot),
+                        type);
+            }
+        } finally {
+            dropBankItemBlocker();
+        }
+        // sau khi gỡ trigger, Giữ lại bình thường (lỗi trước đó không để lại trạng thái dở dang)
+        action(examId, slotId(examId, "mcq", 1), "keep").andExpect(status().isOk());
+    }
+
+    private void dropBankItemBlocker() {
+        jdbc.execute("DROP TRIGGER IF EXISTS trg_test_block_bank_item ON bank_item");
+        jdbc.execute("DROP FUNCTION IF EXISTS test_block_bank_item()");
     }
 
     @Test

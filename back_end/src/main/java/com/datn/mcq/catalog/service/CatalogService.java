@@ -108,27 +108,5 @@ public class CatalogService {
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
     }
-
-    @Transactional
-    public QuestionTemplate getOrCreateTemplate(
-            Integer subjectId,
-            Integer gradeLevel,
-            String topic,
-            String learningOutcome,
-            String sourceQuestion) {
-        return questionTemplateRepository.findFirstBySubjectIdAndTopicOrderByIdAsc(subjectId, topic)
-                .orElseGet(() -> {
-                    QuestionTemplate tpl = new QuestionTemplate();
-                    tpl.setSubjectId(subjectId);
-                    tpl.setGradeLevel(gradeLevel);
-                    tpl.setTopic(topic);
-                    tpl.setLearningOutcome(learningOutcome);
-                    tpl.setSourceType(SourceType.TEXT);
-                    tpl.setSourceQuestion(sourceQuestion);
-                    tpl.setVersion(1);
-                    tpl.setIsActive(Boolean.TRUE);
-                    return questionTemplateRepository.save(tpl);
-                });
-    }
 }
 

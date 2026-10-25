@@ -4,7 +4,6 @@ import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionStatus;
-import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.llm.prompt.PromptBuilder;
@@ -482,10 +481,6 @@ class QcOrchestratorStatusTest {
             return configured;
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            throw new UnsupportedOperationException("Test QC không được gọi sinh câu hỏi");
-        }
 
         @Override
         public LlmCallResult callJsonMode(String prompt, String modelName, Double temperature) {

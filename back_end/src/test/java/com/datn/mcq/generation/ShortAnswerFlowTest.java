@@ -8,8 +8,6 @@ import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
 import com.datn.mcq.enums.SourceType;
-import com.datn.mcq.enums.Strategy;
-import com.datn.mcq.enums.UserRole;
 import com.datn.mcq.generation.service.DedupScopeResolver;
 import com.datn.mcq.generation.service.QcRerunService;
 import com.datn.mcq.generation.worker.GenerationJobPoller;
@@ -20,8 +18,6 @@ import com.datn.mcq.llm.prompt.PromptBuilder;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
-import com.datn.mcq.user.entity.UserAccount;
-import com.datn.mcq.user.repository.UserAccountRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,9 +51,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Luồng Trả lời ngắn trọn vẹn qua HTTP thật trên datn_mcq_test (GĐ2): generate-sync với rawLlmOutputOverride,
- * format, dedup, Solver giả (không gọi mạng), chấm mù, ngân hàng; job bất đồng bộ; chạy lại QC.
+ * format, dedup, Solver giả (không gọi mạng); job bất đồng bộ; chạy lại QC.
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class ShortAnswerFlowTest {
 
@@ -80,10 +76,6 @@ class ShortAnswerFlowTest {
             return true;
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            throw new UnsupportedOperationException("Không sinh câu MCQ trong test này");
-        }
 
         @Override
         public LlmCallResult callJsonMode(String prompt, String modelName, Double temperature) {
@@ -119,8 +111,6 @@ class ShortAnswerFlowTest {
     @Autowired
     private QuestionTemplateRepository templateRepository;
     @Autowired
-    private UserAccountRepository userRepository;
-    @Autowired
     private GenerationJobProcessor jobProcessor;
     @Autowired
     private QcOrchestrator qcOrchestrator;
@@ -133,7 +123,6 @@ class ShortAnswerFlowTest {
     private MockMvc mockMvc;
     private Subject subject;
     private QuestionTemplate template;
-    private UserAccount teacher;
 
     @BeforeEach
     void setUp() {
@@ -153,7 +142,6 @@ class ShortAnswerFlowTest {
         tpl.setSourceQuestion("Giải $2x = 6$.");
         tpl.setIsActive(true);
         template = templateRepository.save(tpl);
-        teacher = userRepository.save(new UserAccount("GV SA", "gv.sa@test", UserRole.TEACHER));
     }
 
     private static String solverSays(String judgeAnswer) {
@@ -186,30 +174,10 @@ class ShortAnswerFlowTest {
         return objectMapper.readTree(mockMvcBody(mockMvc.perform(get(url)).andExpect(status().isOk())));
     }
 
-    private static Set<String> allKeys(JsonNode node) {
-        Set<String> keys = new java.util.HashSet<>();
-        collect(node, keys);
-        return keys;
-    }
-
-    private static void collect(JsonNode node, Set<String> keys) {
-        if (node.isObject()) {
-            node.fieldNames().forEachRemaining(keys::add);
-            node.elements().forEachRemaining(n -> collect(n, keys));
-        } else if (node.isArray()) {
-            node.elements().forEachRemaining(n -> collect(n, keys));
-        }
-    }
-
-    private static final Set<String> FORBIDDEN_IN_REVIEW = Set.of(
-            "saAnswer", "sa_answer", "answer", "explanation", "llmDifficulty", "answerCorrect", "status",
-            "correctOption", "optionA", "optionB", "optionC", "optionD", "judgeAnswer", "judgeSaKind",
-            "judgeSaAnswer", "answerWarnings", "qcReport", "strategy", "similarityScore", "rawLlmOutput");
-
     // ---------- trọn luồng ----------
 
     @Test
-    void saDiQuaQcChamMuVaoNganHang() throws Exception {
+    void saDiQuaQc() throws Exception {
         JsonNode resp = generateSa(saJson(STEM, "$-\\frac{3}{4}$"), true);
         JsonNode question = resp.get("question");
         JsonNode qc = resp.get("qcReport");
@@ -249,62 +217,9 @@ class ShortAnswerFlowTest {
         assertNull(answerCheck.get("judge_answer"));
         assertEquals(Boolean.TRUE, answerCheck.get("passed"));
 
-        // Chấm mù: danh sách và form không lộ đáp số, lời giải, kết quả QC.
-        JsonNode list = getJson("/api/reviews/questions");
-        assertEquals(1, list.size());
-        assertEquals("sa", list.get(0).get("questionType").asText());
-        JsonNode form = getJson("/api/reviews/questions/" + questionId);
-        assertEquals("sa", form.get("questionType").asText());
-        assertEquals(STEM, form.get("questionText").asText());
-        for (JsonNode node : List.of(list, form)) {
-            Set<String> leaked = new java.util.HashSet<>(allKeys(node));
-            leaked.retainAll(FORBIDDEN_IN_REVIEW);
-            assertEquals(Set.of(), leaked, "Form chấm SA lộ trường");
-            assertFalse(node.toString().contains("BÍ MẬT"));
-            assertFalse(node.toString().contains("frac{3}{4}"), "không lộ đáp số LLM");
-        }
-
-        String submit = """
-                {"reviewerId": %d, "reviewPurpose": "production", "questionType": "sa", "formatOk": true,
-                 "difficultyLabel": "medium", "decision": "approved_as_is",
-                 "reviewerSaKind": "number", "reviewerSaAnswer": "-0,75"}
-                """.formatted(teacher.getId());
-        JsonNode submitted = objectMapper.readTree(mockMvcBody(mockMvc.perform(post("/api/reviews/questions/" + questionId)
-                        .contentType(MediaType.APPLICATION_JSON).content(submit))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.questionStatus").value("in_bank"))
-                .andExpect(jsonPath("$.reviewerSaKind").value("number"))
-                .andExpect(jsonPath("$.reviewerSaAnswer").value("-0,75"))
-                .andExpect(jsonPath("$.finalSaAnswer").value("-0,75"))));
-        assertFalse(submitted.has("answerCorrect"));
-        assertFalse(submitted.toString().contains("frac{3}{4}"));
-        Set<String> leakedAfterSubmit = new java.util.HashSet<>(allKeys(submitted));
-        leakedAfterSubmit.retainAll(Set.of("saAnswer", "explanation", "answerCorrect", "judgeSaAnswer", "status"));
-        assertEquals(Set.of(), leakedAfterSubmit);
-
-        Map<String, Object> review = jdbc.queryForMap("SELECT * FROM teacher_review WHERE question_id = ?", questionId);
-        assertEquals("sa", review.get("question_type"));
-        assertEquals(Boolean.TRUE, review.get("answer_correct"), "-0,75 = -3/4 theo giá trị");
-        assertEquals("-0,75", review.get("final_sa_answer"));
-        assertNull(review.get("reviewer_answer"));
-        assertNull(review.get("final_option"));
-
-        Map<String, Object> bank = jdbc.queryForMap("SELECT * FROM bank_item WHERE source_question_id = ?", questionId);
-        assertEquals("sa", bank.get("question_type"));
-        assertEquals("-0,75", bank.get("sa_answer"));
-        assertEquals("medium", bank.get("difficulty"));
-        assertEquals(submitted.get("bankItemId").asInt(), ((Number) bank.get("id")).intValue());
-        assertEquals("in_bank", jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
-                String.class, questionId));
-        assertEquals("medium", jdbc.queryForObject("SELECT final_difficulty FROM generated_question WHERE id = ?",
-                String.class, questionId));
-
-        // W1-3 (D1): danh sách ngân hàng là một trang {items, page, size, totalItems, totalPages}.
-        JsonNode saItems = getJson("/api/bank-items?questionType=sa").get("items");
-        assertEquals(1, saItems.size());
-        assertEquals("-0,75", saItems.get(0).get("saAnswer").asText());
-        assertEquals(0, getJson("/api/bank-items?questionType=mcq").get("items").size());
-        assertEquals(1, getJson("/api/bank-items").get("items").size());
+        // Chưa có thao tác của giáo viên nên chưa có review hay ngân hàng (Giữ vào ngân hàng: ExamBuildTest).
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM teacher_review", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM bank_item", Integer.class));
     }
 
     /** Hồi quy SA (GĐ3): bộ key của API câu sa giữ như cuối GĐ2, không có trường TF. */
@@ -317,17 +232,6 @@ class ShortAnswerFlowTest {
         assertEquals(Set.of("resultingStatus", "formatPassed", "formatErrors", "answerCheckPassed", "judgeAnswer",
                 "judgeModel", "solverReasoning", "answerCheckStatus", "dedupStatus", "dedup", "saJudgeKind",
                 "saJudgeAnswer"), fieldNames(resp.get("qcReport")));
-        int id = resp.get("question").get("id").asInt();
-        assertEquals(Set.of("id", "templateId", "reviewPurpose", "subjectName", "gradeLevel", "topic", "questionText",
-                "createdAt", "questionType"), fieldNames(getJson("/api/reviews/questions/" + id)));
-        String submit = "{\"reviewerId\": " + teacher.getId() + ", \"questionType\": \"sa\", \"formatOk\": true,"
-                + " \"difficultyLabel\": \"medium\", \"decision\": \"approved_as_is\", \"reviewerSaKind\": \"number\","
-                + " \"reviewerSaAnswer\": \"-0,75\"}";
-        JsonNode submitted = objectMapper.readTree(mockMvcBody(mockMvc.perform(post("/api/reviews/questions/" + id)
-                .contentType(MediaType.APPLICATION_JSON).content(submit)).andExpect(status().isOk())));
-        assertEquals(Set.of("reviewId", "questionId", "reviewPurpose", "reviewerAnswer", "formatOk", "difficultyLabel",
-                "decision", "finalOption", "edited", "editDistance", "questionStatus", "bankItemId", "reviewedAt",
-                "reviewerSaKind", "reviewerSaAnswer", "finalSaAnswer"), fieldNames(submitted));
     }
 
     private static Set<String> fieldNames(JsonNode node) {
@@ -350,7 +254,6 @@ class ShortAnswerFlowTest {
                 + " AND check_type = 'answer_check'", id);
         assertEquals("ambiguous", row.get("judge_sa_kind"));
         assertNull(row.get("judge_sa_answer"));
-        assertEquals(0, getJson("/api/reviews/questions").size(), "production chỉ chấm câu qc_passed");
     }
 
     @Test
@@ -385,7 +288,6 @@ class ShortAnswerFlowTest {
         assertEquals("format_failed", resp.get("question").get("status").asText());
         assertTrue(resp.get("qcReport").get("formatErrors").toString().contains("có chữ số 0 thừa ở đầu"));
         assertEquals(0, SOLVER.calls);
-        assertEquals(0, getJson("/api/reviews/questions").size());
     }
 
     @Test
@@ -459,10 +361,6 @@ class ShortAnswerFlowTest {
             super("FAKE_KEY_FOR_TESTS", "fake-generator-model");
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            throw new UnsupportedOperationException("Câu sa không được sinh qua generateMcq");
-        }
 
         @Override
         public LlmCallResult callJsonModeWithSchema(String prompt, String modelName, Double temperature, String schema) {

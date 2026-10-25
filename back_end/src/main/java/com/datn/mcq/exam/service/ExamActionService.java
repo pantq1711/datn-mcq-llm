@@ -14,7 +14,7 @@ import com.datn.mcq.exam.repository.ExamSlotRepository;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
-import com.datn.mcq.review.service.TeacherReviewService;
+import com.datn.mcq.review.service.AssistedKeepService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,14 +50,14 @@ public class ExamActionService {
     private final ExamBuildService buildService;
     private final ExamViewService viewService;
     private final MatrixService matrixService;
-    private final TeacherReviewService teacherReviewService;
+    private final AssistedKeepService assistedKeepService;
     private final QuestionEditService questionEditService;
     private final GenerationService generationService;
     private final ExamSlotSiblings siblings;
 
     public ExamActionService(ExamSlotRepository slotRepository, ExamSlotActionRepository actionRepository,
                              ExamBuildService buildService, ExamViewService viewService, MatrixService matrixService,
-                             TeacherReviewService teacherReviewService, QuestionEditService questionEditService,
+                             AssistedKeepService assistedKeepService, QuestionEditService questionEditService,
                              GenerationService generationService, ExamSlotSiblings siblings) {
         this.siblings = siblings;
         this.slotRepository = slotRepository;
@@ -65,14 +65,14 @@ public class ExamActionService {
         this.buildService = buildService;
         this.viewService = viewService;
         this.matrixService = matrixService;
-        this.teacherReviewService = teacherReviewService;
+        this.assistedKeepService = assistedKeepService;
         this.questionEditService = questionEditService;
         this.generationService = generationService;
     }
 
     /**
      * Giữ câu: câu lấy từ ngân hàng thì chỉ đánh dấu; câu hệ thống sinh thì ghi teacher_review 'assisted' và bank_item
-     * (TeacherReviewService#keepAssisted) trong cùng transaction.
+     * (AssistedKeepService#keepAssisted) trong cùng transaction.
      */
     @Transactional
     public ExamItemDto keep(Integer examId, Integer slotId, Integer actorId) {
@@ -92,7 +92,7 @@ public class ExamActionService {
                 throw ApiErrorException.conflict(QC_CHECKING, QC_CHECKING_MESSAGE);
             }
             edited = generationService.getQuestionById(slot.getGeneratedQuestionId()).getEditedFromQuestionId() != null;
-            Integer bankItemId = teacherReviewService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
+            Integer bankItemId = assistedKeepService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
             slot.setBankItemId(bankItemId);
         }
         // W1-2 (D6): Giữ bản giáo viên sửa thì chỗ ở trạng thái edited (V7), câu chưa sửa là kept.

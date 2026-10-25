@@ -54,6 +54,11 @@ public class GenerationJobProcessor {
     /** V14: giới hạn độ dài generated_question.solver_error (khớp CHECK chk_gq_solver_error). */
     public static final int MAX_SOLVER_ERROR = 1000;
 
+    /** prompt_version của run mcq tạo bằng enqueue trước 25/10 (chiến lược few-shot của thí nghiệm C1/C2/C3). */
+    static final String LEGACY_MCQ_PROMPT_VERSION = "async-queue-v1";
+    static final String LEGACY_MCQ_JOB_ERROR = "Job mcq theo chiến lược C1/C2/C3 (prompt_version "
+            + LEGACY_MCQ_PROMPT_VERSION + ") không còn được hỗ trợ từ 25/10/2026; hãy tạo lại job.";
+
     public record ClaimedJobContext(
             Integer jobId,
             Integer runId,
@@ -148,6 +153,15 @@ public class GenerationJobProcessor {
         }
 
         ExperimentRun run = experimentService.getById(job.getRunId());
+        if (LEGACY_MCQ_PROMPT_VERSION.equals(run.getPromptVersion())) {
+            // Thí nghiệm C1/C2/C3 đã bỏ (25/10): không dựng lại prompt few-shot, cũng không xử lý riêng; job cũ thất bại
+            // ngay (không gọi LLM) và worker nhận job kế tiếp.
+            job.setStatus(JobStatus.FAILED);
+            job.setLastError(LEGACY_MCQ_JOB_ERROR);
+            job.setUpdatedAt(now);
+            generationJobRepository.save(job);
+            return claimNextPendingJob(includeAnswerCheck);
+        }
         QuestionTemplate tpl = catalogService.getTemplateById(job.getTemplateId());
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
 
@@ -182,7 +196,6 @@ public class GenerationJobProcessor {
                         tpl.getTopic(),
                         tpl.getLearningOutcome(),
                         tpl.getSourceQuestion(),
-                        run.getStrategy(),
                         job.getTargetDifficulty());
         boolean isMath = isMathSubject(subject.getName());
 

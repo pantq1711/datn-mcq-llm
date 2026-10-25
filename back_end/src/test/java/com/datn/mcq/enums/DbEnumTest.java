@@ -1,7 +1,6 @@
 package com.datn.mcq.enums;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -24,7 +23,6 @@ class DbEnumTest {
                 new QuestionStatus.Conv(),
                 new CheckType.Conv(),
                 new ReviewDecision.Conv(),
-                new ReasonCode.Conv(),
                 new SamplingStratum.Conv(),
                 new GoldSplit.Conv(),
                 new ExamStatus.Conv(),
@@ -47,7 +45,6 @@ class DbEnumTest {
                 QuestionStatus.class,
                 CheckType.class,
                 ReviewDecision.class,
-                ReasonCode.class,
                 SamplingStratum.class,
                 GoldSplit.class,
                 ExamStatus.class,
@@ -102,27 +99,6 @@ class DbEnumTest {
         assertEquals(List.of("T", "F", "undecidable"), dbValues(TruthChoice.class));
         assertEquals(List.of("number", "ambiguous"), dbValues(SaAnswerKind.class));
         assertEquals(List.of("number", "ambiguous", "unparseable"), dbValues(SaJudgeKind.class));
-        assertEquals("statement_undecidable", ReasonCode.STATEMENT_UNDECIDABLE.getDbValue());
-        assertEquals("answer_ambiguous", ReasonCode.ANSWER_AMBIGUOUS.getDbValue());
-    }
-
-    /** V4: mã lý do theo dạng câu (quyết định 3 ngày 22/10). */
-    @Test
-    void mãLýDoTheoDạngCâu() {
-        for (ReasonCode code : ReasonCode.values()) {
-            boolean newCode = code == ReasonCode.STATEMENT_UNDECIDABLE || code == ReasonCode.ANSWER_AMBIGUOUS;
-            assertEquals(!newCode, code.allowedFor(QuestionType.MCQ), "mcq: " + code);
-        }
-        assertTrue(ReasonCode.STATEMENT_UNDECIDABLE.allowedFor(QuestionType.TF));
-        assertFalse(ReasonCode.STATEMENT_UNDECIDABLE.allowedFor(QuestionType.SA));
-        assertTrue(ReasonCode.ANSWER_AMBIGUOUS.allowedFor(QuestionType.SA));
-        assertFalse(ReasonCode.ANSWER_AMBIGUOUS.allowedFor(QuestionType.TF));
-        for (ReasonCode code : ReasonCode.MCQ_ONLY) {
-            assertFalse(code.allowedFor(QuestionType.TF), "tf: " + code);
-            assertFalse(code.allowedFor(QuestionType.SA), "sa: " + code);
-        }
-        assertTrue(ReasonCode.CONTENT_INACCURATE.allowedFor(QuestionType.TF));
-        assertTrue(ReasonCode.OTHER.allowedFor(QuestionType.SA));
     }
 
     private static List<String> dbValues(Class<? extends Enum<?>> type) {

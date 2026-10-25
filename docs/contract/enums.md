@@ -38,7 +38,7 @@ Java: đặt tên hằng kiểu `ZERO_SHOT`, `FEW_SHOT_STRUCTURED`... và có b�
 
 | Giá trị trong DB | Hiển thị / ý nghĩa |
 |---|---|
-| `zero-shot` | C1: không ví dụ |
+| `zero-shot` | C1: không ví dụ (thí nghiệm C1/C2/C3 đã bỏ ngày 25/10; ba giá trị giữ cho dữ liệu và CHECK cũ) |
 | `few-shot` | C2: kèm 3 ví dụ |
 | `few-shot-structured` | C3: kèm ví dụ và đầu ra có cấu trúc |
 
@@ -178,7 +178,7 @@ Mã dùng theo dạng câu (service kiểm, DB không chặn): `options_out_of_s
 
 | Giá trị trong DB | Hiển thị / ý nghĩa |
 |---|---|
-| `teacher` | Giáo viên. Đăng nhập được (W1-1), dùng ma trận, tạo đề, Giữ/Đổi, xuất Word, form chấm |
+| `teacher` | Giáo viên. Đăng nhập được (W1-1), dùng ma trận, tạo đề, Giữ/Đổi, xuất Word (form chấm mù đã gỡ 25/10) |
 | `researcher` | Người nghiên cứu (nhóm đồ án). Chưa được đăng nhập qua API (W1-1) |
 | `admin` | Quản trị (V11, W1-1): quản lý tài khoản, xem thống kê; không dùng chức năng của giáo viên. Tài khoản đầu tiên tạo từ biến môi trường `ADMIN_EMAIL`, `ADMIN_PASSWORD` |
 
@@ -264,7 +264,7 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - Run `tf`/`sa` chỉ cho `production`, `strategy = 'zero-shot'`. `prompt_version` là `sa-v1-draft` / `tf-v2-draft` (`v1` ngày 22/10 thêm quy tắc đa dạng; `tf-v2-draft` ngày 23/10 thêm quy tắc ý bám đề dẫn và đóng `$`); run cũ giữ `sa-v0-draft` / `tf-v0-draft` / `tf-v1-draft`. Phân tích C1/C2/C3 lọc `question_type = 'mcq'`.
   - Độ đa dạng (Q1-Q3 ngày 22/10, chỉ `sa`/`tf`, không áp cho `mcq`): prompt gửi model có thêm tối đa 10 câu gần nhất cùng template và cùng dạng câu, ở mọi run và mọi trạng thái (kể cả `duplicate`, `rejected`), chỉ câu `parse_success = TRUE`; `sa` lấy đề, `tf` lấy đề dẫn và 4 ý; không kèm đáp số hay nhãn; mỗi mục (đề, đề dẫn, một ý) cắt tối đa 200 ký tự. Áp cho cả `generate-sync` và job. `experiment_run.prompt_text` giữ prompt gốc (không có danh sách). Dựng lại danh sách của một câu: lấy câu cùng `template_id` và `question_type`, `parse_success = TRUE`, `created_at` nhỏ hơn câu đó, sắp `created_at DESC, id DESC`, lấy 10. Hạn chế: hai lần sinh chạy đồng thời không thấy câu của nhau, và danh sách dựng lại có thể lệch nếu dữ liệu bị sửa sau đó.
   - `quality_check_result.warnings` (V5, JSONB mảng chuỗi): cảnh báo không chặn của bước format (`answer: phân số chưa tối giản`, `label: 4 ý cùng nhãn T`, `statement_a: đã bỏ tiền tố "a)" ở đầu ý`), chỉ ở dòng `check_type = 'format'`, NULL khi không có. Cả sync và job đều ghi; `qcReport.answerWarnings` đọc lại từ cột này. Chạy lại QC ghi đè cột theo kết quả mới (cảnh báo bỏ tiền tố không tái tạo được vì ý đã lưu không còn tiền tố).
-  - Chế độ sửa đầu ra LLM (ngày 23/10, chỉ run `production`; run `experiment` C1/C2/C3 giữ giải mã chặt và cấu hình đầu ra theo `strategy`): (1) trước khi giải mã JSON, dấu `\` của lệnh LaTeX chưa nhân đôi trong chuỗi được nhân đôi: `\` trước ký tự không phải escape JSON hợp lệ, `\u` không theo sau bởi 4 chữ số hex, `\b` `\f` `\r` `\t` ngay trước chữ cái ASCII (`\beta`, `\frac`, `\right`, `\times`...), và `\n` chỉ khi đúng một lệnh `\neq` `\ne` `\neg` `\nu` `\not` `\ni` `\nabla` `\nleq` `\ngeq` `\nparallel` (còn lại vẫn là xuống dòng); cảnh báo `json: đã sửa N escape LaTeX (\circ, ...)`. (2) Sau khi giải mã, trường văn bản có số `$` lẻ (không tính `\$`) mà đoạn sau `$` cuối trông như công thức (không có chữ có dấu tiếng Việt, không có từ chỉ gồm 2 chữ cái ASCII trở lên) được tự chèn `$` ở cuối trường, trước dấu câu kết thúc; cảnh báo `<trường>: đã tự đóng $`. Mọi trường hợp lẻ `$` khác vẫn là lỗi format. Cả hai cảnh báo nằm trong `warnings` (V5). Ngoại lệ có chủ đích của quy tắc 6 trong `backend-structure.md`.
+  - Chế độ sửa đầu ra LLM (ngày 23/10, chỉ run `production`; run `experiment` giữ giải mã chặt; từ 25/10 mcq mọi run gọi JSON mode kèm schema, cấu hình riêng theo `strategy` của C1/C2/C3 đã gỡ): (1) trước khi giải mã JSON, dấu `\` của lệnh LaTeX chưa nhân đôi trong chuỗi được nhân đôi: `\` trước ký tự không phải escape JSON hợp lệ, `\u` không theo sau bởi 4 chữ số hex, `\b` `\f` `\r` `\t` ngay trước chữ cái ASCII (`\beta`, `\frac`, `\right`, `\times`...), và `\n` chỉ khi đúng một lệnh `\neq` `\ne` `\neg` `\nu` `\not` `\ni` `\nabla` `\nleq` `\ngeq` `\nparallel` (còn lại vẫn là xuống dòng); cảnh báo `json: đã sửa N escape LaTeX (\circ, ...)`. (2) Sau khi giải mã, trường văn bản có số `$` lẻ (không tính `\$`) mà đoạn sau `$` cuối trông như công thức (không có chữ có dấu tiếng Việt, không có từ chỉ gồm 2 chữ cái ASCII trở lên) được tự chèn `$` ở cuối trường, trước dấu câu kết thúc; cảnh báo `<trường>: đã tự đóng $`. Mọi trường hợp lẻ `$` khác vẫn là lỗi format. Cả hai cảnh báo nằm trong `warnings` (V5). Ngoại lệ có chủ đích của quy tắc 6 trong `backend-structure.md`.
   - MCQ ở run `production` (job, generate-sync, ma trận) gọi Gemini JSON mode kèm schema `McqProductionSchema` (7 trường, lời giải trước `correct_option`), như `sa`/`tf`; run `experiment` vẫn gọi theo `strategy` (`few-shot-structured` có schema riêng).
   - `quality_check_result.errors` (V8, JSONB mảng chuỗi): lý do bước format không qua, chỉ dòng `format` có `passed = FALSE`, NULL khi qua. Lỗi giải mã JSON (trước FormatChecker) cũng ghi ở đây, dạng `Không giải mã được JSON hợp lệ từ phản hồi LLM: <chi tiết>`; `generation_job.last_error` của job vẫn giữ chi tiết lỗi giải mã như trước. Cả sync và job đều ghi.
   - `generation_job.prompt_note` (V8): ghi chú nơi tạo job thêm vào prompt. Job sinh câu cho chỗ trong đề: "Đây là câu thứ k/n của ô này: dạng hỏi phải khác các câu còn lại..." (khi ô có từ 2 câu) và, khi lần sinh trước của chỗ đó `format_failed`, "Lần sinh trước bị loại vì: <errors>. Tránh lặp lại lỗi này." (tối đa 300 ký tự). NULL với job thường.
@@ -287,8 +287,8 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     dòng `replace`, NULL với `keep`/`edit`; dòng replace trước V16 được điền `generate`. Với dòng `replace`,
     `generated_question_id`/`bank_item_id` là câu bị đổi RA khỏi chỗ.
   - `exam_slot_action.action`: `keep`, `edit`, `replace` (`edit_distance` chỉ với `edit`). `instruction` (V9): yêu cầu bổ sung của giáo viên khi Đổi câu, 1–500 ký tự, chỉ dòng `replace`; NULL khi không có. `changed_fields` (V13): chỉ dòng `edit` (xem mục "Giáo viên sửa câu trong đề").
-  - `teacher_review.review_mode`: `blind` (mặc định, mọi dữ liệu cũ) hoặc `assisted` (Giữ/Sửa ở chế độ giáo viên). Đánh
-    giá `assisted` bị loại khỏi mọi chỉ số chấm mù (`answer_correct`, duyệt không sửa).
+  - `teacher_review.review_mode`: `blind` (mặc định cột; chỉ còn ở dữ liệu cũ vì form chấm mù đã gỡ ngày 25/10) hoặc `assisted` (Giữ/Sửa ở chế độ giáo viên,
+    mọi dòng mới). Đánh giá `assisted` bị loại khỏi mọi chỉ số chấm mù cũ (`answer_correct`, duyệt không sửa).
   - Run sinh câu theo ô: `purpose = 'production'`, `strategy = 'zero-shot'`, `prompt_version` `matrix-mcq-v1-draft`,
     `matrix-tf-v2-draft` hoặc `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`; `tf` có thêm `v1`); `hyperparams` là thông số ô (chủ đề, nội dung, yêu cầu cần đạt, mức).
     Không thuộc thực nghiệm C1/C2/C3.
