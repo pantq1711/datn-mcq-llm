@@ -72,6 +72,8 @@ class ExamQuestionEditTest {
     static final class EditSolver extends LlmClient {
         String mcqJudge = "B";
         String saJudge = "5";
+        /** Lời giải thích Solver trả cho mcq và sa (W1-3: được lưu ở quality_check_result.solver_reasoning). */
+        String reasoning = "r";
         /** null: đồng ý với nhãn câu tf vừa sinh. */
         String tfJudges;
         /** true: mọi lần gọi đều lỗi (giả lập hết thời gian chờ / lỗi mạng). */
@@ -111,9 +113,9 @@ class ExamQuestionEditTest {
                         + j[1] + "\", \"reasoning_c\": \"r\", \"judge_c\": \"" + j[2] + "\", \"reasoning_d\": \"r\","
                         + " \"judge_d\": \"" + j[3] + "\"}";
             } else if (SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON.equals(schema)) {
-                body = "{\"reasoning\": \"r\", \"judge_answer\": \"" + saJudge + "\"}";
+                body = "{\"reasoning\": \"" + reasoning + "\", \"judge_answer\": \"" + saJudge + "\"}";
             } else {
-                body = "{\"reasoning\": \"r\", \"judge_answer\": \"" + mcqJudge + "\"}";
+                body = "{\"reasoning\": \"" + reasoning + "\", \"judge_answer\": \"" + mcqJudge + "\"}";
             }
             return new LlmCallResult(body, 10, 1.0, 0.0, modelName);
         }

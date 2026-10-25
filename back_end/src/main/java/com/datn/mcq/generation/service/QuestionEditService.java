@@ -23,6 +23,7 @@ import com.datn.mcq.generation.repository.GenerationJobRepository;
 import com.datn.mcq.generation.worker.GenerationJobProcessor;
 import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.AnswerCheckStatus;
+import com.datn.mcq.qc.dto.DedupCandidate;
 import com.datn.mcq.qc.dto.DedupScope;
 import com.datn.mcq.qc.dto.DedupStatus;
 import com.datn.mcq.qc.dto.QcPipelineReport;
@@ -99,6 +100,16 @@ public class QuestionEditService {
 
     @Transactional
     public EditOutcome createVersion(Integer baseQuestionId, QuestionEditInput input) {
+        return createVersion(baseQuestionId, input, List.of());
+    }
+
+    /**
+     * @param sameExamCandidates (W1-3) các câu đang nằm trong cùng đề (chỗ khác), để bản sửa không trùng chúng; rỗng
+     *                           khi không có đề
+     */
+    @Transactional
+    public EditOutcome createVersion(Integer baseQuestionId, QuestionEditInput input,
+                                     List<DedupCandidate> sameExamCandidates) {
         GeneratedQuestion base = questionRepository.findById(baseQuestionId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu hỏi id=" + baseQuestionId));
         QuestionType type = base.getQuestionType() != null ? base.getQuestionType() : QuestionType.MCQ;
@@ -126,7 +137,7 @@ public class QuestionEditService {
 
         DedupScope scope = dedupScopeResolver.resolve(version.getRunId());
         if (scope != null) {
-            scope = scope.excluding(chainIds(base));
+            scope = scope.excluding(chainIds(base)).withExtraCandidates(sameExamCandidates);
         }
         QcPipelineReport report = qcOrchestrator.evaluateAndSave(
                 edited.qcInput(version.getId(), validateLatex, repairs), scope);

@@ -6,6 +6,7 @@ import com.datn.mcq.experiment.service.ExperimentService;
 import com.datn.mcq.qc.dto.DedupScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 /**
@@ -22,9 +23,25 @@ public class DedupScopeResolver {
     private static final Logger LOG = LoggerFactory.getLogger(DedupScopeResolver.class);
 
     private final ExperimentService experimentService;
+    /** Lấy muộn (ObjectProvider) vì bean cài đặt nằm ở module exam, phụ thuộc ngược lại generation. */
+    private final ObjectProvider<SlotDedupContext> slotContext;
 
-    public DedupScopeResolver(ExperimentService experimentService) {
+    public DedupScopeResolver(ExperimentService experimentService, ObjectProvider<SlotDedupContext> slotContext) {
         this.experimentService = experimentService;
+        this.slotContext = slotContext;
+    }
+
+    /**
+     * W1-3: phạm vi dedup của câu sinh cho một chỗ trong đề: như {@link #resolve(Integer)} cộng các câu đang nằm trong
+     * cùng đề. {@code examSlotId} null (job thường, sinh đồng bộ) thì như {@link #resolve(Integer)}.
+     */
+    public DedupScope resolveForSlot(Integer runId, Integer examSlotId) {
+        DedupScope scope = resolve(runId);
+        if (scope == null || examSlotId == null) {
+            return scope;
+        }
+        SlotDedupContext context = slotContext.getIfAvailable();
+        return context == null ? scope : scope.withExtraCandidates(context.candidatesForSlot(examSlotId));
     }
 
     public DedupScope resolve(Integer runId) {

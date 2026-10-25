@@ -332,7 +332,7 @@ class TrueFalseFlowTest {
         assertEquals("in_bank", jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
                 String.class, id));
 
-        JsonNode bankItems = getJson("/api/bank-items?questionType=tf");
+        JsonNode bankItems = getJson("/api/bank-items?questionType=tf").get("items");  // W1-3: danh sách là một trang
         assertEquals(1, bankItems.size());
         assertEquals("d", bankItems.get(0).get("statements").get(3).get("key").asText());
         assertEquals("T", bankItems.get(0).get("statements").get(3).get("label").asText());

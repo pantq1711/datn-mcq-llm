@@ -54,21 +54,24 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-38 | File Word mở ở Compatibility Mode | Xuất file | Trung bình | Đã sửa |
 | L-39 | Job sinh câu `done` trước khi QC xong, đối soát sinh lại câu tốt (bổ sung 24/10) | Hàng đợi/đồng thời | Cao | Đã sửa |
 | L-40 | Chạy lại QC làm mất cảnh báo từ bước giải mã (bổ sung 24/10) | QC | Thấp | Chưa sửa |
+| L-41 | Dedup bỏ sót câu cùng đề ở ô khác chưa qua QC và văn bản câu ngân hàng đã sửa (bổ sung 24/10, W1-3) | QC | Trung bình | Đã sửa |
+| L-42 | Solver lỗi với câu LLM gốc không để lại dấu vết, lẫn với "chưa chạy" (bổ sung 24/10, W1-3) | QC | Thấp | Đã sửa |
+| L-43 | Hai ô dùng chung template có thể nhận cùng một câu ngân hàng (bổ sung 24/10, W1-3) | Dữ liệu/DB | Thấp | Đã sửa |
 
-**Thống kê theo nhóm** (40 mục):
+**Thống kê theo nhóm** (43 mục):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
 | Môi trường | 10 | 10 | 0 | 0 |
-| Dữ liệu/DB | 4 | 4 | 0 | 0 |
+| Dữ liệu/DB | 5 | 5 | 0 | 0 |
 | Quy trình git | 2 | 2 | 0 | 0 |
 | LLM & parse | 11 | 10 | 0 | 1 |
-| QC | 6 | 5 | 0 | 1 |
+| QC | 8 | 7 | 0 | 1 |
 | Hàng đợi/đồng thời | 6 | 5 | 0 | 1 |
 | Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **40** | **37** | **0** | **3** |
+| **Tổng** | **43** | **40** | **0** | **3** |
 
-Theo mức độ: Cao 9, Trung bình 20, Thấp 11.
+Theo mức độ: Cao 9, Trung bình 21, Thấp 13.
 
 ---
 
@@ -273,6 +276,21 @@ Theo mức độ: Cao 9, Trung bình 20, Thấp 11.
 - Chống tái phát: như L-13. `docs/contract/enums.md` ghi rằng các dòng NULL theo quy tắc cũ không được khôi phục tự động.
 - Bài học: sửa một quy tắc ghi dữ liệu phải tính luôn phần dữ liệu đã ghi theo quy tắc cũ.
 - Trạng thái: Đã sửa (code ở `5fefe87`, dữ liệu dev bằng SQL thủ công).
+
+### L-43 Hai ô dùng chung template có thể nhận cùng một câu ngân hàng (bổ sung 24/10, W1-3)
+- Nhóm: Dữ liệu/DB
+- Triệu chứng: khi tạo đề, nếu hai ô ma trận dùng chung một `question_template` (DB không cấm) và ô đầu cần từ 2 câu trở
+  lên, hai chỗ của ô đầu có thể cùng lấy một `bank_item`. Test trước khi sửa:
+  `haiOChungMotTemplateKhongNhanDoiMotCauNganHang ==> expected: <[2117]> but was: <[2117, 2117]>`. Chưa gặp trên dữ liệu
+  thật (hiện mỗi ô tạo template riêng), nên là lỗi tiềm ẩn.
+- Nguyên nhân gốc: `ExamSlotRepository.findBankCandidates` nối `LEFT JOIN exam_matrix_cell c ON c.template_id = t.id`, nhân
+  dòng khi một template có nhiều ô, rồi `LIMIT` lấy cả hai bản sao của cùng một câu.
+- Cách phát hiện: audit thiết kế W1-3 (đọc truy vấn, suy luận), rồi dựng test.
+- Cách sửa: thay phép nối bằng `NOT EXISTS`/`EXISTS` trên `exam_matrix_cell`, nên mỗi câu chỉ ra một dòng.
+- Chống tái phát: `ExamBankSelectionTest.haiOChungMotTemplateKhongNhanDoiMotCauNganHang`.
+- Bài học: nối với bảng có quan hệ một-nhiều rồi mới `LIMIT` thì phải kiểm tra trùng dòng; dùng `EXISTS` khi chỉ cần điều
+  kiện.
+- Trạng thái: Đã sửa.
 
 ## Quy trình git
 
@@ -539,6 +557,44 @@ Theo mức độ: Cao 9, Trung bình 20, Thấp 11.
 - Chống tái phát: chưa có.
 - Bài học: dữ liệu chỉ có ở một bước (cảnh báo khi giải mã) phải được giữ lại khi bước sau ghi đè kết quả.
 - Trạng thái: Chưa sửa (mới ghi nhận).
+
+### L-41 Dedup bỏ sót câu cùng đề ở ô khác chưa qua QC và văn bản câu ngân hàng đã sửa (bổ sung 24/10, W1-3)
+- Nhóm: QC
+- Triệu chứng: trong cùng một đề, câu sinh cho ô B (hoặc bản giáo viên sửa) có thể trùng hệt một câu đã nằm ở ô A mà không
+  bị bắt. Hai trường hợp tái hiện được bằng test: (1) câu ở ô A đang là câu lệch Solver (trạng thái `generated`, được dùng
+  kèm cờ); (2) câu ở ô A lấy từ ngân hàng và giáo viên đã sửa văn bản lúc duyệt (văn bản trong `bank_item` khác câu nguồn).
+  Test trước khi sửa: `sinhTrungCauODaKhacChuaQuaSolverThiBiDedup ==> expected: <duplicate> but was: <qc_passed>`.
+- Nguyên nhân gốc: dedup chỉ so với câu `qc_passed`/`in_bank` của các run production cùng môn và câu cùng run. Mỗi ô ma
+  trận là một run riêng, câu `generated` không phải ứng viên, và `DedupService` đọc nội dung từ `generated_question` nên
+  không thấy văn bản đã sửa trong `bank_item` (README 7.2 đã ghi hạn chế này).
+- Cách phát hiện: audit thiết kế W1-3 (đọc `QualityCheckResultRepository.find*DedupCandidateRows` và `DedupScopeResolver`).
+- Cách sửa: `DedupScope.extraCandidates` mang nội dung các câu đang nằm ở chỗ khác cùng đề; module `exam` cung cấp qua
+  interface `SlotDedupContext` (`ExamSlotSiblings`), `DedupScopeResolver.resolveForSlot` dùng cho job có `exam_slot_id`
+  và `QuestionEditService.createVersion` dùng cho bản giáo viên sửa; `DedupService` so thêm cùng dạng câu.
+- Chống tái phát: `ExamInExamDedupTest` (7 test, gồm bài đối chứng chứng minh văn bản dựng tay khớp đầu ra LLM giả).
+- Bài học: "trùng" phải được định nghĩa theo tập câu thực sự đang cùng xuất hiện (cùng đề), không chỉ theo trạng thái QC;
+  và dữ liệu đối chiếu phải là văn bản người dùng thấy, không phải bản ghi nguồn.
+- Trạng thái: Đã sửa. Hạn chế còn lại: hai job của cùng đề chạy đồng thời có thể cùng qua dedup.
+
+### L-42 Solver lỗi với câu LLM gốc không để lại dấu vết, lẫn với "chưa chạy" (bổ sung 24/10, W1-3)
+- Nhóm: QC
+- Triệu chứng: câu mà Solver gặp lỗi (hết thời gian chờ, phản hồi hỏng) trông giống câu Solver chưa chạy: không có dòng
+  `answer_check`, lý do chỉ có trong `solverReasoning` của response sinh đồng bộ nên mất với câu sinh qua job. Giáo viên và
+  nhóm không biết Solver "lỗi" hay "chưa chạy"; lời giải thích của Solver cũng không được lưu nên không giải thích được vì
+  sao một câu bị coi là lệch.
+- Nguyên nhân gốc: `chk_qcr_judge_only_answer_check` bắt dòng `answer_check` phải có kết quả hợp lệ nên lỗi không ghi được
+  vào `quality_check_result`; `SolverVerdict.reasoning()` chỉ nằm trong bộ nhớ.
+- Cách phát hiện: audit thiết kế W1-3 (yêu cầu vết QC phân biệt chưa chạy / lỗi / lệch).
+- Cách sửa: migration V14: `quality_check_result.solver_reasoning` (lời giải thích, tối đa 4000 ký tự, chỉ dòng
+  `answer_check`) và `generated_question.solver_error` (lý do lỗi, tối đa 1000 ký tự, ghi bởi `finishGeneratedJob` khi
+  `answerCheckStatus = ERROR`); bản giáo viên sửa dùng `generation_job.last_error` của job `answer_check`.
+- Chống tái phát: `ExamQcTraceTest.solverLoiVoiCauLlmGocDuocGhiLaiVaPhanBietVoiChuaChay`, `banSuaSolverThatBaiGhiLoiTrongJob`,
+  `loiGiaiThichDaiBiCatVaBanChiSuaLoiGiaiChepLoiGiaiThichCuaSolver`, `V14UpgradeFromV13Test`.
+- Bài học: một trạng thái "không có dữ liệu" phải phân biệt được nguyên nhân (chưa chạy, lỗi, bị thay thế) ngay lúc ghi,
+  không suy ngược lại sau.
+- Trạng thái: Đã sửa cho đường job sinh câu cho chỗ trong đề; sinh đồng bộ và chạy lại QC chưa ghi `solver_error`. Việc
+  còn nợ (đã duyệt 24/10): khi làm công cụ thí nghiệm Solver phải ghi cả hai đường đó (xem `docs/contract/enums.md`, mục
+  "Vết QC theo ô đề và ngân hàng có lọc").
 
 ## Hàng đợi/đồng thời
 

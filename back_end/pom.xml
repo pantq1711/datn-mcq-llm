@@ -28,6 +28,8 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<!-- W1-3: test hiệu năng gắn @Tag("perf") không chạy mặc định; chạy riêng: -DexcludedGroups=none -->
+		<excludedGroups>perf</excludedGroups>
 	</properties>
 	<dependencies>
 		<dependency>

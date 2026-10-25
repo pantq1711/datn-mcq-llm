@@ -114,12 +114,13 @@ class BankItemsSnapshotTest {
     }
 
     private JsonNode items() throws Exception {
-        String body = mockMvc.perform(get("/api/bank-items"))
+        String body = mockMvc.perform(get("/api/bank-items").param("size", "50"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         JsonNode root = objectMapper.readTree(body);
-        assertTrue(root.isArray());
-        return root;
+        // W1-3 (D1): danh sách là một trang {items, page, size, totalItems, totalPages}.
+        assertTrue(root.isObject() && root.get("items").isArray());
+        return root.get("items");
     }
 
     private static JsonNode byId(JsonNode items, int id) {
@@ -137,12 +138,24 @@ class BankItemsSnapshotTest {
         return keys;
     }
 
+    /** W1-3: các key thêm cho lọc, nguồn và số lần dùng; mọi key khác không được xuất hiện. */
+    private static final Set<String> W13_KEYS = Set.of("subjectId", "subjectName", "gradeLevel", "topic", "content",
+            "origin", "usageCount", "lastUsedAt");
+
+    /** Key của một câu sau khi bỏ các key W1-3: phải đúng bằng bộ key W1-2 (12 key cũ, questionType, saAnswer/statements). */
+    private static Set<String> keysWithoutW13(JsonNode node) {
+        Set<String> keys = keys(node);
+        assertTrue(keys.containsAll(W13_KEYS), "thiếu key W1-3: " + keys);
+        keys.removeAll(W13_KEYS);
+        return keys;
+    }
+
     @Test
     void mcqGiuNguyen12KeyCuVaChiThemQuestionType() throws Exception {
         JsonNode mcq = byId(items(), mcqItem);
         Set<String> expected = new LinkedHashSet<>(OLD_KEYS);
         expected.add("questionType");
-        assertEquals(expected, keys(mcq));
+        assertEquals(expected, keysWithoutW13(mcq));
         assertTrue(mcq.get("explanation").isNull(), "explanation null vẫn phải có key");
         assertEquals("Tính $1+1$", mcq.get("questionText").asText());
         assertEquals("$1$", mcq.get("optionA").asText());
@@ -161,7 +174,7 @@ class BankItemsSnapshotTest {
             String body = mockMvc.perform(get("/api/bank-items").param("questionType", c[0]))
                     .andExpect(status().isOk())
                     .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-            JsonNode items = objectMapper.readTree(body);
+            JsonNode items = objectMapper.readTree(body).get("items");
             assertEquals(1, items.size(), "lọc " + c[0]);
             assertEquals(Integer.parseInt(c[1]), items.get(0).get("id").asInt());
             assertEquals(c[0], items.get(0).get("questionType").asText());
@@ -181,7 +194,7 @@ class BankItemsSnapshotTest {
         Set<String> saExpected = new LinkedHashSet<>(OLD_KEYS);
         saExpected.add("questionType");
         saExpected.add("saAnswer");
-        assertEquals(saExpected, keys(sa));
+        assertEquals(saExpected, keysWithoutW13(sa));
         assertEquals("sa", sa.get("questionType").asText());
         assertEquals("-0,75", sa.get("saAnswer").asText());
         assertTrue(sa.get("optionA").isNull() && sa.get("correctOption").isNull());
@@ -190,7 +203,7 @@ class BankItemsSnapshotTest {
         Set<String> tfExpected = new LinkedHashSet<>(OLD_KEYS);
         tfExpected.add("questionType");
         tfExpected.add("statements");
-        assertEquals(tfExpected, keys(tf));
+        assertEquals(tfExpected, keysWithoutW13(tf));
         assertTrue(tf.get("difficulty").isNull());
         JsonNode statements = tf.get("statements");
         assertEquals(4, statements.size());

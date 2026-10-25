@@ -70,6 +70,14 @@ public class DedupService {
             return DedupOutcome.error("Dedup chưa hỗ trợ dạng câu " + subject.questionType().getDbValue());
         }
 
+        // W1-3: câu đang nằm trong cùng đề (nơi gọi cung cấp theo nội dung); chỉ so câu cùng dạng, không so với chính
+        // nó. Có thể trùng id với một ứng viên đọc từ DB (câu ngân hàng đã sửa: cùng câu nguồn, hai văn bản): giữ cả
+        // hai, kết quả lấy điểm cao nhất.
+        for (DedupCandidate extra : scope.extraCandidates()) {
+            if (extra.questionType() == subject.questionType() && !extra.questionId().equals(subject.questionId())) {
+                candidates.add(extra);
+            }
+        }
         // W1-2: bản giáo viên sửa không so với các bản trước của chính nó (gồm bản gốc LLM).
         candidates.removeIf(c -> scope.excludedQuestionIds().contains(c.questionId()));
         DedupOutcome outcome = DedupChecker.check(subject, candidates, DedupChecker.PROVISIONAL_THRESHOLD);

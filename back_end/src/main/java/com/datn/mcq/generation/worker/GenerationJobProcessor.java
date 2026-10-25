@@ -3,6 +3,7 @@ package com.datn.mcq.generation.worker;
 import com.datn.mcq.catalog.entity.QuestionTemplate;
 import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.service.CatalogService;
+import com.datn.mcq.common.util.TextClip;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.enums.QuestionStatus;
@@ -50,6 +51,9 @@ import java.util.Optional;
 @Service
 public class GenerationJobProcessor {
 
+    /** V14: giới hạn độ dài generated_question.solver_error (khớp CHECK chk_gq_solver_error). */
+    public static final int MAX_SOLVER_ERROR = 1000;
+
     public record ClaimedJobContext(
             Integer jobId,
             Integer runId,
@@ -69,7 +73,9 @@ public class GenerationJobProcessor {
             /* V13 (W1-2): loại job; với answer_check chỉ có jobId, runId, templateId, attempt, questionType, questionId */
             String jobType,
             /* answer_check: bản giáo viên sửa cần chạy lại Solver; null với job sinh câu */
-            Integer questionId
+            Integer questionId,
+            /* W1-3: chỗ trong đề mà job sinh câu phục vụ (generation_job.exam_slot_id); null với job thường */
+            Integer examSlotId
     ) {
         public boolean answerCheck() {
             return GenerationJob.TYPE_ANSWER_CHECK.equals(jobType);
@@ -138,7 +144,7 @@ public class GenerationJobProcessor {
             // W1-2: job chạy lại Solver cho bản giáo viên sửa, không dựng prompt sinh câu.
             return Optional.of(new ClaimedJobContext(job.getId(), job.getRunId(), job.getTemplateId(), nextAttempt,
                     null, null, null, null, null, false, jobQuestionType, List.of(), null, null,
-                    job.getJobType(), job.getQuestionId()));
+                    job.getJobType(), job.getQuestionId(), null));
         }
 
         ExperimentRun run = experimentService.getById(job.getRunId());
@@ -196,7 +202,8 @@ public class GenerationJobProcessor {
                 run.getPurpose(),
                 matrix && questionType == QuestionType.TF ? TfLabelPattern.fromNote(job.getPromptNote()) : null,
                 job.getJobType(),
-                null
+                null,
+                job.getExamSlotId()
         ));
     }
 
@@ -370,7 +377,22 @@ public class GenerationJobProcessor {
      */
     @Transactional
     public void finishGeneratedJob(Integer jobId, Integer questionId, QuestionStatus newStatus) {
+        finishGeneratedJob(jobId, questionId, newStatus, null);
+    }
+
+    /**
+     * @param solverError (V14, W1-3) lý do Solver lỗi với câu này (đã có từ báo cáo QC khi answer_check ở trạng thái
+     *                    ERROR); null khi Solver không lỗi. Cắt theo giới hạn cột.
+     */
+    @Transactional
+    public void finishGeneratedJob(Integer jobId, Integer questionId, QuestionStatus newStatus, String solverError) {
         updateQuestionStatus(questionId, newStatus);
+        if (solverError != null) {
+            GeneratedQuestion gq = generatedQuestionRepository.findById(questionId)
+                    .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generated_question id=" + questionId));
+            gq.setSolverError(TextClip.clip(solverError, MAX_SOLVER_ERROR));
+            generatedQuestionRepository.save(gq);
+        }
         GenerationJob job = generationJobRepository.findById(jobId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generation_job id=" + jobId));
         job.setStatus(JobStatus.DONE);

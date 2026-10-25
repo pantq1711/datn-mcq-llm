@@ -1,16 +1,20 @@
 package com.datn.mcq.qc.service;
 
 import com.datn.mcq.common.util.JsonStringArray;
+import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
+import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.generation.parser.LlmOutputRepair;
+import com.datn.mcq.qc.dto.TfJudgement;
 import com.datn.mcq.qc.entity.QualityCheckResult;
 import com.datn.mcq.qc.repository.AnswerCheckStatementRepository;
 import com.datn.mcq.qc.repository.QualityCheckResultRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -78,6 +82,21 @@ public class QcSummaryService {
         }
     }
 
+    /** Bước format đã lưu (V5, V8): lỗi chặn và cảnh báo không chặn (gồm cả các lần hệ thống tự sửa). */
+    public record FormatStep(boolean passed, List<String> errors, List<String> warnings, LocalDateTime checkedAt) {}
+
+    /** Bước dedup đã lưu: điểm tương đồng cao nhất, câu khớp và ngưỡng đã dùng lúc kiểm. */
+    public record DedupStep(boolean passed, Double similarity, Integer comparedToQuestionId, Double threshold,
+                            LocalDateTime checkedAt) {}
+
+    /** Kết quả Solver hợp lệ đã lưu (V14: kèm lời giải thích). {@code judgeLabels} chỉ có với câu tf. */
+    public record SolverStep(boolean passed, String judgeModel, AnswerChoice judgeAnswer, SaJudgeKind judgeSaKind,
+                             String judgeSaAnswer, List<TfJudgement> judgeLabels, String reasoning,
+                             LocalDateTime checkedAt) {}
+
+    /** Chi tiết từng bước QC đã lưu của một câu (W1-3, vết QC); bước chưa có dòng thì null. */
+    public record QcDetail(FormatStep format, DedupStep dedup, SolverStep solver) {}
+
     private final QualityCheckResultRepository resultRepository;
     private final AnswerCheckStatementRepository statementRepository;
 
@@ -92,6 +111,33 @@ public class QcSummaryService {
     public List<String> formatErrors(Integer questionId) {
         return JsonStringArray.read(resultRepository.findByQuestionIdAndCheckType(questionId, CheckType.FORMAT)
                 .map(QualityCheckResult::getErrors).orElse(null));
+    }
+
+    /** W1-3: chi tiết từng bước QC đã lưu của một câu. Chỉ đọc. */
+    @Transactional(readOnly = true)
+    public QcDetail detail(Integer questionId) {
+        FormatStep format = null;
+        DedupStep dedup = null;
+        SolverStep solver = null;
+        for (QualityCheckResult r : resultRepository.findByQuestionIdOrderByIdAsc(questionId)) {
+            switch (r.getCheckType()) {
+                case FORMAT -> format = new FormatStep(Boolean.TRUE.equals(r.getPassed()),
+                        JsonStringArray.read(r.getErrors()), JsonStringArray.read(r.getWarnings()), r.getCheckedAt());
+                case DEDUP -> dedup = new DedupStep(Boolean.TRUE.equals(r.getPassed()), r.getSimilarityScore(),
+                        r.getComparedToQuestionId(), r.getThresholdUsed(), r.getCheckedAt());
+                case ANSWER_CHECK -> {
+                    List<TfJudgement> labels = null;
+                    if (r.getQuestionType() == QuestionType.TF) {
+                        labels = statementRepository.findByQcResultIdOrderByPositionAsc(r.getId()).stream()
+                                .map(s -> new TfJudgement(s.getStatementKey(), s.getJudgeLabel())).toList();
+                    }
+                    solver = new SolverStep(Boolean.TRUE.equals(r.getPassed()), r.getJudgeModel(), r.getJudgeAnswer(),
+                            r.getJudgeSaKind(), r.getJudgeSaAnswer(), labels, r.getSolverReasoning(),
+                            r.getCheckedAt());
+                }
+            }
+        }
+        return new QcDetail(format, dedup, solver);
     }
 
     @Transactional(readOnly = true)

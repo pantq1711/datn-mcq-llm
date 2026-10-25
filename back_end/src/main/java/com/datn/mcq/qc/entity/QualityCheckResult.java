@@ -59,6 +59,10 @@ public class QualityCheckResult {
     @Column(name = "judge_sa_answer", columnDefinition = "TEXT")
     private String judgeSaAnswer;
 
+    /** V14 (W1-3): lời giải thích của Solver (chỉ dòng answer_check, tối đa 4000 ký tự); NULL với dòng cũ. */
+    @Column(name = "solver_reasoning", columnDefinition = "TEXT")
+    private String solverReasoning;
+
     @Column(name = "checked_at")
     private LocalDateTime checkedAt;
 
@@ -192,6 +196,14 @@ public class QualityCheckResult {
 
     public void setJudgeSaAnswer(String judgeSaAnswer) {
         this.judgeSaAnswer = judgeSaAnswer;
+    }
+
+    public String getSolverReasoning() {
+        return solverReasoning;
+    }
+
+    public void setSolverReasoning(String solverReasoning) {
+        this.solverReasoning = solverReasoning;
     }
 }
 

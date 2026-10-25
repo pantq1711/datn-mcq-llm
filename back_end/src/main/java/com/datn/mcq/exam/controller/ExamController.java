@@ -6,6 +6,7 @@ import com.datn.mcq.exam.dto.ExamBuildDtos.BuildResultDto;
 import com.datn.mcq.exam.dto.ExamBuildDtos.ProgressDto;
 import com.datn.mcq.exam.dto.ExamBuildDtos.SlotDto;
 import com.datn.mcq.exam.dto.ExamEditDtos.EditQuestionRequest;
+import com.datn.mcq.exam.dto.ExamQcTraceDtos.QcTraceDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamItemDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamPageDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
@@ -13,6 +14,7 @@ import com.datn.mcq.exam.export.ExamExportService;
 import com.datn.mcq.exam.export.ExamExportService.DocxFile;
 import com.datn.mcq.exam.service.ExamActionService;
 import com.datn.mcq.exam.service.ExamBuildService;
+import com.datn.mcq.exam.service.ExamQcTraceService;
 import com.datn.mcq.exam.service.ExamViewService;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -43,9 +45,12 @@ public class ExamController {
     private final ExamViewService examViewService;
     private final ExamActionService examActionService;
     private final ExamExportService examExportService;
+    private final ExamQcTraceService examQcTraceService;
 
     public ExamController(ExamBuildService examBuildService, ExamViewService examViewService,
-                          ExamActionService examActionService, ExamExportService examExportService) {
+                          ExamActionService examActionService, ExamExportService examExportService,
+                          ExamQcTraceService examQcTraceService) {
+        this.examQcTraceService = examQcTraceService;
         this.examBuildService = examBuildService;
         this.examViewService = examViewService;
         this.examActionService = examActionService;
@@ -127,6 +132,15 @@ public class ExamController {
     public ExamItemDto editQuestion(CurrentUser user, @PathVariable Integer examId, @PathVariable Integer slotId,
                                     @RequestBody(required = false) EditQuestionRequest request) {
         return examActionService.editQuestion(examId, slotId, user.id(), request);
+    }
+
+    /**
+     * W1-3: vết QC của một chỗ: các lần sinh, phiên bản (LLM gốc / giáo viên sửa), từng bước QC, lý do cờ và lịch sử
+     * thao tác. Chỉ đọc (không đối soát job). Đề của người khác hoặc chỗ không thuộc đề: 404.
+     */
+    @GetMapping("/{examId}/slots/{slotId}/qc-trace")
+    public QcTraceDto qcTrace(CurrentUser user, @PathVariable Integer examId, @PathVariable Integer slotId) {
+        return examQcTraceService.trace(examId, slotId, user.id());
     }
 
     /** Các chỗ của một ô (tóm tắt). */

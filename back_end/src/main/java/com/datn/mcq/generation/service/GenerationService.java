@@ -585,6 +585,18 @@ public class GenerationService {
                 GenerationJob.TYPE_ANSWER_CHECK);
     }
 
+    /** W1-3: mọi job sinh câu (không kể answer_check) của một chỗ trong đề, theo thứ tự tạo. */
+    @Transactional(readOnly = true)
+    public List<GenerationJob> generateJobsForSlot(Integer examSlotId) {
+        return generationJobRepository.findByExamSlotIdAndJobTypeOrderByIdAsc(examSlotId, GenerationJob.TYPE_GENERATE);
+    }
+
+    /** W1-3: bản giáo viên sửa tiếp theo của một câu; rỗng nếu chưa có. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<GeneratedQuestion> editedChild(Integer questionId) {
+        return generatedQuestionRepository.findByEditedFromQuestionId(questionId);
+    }
+
     /**
      * W1-2: bản gốc LLM của một câu theo chuỗi edited_from_question_id (chính câu đó nếu là đầu ra LLM).
      */

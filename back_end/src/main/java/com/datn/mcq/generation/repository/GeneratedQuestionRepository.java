@@ -18,5 +18,8 @@ public interface GeneratedQuestionRepository extends JpaRepository<GeneratedQues
 
     /** V13 (W1-2): câu đã có bản giáo viên sửa tiếp (đã bị thay). */
     boolean existsByEditedFromQuestionId(Integer questionId);
+
+    /** W1-3: bản giáo viên sửa tiếp theo của một câu (tối đa một, UNIQUE ở DB). */
+    java.util.Optional<GeneratedQuestion> findByEditedFromQuestionId(Integer questionId);
 }
 

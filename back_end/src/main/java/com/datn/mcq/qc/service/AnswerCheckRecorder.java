@@ -47,6 +47,15 @@ public class AnswerCheckRecorder {
     @Transactional
     public QualityCheckResult recordTrueFalse(Integer questionId, boolean passed, String judgeModel,
                                               List<TruthChoice> judgeLabels) {
+        return recordTrueFalse(questionId, passed, judgeModel, judgeLabels, null);
+    }
+
+    /**
+     * @param solverReasoning lời giải thích của Solver đã cắt theo giới hạn cột (V14); null nếu không có
+     */
+    @Transactional
+    public QualityCheckResult recordTrueFalse(Integer questionId, boolean passed, String judgeModel,
+                                              List<TruthChoice> judgeLabels, String solverReasoning) {
         if (judgeLabels == null || judgeLabels.size() != StatementKey.values().length) {
             throw new IllegalArgumentException("Kết quả Solver câu đúng/sai phải có đủ 4 ý");
         }
@@ -61,6 +70,7 @@ public class AnswerCheckRecorder {
         qcr.setJudgeModel(judgeModel);
         qcr.setJudgeSaKind(null);
         qcr.setJudgeSaAnswer(null);
+        qcr.setSolverReasoning(solverReasoning);
         qcr.setCheckedAt(LocalDateTime.now());
         QualityCheckResult saved = qualityCheckResultRepository.saveAndFlush(qcr);
 
