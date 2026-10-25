@@ -99,7 +99,22 @@ public class GeneratedQuestion {
     @Column(name = "edited_from_question_id", updatable = false)
     private Integer editedFromQuestionId;
 
+    /**
+     * V14 (W1-3): lý do Solver lỗi với câu sinh từ job (không có dòng answer_check); NULL khi không lỗi hoặc chưa rõ.
+     * Tối đa 1000 ký tự.
+     */
+    @Column(name = "solver_error", columnDefinition = "TEXT")
+    private String solverError;
+
     public GeneratedQuestion() {}
+
+    public String getSolverError() {
+        return solverError;
+    }
+
+    public void setSolverError(String solverError) {
+        this.solverError = solverError;
+    }
 
     public Integer getEditedFromQuestionId() {
         return editedFromQuestionId;

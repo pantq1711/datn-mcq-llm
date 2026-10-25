@@ -1,6 +1,7 @@
 package com.datn.mcq.qc.orchestrator;
 
 import com.datn.mcq.common.util.JsonStringArray;
+import com.datn.mcq.common.util.TextClip;
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.QuestionStatus;
@@ -264,14 +265,18 @@ public class QcOrchestrator {
                     throw new IllegalStateException("Chưa có bộ ghi kết quả Solver câu đúng/sai");
                 }
                 answerCheckRecorder.recordTrueFalse(questionId, verdict.passed(), verdict.judgeModel(),
-                        verdict.tfLabels());
+                        verdict.tfLabels(), TextClip.clip(verdict.reasoning(), MAX_SOLVER_REASONING));
             }
             case SA -> upsertCheckResult(questionId, QuestionType.SA, CheckType.ANSWER_CHECK, verdict.passed(), null,
-                    verdict.judgeModel(), verdict.saJudgeKind(), verdict.saJudgeAnswer());
+                    verdict.judgeModel(), verdict.saJudgeKind(), verdict.saJudgeAnswer(), null, null,
+                    verdict.reasoning());
             case MCQ -> upsertCheckResult(questionId, QuestionType.MCQ, CheckType.ANSWER_CHECK, verdict.passed(),
-                    verdict.judgeAnswer(), verdict.judgeModel(), null, null);
+                    verdict.judgeAnswer(), verdict.judgeModel(), null, null, null, null, verdict.reasoning());
         }
     }
+
+    /** V14 (W1-3): giới hạn độ dài lời giải thích của Solver khi lưu (khớp CHECK chk_qcr_solver_reasoning). */
+    public static final int MAX_SOLVER_REASONING = 4000;
 
     /**
      * W1-2 (D5): chép kết quả Solver của {@code fromQuestionId} sang {@code toQuestionId} khi bản sửa chỉ đổi lời giải.
@@ -294,7 +299,8 @@ public class QcOrchestrator {
             labels = answerCheckRecorder.judgeLabels(r.getId());
         }
         SolverVerdict copy = new SolverVerdict(r.getQuestionType(), Boolean.TRUE.equals(r.getPassed()),
-                r.getJudgeModel(), null, r.getJudgeAnswer(), r.getJudgeSaKind(), r.getJudgeSaAnswer(), labels);
+                r.getJudgeModel(), r.getSolverReasoning(), r.getJudgeAnswer(), r.getJudgeSaKind(),
+                r.getJudgeSaAnswer(), labels);
         recordSolver(toQuestionId, copy);
         return Optional.of(copy.status());
     }
@@ -402,6 +408,27 @@ public class QcOrchestrator {
             String judgeSaAnswer,
             List<String> warnings,
             List<String> errors) {
+        return upsertCheckResult(questionId, questionType, checkType, passed, judgeAnswer, judgeModel, judgeSaKind,
+                judgeSaAnswer, warnings, errors, null);
+    }
+
+    /**
+     * Như trên, kèm lời giải thích của Solver (V14, W1-3): chỉ ghi vào dòng answer_check (cắt theo giới hạn cột); dòng
+     * khác luôn NULL. Một lần lưu duy nhất.
+     */
+    @Transactional
+    public QualityCheckResult upsertCheckResult(
+            Integer questionId,
+            QuestionType questionType,
+            CheckType checkType,
+            boolean passed,
+            AnswerChoice judgeAnswer,
+            String judgeModel,
+            SaJudgeKind judgeSaKind,
+            String judgeSaAnswer,
+            List<String> warnings,
+            List<String> errors,
+            String solverReasoning) {
         QualityCheckResult qcr = qualityCheckResultRepository
                 .findByQuestionIdAndCheckType(questionId, checkType)
                 .orElseGet(QualityCheckResult::new);
@@ -422,6 +449,8 @@ public class QcOrchestrator {
         }
         qcr.setWarnings(checkType == CheckType.FORMAT ? writeWarnings(warnings) : null);
         qcr.setErrors(checkType == CheckType.FORMAT && !passed ? JsonStringArray.write(errors) : null);
+        qcr.setSolverReasoning(checkType == CheckType.ANSWER_CHECK
+                ? TextClip.clip(solverReasoning, MAX_SOLVER_REASONING) : null);
         qcr.setCheckedAt(LocalDateTime.now());
         return qualityCheckResultRepository.save(qcr);
     }

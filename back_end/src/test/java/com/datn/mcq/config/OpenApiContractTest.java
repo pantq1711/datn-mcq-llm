@@ -143,9 +143,18 @@ class OpenApiContractTest {
     @Test
     void noPublicEndpointCanTriggerQcRerun() throws Exception {
         JsonNode paths = objectMapper.readTree(apiDocs()).path("paths");
-        paths.fieldNames().forEachRemaining(path ->
-                assertFalse(path.toLowerCase().contains("rerun") || path.toLowerCase().contains("/qc"),
-                        "Không được mở endpoint chạy lại QC khi chưa có xác thực: " + path));
+        paths.fieldNames().forEachRemaining(path -> {
+            String p = path.toLowerCase();
+            assertFalse(p.contains("rerun"), "Không được mở endpoint chạy lại QC khi chưa có xác thực: " + path);
+            if (p.contains("/qc")) {
+                // W1-3: ngoại lệ duy nhất là vết QC theo ô đề, CHỈ ĐỌC (GET), không gọi Solver và không đối soát.
+                assertTrue(p.matches("/api/exams/\\{[a-z]+}/slots/\\{[a-z]+}/qc-trace"),
+                        "Không được mở endpoint chạy lại QC khi chưa có xác thực: " + path);
+                java.util.List<String> methods = new java.util.ArrayList<>();
+                paths.path(path).fieldNames().forEachRemaining(methods::add);
+                assertEquals(java.util.List.of("get"), methods, "vết QC chỉ được là GET: " + path);
+            }
+        });
     }
 
     /** W1-1: Swagger có nút Authorize (bearer JWT); API đăng nhập công khai; người dùng hiện tại không lộ thành tham số. */

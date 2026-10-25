@@ -47,11 +47,13 @@ public class ExamActionService {
     private final TeacherReviewService teacherReviewService;
     private final QuestionEditService questionEditService;
     private final GenerationService generationService;
+    private final ExamSlotSiblings siblings;
 
     public ExamActionService(ExamSlotRepository slotRepository, ExamSlotActionRepository actionRepository,
                              ExamBuildService buildService, ExamViewService viewService, MatrixService matrixService,
                              TeacherReviewService teacherReviewService, QuestionEditService questionEditService,
-                             GenerationService generationService) {
+                             GenerationService generationService, ExamSlotSiblings siblings) {
+        this.siblings = siblings;
         this.slotRepository = slotRepository;
         this.actionRepository = actionRepository;
         this.buildService = buildService;
@@ -156,8 +158,9 @@ public class ExamActionService {
             throw ApiErrorException.conflict(VERSION_CONFLICT,
                     "Câu đã thay đổi kể từ lúc bạn mở (có người sửa hoặc đổi câu). Hãy tải lại rồi sửa tiếp.");
         }
+        // W1-3: bản sửa cũng được so trùng với các câu đang nằm ở những chỗ khác của đề.
         QuestionEditService.EditOutcome outcome = questionEditService.createVersion(slot.getGeneratedQuestionId(),
-                toInput(request));
+                toInput(request), siblings.candidates(examId, slot.getId(), slot.getQuestionType()));
         if (outcome.changed()) {
             slot.setGeneratedQuestionId(outcome.questionId());
             slot.setState(ExamSlot.READY);

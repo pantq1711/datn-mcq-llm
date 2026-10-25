@@ -299,11 +299,12 @@ class ShortAnswerFlowTest {
         assertEquals("medium", jdbc.queryForObject("SELECT final_difficulty FROM generated_question WHERE id = ?",
                 String.class, questionId));
 
-        JsonNode saItems = getJson("/api/bank-items?questionType=sa");
+        // W1-3 (D1): danh sách ngân hàng là một trang {items, page, size, totalItems, totalPages}.
+        JsonNode saItems = getJson("/api/bank-items?questionType=sa").get("items");
         assertEquals(1, saItems.size());
         assertEquals("-0,75", saItems.get(0).get("saAnswer").asText());
-        assertEquals(0, getJson("/api/bank-items?questionType=mcq").size());
-        assertEquals(1, getJson("/api/bank-items").size());
+        assertEquals(0, getJson("/api/bank-items?questionType=mcq").get("items").size());
+        assertEquals(1, getJson("/api/bank-items").get("items").size());
     }
 
     /** Hồi quy SA (GĐ3): bộ key của API câu sa giữ như cuối GĐ2, không có trường TF. */

@@ -185,6 +185,15 @@ public class GenerationJobPoller {
         }
     }
 
+    /**
+     * V14 (W1-3): lý do Solver lỗi để lưu cạnh câu; chỉ khi answer_check ở trạng thái ERROR (không có kết quả hợp lệ).
+     * "Chưa chạy" (NOT_RUN) và "lệch" (có dòng answer_check) không ghi lỗi.
+     */
+    private static String solverError(QcPipelineReport report) {
+        return report.answerCheckStatus() == com.datn.mcq.qc.dto.AnswerCheckStatus.ERROR
+                ? report.solverReasoning() : null;
+    }
+
     private ProcessedJobSummary saveAndCheck(GenerationJobProcessor.ClaimedJobContext ctx, LlmCallResult llmResult,
                                              boolean runAnswerCheck, boolean production) {
         boolean shortAnswer = ctx.questionType() == QuestionType.SA;
@@ -200,8 +209,8 @@ public class GenerationJobPoller {
             GeneratedQuestion savedTf = processor.saveTrueFalseFromJob(ctx, llmResult, parsedTf);
             QcPipelineReport tfReport = qcOrchestrator.evaluateAndSave(
                     GenerationService.trueFalseQcInput(savedTf.getId(), parsedTf, ctx.validateLatex(), runAnswerCheck),
-                    dedupScopeResolver.resolve(ctx.runId()));
-            processor.finishGeneratedJob(ctx.jobId(), savedTf.getId(), tfReport.resultingStatus());
+                    dedupScopeResolver.resolveForSlot(ctx.runId(), ctx.examSlotId()));
+            processor.finishGeneratedJob(ctx.jobId(), savedTf.getId(), tfReport.resultingStatus(), solverError(tfReport));
             return new ProcessedJobSummary(true, ctx.jobId(), savedTf.getId(), "done",
                     tfReport.resultingStatus().getDbValue(), parsedTf.parseError());
         }
@@ -211,8 +220,8 @@ public class GenerationJobPoller {
             GeneratedQuestion savedSa = processor.saveShortAnswerFromJob(ctx, llmResult, parsedSa);
             QcPipelineReport saReport = qcOrchestrator.evaluateAndSave(
                     GenerationService.shortAnswerQcInput(savedSa.getId(), parsedSa, ctx.validateLatex(), runAnswerCheck),
-                    dedupScopeResolver.resolve(ctx.runId()));
-            processor.finishGeneratedJob(ctx.jobId(), savedSa.getId(), saReport.resultingStatus());
+                    dedupScopeResolver.resolveForSlot(ctx.runId(), ctx.examSlotId()));
+            processor.finishGeneratedJob(ctx.jobId(), savedSa.getId(), saReport.resultingStatus(), solverError(saReport));
             return new ProcessedJobSummary(true, ctx.jobId(), savedSa.getId(), "done",
                     saReport.resultingStatus().getDbValue(), parsedSa.parseError());
         }
@@ -233,8 +242,8 @@ public class GenerationJobPoller {
                 ctx.validateLatex(),
                 runAnswerCheck,
                 parsed.parseError()
-        ).withParseWarnings(parsed.parseWarnings()), dedupScopeResolver.resolve(ctx.runId()));
-        processor.finishGeneratedJob(ctx.jobId(), savedQuestion.getId(), qcReport.resultingStatus());
+        ).withParseWarnings(parsed.parseWarnings()), dedupScopeResolver.resolveForSlot(ctx.runId(), ctx.examSlotId()));
+        processor.finishGeneratedJob(ctx.jobId(), savedQuestion.getId(), qcReport.resultingStatus(), solverError(qcReport));
 
         return new ProcessedJobSummary(
                 true,

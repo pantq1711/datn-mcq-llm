@@ -17,6 +17,9 @@ public interface GenerationJobRepository extends JpaRepository<GenerationJob, In
     /** V7: job mới nhất của một chỗ trong đề. */
     Optional<GenerationJob> findFirstByExamSlotIdOrderByIdDesc(Integer examSlotId);
 
+    /** W1-3: mọi job sinh câu của một chỗ trong đề, theo thứ tự tạo (vết QC). */
+    List<GenerationJob> findByExamSlotIdAndJobTypeOrderByIdAsc(Integer examSlotId, String jobType);
+
     /**
      * Đợt A (ngày 23/10): khóa một job pending đã đến hạn để nhận. SKIP LOCKED bỏ qua job đang bị transaction khác
      * khóa, nên hai worker (hai luồng hoặc hai instance) không nhận trùng. Phải gọi trong transaction đọc-ghi; khóa giữ

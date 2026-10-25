@@ -1,6 +1,7 @@
 # API backend: tóm tắt cho frontend
 
-Cập nhật 2026-10-24 (W1-1: đăng nhập JWT, phân quyền, quyền sở hữu, `GET /api/exams`; mục 8). Trước đó 2026-10-22
+Cập nhật 2026-10-24 (W1-3: ngân hàng có lọc, phân trang, chi tiết kèm nguồn gốc; vết QC theo ô; chống trùng trong đề;
+mục "Ngân hàng câu hỏi" và 7.7). Cùng ngày (W1-1: đăng nhập JWT, phân quyền, quyền sở hữu, `GET /api/exams`; mục 8). Trước đó 2026-10-22
 (thêm câu Đúng/Sai `tf` và Trả lời ngắn `sa`). Nguồn chuẩn là code trong `back_end/` và các
 migration Flyway; file này chỉ tóm tắt.
 Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị trong DB" của [`docs/contract/enums.md`](../contract/enums.md)
@@ -77,7 +78,9 @@ Quyền của các dòng dưới: `catalog` GET và `bank-items` cho GV và AD; 
 | GET | `/api/reviews/questions/{id}` | Form chấm một câu |
 | POST | `/api/reviews/questions/{id}` | Nộp đánh giá |
 | POST | `/api/reviews/demo/seed-math` | Tạo 5 câu `mcq` demo; đi qua format và dedup, không chạy answer_check, nên giữ `generated` |
-| GET | `/api/bank-items?questionType=` | Ngân hàng câu hỏi đã duyệt, mới nhất trước; `questionType` (`mcq`, `tf`, `sa`) bỏ trống là mọi dạng |
+| GET | `/api/bank-items?...` | Ngân hàng câu hỏi đã duyệt: lọc, tìm, sắp xếp, phân trang; mỗi câu kèm số đề đã dùng (mục "Ngân hàng câu hỏi") |
+| GET | `/api/bank-items/{id}` | Chi tiết một câu ngân hàng: đáp án, lời giải, nguồn gốc, đề đã dùng |
+| GET | `/api/bank-items/topics?subjectId=` | Chủ đề có câu trong ngân hàng kèm số câu, để dựng bộ lọc |
 | POST | `/api/exam-matrices` | Tạo ma trận đề bằng JSON (mục 7) |
 | GET | `/api/exam-matrices`, `/api/exam-matrices/{id}` | Danh sách ma trận / chi tiết một ma trận |
 | GET | `/api/exam-matrices/samples` | Các mẫu ma trận có sẵn (hiện có `giuaki1-toan8`) |
@@ -86,6 +89,7 @@ Quyền của các dòng dưới: `catalog` GET và `bank-items` cho GV và AD; 
 | GET | `/api/exams/{id}/progress` | Tiến độ theo ô |
 | GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
+| GET | `/api/exams/{id}/slots/{slotId}/qc-trace` | Vết QC của một chỗ: các lần sinh, phiên bản, từng bước QC, thao tác (mục 7.7). Chỉ đọc |
 | POST | `/api/exams/{id}/slots/{slotId}/keep` | Giữ câu (vào ngân hàng) |
 | POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác (sinh lại đúng ô), có thể kèm yêu cầu của giáo viên |
 | PUT | `/api/exams/{id}/slots/{slotId}/question` | Sửa câu của chỗ chưa Giữ (mục 7.5a); QC chạy lại, Solver qua hàng đợi |
@@ -355,9 +359,34 @@ POST /api/reviews/questions/205
 
 ### Ngân hàng câu hỏi
 
-`GET /api/bank-items` trả mỗi câu với 12 key cũ luôn có mặt (kể cả khi `null`): `id, sourceQuestionId, reviewId,
-questionText, optionA..optionD, correctOption, explanation, difficulty, createdAt`, cộng `questionType`. Câu `sa` thêm
-`saAnswer` (đáp số cuối giáo viên chốt); câu `tf` thêm `statements` (4 ý theo thứ tự a-d) và `difficulty` cấp câu là `null`:
+Ngân hàng là dữ liệu đã duyệt, không phải form chấm, nên có đáp án, đáp số và nhãn cuối. Ngân hàng dùng chung cho mọi
+giáo viên (H1). Giáo viên và admin chỉ ĐỌC; sửa, xóa câu ngân hàng chưa làm (Q-4c).
+
+**Danh sách** (W1-3: thay danh sách không phân trang; đổi hợp đồng so với trước, frontend chưa dùng):
+
+```http
+GET /api/bank-items?subjectId=1&gradeLevel=8&questionType=mcq&topic=Đa thức&difficulty=easy&q=bậc&sort=least_used&page=0&size=20
+→ {"items": [ ...câu... ], "page": 0, "size": 20, "totalItems": 57, "totalPages": 3}
+```
+
+| Tham số | Ý nghĩa |
+|---|---|
+| `subjectId`, `gradeLevel` (6-9) | Môn, khối (của template gốc của câu) |
+| `questionType` | `mcq`, `tf`, `sa` |
+| `topic`, `content` | Chủ đề; nội dung của ô ma trận đã sinh câu. So đúng, bỏ khoảng trắng hai đầu, không phân biệt hoa thường |
+| `difficulty` | `easy`, `medium`, `hard`. Câu `tf`: có ít nhất một ý ở mức đó |
+| `levels` | Chỉ câu `tf`: đúng 4 mức a-d, ví dụ `easy,easy,medium,hard` (gửi kèm `questionType` khác `tf` thì 400) |
+| `origin` | `ai` (câu AI đã được giáo viên duyệt, hiện là mọi câu). `import` để dành cho nhập từ Word: hiện trả rỗng |
+| `q` | Tìm trong đề, 4 phương án, đáp số và các ý (không phân biệt hoa thường, phân biệt dấu; `%` và `_` là ký tự thường). Tối đa 100 ký tự |
+| `usage` | `used` (có ít nhất một đề dùng) hoặc `unused` |
+| `sort` | `newest` (mặc định, như trước), `oldest`, `least_used` (ít đề dùng trước, hòa thì dùng lần cuối cũ hơn trước), `recently_used` |
+| `page`, `size` | `page` từ 0 (mặc định 0); `size` 1-50 (mặc định 20) |
+
+Tham số sai (số trang, `gradeLevel`, enum lạ, `sort`, `usage`, `origin`, `levels`, `q` quá dài) trả 400 `{"error": "..."}`.
+Chưa đăng nhập 401. Mỗi câu giữ nguyên các key cũ (luôn có mặt kể cả khi `null`: `id, sourceQuestionId, reviewId,
+questionText, optionA..optionD, correctOption, explanation, difficulty, createdAt`, cộng `questionType`; câu `sa` thêm
+`saAnswer` là đáp số cuối giáo viên chốt; câu `tf` thêm `statements` 4 ý theo thứ tự a-d và `difficulty` cấp câu là
+`null`) và thêm môn, chủ đề, nguồn, mức dùng:
 
 ```json
 {"id": 32, "sourceQuestionId": 205, "reviewId": 78, "questionText": "Cho biểu thức $P = \\frac{x^2 - 1}{x^2 - x}$.",
@@ -369,10 +398,49 @@ questionText, optionA..optionD, correctOption, explanation, difficulty, createdA
    {"key": "b", "text": "Với điều kiện xác định, $P = \\frac{x+1}{x}$.", "label": "T", "difficulty": "easy"},
    {"key": "c", "text": "Tại $x = 2$ thì $P = 2$.", "label": "F", "difficulty": "medium"},
    {"key": "d", "text": "Có đúng một giá trị nguyên của $x$ để $P$ nhận giá trị nguyên.", "label": "T", "difficulty": "hard"}
- ]}
+ ],
+ "subjectId": 1, "subjectName": "Toán", "gradeLevel": 8, "topic": "Hằng đẳng thức", "content": "Khai triển",
+ "origin": {"type": "ai", "reviewMode": "assisted", "edited": true},
+ "usageCount": 3, "lastUsedAt": "2026-10-23T09:00:00"}
 ```
 
-Ngân hàng là dữ liệu đã duyệt, không phải form chấm, nên có đáp án, đáp số và nhãn cuối.
+- `origin.reviewMode`: `assisted` (Giữ trong đề ở chế độ giáo viên) hoặc `blind` (duyệt ở form chấm mù);
+  `origin.edited`: câu đã qua tay giáo viên sửa (bản sửa trong đề hoặc sửa lúc duyệt).
+- `usageCount`: số đề khác nhau (của mọi giáo viên) đang có câu này; `lastUsedAt`: ngày tạo đề mới nhất trong số đó, `null`
+  nếu chưa dùng. Câu bị Đổi ra khỏi một chỗ thì đề đó không còn tính.
+- `content` có thể `null` (câu không sinh từ ô ma trận).
+
+**Chi tiết một câu:**
+
+```http
+GET /api/bank-items/88
+→ { ...mọi trường của một câu ở trên...,
+    "provenance": {
+      "llmQuestionId": 345, "runId": 12, "promptVersion": "matrix-mcq-v1-draft", "model": "gemini-3.5-flash-lite",
+      "versions": [
+        {"questionId": 345, "kind": "llm", "createdAt": "2026-10-24T09:00:00", "editedBy": null,
+         "changedFields": null, "editDistance": null},
+        {"questionId": 402, "kind": "teacher_edit", "createdAt": "2026-10-24T09:20:00",
+         "editedBy": {"id": 7, "name": "Nguyễn Văn A"}, "changedFields": ["option_c", "correct_option"],
+         "editDistance": 4}],
+      "review": {"reviewId": 91, "mode": "assisted", "decision": "approved_as_is",
+                 "reviewer": {"id": 7, "name": "Nguyễn Văn A"}, "reviewedAt": "2026-10-24T09:30:00"}},
+    "usage": {"usageCount": 3, "lastUsedAt": "2026-10-24T10:00:00",
+              "myExams": [{"examId": 12, "examCode": "MT261024090000123", "title": "Đề giữa kì I",
+                           "createdAt": "2026-10-24T10:00:00"}]}}
+404 {"error": "Không tìm thấy câu ngân hàng id=999"}
+```
+
+- `provenance.versions` đi từ câu LLM gốc đến bản được đưa vào ngân hàng; `bank_item.source_question_id` là phiên bản cuối.
+  `editedBy` chỉ có khi có nhật ký thao tác Sửa trong đề. Không có `raw_llm_output`.
+- `usage.myExams` chỉ gồm đề của chính người gọi (tối đa 50, mới nhất trước); đề của giáo viên khác chỉ được tính vào
+  `usageCount`, không lộ mã đề. Admin luôn nhận danh sách rỗng.
+
+**Chủ đề:** `GET /api/bank-items/topics?subjectId=` trả `[{"subjectId": 1, "subjectName": "Toán", "gradeLevel": 8,
+"topic": "Đa thức", "count": 12}]` (sắp theo môn, khối, chủ đề; gộp chủ đề không phân biệt hoa thường).
+
+Hiệu năng: với khoảng 3000 câu và 12000 lượt dùng, mọi tổ hợp lọc/tìm/sắp xếp trên chạy dưới 110 ms trên máy phát triển
+(`BankSearchPerformanceTest`, tag `perf`, không chạy mặc định) nên chưa cần chỉ mục mới.
 
 ## 3. Trường bị giấu khỏi form chấm
 
@@ -600,7 +668,9 @@ POST /api/exams/build
 - Ngân hàng câu dùng chung cho mọi giáo viên (H1): câu ngân hàng khớp ô được lấy bất kể ai đã đưa vào.
 - Mỗi ô lấy câu ngân hàng khớp ô trước: cùng môn, cùng dạng, cùng mức (`tf`: cùng 4 mức theo thứ tự), cùng chủ đề của
   template gốc (so sau trim, không phân biệt hoa thường); nếu câu ngân hàng được sinh từ một ô ma trận thì còn phải cùng
-  nội dung. Câu chưa nằm trong đề nào được ưu tiên; không lấy trùng câu trong cùng một đề.
+  nội dung. Một câu ngân hàng chỉ vào MỘT chỗ của đề (kể cả khi nhiều ô dùng chung template). Giữa các đề chỉ xếp hạng
+  mềm, không cấm: câu có ít đề khác dùng hơn được chọn trước, hòa thì câu dùng lần cuối cũ hơn trước (chưa dùng lên đầu),
+  hòa nữa thì theo id; đề của mọi giáo viên đều được tính (ngân hàng dùng chung). Hết câu chưa dùng thì dùng lại câu đã dùng.
 - Phần thiếu: mỗi ô một run production, zero-shot, `prompt_version` `matrix-mcq-v1-draft` / `matrix-tf-v2-draft` /
   `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`, `tf` có thêm `v1`; prompt nháp `MatrixPromptDraftV0`: sinh từ chủ đề, nội dung, yêu cầu cần đạt, không có câu
   mẫu; quy tắc đa dạng và danh sách tối đa 10 câu đã sinh của ô; chủ đề hình học như Tứ giác dặn câu phải làm được
@@ -619,8 +689,11 @@ POST /api/exams/build
   - câu lệch Solver (trạng thái `generated`): sinh lại 1 lần; vẫn lệch thì dùng câu đó, kèm cờ "cần xem kỹ";
   - câu trùng, lỗi định dạng hoặc job lỗi: sinh lại, tối đa 3 lần mỗi chỗ; hết lượt thì dùng câu lệch Solver đã có (nếu
     có), không thì chỗ đó `failed`.
-- Dedup của câu sinh ra dùng phạm vi production hiện có (so với câu `qc_passed`, `in_bank` cùng môn). Văn bản đã sửa
-  trong `bank_item` chưa được đưa vào dedup.
+- Dedup của câu sinh ra dùng phạm vi production hiện có (so với câu `qc_passed`, `in_bank` cùng môn), cộng (W1-3) các câu
+  đang nằm ở chỗ khác CÙNG đề và cùng dạng: câu hiện tại của chỗ kể cả câu lệch Solver chưa qua `qc_passed`, văn bản câu
+  ngân hàng đang dùng (kể cả bản đã sửa lúc duyệt), câu vừa sinh của chỗ đang sinh. Câu trùng thành `duplicate` rồi sinh
+  lại như trên. Câu đã bị Đổi ra khỏi chỗ không tính. Hạn chế còn lại: hai job của cùng đề chạy đồng thời có thể cùng qua
+  dedup (chưa khóa theo phạm vi).
 
 ### 7.3. Tiến độ
 
@@ -696,6 +769,9 @@ POST /api/exams/12/slots/104/replace  {"instruction": "Dùng ngữ cảnh tính 
 - Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`, `edit`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại
   khỏi chỉ số chấm mù (`answer_correct`, duyệt không sửa).
 - **Chưa có:** sửa câu đã nằm trong ngân hàng, ráp đề, trộn mã đề, đề dự phòng, xuất PDF.
+- **Việc kế tiếp (D5, chưa làm):** Đổi với `{"source": "bank"}`: lấy câu ngân hàng khớp ô trước (loại các câu đã có trong
+  đề và các câu đã bị Đổi ra khỏi chỗ, đọc từ `exam_slot_action`), hết thì sinh mới như hiện nay. Hiện Đổi luôn sinh câu
+  mới và không bao giờ lấy câu ngân hàng; test `ExamBankSelectionTest.doiCauSinhMoiKhongLayCauNganHang...` khóa hành vi này.
 
 ### 7.5a. Sửa câu (W1-2)
 
@@ -785,6 +861,86 @@ GET /api/exams/12/export/docx   → 200, file MT2610231200001.docx (Content-Disp
     `app.export.pandoc-path`) là đường dẫn đầy đủ tới file chạy.
   - Test gọi pandoc thật (`PandocRunnerTest`, `ExamBuildTest`) tìm pandoc theo `PANDOC_PATH`, PATH, rồi
     `%LOCALAPPDATA%\Pandoc`; không thấy thì bỏ qua phần gọi pandoc thật.
+
+### 7.7. Vết QC của một chỗ (W1-3)
+
+```http
+GET /api/exams/12/slots/101/qc-trace
+```
+
+Cho giáo viên (chỉ vai trò `teacher`, chỉ đề của mình) thấy câu trong chỗ đã đi qua những bước nào. **Chỉ đọc**: không
+đối soát job như xem đề và tiến độ, nên gọi API này không đổi trạng thái chỗ (chỗ còn `generating` vẫn `generating`). Đề
+không có hoặc của giáo viên khác, hoặc chỗ không thuộc đề: 404 `{"error": ...}`; admin 403; chưa đăng nhập 401.
+
+```json
+{"examId": 12, "slotId": 101, "cellId": 21, "slotNo": 2, "part": "I", "topic": "Đa thức", "questionType": "mcq",
+ "state": "kept", "source": "generated", "currentQuestionId": 450, "bankItemId": 88, "attempts": 3, "solverRetries": 0,
+ "lineages": [
+  {"origin": "generated",
+   "job": {"jobId": 501, "createdAt": "2026-10-24T09:00:00", "status": "done", "attempt": 1, "error": null},
+   "versions": [
+    {"questionId": 340, "kind": "llm", "createdAt": "2026-10-24T09:00:20", "status": "format_failed", "current": false,
+     "editedBy": null, "changedFields": null, "editDistance": null,
+     "answer": {"correctOption": "A", "saAnswer": null, "labels": null},
+     "qc": {"format": {"passed": false, "errors": ["option_c: số dấu $ lẻ"], "warnings": [], "autoRepairs": [],
+                       "checkedAt": "2026-10-24T09:00:20"},
+            "dedup": null,
+            "answerCheck": {"state": "not_run", "reason": "format_failed", "judgeModel": null, "judgeAnswer": null,
+                            "judgeSaKind": null, "judgeSaAnswer": null, "judgeLabels": null, "solverReasoning": null,
+                            "error": null, "checkedAt": null, "job": null}},
+     "reviewReasons": []}]},
+  {"origin": "generated",
+   "job": {"jobId": 507, "createdAt": "2026-10-24T09:05:00", "status": "done", "attempt": 1, "error": null},
+   "versions": [
+    {"questionId": 345, "kind": "llm", "status": "qc_passed", "current": false, "...": "...",
+     "answer": {"correctOption": "B"},
+     "qc": {"format": {"passed": true, "errors": [], "warnings": [],
+                       "autoRepairs": ["option_a: đã tự đóng $"], "checkedAt": "..."},
+            "dedup": {"passed": true, "similarity": 0.41, "threshold": 0.9, "checkedAt": "...",
+                      "comparedTo": {"questionId": 210, "inThisExam": false, "inBank": true}},
+            "answerCheck": {"state": "consistent", "judgeModel": "gemini-3.5-flash-lite", "judgeAnswer": "B",
+                            "solverReasoning": "Số mũ cao nhất của x là 3 ...", "error": null, "job": null, "...": "..."}},
+     "reviewReasons": ["warning: option_a: đã tự đóng $"]},
+    {"questionId": 402, "kind": "teacher_edit", "createdAt": "2026-10-24T09:20:00", "status": "generated",
+     "current": false, "editedBy": {"id": 7, "name": "Nguyễn Văn A"},
+     "changedFields": ["option_c", "correct_option"], "editDistance": 4, "answer": {"correctOption": "C"},
+     "qc": {"format": {"passed": true, "...": "..."}, "dedup": {"passed": true, "...": "..."},
+            "answerCheck": {"state": "inconsistent", "judgeAnswer": "B", "solverReasoning": "...",
+                            "job": {"jobId": 530, "status": "done", "attempt": 1, "error": null, "...": "..."}}},
+     "reviewReasons": ["solver_inconsistent"]}]},
+  {"origin": "generated", "job": {"jobId": 533, "...": "..."},
+   "versions": [{"questionId": 450, "kind": "llm", "status": "in_bank", "current": true, "...": "...",
+                 "reviewReasons": []}]}],
+ "actions": [
+  {"id": 80, "action": "edit", "at": "2026-10-24T09:20:00", "actor": {"id": 7, "name": "Nguyễn Văn A"},
+   "questionId": 402, "bankItemId": null, "changedFields": ["option_c", "correct_option"], "editDistance": 4,
+   "instruction": null},
+  {"id": 81, "action": "replace", "at": "...", "actor": {"id": 7, "name": "..."}, "questionId": 402, "bankItemId": null,
+   "changedFields": null, "editDistance": null, "instruction": "Dùng ngữ cảnh mua vở"},
+  {"id": 82, "action": "keep", "at": "...", "actor": {"id": 7, "name": "..."}, "questionId": 450, "bankItemId": 88,
+   "changedFields": null, "editDistance": null, "instruction": null}]}
+```
+
+- `lineages`: mỗi phần tử là **một lần sinh** (job sinh câu của chỗ, theo thứ tự tạo; các lần sinh lại sau lỗi định dạng,
+  trùng, lệch Solver hoặc Đổi câu đều là lineage riêng) và `versions` là câu LLM gốc rồi các bản giáo viên sửa theo thứ tự.
+  Chỗ lấy câu từ ngân hàng có một lineage `origin = "bank"` (`job = null`) gồm chuỗi phiên bản của câu nguồn.
+- `current`: phiên bản đang nằm trong chỗ (`currentQuestionId`). `kind`: `llm` hoặc `teacher_edit`.
+- `qc.format.autoRepairs`: các lần hệ thống tự sửa (`json: đã sửa 1 escape LaTeX (\circ)`, `<trường>: đã tự đóng $`);
+  `warnings` là cảnh báo khác. `errors` là lý do không qua format. Mỗi bước là `null` khi câu chưa có dòng QC đó (ví dụ
+  câu dựng tay).
+- `qc.dedup.threshold`: ngưỡng đã dùng lúc kiểm, đọc từ `quality_check_result.threshold_used` (hiện 0.90); `similarity`
+  là điểm cao nhất với câu `comparedTo` (có thể `null` khi không có ứng viên đáng kể). `comparedTo.inThisExam`: câu đó
+  đang nằm trong đề này; `inBank`: câu đó đã có trong ngân hàng.
+- `qc.answerCheck.state` phân biệt bốn tình huống: `consistent` (Solver khớp), `inconsistent` (lệch: kèm `judgeAnswer`
+  hoặc `judgeSaKind`/`judgeSaAnswer` hoặc `judgeLabels` theo dạng câu, và `solverReasoning`), `error` (Solver lỗi, không có
+  kết quả: `error` là lý do; với bản sửa còn `job.status = "failed"`), `pending` (job `answer_check` đang chờ hoặc chạy),
+  `not_run` (chưa chạy, `reason` là `format_failed`, `duplicate`, `dedup_not_concluded`, `solver_not_run`, `superseded`
+  hoặc `not_recorded`). `consistent`/`inconsistent` đọc từ dòng `answer_check` đã lưu.
+- `reviewReasons`: lý do "cần xem kỹ" của riêng phiên bản đó, cùng tên với API xem đề (7.4), rỗng với bản đã vào ngân hàng.
+- `actions`: Sửa / Đổi / Giữ của chỗ theo thứ tự thời gian; `Đổi` kèm `instruction`; `Sửa` kèm `changedFields`,
+  `editDistance`. `questionId` là câu bị thao tác (Đổi: câu bị đổi ra khỏi chỗ).
+- Không có `raw_llm_output`, prompt, `prompt_note`, token, độ trễ hay chi phí. Dữ liệu cũ (trước V14) có
+  `solverReasoning = null`.
 
 ## 8. Đăng nhập và phân quyền (W1-1)
 
