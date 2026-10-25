@@ -28,3 +28,6 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 data/private/
+
+# Công cụ nhập bộ câu hỏi từ Word (W2-1)
+tools/bank-import/target/
