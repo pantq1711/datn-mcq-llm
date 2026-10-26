@@ -408,7 +408,7 @@ Backend kiểm tra cú pháp bề mặt, không bảo đảm KaTeX render đư�
 
 | Mức | Trường hợp | Hệ quả |
 |---|---|---|
-| Lỗi | Ký tự điều khiển, số dấu `$` lẻ, ngoặc `{}` không cân bằng, lệnh nằm ngoài `$...$`, thiếu đối số `\frac`/`\sqrt`, `\left`/`\right` hoặc `\begin`/`\end` không khớp, ở đề, 4 phương án (`mcq`), 4 ý (`tf`) hoặc đáp số (`sa`) | Câu sinh ra thành `format_failed`; bản sửa của giáo viên bị từ chối (400) |
+| Lỗi | Ký tự điều khiển, số dấu `$` lẻ, ngoặc `{}` không cân bằng, lệnh nằm ngoài `$...$`, thiếu đối số `\frac`/`\sqrt`, `\left`/`\right` hoặc `\begin`/`\end` không khớp, ở đề, 4 phương án (`mcq`), 4 ý (`tf`) hoặc đáp số (`sa`) | Câu sinh ra thành `format_failed`; bản sửa của giáo viên bị từ chối (400). Riêng câu `tf` do LLM sinh còn bị `format_failed` khi `explanation` tự thú nhận gán nhãn theo mẫu/yêu cầu hoặc tự sửa đề giữa lời giải (lý do `explanation: ...` vào ghi chú lần sinh lại); quy tắc này KHÔNG áp cho chữ giáo viên viết hay sửa |
 | Cảnh báo | Lệnh nằm ngoài danh sách cho phép, ví dụ `\widehat`, `\alpha`; môi trường ngoài danh sách (ví dụ `array`) khi cấu trúc cân bằng; mọi lỗi định dạng trong `explanation` | Không ảnh hưởng trạng thái, không trả về API. Lời giải luôn được giữ nguyên khi vào ngân hàng, kể cả khi còn lỗi LaTeX (quyết định 23/10) |
 
 Trước khi kiểm tra, backend đổi chuỗi `\n` theo nghĩa đen (dấu `\` rồi chữ `n`, do model viết `\\n` trong JSON)
@@ -571,8 +571,8 @@ POST /api/exams/build
   nội dung. Một câu ngân hàng chỉ vào MỘT chỗ của đề (kể cả khi nhiều ô dùng chung template). Giữa các đề chỉ xếp hạng
   mềm, không cấm: câu có ít đề khác dùng hơn được chọn trước, hòa thì câu dùng lần cuối cũ hơn trước (chưa dùng lên đầu),
   hòa nữa thì theo id; đề của mọi giáo viên đều được tính (ngân hàng dùng chung). Hết câu chưa dùng thì dùng lại câu đã dùng.
-- Phần thiếu: mỗi ô một run production, zero-shot, `prompt_version` `matrix-mcq-v1-draft` / `matrix-tf-v2-draft` /
-  `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`, `tf` có thêm `v1`; prompt nháp `MatrixPromptDraftV0`: sinh từ chủ đề, nội dung, yêu cầu cần đạt, không có câu
+- Phần thiếu: mỗi ô một run production, zero-shot, `prompt_version` `matrix-mcq-v1-draft` / `matrix-tf-v3-draft` /
+  `matrix-sa-v1-draft` (run trước ngày 23/10 là `v0`, `tf` có thêm `v1`, `v2` đến ngày 26/10; prompt nháp `MatrixPromptDraftV0`: sinh từ chủ đề, nội dung, yêu cầu cần đạt, không có câu
   mẫu; quy tắc đa dạng và danh sách tối đa 10 câu đã sinh của ô; chủ đề hình học như Tứ giác dặn câu phải làm được
   không cần hình vẽ). Mỗi chỗ một job, giãn cách 13 giây. Job chạy bằng worker (`app.worker.enabled=true`) hoặc
   `POST /api/generation/jobs/process-next` (công cụ thí nghiệm, chỉ khi `app.experiment.enabled=true`). Một đề 18 câu khi ngân hàng còn trống mất khoảng 7-8 phút trên Free Tier.
@@ -580,10 +580,15 @@ POST /api/exams/build
   này" (dạng hỏi khác các câu còn lại, phủ các ý khác nhau của yêu cầu cần đạt) khi ô có từ 2 câu; khi sinh lại sau
   một lần `format_failed`, thêm "Lần sinh trước bị loại vì: <lỗi>. Tránh lặp lại lỗi này." (tối đa 300 ký tự). Prompt
   dựng lúc worker nhận job nên có cả câu đã sinh của các chỗ trước trong cùng ô.
-- Câu `tf`: ghi chú có thêm mẫu nhãn bắt buộc, ví dụ "Mẫu nhãn bắt buộc (T,F,F,T): ý a phải Đúng, ý b phải Sai, ...",
-  chọn ngẫu nhiên trong các mẫu có 1–3 ý Đúng và khác mẫu của câu `tf` gần nhất cùng đề (cả khi sinh lại). Prompt bỏ
-  dòng "không bắt buộc số ý Đúng" và, khi ý d ở mức Vận dụng, dặn ý d phải cần suy luận thêm, không chỉ là hệ quả trực
-  tiếp của ý c. Nhãn trả về khác mẫu thì câu vẫn dùng được, kèm cảnh báo `label: khác mẫu bắt buộc ...` và cờ "cần xem kỹ".
+- Câu `tf`: ghi chú có thêm mẫu nhãn MỤC TIÊU, ví dụ "Mẫu nhãn mục tiêu (T,F,F,T): cố gắng viết ý a Đúng, ý b Sai, ...",
+  chọn ngẫu nhiên trong các mẫu có 1–3 ý Đúng và khác mẫu của câu `tf` gần nhất cùng đề (cả khi sinh lại). Từ `v3` (26/10) ghi
+  chú dặn: nhãn phải khớp đúng/sai THẬT của ý (muốn ý Sai thì viết khẳng định sai bằng cách đổi hệ số, dấu hoặc kết luận), không
+  gán nhãn trái với lời giải, lời giải không nhắc tới mẫu hay việc gán nhãn theo yêu cầu, và được lệch mẫu khi không viết được ý
+  hợp lý (ưu tiên tính đúng). `v2` (23/10) ghi "mẫu nhãn bắt buộc" kèm "ý a phải Đúng…" nên model gán nhãn theo mẫu bất chấp toán
+  học (xem `docs/dev-log/loi-va-cach-xu-ly.md`, L-47). Prompt bỏ dòng "không bắt buộc số ý Đúng" và, khi ý d ở mức Vận dụng, dặn
+  ý d phải cần suy luận thêm, không chỉ là hệ quả trực tiếp của ý c. Nhãn trả về khác mẫu thì câu vẫn dùng được, kèm cảnh báo
+  `label: khác mẫu mục tiêu ...` (dữ liệu cũ: `khác mẫu bắt buộc`); cảnh báo này chỉ lưu ở `warnings` và hiện trong vết QC
+  (`qc.format.warnings`) để thống kê mức tuân thủ, KHÔNG bật cờ "cần xem kỹ" (từ 26/10; trước đó có).
 - Mỗi lần gọi tiến độ, xem đề hoặc thao tác, backend đối soát các job đã xong:
   - câu `qc_passed`: chỗ đó có câu;
   - câu lệch Solver (trạng thái `generated`): sinh lại 1 lần; vẫn lệch thì dùng câu đó, kèm cờ "cần xem kỹ";
@@ -677,8 +682,9 @@ khác để sinh lại).
 - `reviewReasons`: `solver_inconsistent` (Solver lệch), `solver_ambiguous`, `solver_unparseable` (`sa`),
   `statement_undecidable` (`tf`), `solver_not_run` (Solver chưa chạy hoặc lỗi), `dedup_not_run`, và
   `warning: <cảnh báo format>` (ví dụ `warning: label: 4 ý cùng nhãn T`, `warning: option_a: đã tự đóng $`,
-  `warning: label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)`). Cảnh báo `json: đã sửa ... escape LaTeX` không phải lý
-  do (vẫn lưu trong `warnings`). `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
+  `warning: label: khác mẫu mục tiêu T,F,F,T (nhận T,T,F,F)`; dữ liệu trước 26/10 ghi `khác mẫu bắt buộc`). Cảnh báo `json: đã sửa ... escape LaTeX` không phải lý
+  do (vẫn lưu trong `warnings`). Từ 26/10 cảnh báo `label: khác mẫu mục tiêu ...` (mẫu nhãn tf là mục tiêu, lệch vì tính đúng là hợp lệ)
+  cũng không phải lý do (vẫn lưu trong `warnings` và hiện trong vết QC), ví dụ ở trên chỉ còn các cảnh báo khác. `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
   `solver_pending` (Solver đang kiểm lại, thay `solver_not_run`), `solver_failed` (kiểm lại thất bại) và
   `duplicate: <id>` (bản sửa trùng câu khác).
 - W2-3, câu sinh từ đề có tài liệu bài học (mục 7.2, 9) có thêm lý do của QC "bám tài liệu" (mục 7.7a):

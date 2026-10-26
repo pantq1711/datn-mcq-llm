@@ -7,6 +7,7 @@ import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.generation.parser.LlmOutputRepair;
+import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.qc.dto.GroundingVerdict;
 import com.datn.mcq.qc.dto.TfJudgement;
 import com.datn.mcq.qc.entity.QualityCheckResult;
@@ -93,7 +94,8 @@ public class QcSummaryService {
             }
             for (String w : warnings) {
                 // Ngày 23/10: cảnh báo đã sửa escape LaTeX không bật cờ; "đã tự đóng $" và các cảnh báo khác vẫn bật.
-                if (!w.startsWith(LlmOutputRepair.ESCAPE_WARNING_PREFIX)) {
+                // Từ 26/10: nhãn tf lệch mẫu mục tiêu là hợp lệ, cũng không bật cờ (vẫn lưu ở warnings và hiện trong vết QC).
+                if (!w.startsWith(LlmOutputRepair.ESCAPE_WARNING_PREFIX) && !TfLabelPattern.isDeviationWarning(w)) {
                     reasons.add(WARNING_PREFIX + w);
                 }
             }

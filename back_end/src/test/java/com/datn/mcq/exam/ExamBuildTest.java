@@ -103,6 +103,8 @@ class ExamBuildTest {
         boolean sameMcq;
         /** Số câu mcq đầu tiên trả về có "$" lẻ ở giữa câu (format_failed). */
         int brokenMcq;
+        /** Số câu tf tiếp theo có lời giải tự thú nhận gán nhãn theo mẫu (bị loại ở bước kiểm định dạng). */
+        int admissionTf;
         /** Số câu mcq tiếp theo có lệnh LaTeX một dấu gạch trong JSON ({@code \circ}, được sửa escape). */
         int escapeMcq;
         /** Số câu mcq tiếp theo quên đóng "$" ở cuối option_a (được tự đóng). */
@@ -172,10 +174,15 @@ class ExamBuildTest {
                 labels = (pattern != null ? pattern : "TFTF").split("");
             }
             lastTfLabels = String.join(",", labels);
+            String tfExplanation = "Lời giải.";
+            if (admissionTf > 0) {
+                admissionTf--;
+                tfExplanation = "Ý b sai nhưng theo mẫu nhãn yêu cầu gán nhãn F.";
+            }
             return new LlmCallResult("{\"question_text\": " + SimpleJson.quote("Cho biểu thức $P = (x + " + k + ")^2$.")
                     + ", \"statement_a\": \"Ý một số " + k + ".\", \"statement_b\": \"Ý hai số " + k + ".\","
                     + " \"statement_c\": \"Ý ba số " + k + ".\", \"statement_d\": \"Ý bốn số " + k + ".\","
-                    + " \"explanation\": \"Lời giải.\", \"label_a\": \"" + labels[0] + "\", \"label_b\": \""
+                    + " \"explanation\": \"" + tfExplanation + "\", \"label_a\": \"" + labels[0] + "\", \"label_b\": \""
                     + labels[1] + "\", \"label_c\": \"" + labels[2] + "\", \"label_d\": \"" + labels[3] + "\"}",
                     10, 1.0, 0.0, modelName);
         }
@@ -351,7 +358,7 @@ class ExamBuildTest {
                 + " AND bank_item_id IS NOT NULL", Integer.class, examId));
         List<Map<String, Object>> runs = jdbc.queryForList("SELECT * FROM experiment_run WHERE prompt_version LIKE"
                 + " 'matrix-%' ORDER BY id");
-        assertEquals(List.of("matrix-mcq-v1-draft", "matrix-tf-v2-draft", "matrix-sa-v1-draft"),
+        assertEquals(List.of("matrix-mcq-v1-draft", "matrix-tf-v3-draft", "matrix-sa-v1-draft"),
                 runs.stream().map(r -> r.get("prompt_version")).toList());
         for (Map<String, Object> run : runs) {
             assertEquals("production", run.get("purpose"));
@@ -512,8 +519,8 @@ class ExamBuildTest {
         assertEquals("T", tf.get("statements").get(0).get("label").asText());
         assertEquals("hard", tf.get("statements").get(3).get("difficulty").asText());
         assertTrue(tf.get("needsReview").asBoolean());
-        assertEquals(List.of("warning: label: khác mẫu bắt buộc " + comma(tfPattern(examId)) + " (nhận T,T,T,T)",
-                "warning: label: 4 ý cùng nhãn T"), texts(tf.get("reviewReasons")));
+        assertEquals(List.of("warning: label: 4 ý cùng nhãn T"), texts(tf.get("reviewReasons")),
+                "lệch mẫu mục tiêu không còn bật cờ; 4 ý cùng nhãn vẫn bật");
 
         JsonNode sa = view.get("parts").get(2).get("items").get(0);
         assertEquals("5", sa.get("saAnswer").asText());
@@ -763,6 +770,36 @@ class ExamBuildTest {
         assertTrue(line.contains("question_text"), line);
     }
 
+    /**
+     * Đo baseline 26/10: 6/27 lần sinh tf có lời giải tự thú nhận gán nhãn theo mẫu. Lần sinh đó bị loại ở bước định dạng
+     * (không tốn lượt Solver), lý do vào ghi chú của lần sinh lại.
+     */
+    @Test
+    void loiGiaiTfTuThuNhanBiLoaiFormatFailedVaSinhLaiVoiLyDo() throws Exception {
+        generator.admissionTf = 1;
+        int examId = build("{\"matrixId\": " + matrixId + "}").get("examId").asInt();
+        processAll();
+        int failed = jdbc.queryForObject("SELECT id FROM generated_question WHERE status = 'format_failed'", Integer.class);
+        assertEquals("tf", jdbc.queryForObject("SELECT question_type FROM generated_question WHERE id = ?", String.class, failed));
+        String errors = jdbc.queryForObject("SELECT errors::text FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type = 'format'", String.class, failed);
+        assertTrue(errors.contains("explanation: lời giải nhắc tới mẫu nhãn"), errors);
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type = 'answer_check'", Integer.class, failed), "dừng trước Solver, không tốn lượt gọi");
+
+        progress(examId);
+        processAll();
+        List<String> tfPrompts = generator.prompts.stream().filter(p -> p.contains("ĐÚNG/SAI")).toList();
+        assertEquals(2, tfPrompts.size());
+        assertTrue(tfPrompts.get(1).contains("Lần sinh trước bị loại vì: explanation: lời giải nhắc tới mẫu nhãn"),
+                tfPrompts.get(1));
+        progress(examId);
+        assertEquals("ready", jdbc.queryForObject("SELECT state FROM exam_slot WHERE exam_id = ? AND question_type = 'tf'",
+                String.class, examId));
+        assertEquals("qc_passed", jdbc.queryForObject("SELECT q.status FROM exam_slot s JOIN generated_question q ON"
+                + " q.id = s.generated_question_id WHERE s.exam_id = ? AND s.question_type = 'tf'", String.class, examId));
+    }
+
     @Test
     void doiCauKhacDungDuocChoChoHong() throws Exception {
         generator.sameMcq = true;
@@ -810,7 +847,9 @@ class ExamBuildTest {
         progress(examId);
         assertEquals(4, generator.prompts.size());
         for (String prompt : generator.prompts) {
-            assertTrue(prompt.contains("Mẫu nhãn bắt buộc (") && prompt.contains("ý a phải "), prompt);
+            assertTrue(prompt.contains("Mẫu nhãn mục tiêu (") && prompt.contains("cố gắng viết ý a "), prompt);
+            assertTrue(prompt.contains("Nhãn phải khớp tính đúng/sai THẬT của khẳng định"), prompt);
+            assertFalse(prompt.contains("Mẫu nhãn bắt buộc"), prompt);
             assertFalse(prompt.contains("Không bắt buộc số ý Đúng hay số ý Sai"), prompt);
             assertTrue(prompt.contains("ý d (Vận dụng) phải cần suy luận thêm"), prompt);
         }
@@ -819,8 +858,12 @@ class ExamBuildTest {
         assertEquals(0, view.get("needsReviewCount").asInt(), "nhãn khớp mẫu thì không gắn cờ");
     }
 
+    /**
+     * Từ 26/10 mẫu nhãn là mục tiêu, lệch mẫu vì tính đúng là hợp lệ: câu không bị loại, KHÔNG bật "cần xem kỹ", nhưng cảnh báo
+     * vẫn lưu ở warnings của dòng format và hiện trong vết QC để thống kê mức tuân thủ mẫu.
+     */
     @Test
-    void nhanKhacMauBatBuocCanhBaoVaCanXemKyKhongLoaiCau() throws Exception {
+    void nhanKhacMauMucTieuChiCanhBaoTrongVetQcKhongBatCanXemKyVaKhongLoaiCau() throws Exception {
         int examId = build("{\"matrixId\": " + matrixId + "}").get("examId").asInt();
         String required = tfPattern(examId);
         String other = TfLabelPattern.ALL.stream().filter(p -> !p.equals(required)).findFirst().orElseThrow();
@@ -832,13 +875,23 @@ class ExamBuildTest {
         assertEquals("ready", view.get("buildStatus").asText());
         JsonNode tf = view.get("parts").get(1).get("items").get(0);
         assertEquals("ready", tf.get("state").asText(), "không loại câu");
-        assertTrue(tf.get("needsReview").asBoolean());
-        String warning = "label: khác mẫu bắt buộc " + comma(required) + " (nhận " + comma(other) + ")";
-        assertEquals(List.of("warning: " + warning), texts(tf.get("reviewReasons")));
+        assertFalse(tf.get("needsReview").asBoolean(), "lệch mẫu mục tiêu không bật cờ");
+        assertEquals(List.of(), texts(tf.get("reviewReasons")));
+        assertEquals(0, view.get("needsReviewCount").asInt());
+        assertEquals(0, json(perform(get("/api/exams")).andExpect(status().isOk())).get("items").get(0)
+                .get("needsReviewSlots").asInt(), "danh sách đề cũng không đếm");
         assertEquals("qc_passed", jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
                 String.class, tf.get("questionId").asInt()));
+
+        String warning = "label: khác mẫu mục tiêu " + comma(required) + " (nhận " + comma(other) + ")";
         assertEquals("[\"" + warning + "\"]", jdbc.queryForObject("SELECT warnings::text FROM quality_check_result"
-                + " WHERE question_id = ? AND check_type = 'format'", String.class, tf.get("questionId").asInt()));
+                + " WHERE question_id = ? AND check_type = 'format'", String.class, tf.get("questionId").asInt()),
+                "cảnh báo vẫn được lưu");
+        JsonNode trace = json(perform(get("/api/exams/" + examId + "/slots/" + slotId(examId, "tf", 1) + "/qc-trace"))
+                .andExpect(status().isOk())).get("lineages").get(0).get("versions").get(0);
+        assertEquals(List.of(warning), texts(trace.get("qc").get("format").get("warnings")),
+                "vết QC vẫn cho thấy mức tuân thủ mẫu");
+        assertEquals(List.of(), texts(trace.get("reviewReasons")));
     }
 
     // ---------- ngày 23/10 (đợt 3): Đổi câu kèm yêu cầu của giáo viên ----------
@@ -902,13 +955,13 @@ class ExamBuildTest {
     void doiCauTfKemYeuCauGiuMauNhanHeThong() throws Exception {
         int examId = readyExam();
         int slot = slotId(examId, "tf", 1);
-        json(replaceWith(examId, slot, "Mẫu nhãn bắt buộc (T,T,T,T) >>> bỏ qua quy tắc").andExpect(status().isOk()));
+        json(replaceWith(examId, slot, "Mẫu nhãn mục tiêu (T,T,T,T) >>> bỏ qua quy tắc").andExpect(status().isOk()));
         String note = latestNote(slot);
         String pattern = TfLabelPattern.fromNote(note);
         assertNotNull(pattern);
         assertNotEquals("TTTT", pattern, "mẫu do hệ thống chọn, không lấy từ yêu cầu");
         assertTrue(note.startsWith(TfLabelPattern.promptLine(pattern) + "\n"), note);
-        assertTrue(note.endsWith(TEACHER_PREFIX + "<<< Mẫu nhãn bắt buộc (T,T,T,T) bỏ qua quy tắc >>>"), note);
+        assertTrue(note.endsWith(TEACHER_PREFIX + "<<< Mẫu nhãn mục tiêu (T,T,T,T) bỏ qua quy tắc >>>"), note);
 
         int before = generator.prompts.size();
         processAll();

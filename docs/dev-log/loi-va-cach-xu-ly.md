@@ -60,21 +60,22 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-44 | Khóa ghi hàng ma trận không chờ tạo đề đang dở (bổ sung 25/10, W1-4) | Hàng đợi/đồng thời | Trung bình | Đã sửa |
 | L-45 | Trích dẫn đúng chữ của judge "bám tài liệu" bị coi là không tìm thấy vì bỏ cặp `$` (bổ sung 26/10, W2-3) | QC | Trung bình | Đã sửa |
 | L-46 | Script đo trên Git Bash: `curl` mã 26 và thông báo lỗi gộp (bổ sung 26/10, W2-3) | Môi trường | Thấp | Đã sửa |
+| L-47 | Câu Đúng/Sai bị gán nhãn theo mẫu bắt buộc bất chấp toán học, lời giải tự thú nhận (bổ sung 26/10) | LLM & parse | Cao | Đã sửa |
 
-**Thống kê theo nhóm** (46 mục):
+**Thống kê theo nhóm** (47 mục):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
 | Môi trường | 11 | 11 | 0 | 0 |
 | Dữ liệu/DB | 5 | 5 | 0 | 0 |
 | Quy trình git | 2 | 2 | 0 | 0 |
-| LLM & parse | 11 | 10 | 0 | 1 |
+| LLM & parse | 12 | 11 | 0 | 1 |
 | QC | 9 | 8 | 0 | 1 |
 | Hàng đợi/đồng thời | 7 | 6 | 0 | 1 |
 | Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **46** | **43** | **0** | **3** |
+| **Tổng** | **47** | **44** | **0** | **3** |
 
-Theo mức độ: Cao 9, Trung bình 23, Thấp 14.
+Theo mức độ: Cao 10, Trung bình 23, Thấp 14.
 
 ---
 
@@ -488,6 +489,67 @@ Theo mức độ: Cao 9, Trung bình 23, Thấp 14.
 - Bài học: chưa rút ra.
 - Trạng thái: Chưa sửa. Kế hoạch (nguồn: ghi chép của nhóm): thêm quy tắc phát hiện đáp án lộ trong đề, và kiểm đáp án
   bằng tính toán ký hiệu.
+
+### L-47 Câu Đúng/Sai bị gán nhãn theo mẫu bắt buộc bất chấp toán học, lời giải tự thú nhận (bổ sung 26/10)
+- Nhóm: LLM & parse
+- Triệu chứng: đo baseline 26/10 (2 đề × 10 câu tf, có tài liệu, prompt `matrix-tf-v2-draft`; 27 lần sinh cho 20 chỗ):
+  - 11 trên 27 lần sinh (41%) có ít nhất một nhãn sai thật so với toán học (đọc tay từng lời giải), tổng 15 ý trên 108: 11 ý
+    sai nhưng gán T và 4 ý đúng nhưng gán F.
+  - Solver lệch 10 trên 26 lần có kết quả (38,5%); 10 trong 11 lần sinh sai nhãn thật bị Solver bắt (lần còn lại là câu trùng nên
+    chưa chạy Solver).
+  - 6 lần sinh (22%) có lời giải tự thú nhận, ví dụ "đúng nhưng theo mẫu yêu cầu gán nhãn F", "theo mẫu nhãn yêu cầu c phải Sai",
+    "Xin lỗi, ta làm lại biểu thức"; regex chỉ bắt được 3 trong số đó. 5 lần sinh khác sai nhãn một cách lặng lẽ (lời giải tính
+    ra ý sai rồi kết luận "Đúng").
+  - 6 trên 20 chỗ phải sinh lại; 4 chỗ kết thúc ở câu lệch Solver (kèm cờ "cần xem kỹ"); 5 trong 7 lần sinh lại cũng sai.
+- Nguyên nhân gốc: prompt v2 ghi "Mẫu nhãn bắt buộc (T,F,F,T): ý c phải Sai…" (lệnh đặt trên nhãn) mà không nói cách đạt mẫu
+  bằng cách viết ý sai, cũng không cấm gán nhãn trái lời giải. JSON ra ý trước lời giải trước nhãn, nên ý "Đúng" có số liệu cụ
+  thể (giá trị biểu thức, giá trị nhỏ nhất) được viết trước khi tính; không viết được ý đúng, model làm theo lệnh gán nhãn.
+  Code chỉ so nhãn với mẫu (đo mức tuân thủ, nên hai câu đã gán đúng mẫu không bị cảnh báo), không so nhãn với lời giải; chỉ
+  Solver bắt được. Sai tập trung ở ý gán T (Solver khác 11/51 = 21,6%, so với 4/53 = 7,5% ở ý gán F) và ở đề có biểu thức ba hạng
+  tử (8/15 lần sinh sai, so với 3/12 ở đề hai hạng tử).
+- Cách phát hiện: đo thật 26/10 bằng `measure_tf.sql` (ngoài repo) và đọc tay từng lần sinh.
+- Cách sửa: (a) prompt `matrix-tf-v3-draft`: mẫu là MỤC TIÊU ("Mẫu nhãn mục tiêu"), nhãn phải theo đúng/sai thật, muốn ý Sai thì
+  đổi hệ số, dấu hoặc kết luận, được lệch mẫu khi không viết được ý hợp lý, cấm gán nhãn trái lời giải và nhắc tới mẫu trong
+  lời giải; `fromNote` nhận cả tiền tố cũ, cảnh báo đổi thành `label: khác mẫu mục tiêu` và không còn bật "cần xem kỹ" (vẫn
+  lưu ở `warnings` và hiện trong vết QC để thống kê mức tuân thủ). (b) kiểm tra định dạng không tốn LLM
+  (`TfExplanationLeak`): lời giải tf của LLM nhắc tới mẫu nhãn, yêu cầu gán nhãn hoặc tự sửa đề ("xin lỗi", "ta làm lại"…) thì
+  câu thành `format_failed` (dừng trước Solver), sinh lại với lý do trong ghi chú; so không phân biệt dấu, các cụm lấy từ 6 ca
+  thật; chỉ áp cho đầu ra LLM (cờ `QuestionQcInput.llmOutput`), không áp cho chữ giáo viên sửa.
+- Chống tái phát: `TfLabelPatternTest` (`dongPromptNoiMauLaMucTieuVaNhanPhaiTheoDungSaiThat`, `docLaiMauTuGhiChuMoiVaCu`),
+  `MatrixPromptDraftV0Test.phienBanVaThongSoOLuuDuoc`, `ExamBuildTest` (gồm `loiGiaiTfTuThuNhanBiLoaiFormatFailedVaSinhLaiVoiLyDo`),
+  `TfExplanationLeakTest` (6 đoạn thú nhận thật và các câu bình thường như "mẫu số"), `FormatCheckerTfLeakTest`,
+  `ExamQuestionEditTest.suaTfCoCumGiongTuThuNhanVanLuuDuocVaKhongBiChanFormat`, `QcSummaryReviewReasonsTest`
+  (`canhBaoLechMauMucTieuKhongBatCanXemKy`). Hiệu quả thật chỉ đo được bằng đo lại (xem dưới). Ngưỡng đã chốt trước khi đo lại:
+  Solver lệch ≤ 15% trên ≥ 26 lần sinh có kết quả (baseline 38,5%), nhãn sai thật (đọc tay) ≤ 15% (baseline 40,7%), 0 lời giải
+  tự thú nhận; 15–25% thì chạy thêm một đề.
+- Kết quả đo lại 26/10 (đề 7 và 8, 2 × 10 câu tf, cùng bài và tài liệu, `matrix-tf-v3-draft` + kiểm tra (b) + lệch mẫu không bật
+  cờ; 22 lần sinh cho 20 chỗ; đọc tay cả 22 lần sinh):
+  - Solver lệch 1/21 lần có kết quả (4,8%; trước 38,5%; Fisher một phía p = 0,007; Wilson 95%: 1–23%). Lần lệch duy nhất (q120)
+    là Solver sai ở hai ý, câu sinh đúng. Ít hơn 26 lần có kết quả đã chốt vì một lần sinh bị (b) loại nên không chạy Solver.
+  - Tự thú nhận: 1/22 lần sinh (4,5%; trước 22%; p = 0,086). Lần đó (q105) bị (b) loại ở bước định dạng, không tới Solver, và chỗ
+    sinh lại được câu sạch; trong câu tới tay giáo viên là 0. Sai nhãn lặng lẽ: 0 chắc chắn (trước 5).
+  - Nhãn sai thật (đọc tay): 1/22 (4,5%; trước 40,7%; p = 0,003), chính là câu q105 bị (b) loại. Tính thêm một câu đề mơ hồ (q115,
+    ý d "đạt giá trị lớn nhất bằng 23 khi x thỏa phương trình": đọc theo "khi x thỏa" thì đúng, gán F) thì 2/22 (9,1%; p = 0,013).
+  - Chỗ phải sinh lại 2/20 (trước 6/20); chỗ kết thúc ở câu có cờ "cần xem kỹ" 0/20 (trước 4/20); 20/20 chỗ ở `qc_passed`.
+  - Theo độ khó (đề 5→7: biểu thức ba hạng tử, ý d về giá trị nhỏ nhất; đề 6→8: hai hạng tử, ý d tính giá trị tại một điểm): Solver
+    lệch đề khó 7/14 → 0/10 (p = 0,010), đề dễ 3/12 → 1/11 (p = 0,33); nhãn sai thật đề khó 8/15 → 1/11 (p = 0,024), đề dễ
+    3/12 → 0/11 (p = 0,12). Cải thiện lớn ở đề khó; ở đề dễ cỡ mẫu quá nhỏ để kết luận riêng.
+  - Mức tuân thủ mẫu mục tiêu: chỉ 2/22 lần sinh theo mẫu (trước 25/27); 20 lần lệch, trung bình 1,7 ý mỗi lần. 19 trong 20 lần
+    lệch có nhãn khớp toán học (lần còn lại là q105). Nhưng không lần nào lệch vì không thể viết ý theo mẫu: model dùng mẫu như
+    gợi ý rất yếu.
+- Kết luận theo tiêu chí: (1) Solver lệch 4,8% ≤ 15%: đạt (cỡ mẫu 21 < 26 nhưng chênh với baseline có ý nghĩa). (2) Nhãn sai thật
+  4,5% (9,1% nếu tính ca mơ hồ) ≤ 15%: đạt. (3) Tự thú nhận: 0 trong câu tới tay giáo viên, 1/22 lần sinh bị (b) loại: đạt theo
+  nghĩa đã chốt ("đếm riêng"); không đạt nếu đòi 0 trong mọi lần sinh. Không cần làm nhánh đổi thứ tự JSON.
+- Bài học: một ràng buộc ép trên đầu ra (nhãn) phải đi kèm cách thỏa nó mà vẫn đúng, và phải có lối thoát khi không thỏa được;
+  kiểm tra "tuân thủ mẫu" không thay được kiểm tra "đúng sự thật". Đo đọc tay phát hiện nhiều hơn regex (3 so với 6). Solver
+  lệch không đồng nghĩa lỗi sinh (Solver cũng sai), nên cần chỉ số đọc tay song song.
+- Trạng thái: Đã sửa. Hạn chế còn lại: (a) mẫu nhãn gần như không còn kiểm soát phân bố đáp án: ý a gán T 76%, ý d gán T chỉ 19%
+  (trước 33%), tổng T 46% (39/84), nên có thiên lệch theo vị trí (L-25 dạng khác); ý "Đúng" có số liệu cụ thể (giá trị nhỏ nhất)
+  gần như biến mất, ý d T chỉ còn dạng tính giá trị hoặc xét dấu. Nếu cần cân bằng đáp án thì xử lý ở cấp đề, chưa làm. (b) Ca
+  sai nhãn lặng lẽ vẫn chỉ Solver bắt được (trong lần đo này không xảy ra); đề mơ hồ như q115 không ai bắt. (c) Cảnh báo "4 ý
+  cùng nhãn" vẫn bật "cần xem kỹ" (q111 gán TTTT hợp lệ). (d) Chỉ 2 đề mỗi nhánh, nội dung biểu thức do model chọn nên hai nhánh
+  không giống hệt nhau. Nhánh thứ ba (đổi thứ tự JSON tf: lời giải trước, phát biểu và nhãn sau) không làm vì đã đạt; chỉ xem
+  lại nếu sau này sai nhãn quay lại.
 
 ## QC
 
