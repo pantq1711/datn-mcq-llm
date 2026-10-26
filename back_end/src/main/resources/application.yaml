@@ -98,9 +98,10 @@ app:
     max-pages: ${MATERIAL_MAX_PAGES:200}
     max-per-owner: ${MATERIAL_MAX_PER_OWNER:50}
     max-uploads-per-hour: ${MATERIAL_MAX_UPLOADS_PER_HOUR:30}
-    max-concurrent-extractions: ${MATERIAL_MAX_CONCURRENT:2}
+    max-concurrent-extractions: ${MATERIAL_MAX_CONCURRENT:1}
+    queue-wait: ${MATERIAL_QUEUE_WAIT:30s}
     extract-timeout: ${MATERIAL_EXTRACT_TIMEOUT:30s}
-    pandoc-heap-mb: ${MATERIAL_PANDOC_HEAP_MB:768}
+    pandoc-heap-mb: ${MATERIAL_PANDOC_HEAP_MB:256}
   # Bảng điểm cho phần tạo đề sau này (V4); luồng sinh câu không dùng. Giá trị mặc định nằm ở ExamScoringProperties.
   exam:
     scoring:

@@ -19,3 +19,10 @@ springdoc:
     enabled: false
   swagger-ui:
     enabled: false
+
+# Giới hạn bộ nhớ và đồng thời cho môi trường thật VPS 2GB / container app 1GB (W2-4a Mục 1)
+app:
+  materials:
+    max-concurrent-extractions: 1
+    pandoc-heap-mb: 256
+    queue-wait: 30s

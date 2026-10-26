@@ -188,12 +188,15 @@ class PdfAndFacadeTest {
         CountDownLatch release = new CountDownLatch(1);
         PdfTextExtractor blocking = new PdfTextExtractor(props) {
             @Override
-            public ExtractedText extract(byte[] content) {
+            public ExtractedText extract(byte[] content, Runnable permitReleaser) {
                 inside.countDown();
                 try {
                     release.await(10, TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                }
+                if (permitReleaser != null) {
+                    permitReleaser.run();
                 }
                 return new ExtractedText("x", LessonMaterial.MIME_PDF, "pdfbox", 1, List.of());
             }

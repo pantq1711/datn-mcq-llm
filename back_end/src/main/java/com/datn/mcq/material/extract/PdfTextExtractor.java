@@ -1,6 +1,7 @@
 package com.datn.mcq.material.extract;
 
 import com.datn.mcq.material.entity.LessonMaterial;
+import jakarta.annotation.PreDestroy;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -15,10 +16,13 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -26,8 +30,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * độ dài văn bản, thời gian (trang xử lý quá hạn thì dừng; quá hạn tổng thì đóng tài liệu và bỏ kết quả). PDF có mật khẩu
  * hoặc cấm sao chép nội dung bị từ chối. Công thức trong PDF thường bị méo khi trích: nhiều ký tự lỗi thì có cảnh báo.
  *
- * <p>Giới hạn còn lại: PDFBox không có trần bộ nhớ cho luồng nén (flate) giải nén; file ≤ 10 MB, ≤ 200 trang và chỉ giáo
- * viên đã đăng nhập tải lên, nhưng một PDF độc vẫn có thể ăn nhiều heap. Trích ngoài tiến trình là việc sau nếu cần.
+ * <p>Quản lý luồng (W2-4a Mục 1): dùng ThreadPoolExecutor có trần (SynchronousQueue), không dùng newCachedThreadPool;
+ * chỉ giải phóng permit khi luồng trích thật sự kết thúc trong background, ngăn tình trạng luồng cũ treo mà permit đã nhả.
  */
 @Component
 public class PdfTextExtractor {
@@ -38,25 +42,60 @@ public class PdfTextExtractor {
             + "Hệ thống chưa hỗ trợ OCR; hãy dùng file có chữ hoặc dán nội dung vào file .txt.";
 
     private final MaterialProperties props;
-    private final ExecutorService pool = Executors.newCachedThreadPool(runnable -> {
-        Thread t = new Thread(runnable, "pdf-extract");
-        t.setDaemon(true);
-        return t;
-    });
+    private final ExecutorService pool;
 
     public PdfTextExtractor(MaterialProperties props) {
         this.props = props;
+        int maxThreads = Math.max(1, props.getMaxConcurrentExtractions());
+        this.pool = new ThreadPoolExecutor(
+                1, maxThreads, 60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                runnable -> {
+                    Thread t = new Thread(runnable, "pdf-extract");
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.AbortPolicy()
+        );
     }
 
-    public ExtractedText extract(byte[] content) {
+    @PreDestroy
+    public void shutdown() {
+        pool.shutdownNow();
+    }
+
+    public final ExtractedText extract(byte[] content) {
+        return extract(content, null);
+    }
+
+    public ExtractedText extract(byte[] content, Runnable permitReleaser) {
+        AtomicBoolean released = new AtomicBoolean(false);
+        Runnable releaseOnce = () -> {
+            if (released.compareAndSet(false, true) && permitReleaser != null) {
+                permitReleaser.run();
+            }
+        };
         AtomicReference<PDDocument> opened = new AtomicReference<>();
         long deadline = System.nanoTime() + props.getExtractTimeout().toNanos();
-        Future<ExtractedText> task = pool.submit(() -> doExtract(content, deadline, opened));
+        Future<ExtractedText> task;
+        try {
+            task = pool.submit(() -> {
+                try {
+                    return doExtract(content, deadline, opened);
+                } finally {
+                    releaseOnce.run();
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            releaseOnce.run();
+            throw MaterialErrors.busy();
+        }
         try {
             return task.get(props.getExtractTimeout().toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             task.cancel(true);
             closeQuietly(opened.get());
+            // Không nhả permit ở đây nếu luồng trích thật sự chưa kết thúc; releaseOnce trong finally của task sẽ nhả
             throw MaterialErrors.timeout();
         } catch (InterruptedException e) {
             task.cancel(true);

@@ -140,6 +140,12 @@ docker compose logs -f --tail=100 app     # Flyway migrate lên V16; dòng "Đã
 Kiểm tra: mở `https://<tên miền>` (chứng chỉ do Caddy tự xin lần đầu, có thể mất vài chục giây); `curl -i
 https://<tên miền>/actuator/health` phải trả **404** (đã bị chặn); `https://<tên miền>/swagger-ui/index.html` cũng 404.
 
+Kiểm tra quyền ghi thư mục tạm `/tmp` trên volume đĩa:
+```bash
+docker compose exec app sh -c 'touch /tmp/.w && rm /tmp/.w && echo ok'
+```
+Lệnh phải in ra `ok`. Nếu báo `Permission denied` (do Docker tạo volume với user `root` trong khi container `app` chạy user non-root `app` có UID/GID `10001:10001` theo `back_end/Dockerfile`): sửa quyền bằng `docker compose exec -u 0 app chown -R 10001:10001 /tmp` (hoặc `chmod 1777 /tmp`), sau đó chạy lại lệnh kiểm tra trên.
+
 ### 4.9 Tạo admin đầu tiên và tài khoản giáo viên
 
 1. `ADMIN_EMAIL` và `ADMIN_PASSWORD` trong `deploy/.env` được dùng khi `app` khởi động và **chưa có admin nào**. Không ghi
@@ -177,6 +183,11 @@ Biến đặt trong `deploy/.env` (mẫu: `deploy/.env.example`). Compose **đè
   chỉ là chuẩn bị. Muốn đổi thì sửa cả `application-prod.yaml` và `deploy/web/Caddyfile`.
 - **Health:** `GET /actuator/health` chỉ trả trạng thái (UP/DOWN), chi tiết chỉ cho người đã đăng nhập. Caddy chặn
   `/actuator` từ bên ngoài; healthcheck của Docker gọi nội bộ trong container.
+- **Tài nguyên Pandoc & trích tài liệu:**
+  - `MATERIAL_MAX_CONCURRENT` (mặc định prod: `1`): số tác vụ trích tài liệu (`docx`/`pdf`) và xuất Word (`pandoc`) được chạy cùng một lúc. Cả hai dùng chung một Semaphore có trần permit để tránh OOM khi máy chủ VPS chỉ có 2 GB RAM (container `app` giới hạn 1 GB).
+  - `MATERIAL_QUEUE_WAIT` (mặc định: `30s`): thời gian chờ xếp hàng lấy permit; nếu quá thời gian này sẽ trả lời ngay `503 Service Unavailable` (`EXTRACTOR_UNAVAILABLE` hoặc `PANDOC_UNAVAILABLE`) kèm header `Retry-After: 30`.
+  - `MATERIAL_PANDOC_HEAP_MB` (mặc định prod: `256`): Pandoc được chạy kèm cờ Haskell RTS `+RTS -M<MB>m -RTS` để khống chế heap tối đa, tránh tràn RAM container.
+  - **Thư mục tạm `/tmp`:** Chuyển từ `tmpfs: 128m` sang Docker volume trên đĩa `app_tmp:/tmp`. Thay đổi này giúp tiết kiệm 128 MB RAM cho container và đảm bảo sẵn sàng tương thích nếu sau này bật `read_only: true` (volume ghi được mount vào `/tmp`, không làm mất cờ read-only của container filesystem).
 - **PostgreSQL:** `shared_buffers=256MB`, `max_connections=60`, `mem_limit` 768 MB.
 
 ## 6. Vận hành
@@ -315,7 +326,7 @@ nhận cookie Secure qua http).
 | Đăng nhập được nhưng bị đăng xuất sau ít phút | cookie không lưu: `COOKIE_SECURE=true` mà truy cập qua http, hoặc frontend gọi API khác domain |
 | API trả 403 "Invalid CORS request" | `CORS_ALLOWED_ORIGINS` không khớp `https://<tên miền>` |
 | Tải tài liệu docx báo 503 `EXTRACTOR_UNAVAILABLE` hoặc container `OOMKilled` khi tải docx/pdf lớn | docx cần pandoc (cùng bản dùng xuất Word): `docker compose exec app pandoc --version`. OOM: hạ `MATERIAL_PANDOC_HEAP_MB` hoặc tăng `mem_limit` của `app`; pdf độc có thể ăn nhiều heap, xem `docs/api/README.md` mục 9.4 |
-| Xuất Word báo 503/500 | `docker compose exec app pandoc --version`; xem log `app`; container có thể bị OOM (`docker inspect` ghi `OOMKilled`) → tăng `mem_limit` của `app` |
+| Xuất Word báo 503/500 | 503 `PANDOC_UNAVAILABLE`: hết slot hoặc quá thời gian xếp hàng `MATERIAL_QUEUE_WAIT` (đang trích tài liệu hoặc xuất Word khác); thử lại sau thời gian trong header `Retry-After`. 500: kiểm tra pandoc trong container (`docker compose exec app pandoc --version`), xem log `app`; nếu container bị OOM (`docker inspect` ghi `OOMKilled`) → tăng `mem_limit` của `app` hoặc hạ `MATERIAL_PANDOC_HEAP_MB` |
 | `app` khởi động lại liên tục | `docker compose logs app`: thường là `JWT_SECRET` thiếu/ngắn, `ADMIN_PASSWORD` dưới 12 ký tự, hoặc sai mật khẩu DB (đổi `DB_PASSWORD` sau khi volume `pgdata` đã tạo không có tác dụng) |
 | Đĩa đầy | `docker system df`; `docker image prune -f`; kiểm thư mục sao lưu |
 

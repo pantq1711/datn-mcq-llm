@@ -115,9 +115,16 @@ public class ApiExceptionHandler {
     /** Xuất đề ra Word không thành (thiếu pandoc, quá thời gian, pandoc báo lỗi): trả đúng mã kèm thông báo. */
     @ExceptionHandler(DocumentExportException.class)
     public ResponseEntity<Map<String, String>> handleExport(DocumentExportException ex) {
-        return ResponseEntity.status(ex.getHttpStatus())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("error", ex.getMessage() != null ? ex.getMessage() : "Không xuất được đề"));
+        var builder = ResponseEntity.status(ex.getHttpStatus()).contentType(MediaType.APPLICATION_JSON);
+        if (ex.getRetryAfterSeconds() != null && ex.getRetryAfterSeconds() > 0) {
+            builder.header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        Map<String, String> body = new LinkedHashMap<>();
+        body.put("error", ex.getMessage() != null ? ex.getMessage() : "Không xuất được đề");
+        if (ex.getCode() != null) {
+            body.put("code", ex.getCode());
+        }
+        return builder.body(body);
     }
 
     /** W1-1: đăng nhập hoặc refresh không thành: 401 kèm code (INVALID_CREDENTIALS, REFRESH_INVALID). */
@@ -184,6 +191,7 @@ public class ApiExceptionHandler {
     @ExceptionHandler(UpstreamServiceException.class)
     public ResponseEntity<Map<String, String>> handleUpstream(UpstreamServiceException ex) {
         return ResponseEntity.status(ex.getHttpStatus())
+
                 .body(Map.of("error", ex.getMessage() != null ? ex.getMessage() : "Dịch vụ ngoài tạm thời không phục vụ"));
     }
 }

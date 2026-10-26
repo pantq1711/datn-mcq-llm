@@ -823,7 +823,7 @@ GET /api/exams/12/export/docx   → 200, file MT2610231200001.docx (Content-Disp
   w:val="15"/></w:compat>` (trước `<w:rsids>`) để Word không mở file ở Compatibility Mode (lệnh Convert Equations của
   MathType mới chạy), và đặt font mặc định cùng kiểu Normal là Times New Roman 13 trong `word/styles.xml`. Tiêu đề
   (Heading) vẫn dùng font theo theme của pandoc.
-- Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; pandoc báo lỗi
+- Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; khi hệ thống đang bận (tiến trình trích xuất tài liệu hoặc xuất Word khác đang giữ Semaphore) và chờ quá thời gian xếp hàng (`queue-wait`, mặc định 30s) trả 503 kèm mã `EXPORT_BUSY` và header `Retry-After`; pandoc báo lỗi trả 500.
   trả 500.
 - **Cài pandoc** (backend không tự cài):
   - Windows: tải bộ cài `.msi` ở <https://pandoc.org/installing.html> (hoặc `winget install --id JohnMacFarlane.Pandoc`),
@@ -1138,7 +1138,7 @@ Mã lỗi (body `{"error", "code"}`):
 | 422 | `MATERIAL_ENCRYPTED` | pdf có mật khẩu hoặc cấm sao chép nội dung |
 | 429 | `TOO_MANY_UPLOADS` | quá 30 lần tải mỗi giờ (tính cả lần lỗi; bộ đếm trong bộ nhớ) |
 | 503 | `EXTRACTOR_UNAVAILABLE` | docx cần pandoc mà máy chủ chưa cài (pdf và txt vẫn dùng được) |
-| 503 | `EXTRACTOR_BUSY`, `EXTRACTION_TIMEOUT` | đang trích tối đa 2 tài liệu cùng lúc / một lần trích quá 30 giây |
+| 503 | `EXTRACTOR_BUSY`, `EXTRACTION_TIMEOUT` | đang trích tài liệu đạt giới hạn đồng thời hoặc chờ quá hàng đợi / một lần trích quá 30 giây |
 
 ### 9.2. Danh sách, chi tiết, xóa
 
