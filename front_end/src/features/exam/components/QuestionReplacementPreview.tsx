@@ -393,8 +393,8 @@ export default function QuestionReplacementPreview({
                 await replaceQuestion(
                     examId,
                     slotId,
-                    originalQuestion.id,
-                    replacementQuestion.id
+                    Number(originalQuestion.id),
+                    Number(replacementQuestion.id)
                 );
                 message.success('Thay thế câu hỏi thành công');
             }
