@@ -1,7 +1,7 @@
 import { useState } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { Card, Typography, Input, Alert, Button, Space, message } from "antd";
+import { Card, Typography, Input, Alert, Button } from "antd";
 import { ThunderboltOutlined } from "@ant-design/icons";
 // import { seedDemoMathQuestions } from "../../teacher-review/services/teacherReviewApi";
 
@@ -43,7 +43,7 @@ export function validateLatex(
 }
 
 export default function TestKaTeX() {
-    const [seeding, setSeeding] = useState<boolean>(false);
+    // const [seeding, setSeeding] = useState<boolean>(false);
 
     // const handleSeedMath = async () => {
     //     setSeeding(true);
@@ -98,7 +98,7 @@ export default function TestKaTeX() {
                     <Button
                         type="primary"
                         icon={<ThunderboltOutlined />}
-                        loading={seeding}
+                    // loading={seeding}
                     // onClick={handleSeedMath}
                     >
                         Tạo câu hỏi Toán mẫu (Seed Demo Math)

@@ -12,9 +12,9 @@ export async function generateExam(payload: GenerateExamPayload): Promise<Genera
 }
 
 export async function keepQuestion(
-    examId: string,
-    slotId: string,
-    questionId: number | string
+    examId: number,
+    slotId: number,
+    questionId: number
 ): Promise<{ success: boolean }> {
     const url = `/api/exams/${examId}/slots/${slotId}/keep`;
     const response = await axiosInstance.post(url, { questionId });
@@ -27,10 +27,10 @@ export async function keepQuestion(
 }
 
 export async function replaceQuestion(
-    examId: string,
-    slotId: string,
-    originalQuestionId: number | string,
-    replacementQuestionId: number | string
+    examId: number,
+    slotId: number,
+    originalQuestionId: number,
+    replacementQuestionId: number
 ): Promise<{ success: boolean }> {
     const url = `/api/exams/${examId}/slots/${slotId}/replace`;
     const response = await axiosInstance.post(url, {
@@ -46,8 +46,8 @@ export async function replaceQuestion(
 }
 
 export async function updateQuestion(
-    examId: string,
-    slotId: string,
+    examId: number,
+    slotId: number,
     question: ExamQuestionItem
 ): Promise<ExamQuestionItem> {
     const url = `/api/exams/${examId}/slots/${slotId}/question`;

@@ -34,11 +34,6 @@ interface TrueFalseStatement {
     isTrue?: boolean;
 }
 
-/**
- * Mở rộng kiểu dữ liệu hiện có để component có thể hiển thị
- * các dạng câu hỏi khác nhau mà không bắt buộc phải sửa
- * ExamQuestionItem ngay lập tức.
- */
 type PreviewQuestionItem = (
     ExamQuestionItem | QuestionReplacementCandidate
 ) & {
@@ -55,8 +50,9 @@ interface QuestionReplacementPreviewProps {
     originalQuestion: PreviewQuestionItem | null;
     replacementQuestion: PreviewQuestionItem | null;
     onCancel: () => void;
-    examId: string;
-    slotId: string;
+    // Cho phép examId và slotId có thể là string, number hoặc undefined để tránh lỗi type mismatch
+    examId?: number;
+    slotId?: number;
     onConfirm?: () => Promise<void>;
     confirmLoading?: boolean;
     qualityStatus?: "passed" | "warning" | "failed" | "pending";
@@ -68,12 +64,6 @@ interface QuestionContentProps {
     variant: "original" | "replacement";
 }
 
-/**
- * Chuẩn hóa questionType.
- *
- * Nếu dữ liệu cũ chưa có questionType, mặc định hiển thị
- * trắc nghiệm A-D để duy trì khả năng tương thích.
- */
 function normalizeQuestionType(
     value?: string,
 ): NormalizedQuestionType {
@@ -157,10 +147,6 @@ function getBooleanAnswer(
     return null;
 }
 
-/**
- * Phần hiển thị nội dung câu hỏi.
- * Cả câu gốc và câu thay thế đều sử dụng chung component này.
- */
 function QuestionContent({
     question,
     variant,
@@ -208,7 +194,6 @@ function QuestionContent({
                 {question.questionText || "Chưa có nội dung câu hỏi."}
             </Paragraph>
 
-            {/* Dạng 1: Trắc nghiệm A-D */}
             {questionType === "MULTIPLE_CHOICE" && (
                 <div
                     className="replacement-preview-options"
@@ -252,7 +237,6 @@ function QuestionContent({
                 </div>
             )}
 
-            {/* Dạng 2: Đúng/Sai */}
             {questionType === "TRUE_FALSE" && (
                 <div className="replacement-preview-statements">
                     {statements.length > 0 ? (
@@ -328,7 +312,6 @@ function QuestionContent({
                 </div>
             )}
 
-            {/* Dạng 3: Trả lời ngắn */}
             {questionType === "SHORT_ANSWER" && (
                 <div className="replacement-preview-short-answer">
                     <Text
@@ -350,7 +333,6 @@ function QuestionContent({
                 </div>
             )}
 
-            {/* Dạng chưa được hỗ trợ */}
             {questionType === "UNKNOWN" && (
                 <Alert
                     type="warning"
@@ -406,16 +388,17 @@ export default function QuestionReplacementPreview({
 
         setSubmitting(true);
         try {
-            // Gọi API thay thế
-            await replaceQuestion(
-                examId,
-                slotId,
-                originalQuestion.id,
-                replacementQuestion.id
-            );
+            // Kiểm tra tồn tại examId và slotId trước khi gọi API
+            if (examId !== undefined && slotId !== undefined) {
+                await replaceQuestion(
+                    examId,
+                    slotId,
+                    originalQuestion.id,
+                    replacementQuestion.id
+                );
+                message.success('Thay thế câu hỏi thành công');
+            }
 
-            message.success('Thay thế câu hỏi thành công');
-            // Thông báo cho component cha (có thể là reload danh sách)
             await onConfirm?.();
         } catch (e) {
             console.error(e);

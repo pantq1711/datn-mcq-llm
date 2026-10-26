@@ -5,7 +5,7 @@ import axiosInstance from "../../../services/apiClient";
 //     status: string;
 // }
 
-import type { QuestionTemplate, Subject, GenerateQuestionPayload, GenerateResponse, GenerationStatusResponse, GenerationResultResponse } from "../types/generation.types";
+import type { Subject, GenerationStatusResponse, GenerationResultResponse } from "../types/generation.types";
 
 // export async function createGenerationTask(
 //     payload: GenerateQuestionPayload

@@ -24,8 +24,8 @@ interface EditQuestionFormValues {
 interface EditQuestionModalProps {
     open: boolean;
     question: ExamQuestionItem | null;
-    examId: string;
-    slotId: string;
+    examId: number;
+    slotId: number;
     onCancel: () => void;
     onSave: (updatedQuestion: ExamQuestionItem) => void | Promise<void>;
     loading?: boolean;

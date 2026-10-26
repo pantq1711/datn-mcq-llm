@@ -1,11 +1,4 @@
-import {
-    Card,
-    Descriptions,
-    Radio,
-    Space,
-    Tag,
-    Typography,
-} from "antd";
+import { Card, Descriptions, Radio, Space, Tag, Typography, } from "antd";
 import './ReviewQuestionForm.css';
 
 import CorrectAnswerSelector from "./CorrectAnswerSelector";
@@ -152,11 +145,11 @@ export default function ReviewQuestionForm({
                     onChange={onFormatStatusChange}
                     options={[
                         {
-                            value: "PASS",
+                            value: "qc_passed",
                             label: "Đạt chuẩn",
                         },
                         {
-                            value: "FAIL",
+                            value: "format_failed",
                             label: "Không đạt chuẩn",
                         },
                     ]}

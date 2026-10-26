@@ -12,10 +12,10 @@ import QuestionBankPage from "../features/question-bank/pages/QuestionBankPage";
 import GenerateExamPage from "../features/exam/pages/GenerateExamPage";
 import ExamListPage from "../features/exam/pages/ExamListPage";
 import ExamDetailPage from "../features/exam/pages/ExamDetailPage";
-import ExperimentListPage from "../features/experiment/pages/ExperimentListPage";
-import ExperimentDetailPage from "../features/experiment/pages/ExperimentDetailPage";
-import ExperimentComparisonPage from "../features/experiment/pages/ExperimentComparisonPage";
-import GenerateQuestionPage from "../features/question-generation/pages/GenerateQuestionPage";
+// import ExperimentListPage from "../features/experiment/pages/ExperimentListPage";
+// import ExperimentDetailPage from "../features/experiment/pages/ExperimentDetailPage";
+// import ExperimentComparisonPage from "../features/experiment/pages/ExperimentComparisonPage";
+// import GenerateQuestionPage from "../features/question-generation/pages/GenerateQuestionPage";
 // import GenerationHistoryPage from "../features/question-generation/pages/GenerationHistoryPage";
 import ExamMatrixListPage from "../features/exam-matrix/pages/ExamMatrixListPage";
 import TestKaTeX from "../features/test-katex/pages/TestKaTeX";
@@ -39,10 +39,10 @@ export default function AppRoutes() {
                 <Route path="exams" element={<ExamListPage />} />
                 <Route path="exams/generate" element={<GenerateExamPage />} />
                 <Route path="exams/:id" element={<ExamDetailPage />} />
-                <Route path="experiments" element={<ExperimentListPage />} />
+                {/* <Route path="experiments" element={<ExperimentListPage />} />
                 <Route path="experiments/:id" element={<ExperimentDetailPage />} />
-                <Route path="experiments/comparison" element={<ExperimentComparisonPage />} />
-                <Route path="generate" element={<GenerateQuestionPage />} />
+                <Route path="experiments/comparison" element={<ExperimentComparisonPage />} /> */}
+                {/* <Route path="generate" element={<GenerateQuestionPage />} /> */}
                 {/* <Route path="generation-history" element={<GenerationHistoryPage />} /> */}
                 {/* <Route path="job-processor" element={<JobProcessorPage />} /> */}
                 <Route path="exam-matrices" element={<ExamMatrixListPage />} />

@@ -1,14 +1,5 @@
 import { Menu } from "antd";
-import {
-    ExperimentOutlined,
-    FileTextOutlined,
-    FormOutlined,
-    HomeOutlined,
-    ReadOutlined,
-    TableOutlined,
-    SafetyCertificateOutlined,
-    OrderedListOutlined
-} from "@ant-design/icons";
+import { FileTextOutlined, HomeOutlined, ReadOutlined, TableOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
 import "./Sidebar.css";
@@ -21,11 +12,11 @@ const menuItems: MenuItem[] = [
         icon: <HomeOutlined />,
         label: "Tổng quan",
     },
-    {
-        key: "/generate",
-        icon: <FormOutlined />,
-        label: "Sinh câu hỏi",
-    },
+    // {
+    //     key: "/generate",
+    //     icon: <FormOutlined />,
+    //     label: "Sinh câu hỏi",
+    // },
     // {
     //     key: "/job-processor",
     //     icon: <OrderedListOutlined />,
@@ -51,11 +42,11 @@ const menuItems: MenuItem[] = [
         icon: <FileTextOutlined />,
         label: "Đề thi",
     },
-    {
-        key: "/experiments",
-        icon: <ExperimentOutlined />,
-        label: "Thực nghiệm",
-    },
+    // {
+    //     key: "/experiments",
+    //     icon: <ExperimentOutlined />,
+    //     label: "Thực nghiệm",
+    // },
 ];
 
 export default function Sidebar() {
@@ -67,7 +58,7 @@ export default function Sidebar() {
     };
 
     const selectedKey = menuItems
-        .filter((item): item is MenuItem => !!item && "key" in item)
+        .filter((item): item is NonNullable<MenuItem> => item !== null && typeof item === "object" && "key" in item)
         .map((item) => item.key)
         .find((key) => {
             if (typeof key !== "string") return false;

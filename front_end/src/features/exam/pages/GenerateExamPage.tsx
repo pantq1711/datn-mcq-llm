@@ -8,7 +8,7 @@ import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
 
 import "./GenerateExamPage.css";
-import type { ExamSubjectOption, GeneratedExamCode, ExamPreviewData, ExamQuestionItem, ExamGenerationValues } from "../types/exam.types";
+import type { ExamSubjectOption, GeneratedExamCode, ExamQuestionItem, ExamGenerationValues } from "../types/exam.types";
 import { getCatalogSubjects, generateExam } from "../services/examApi";
 
 const { Title, Text } = Typography;
