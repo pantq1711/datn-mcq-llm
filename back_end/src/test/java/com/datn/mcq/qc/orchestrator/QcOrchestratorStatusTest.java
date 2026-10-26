@@ -85,7 +85,7 @@ class QcOrchestratorStatusTest {
 
         assertEquals(QuestionStatus.FORMAT_FAILED, report.resultingStatus());
         assertEquals(0, llm.solverCalls, "Format lỗi thì không được gọi Solver");
-        verify(repository, never()).findDedupCandidateRows(any(), any(), any());
+        verify(repository, never()).findDedupCandidateRows(any(), any(), any(), any());
     }
 
     // ---------- Dedup chưa kết luận: thiếu phạm vi, lỗi, hoặc trùng ----------
@@ -105,13 +105,13 @@ class QcOrchestratorStatusTest {
         assertEquals(0, llm.solverCalls, "Dedup chưa kết luận thì không được gọi Solver");
         assertNoAnswerCheckRowSaved();
         assertNoDedupRowSaved();
-        verify(repository, never()).findDedupCandidateRows(any(), any(), any());
+        verify(repository, never()).findDedupCandidateRows(any(), any(), any(), any());
     }
 
     @Test
     void dedupFailureMustStayGeneratedAndNeverCallSolver() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("A"));
-        when(repository.findDedupCandidateRows(anyInt(), anyInt(), anyCollection()))
+        when(repository.findDedupCandidateRows(any(), any(), any(), any()))
                 .thenThrow(new IllegalStateException("mất kết nối DB"));
 
         QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
@@ -127,7 +127,7 @@ class QcOrchestratorStatusTest {
     @Test
     void duplicateMustBeDuplicateAndNeverCallSolver() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("A"));
-        when(repository.findDedupCandidateRows(anyInt(), anyInt(), anyCollection()))
+        when(repository.findDedupCandidateRows(any(), any(), any(), any()))
                 .thenReturn(List.<Object[]>of(duplicateCandidateRow(5)));
 
         QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE);
@@ -149,7 +149,7 @@ class QcOrchestratorStatusTest {
     void noDuplicateThenConsistentAnswerCheckReachesQcPassed() {
         FakeSolverLlmClient llm = FakeSolverLlmClient.returning(solverJson("A"));
         boolean[] dedupRanBeforeSolver = {false};
-        when(repository.findDedupCandidateRows(anyInt(), anyInt(), anyCollection())).thenAnswer(inv -> {
+        when(repository.findDedupCandidateRows(any(), any(), any(), any())).thenAnswer(inv -> {
             dedupRanBeforeSolver[0] = llm.solverCalls == 0;
             return List.of();
         });
@@ -326,10 +326,10 @@ class QcOrchestratorStatusTest {
                 if (dedupCase.equals("missing-scope")) {
                     scope = null;
                 } else if (dedupCase.equals("dedup-error")) {
-                    when(repository.findDedupCandidateRows(anyInt(), anyInt(), anyCollection()))
+                    when(repository.findDedupCandidateRows(any(), any(), any(), any()))
                             .thenThrow(new IllegalStateException("lỗi đọc ứng viên"));
                 } else {
-                    when(repository.findDedupCandidateRows(anyInt(), anyInt(), anyCollection()))
+                    when(repository.findDedupCandidateRows(any(), any(), any(), any()))
                             .thenReturn(List.<Object[]>of(duplicateCandidateRow(5)));
                 }
                 QcPipelineReport report = orchestrator(llm).evaluateAndSave(validInput(Option.A, true), scope);

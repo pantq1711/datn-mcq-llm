@@ -214,7 +214,7 @@ public class ExamActionService {
         }
         // W1-3: bản sửa cũng được so trùng với các câu đang nằm ở những chỗ khác của đề.
         QuestionEditService.EditOutcome outcome = questionEditService.createVersion(slot.getGeneratedQuestionId(),
-                toInput(request), siblings.candidates(examId, slot.getId(), slot.getQuestionType()));
+                toInput(request), siblings.candidates(examId, slot.getId(), slot.getQuestionType()), actorId);
         if (outcome.changed()) {
             slot.setGeneratedQuestionId(outcome.questionId());
             slot.setState(ExamSlot.READY);

@@ -30,7 +30,8 @@ import java.util.Set;
  *                            cùng dạng câu với câu đang kiểm tra được so.
  */
 public record DedupScope(Purpose purpose, Integer runId, List<Integer> comparableRunIds,
-                         Set<Integer> excludedQuestionIds, List<DedupCandidate> extraCandidates) {
+                         Set<Integer> excludedQuestionIds, List<DedupCandidate> extraCandidates,
+                         Integer creatorUserId) {
 
     public DedupScope {
         comparableRunIds = comparableRunIds == null ? null : List.copyOf(comparableRunIds);
@@ -39,26 +40,36 @@ public record DedupScope(Purpose purpose, Integer runId, List<Integer> comparabl
     }
 
     public DedupScope(Purpose purpose, Integer runId, List<Integer> comparableRunIds,
+                      Set<Integer> excludedQuestionIds, List<DedupCandidate> extraCandidates) {
+        this(purpose, runId, comparableRunIds, excludedQuestionIds, extraCandidates, null);
+    }
+
+    public DedupScope(Purpose purpose, Integer runId, List<Integer> comparableRunIds,
                       Set<Integer> excludedQuestionIds) {
-        this(purpose, runId, comparableRunIds, excludedQuestionIds, null);
+        this(purpose, runId, comparableRunIds, excludedQuestionIds, null, null);
     }
 
     public DedupScope(Purpose purpose, Integer runId, List<Integer> comparableRunIds) {
-        this(purpose, runId, comparableRunIds, null, null);
+        this(purpose, runId, comparableRunIds, null, null, null);
     }
 
     /** Bản sao loại trừ thêm các câu {@code ids} khỏi ứng viên. */
     public DedupScope excluding(Collection<Integer> ids) {
         Set<Integer> all = new HashSet<>(excludedQuestionIds);
         all.addAll(ids);
-        return new DedupScope(purpose, runId, comparableRunIds, all, extraCandidates);
+        return new DedupScope(purpose, runId, comparableRunIds, all, extraCandidates, creatorUserId);
     }
 
     /** Bản sao có thêm các ứng viên so trùng theo nội dung (W1-3: câu trong cùng đề). */
     public DedupScope withExtraCandidates(Collection<DedupCandidate> candidates) {
         List<DedupCandidate> all = new java.util.ArrayList<>(extraCandidates);
         all.addAll(candidates);
-        return new DedupScope(purpose, runId, comparableRunIds, excludedQuestionIds, all);
+        return new DedupScope(purpose, runId, comparableRunIds, excludedQuestionIds, all, creatorUserId);
+    }
+
+    /** W2-4a: Bản sao gắn id người tạo đề để lọc ứng viên ngân hàng riêng tư. */
+    public DedupScope withCreatorUserId(Integer creatorUserId) {
+        return new DedupScope(purpose, runId, comparableRunIds, excludedQuestionIds, extraCandidates, creatorUserId);
     }
 
     public static DedupScope forExperiment(Integer runId) {

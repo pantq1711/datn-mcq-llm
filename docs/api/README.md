@@ -323,6 +323,7 @@ GET /api/bank-items/88
 
 - `provenance.versions` đi từ câu LLM gốc đến bản được đưa vào ngân hàng; `bank_item.source_question_id` là phiên bản cuối.
   `editedBy` chỉ có khi có nhật ký thao tác Sửa trong đề. Không có `raw_llm_output`.
+  **Quyền riêng tư (W2-4a):** trong `versions[].editedBy` và `review.reviewer`, họ tên và id của giáo viên khác được ẩn danh thành `{"id": null, "name": "Giáo viên khác"}`; chỉ chính giáo viên đó hoặc Quản trị viên (Admin) mới thấy id và họ tên thật.
 - `usage.myExams` chỉ gồm đề của chính người gọi (tối đa 50, mới nhất trước); đề của giáo viên khác chỉ được tính vào
   `usageCount`, không lộ mã đề. Admin luôn nhận danh sách rỗng.
 
@@ -823,7 +824,7 @@ GET /api/exams/12/export/docx   → 200, file MT2610231200001.docx (Content-Disp
   w:val="15"/></w:compat>` (trước `<w:rsids>`) để Word không mở file ở Compatibility Mode (lệnh Convert Equations của
   MathType mới chạy), và đặt font mặc định cùng kiểu Normal là Times New Roman 13 trong `word/styles.xml`. Tiêu đề
   (Heading) vẫn dùng font theo theme của pandoc.
-- Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; pandoc báo lỗi
+- Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; khi hệ thống đang bận (tiến trình trích xuất tài liệu hoặc xuất Word khác đang giữ Semaphore) và chờ quá thời gian xếp hàng (`queue-wait`, mặc định 30s) trả 503 kèm mã `EXPORT_BUSY` và header `Retry-After`; pandoc báo lỗi trả 500.
   trả 500.
 - **Cài pandoc** (backend không tự cài):
   - Windows: tải bộ cài `.msi` ở <https://pandoc.org/installing.html> (hoặc `winget install --id JohnMacFarlane.Pandoc`),
@@ -916,9 +917,7 @@ không có hoặc của giáo viên khác, hoặc chỗ không thuộc đề: 40
   `editDistance`. `questionId` là câu bị thao tác (Đổi: câu bị đổi ra khỏi chỗ).
 - Không có `raw_llm_output`, prompt, `prompt_note`, token, độ trễ hay chi phí. Dữ liệu cũ (trước V14) có
   `solverReasoning = null`.
-- **Hạn chế đã biết (W2-3, chưa sửa):** bước dedup so với câu của mọi giáo viên cùng môn, nên `qc.dedup.comparedTo.questionId`
-  có thể trỏ tới câu sinh từ tài liệu riêng tư của giáo viên khác (câu đó không hiện trong ngân hàng của người xem). Chỉ lộ id
-  câu và độ tương đồng, không lộ nội dung.
+- **Quyền riêng tư dedup (W2-4a):** phạm vi ứng viên dedup được giới hạn theo người tạo đề (`creatorUserId`): chỉ gồm câu ngân hàng dùng chung, câu riêng tư của chính giáo viên, và các câu trong cùng đề. Do đó `qc.dedup.comparedTo` không bao giờ trỏ tới câu riêng tư của giáo viên khác.
 
 ### 7.7a. QC "bám tài liệu" (W2-3)
 
@@ -930,10 +929,10 @@ ngoài transaction DB, thử lại có giới hạn như mọi job, thiếu API 
 - Judge được thấy câu hỏi, đáp án và lời giải của người soạn (khác Solver) cùng ĐÚNG các đoạn tài liệu mà model sinh câu đã thấy
   (`generation_job.material_context`). Tài liệu và câu hỏi là dữ liệu trong khối có ranh giới, mọi lệnh trong đó không được làm
   theo. Đầu ra bị ép theo schema: `verdict` (`SUPPORTED`, `NOT_SUPPORTED`, `UNKNOWN`), `reason` (ngắn), `evidence_quote`.
-- **Kiểm chứng trích dẫn:** `SUPPORTED` bắt buộc kèm trích dẫn nguyên văn đủ dài (từ 8 ký tự không kể khoảng trắng) mà server
+- **Kiểm chứng trích dẫn (W2-4a):** `SUPPORTED` bắt buộc kèm trích dẫn nguyên văn đủ dài (từ 15 ký tự sau chuẩn hóa) mà server
   tìm thấy trong đoạn tài liệu đã đưa. So khớp chuẩn hóa như nhau cho cả hai phía: không phân biệt hoa thường, bỏ mọi
   khoảng trắng và ký tự vô hình, bỏ ký hiệu bao công thức (`$`, `\(`, `\)`, `\[`, `\]`) và lệnh dàn trang LaTeX (`\left`,
-  `\right`, `\,`, `\;`, `\!`), gộp dấu trừ/gạch dài và dấu nháy cong về ASCII, rút `^{x}`/`_{x}` về `^x`/`_x` khi trong
+  `\right`, `\,`, `\;`, `\!`), quy đổi tương đương các biểu diễn toán học đối xứng (`\dfrac`/`\tfrac` $\rightarrow$ `\frac`, `\leq`/`\geq`/`\neq` $\rightarrow$ `\le`/`\ge`/`\ne`, chữ số mũ Unicode `²³⁴` $\rightarrow$ `^2^3^4`, `×` $\rightarrow$ `\times`), gộp dấu trừ/gạch dài và dấu nháy cong về ASCII, rút `^{x}`/`_{x}` về `^x`/`_x` khi trong
   ngoặc đúng một chữ hoặc số (`x^{12}` giữ nguyên); quote còn bị cắt dấu câu và dấu nháy hai đầu. Không bỏ dấu tiếng Việt,
   không so mờ, nên đổi chữ, số, dấu hay hệ số vẫn không khớp; độ dài tối thiểu tính sau chuẩn hóa. Không tìm thấy thì `SUPPORTED` bị hạ
   xuống `UNKNOWN` (lý do bắt đầu bằng `evidence_not_found:`). `NOT_SUPPORTED` và `UNKNOWN` giữ nguyên kết luận;
@@ -1138,7 +1137,7 @@ Mã lỗi (body `{"error", "code"}`):
 | 422 | `MATERIAL_ENCRYPTED` | pdf có mật khẩu hoặc cấm sao chép nội dung |
 | 429 | `TOO_MANY_UPLOADS` | quá 30 lần tải mỗi giờ (tính cả lần lỗi; bộ đếm trong bộ nhớ) |
 | 503 | `EXTRACTOR_UNAVAILABLE` | docx cần pandoc mà máy chủ chưa cài (pdf và txt vẫn dùng được) |
-| 503 | `EXTRACTOR_BUSY`, `EXTRACTION_TIMEOUT` | đang trích tối đa 2 tài liệu cùng lúc / một lần trích quá 30 giây |
+| 503 | `EXTRACTOR_BUSY`, `EXTRACTION_TIMEOUT` | đang trích tài liệu đạt giới hạn đồng thời hoặc chờ quá hàng đợi / một lần trích quá 30 giây |
 
 ### 9.2. Danh sách, chi tiết, xóa
 
@@ -1174,9 +1173,20 @@ Mã lỗi (body `{"error", "code"}`):
 - **Bộ nhớ của pandoc:** mỗi lần đọc docx bị giới hạn heap `MATERIAL_PANDOC_HEAP_MB` (768 MB) và 30 giây. `mem_limit` của
   `app` là 1 GB và heap JVM chiếm 55%, nên trần này là giới hạn trên, chưa đo với tài liệu lớn: nếu container bị `OOMKilled`
   khi tải docx lớn, hạ `MATERIAL_PANDOC_HEAP_MB` hoặc tăng `mem_limit`.
-- **qc-trace và câu riêng tư:** `qc.dedup.comparedTo.questionId` có thể trỏ tới câu riêng tư của giáo viên khác (chỉ lộ id và độ
-  tương đồng); xem mục 7.7. Chưa sửa.
+- **qc-trace và câu riêng tư:** đã khắc phục ở W2-4a (xem mục 7.7 và 8).
+- **Tính bất biến của ngữ cảnh đề:** `exam_generation_context` chỉ được tạo lúc sinh đề, không có API nào cho phép sửa hay gỡ sau khi tạo (chỉ xóa cascade theo đề). Do đó `ExamActionService.keep` dùng ngữ cảnh tài liệu của đề để gắn `bank_item.visible_to_user_id` là hoàn toàn đúng và an toàn.
 - Tài liệu ảnh hưởng tới câu được SINH và được dùng để chấm "bám tài liệu" (mục 7.7a); bản giáo viên sửa chưa được chấm lại.
 - Cấu hình giới hạn: `app.materials.*` (biến `MATERIAL_MAX_FILE_BYTES`, `MATERIAL_MAX_CHARS`, `MATERIAL_MAX_PAGES`,
   `MATERIAL_MAX_PER_OWNER`, `MATERIAL_MAX_UPLOADS_PER_HOUR`, `MATERIAL_MAX_CONCURRENT`, `MATERIAL_EXTRACT_TIMEOUT`,
   `MATERIAL_PANDOC_HEAP_MB`). Caddy cho phép body tới 12 MB; Tomcat đọc bỏ tối đa 25 MB phần thừa để trả được 413.
+
+### 9.5. Dữ liệu gửi tới dịch vụ AI
+
+- **Dữ liệu gửi đi:** Văn bản trích từ tài liệu bài học (các đoạn được chọn bởi `PassageSelector`), đề bài, "yêu cầu thêm cho AI" và các câu hỏi được sinh ra sẽ được gửi tới Google Gemini API để thực hiện sinh câu hỏi, giải thẩm định (Solver) và kiểm tra bám tài liệu (grounding check).
+- **Lưu trữ phía server:** Hệ thống chỉ lưu văn bản đã trích và mã băm sha256 của file gốc, tuyệt đối không lưu file gốc (đã nêu ở mục 9; người dùng không thể tải lại file gốc đã tải lên).
+- **Chính sách dữ liệu của Google Gemini API:** Với gói miễn phí của Gemini API, Google có thể dùng dữ liệu gửi lên để cải thiện sản phẩm (có thể bao gồm huấn luyện mô hình) (theo điều khoản của Google tại thời điểm viết: 10/2026, cần kiểm tra lại khi triển khai); khi triển khai hệ thống cho người dùng thật nên dùng gói trả phí của Google.
+- **Trách nhiệm của giáo viên:** Giáo viên **không** tải lên tài liệu chứa thông tin cá nhân của học sinh (như họ tên, điểm số, số điện thoại, địa chỉ...) hoặc tài liệu mật/nội bộ của nhà trường. Giáo viên chịu hoàn toàn trách nhiệm về bản quyền và quyền sử dụng đối với tài liệu tải lên hệ thống.
+- **Ghi chú cho frontend:** Trước nút bấm tải tài liệu lên, frontend cần hiển thị một ô xác nhận (checkbox) bắt buộc với nội dung:
+  > *"Tài liệu sẽ được gửi tới dịch vụ AI bên thứ ba để sinh câu hỏi. Tôi xác nhận tài liệu không chứa thông tin cá nhân của học sinh và tôi có quyền sử dụng tài liệu này."*
+
+  Nút "Tải lên" chỉ được kích hoạt (enable) khi người dùng đã tích chọn ô xác nhận này.

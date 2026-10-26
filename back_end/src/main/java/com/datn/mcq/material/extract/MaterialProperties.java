@@ -40,13 +40,13 @@ public class MaterialProperties {
     private double formulaLossWarnRatio = 0.3;
 
     /** Số lần trích chạy đồng thời tối đa (pandoc là tiến trình con cùng cgroup, PDFBox ăn bộ nhớ). */
-    private int maxConcurrentExtractions = 2;
+    private int maxConcurrentExtractions = 1;
     /** Chờ chỗ trích tối đa bao lâu trước khi trả 503. */
-    private Duration queueWait = Duration.ofSeconds(15);
+    private Duration queueWait = Duration.ofSeconds(30);
     /** Thời gian tối đa cho một lần trích (pandoc hoặc PDFBox). */
     private Duration extractTimeout = Duration.ofSeconds(30);
     /** Trần heap của pandoc (MB, cờ +RTS -M). */
-    private int pandocHeapMb = 768;
+    private int pandocHeapMb = 256;
 
     public long getMaxFileBytes() {
         return maxFileBytes;

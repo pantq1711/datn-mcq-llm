@@ -188,8 +188,9 @@ public final class MatrixPromptDraftV0 {
 
     /**
      * Như trên, kèm các đoạn tài liệu bài học đã chọn ({@code materialContext}, W2-3): khối DỮ LIỆU có ranh giới
-     * {@link #DOC_OPEN} ... {@link #DOC_CLOSE}, đặt sau thông số của ô và ghi chú của job, TRƯỚC các quy tắc và yêu cầu đầu
-     * ra (nên yêu cầu đầu ra của hệ thống luôn là phần cuối). Null hoặc trống thì giống prompt không có tài liệu.
+     * {@link #DOC_OPEN} ... {@link #DOC_CLOSE}, đặt sau thông số của ô và ghi chú hệ thống của job, TRƯỚC các quy tắc
+     * và yêu cầu đầu ra; các khối "yêu cầu thêm" và yêu cầu khi Đổi câu của giáo viên được đặt ở CUỐI prompt là chủ đích
+     * (đây là yêu cầu của chính chủ đề). Null hoặc trống thì giống prompt không có tài liệu.
      */
     public static String buildGenerationPrompt(MatrixCellSpec spec, List<PreviousQuestion> previous, String note,
                                                String materialContext) {

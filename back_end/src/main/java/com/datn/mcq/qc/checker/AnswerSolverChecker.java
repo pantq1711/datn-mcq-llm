@@ -43,6 +43,11 @@ public class AnswerSolverChecker {
         }
     }
 
+    /**
+     * Phiên bản prompt Solver (W2-4a mục 5): bọc đề bài trong khối ranh giới và trung hòa các ký tự/nhãn ranh giới.
+     */
+    public static final String SOLVER_PROMPT_VERSION = PromptBuilder.SOLVER_PROMPT_VERSION;
+
     /** Cấu trúc JSON bắt buộc cho phản hồi của Solver (Gemini responseSchema). */
     public static final String SOLVER_RESPONSE_SCHEMA_JSON = """
             {"type":"OBJECT","properties":{

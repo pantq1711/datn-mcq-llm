@@ -33,12 +33,15 @@ public class ExamSlotSiblings implements SlotDedupContext {
     private final ExamSlotRepository slotRepository;
     private final BankService bankService;
     private final GenerationService generationService;
+    private final com.datn.mcq.exam.repository.ExamRepository examRepository;
 
     public ExamSlotSiblings(ExamSlotRepository slotRepository, BankService bankService,
-                            GenerationService generationService) {
+                            GenerationService generationService,
+                            com.datn.mcq.exam.repository.ExamRepository examRepository) {
         this.slotRepository = slotRepository;
         this.bankService = bankService;
         this.generationService = generationService;
+        this.examRepository = examRepository;
     }
 
     @Override
@@ -113,5 +116,16 @@ public class ExamSlotSiblings implements SlotDedupContext {
                     generationService.getStatements(q.getId()).stream()
                             .map(GeneratedQuestionStatement::getStatementText).toList());
         };
+    }
+    @Override
+    @Transactional(readOnly = true)
+    public Integer creatorUserIdForSlot(Integer examSlotId) {
+        if (examSlotId == null) {
+            return null;
+        }
+        return slotRepository.findById(examSlotId)
+                .flatMap(s -> examRepository.findById(s.getExamId()))
+                .map(com.datn.mcq.exam.entity.Exam::getCreatedBy)
+                .orElse(null);
     }
 }

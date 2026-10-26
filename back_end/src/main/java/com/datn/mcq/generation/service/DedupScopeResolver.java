@@ -41,7 +41,11 @@ public class DedupScopeResolver {
             return scope;
         }
         SlotDedupContext context = slotContext.getIfAvailable();
-        return context == null ? scope : scope.withExtraCandidates(context.candidatesForSlot(examSlotId));
+        if (context == null) {
+            return scope;
+        }
+        return scope.withExtraCandidates(context.candidatesForSlot(examSlotId))
+                .withCreatorUserId(context.creatorUserIdForSlot(examSlotId));
     }
 
     public DedupScope resolve(Integer runId) {
