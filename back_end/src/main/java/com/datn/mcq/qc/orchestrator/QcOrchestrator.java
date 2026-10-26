@@ -10,11 +10,13 @@ import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.FormatChecker;
+import com.datn.mcq.qc.checker.GroundingChecker;
 import com.datn.mcq.qc.dto.AnswerCheckStatus;
 import com.datn.mcq.qc.dto.DedupCandidate;
 import com.datn.mcq.qc.dto.DedupOutcome;
 import com.datn.mcq.qc.dto.DedupScope;
 import com.datn.mcq.qc.dto.DedupStatus;
+import com.datn.mcq.qc.dto.GroundingResult;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.dto.SolverVerdict;
@@ -47,6 +49,13 @@ public class QcOrchestrator {
     private final QualityCheckResultRepository qualityCheckResultRepository;
     private final DedupService dedupService;
     private final AnswerCheckRecorder answerCheckRecorder;
+
+    /**
+     * W2-3: judge "bám tài liệu". Nạp bằng field (không qua constructor) để các test dựng tay QcOrchestrator không phải đổi;
+     * thiếu thì {@link #groundingAvailable()} là false.
+     */
+    @Autowired(required = false)
+    private GroundingChecker groundingChecker;
 
     /**
      * Chữ ký trước GĐ3, giữ lại cho các test dựng tay QcOrchestrator với câu MCQ. Không dùng trong mã chính:
@@ -210,6 +219,22 @@ public class QcOrchestrator {
 
     /** Lý do Solver không chạy được vì thiếu cấu hình (lỗi cấu hình, không phải lỗi tạm thời: không thử lại). */
     public static final String SOLVER_NOT_CONFIGURED = "answer_check không chạy: chưa cấu hình API key cho Solver";
+
+    /** W2-3: judge "bám tài liệu" gọi được (đã cấu hình API key). */
+    public boolean groundingAvailable() {
+        return groundingChecker != null && groundingChecker.canRunOnline();
+    }
+
+    /**
+     * W2-3: chấm một câu theo đoạn tài liệu {@code context} (gọi mạng, KHÔNG ghi DB, không mở transaction). Ném lỗi khi gọi
+     * thất bại hoặc phản hồi hỏng; không có cấu hình thì ném IllegalStateException({@link GroundingChecker#NOT_CONFIGURED}).
+     */
+    public GroundingResult callGrounding(QuestionQcInput input, String context) {
+        if (!groundingAvailable()) {
+            throw new IllegalStateException(GroundingChecker.NOT_CONFIGURED);
+        }
+        return groundingChecker.check(input, context);
+    }
 
     /** Solver gọi được (đã cấu hình API key). */
     public boolean solverAvailable() {

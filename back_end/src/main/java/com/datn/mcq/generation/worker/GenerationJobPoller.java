@@ -19,6 +19,8 @@ import com.datn.mcq.generation.parser.McqJsonParser;
 import com.datn.mcq.generation.service.DedupScopeResolver;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
+import com.datn.mcq.qc.checker.GroundingChecker;
+import com.datn.mcq.qc.dto.GroundingResult;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
@@ -88,6 +90,9 @@ public class GenerationJobPoller {
         GenerationJobProcessor.ClaimedJobContext ctx = claimedOpt.get();
         if (ctx.answerCheck()) {
             return processAnswerCheck(ctx);
+        }
+        if (ctx.grounding()) {
+            return processGrounding(ctx);
         }
         boolean shortAnswer = ctx.questionType() == QuestionType.SA;
         boolean trueFalse = ctx.questionType() == QuestionType.TF;
@@ -175,6 +180,51 @@ public class GenerationJobPoller {
             var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(),
                     null, error);
+        }
+    }
+
+    /**
+     * W2-3: job grounding_check, QC "bám tài liệu" của một câu đã sinh. (1) transaction ngắn dựng đầu vào (câu đã bị thay thì
+     * bỏ, không gọi LLM); (2) gọi judge NGOÀI transaction; (3) transaction ngắn ghi kết quả và job done cùng lúc. Lỗi judge
+     * (mạng, hết thời gian chờ, phản hồi hỏng) đi đường thử lại có giới hạn ({@code max-attempts}, backoff) rồi failed; thiếu
+     * API key thì failed ngay. Không bao giờ đổi trạng thái câu: kết quả chỉ là cảnh báo.
+     */
+    private ProcessedJobSummary processGrounding(GenerationJobProcessor.ClaimedJobContext ctx) {
+        Optional<GenerationJobProcessor.GroundingJobInput> input;
+        try {
+            input = processor.prepareGrounding(ctx);
+        } catch (RuntimeException ex) {
+            var failedJob = processor.recordJobFailure(ctx.jobId(), "Lỗi trước lời gọi judge: " + ex.getMessage(),
+                    maxAttempts);
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(), null,
+                    ex.getMessage());
+        }
+        if (input.isEmpty()) {
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "done", null, "skipped");
+        }
+        if (!qcOrchestrator.groundingAvailable()) {
+            processor.failJobNow(ctx.jobId(), GroundingChecker.NOT_CONFIGURED);
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "failed", null,
+                    GroundingChecker.NOT_CONFIGURED);
+        }
+        GroundingResult result;
+        try {
+            result = qcOrchestrator.callGrounding(input.get().question(), input.get().context());
+        } catch (RuntimeException ex) {
+            String error = "Không hoàn tất grounding_check: " + ex.getMessage();
+            var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(), null,
+                    error);
+        }
+        try {
+            processor.completeGrounding(ctx, result, input.get().refsJson());
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "done", null, null);
+        } catch (RuntimeException ex) {
+            String error = "Lỗi sau lời gọi judge: " + ex.getMessage();
+            LOG.warn("Job {}: {}", ctx.jobId(), error, ex);
+            var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(), null,
+                    error);
         }
     }
 

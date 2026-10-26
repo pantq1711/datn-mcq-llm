@@ -2253,6 +2253,42 @@
           }
         }
       },
+      "GroundingDto" : {
+        "type" : "object",
+        "properties" : {
+          "state" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "evidenceQuote" : {
+            "type" : "string"
+          },
+          "evidenceFound" : {
+            "type" : "boolean"
+          },
+          "judgeModel" : {
+            "type" : "string"
+          },
+          "materialRefs" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MaterialRefDto"
+            }
+          },
+          "checkedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "error" : {
+            "type" : "string"
+          },
+          "job" : {
+            "$ref" : "#/components/schemas/JobDto"
+          }
+        }
+      },
       "JobDto" : {
         "type" : "object",
         "properties" : {
@@ -2319,6 +2355,37 @@
           }
         }
       },
+      "MaterialRefDto" : {
+        "type" : "object",
+        "properties" : {
+          "materialId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sha256" : {
+            "type" : "string"
+          },
+          "from" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "to" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "rank" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "score" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "selection" : {
+            "type" : "string"
+          }
+        }
+      },
       "QcDto" : {
         "type" : "object",
         "properties" : {
@@ -2330,6 +2397,9 @@
           },
           "answerCheck" : {
             "$ref" : "#/components/schemas/AnswerCheckDto"
+          },
+          "grounding" : {
+            "$ref" : "#/components/schemas/GroundingDto"
           }
         }
       },

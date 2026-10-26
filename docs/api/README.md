@@ -681,6 +681,11 @@ khác để sinh lại).
   do (vẫn lưu trong `warnings`). `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
   `solver_pending` (Solver đang kiểm lại, thay `solver_not_run`), `solver_failed` (kiểm lại thất bại) và
   `duplicate: <id>` (bản sửa trùng câu khác).
+- W2-3, câu sinh từ đề có tài liệu bài học (mục 7.2, 9) có thêm lý do của QC "bám tài liệu" (mục 7.7a):
+  `grounding_not_supported` (judge cho là đáp án, lời giải hoặc câu hỏi không khớp tài liệu), `grounding_unknown` (đoạn tài
+  liệu không đủ để kết luận, hoặc judge nói "bám tài liệu" mà trích dẫn không kiểm chứng được), `grounding_pending` (đang chờ
+  hoặc đang chấm) và `grounding_failed` (chấm lỗi, không có kết quả). Đây chỉ là CẢNH BÁO: câu giữ nguyên trạng thái (vẫn
+  `qc_passed` nếu đã qua QC), không bị loại, giáo viên vẫn Giữ được. Kết luận `SUPPORTED` không thêm lý do nào.
 - W1-2: câu hệ thống sinh chưa Giữ có `qcState`: `checking` (Solver đang kiểm lại bản sửa), `passed` (không còn lý do cần
   xem kỹ), `needs_review` (có lý do). Chỗ khác không có trường này. Mọi câu có `edited` (câu hiện tại là bản giáo viên
   sửa, kể cả khi đã Giữ) và, khi `edited`, `originalQuestionId` (bản gốc LLM).
@@ -909,6 +914,40 @@ không có hoặc của giáo viên khác, hoặc chỗ không thuộc đề: 40
   có thể trỏ tới câu sinh từ tài liệu riêng tư của giáo viên khác (câu đó không hiện trong ngân hàng của người xem). Chỉ lộ id
   câu và độ tương đồng, không lộ nội dung.
 
+### 7.7a. QC "bám tài liệu" (W2-3)
+
+Chỉ chạy với câu SINH từ đề có tài liệu bài học đính kèm. Khi job sinh câu xong và câu còn dùng được (qua QC, hoặc lệch Solver
+nên có thể được dùng kèm cờ; không phải `format_failed` hay `duplicate`), hệ thống xếp MỘT job `grounding_check` trong CÙNG
+transaction. Worker chấm bằng một LLM judge (mô hình `app.llm.grounding-model`, mặc định bằng model của Solver, nhiệt độ 0),
+ngoài transaction DB, thử lại có giới hạn như mọi job, thiếu API key thì thất bại ngay.
+
+- Judge được thấy câu hỏi, đáp án và lời giải của người soạn (khác Solver) cùng ĐÚNG các đoạn tài liệu mà model sinh câu đã thấy
+  (`generation_job.material_context`). Tài liệu và câu hỏi là dữ liệu trong khối có ranh giới, mọi lệnh trong đó không được làm
+  theo. Đầu ra bị ép theo schema: `verdict` (`SUPPORTED`, `NOT_SUPPORTED`, `UNKNOWN`), `reason` (ngắn), `evidence_quote`.
+- **Kiểm chứng trích dẫn:** `SUPPORTED` bắt buộc kèm trích dẫn nguyên văn đủ dài (từ 8 ký tự không kể khoảng trắng) mà server
+  tìm thấy trong đoạn tài liệu đã đưa (không phân biệt hoa thường và khoảng trắng). Không tìm thấy thì `SUPPORTED` bị hạ
+  xuống `UNKNOWN` (lý do bắt đầu bằng `evidence_not_found:`). `NOT_SUPPORTED` và `UNKNOWN` giữ nguyên kết luận;
+  `evidenceFound` cho biết trích dẫn của judge có thật hay không.
+- Kết quả ở bảng `question_grounding` (V20; mỗi câu một dòng, kèm `generated_with_material` để so nhóm có/không tài liệu khi
+  đo). KHÔNG đổi `generated_question.status` (Q-2 không đổi). Cờ "cần xem kỹ" xem mục 7.4.
+- Vết QC (mục 7.7): mỗi phiên bản có `qc.grounding`, `null` với câu không dùng tài liệu:
+
+```json
+"grounding": {"state": "supported", "reason": "Khớp định lý bình phương của một tổng.",
+  "evidenceQuote": "Bình phương của một tổng bằng tổng bình phương hai số cộng hai lần tích", "evidenceFound": true,
+  "judgeModel": "gemini-3.5-flash-lite", "checkedAt": "2026-10-26T09:30:00",
+  "materialRefs": [{"materialId": 12, "sha256": "9f2c…", "from": 0, "to": 1480, "rank": 0, "score": 3.2, "selection": "ranked"}],
+  "error": null, "job": {"jobId": 301, "createdAt": "…", "status": "done", "attempt": 1, "error": null}}
+```
+
+  `state`: `supported`, `not_supported`, `unknown` (đã có kết quả), `pending` (job đang chờ hoặc chạy), `error` (job lỗi, không có
+  kết quả; `error` là lý do) hoặc `not_run` (job đã bỏ qua, ví dụ câu đã bị bản giáo viên sửa thay). `materialRefs` là các đoạn tài
+  liệu (khoảng `[from, to)` của văn bản đã trích) judge đã thấy.
+- Chưa làm (bước sau của task): chấm lại bản giáo viên sửa; đường chấm nhóm "không tài liệu" cho thí nghiệm (cột
+  `generated_with_material` đã có sẵn).
+- Giới hạn: judge là LLM cùng họ với model sinh câu nên có thể thiên vị; kết quả chưa được đối chiếu với nhãn của người. Câu chỉ cần
+  kiến thức phổ thông sẽ ra `UNKNOWN` (không phải lỗi). Mỗi câu có tài liệu tốn thêm 1 lượt gọi LLM.
+
 ## 8. Đăng nhập và phân quyền (W1-1)
 
 Không có đăng ký tự do: admin tạo tài khoản giáo viên (mục 8.1). Admin đầu tiên tạo khi backend khởi động từ biến môi
@@ -1102,7 +1141,9 @@ Mã lỗi (body `{"error", "code"}`):
 - Văn bản chuẩn hóa Unicode NFC, bỏ ký tự điều khiển và ký tự ẩn (bidi, độ rộng bằng không).
 - **docx được làm sạch markdown ngay khi trích (W2-3 bước 5)**: `extracted_text` lưu trong DB là văn bản thường, không còn `**`,
   `_`, dấu `\` thoát ký tự, `#` của tiêu đề, `>` của trích dẫn, dòng kẻ bảng; liên kết chỉ còn chữ hiển thị; danh sách `- `.
-  Công thức `$...$` và `$$...$$` giữ nguyên từng ký tự. Offset `[from, to)` của đoạn trích tính trên đúng văn bản này.
+  Công thức `$...$` và `$$...$$` giữ nguyên từng ký tự. Chỉ số trên/dưới định dạng Word giữ nghĩa bằng ký hiệu (`x²` thành `x^2`,
+  `H₂O` thành `H_2O`; bỏ dấu đóng của cặp pandoc); `~~gạch ngang~~` chỉ bỏ dấu. Offset `[from, to)` của đoạn trích tính trên đúng
+  văn bản này.
   (Tài liệu docx tải lên trước thay đổi này, nếu có, vẫn còn markdown; không chuyển đổi vì chưa có dữ liệu thật.)
 
 ### 9.4. Hạn chế đã biết
@@ -1117,7 +1158,7 @@ Mã lỗi (body `{"error", "code"}`):
   khi tải docx lớn, hạ `MATERIAL_PANDOC_HEAP_MB` hoặc tăng `mem_limit`.
 - **qc-trace và câu riêng tư:** `qc.dedup.comparedTo.questionId` có thể trỏ tới câu riêng tư của giáo viên khác (chỉ lộ id và độ
   tương đồng); xem mục 7.7. Chưa sửa.
-- Tài liệu chỉ ảnh hưởng tới câu được SINH; chưa có bước kiểm tra câu có bám tài liệu hay không (QC grounding, bước sau).
+- Tài liệu ảnh hưởng tới câu được SINH và được dùng để chấm "bám tài liệu" (mục 7.7a); bản giáo viên sửa chưa được chấm lại.
 - Cấu hình giới hạn: `app.materials.*` (biến `MATERIAL_MAX_FILE_BYTES`, `MATERIAL_MAX_CHARS`, `MATERIAL_MAX_PAGES`,
   `MATERIAL_MAX_PER_OWNER`, `MATERIAL_MAX_UPLOADS_PER_HOUR`, `MATERIAL_MAX_CONCURRENT`, `MATERIAL_EXTRACT_TIMEOUT`,
   `MATERIAL_PANDOC_HEAP_MB`). Caddy cho phép body tới 12 MB; Tomcat đọc bỏ tối đa 25 MB phần thừa để trả được 413.

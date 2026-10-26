@@ -30,6 +30,7 @@ public final class TestDataCleaner {
         jdbcTemplate.update("DELETE FROM label_assignment");
         jdbcTemplate.update("DELETE FROM dedup_gold_label");
         jdbcTemplate.update("DELETE FROM dedup_gold_pair");
+        jdbcTemplate.update("DELETE FROM question_grounding");
         jdbcTemplate.update("DELETE FROM answer_check_statement");
         jdbcTemplate.update("DELETE FROM quality_check_result");
         jdbcTemplate.update("DELETE FROM question_embedding");

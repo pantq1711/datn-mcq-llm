@@ -607,6 +607,13 @@ public class GenerationService {
                 GenerationJob.TYPE_ANSWER_CHECK);
     }
 
+    /** W2-3: job grounding (chấm "bám tài liệu") của một câu; rỗng khi câu không có tài liệu hoặc chưa được xếp job. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<GenerationJob> latestGroundingJob(Integer questionId) {
+        return generationJobRepository.findFirstByQuestionIdAndJobTypeOrderByIdDesc(questionId,
+                GenerationJob.TYPE_GROUNDING_CHECK);
+    }
+
     /** W1-3: mọi job sinh câu (không kể answer_check) của một chỗ trong đề, theo thứ tự tạo. */
     @Transactional(readOnly = true)
     public List<GenerationJob> generateJobsForSlot(Integer examSlotId) {

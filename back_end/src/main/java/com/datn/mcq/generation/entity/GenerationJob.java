@@ -109,6 +109,12 @@ public class GenerationJob {
     /** V13 (W1-2): chạy lại Solver cho một bản giáo viên sửa; có question_id, không gắn chỗ. */
     public static final String TYPE_ANSWER_CHECK = "answer_check";
 
+    /**
+     * V20 (W2-3): chấm "bám tài liệu" cho một câu đã sinh từ đề có tài liệu; có question_id và material_context, không gắn
+     * chỗ. Mỗi câu tối đa một job loại này.
+     */
+    public static final String TYPE_GROUNDING_CHECK = "grounding_check";
+
     /** V13: loại job, luôn có trong JSON. */
     @Column(name = "job_type", nullable = false, length = 20, updatable = false)
     private String jobType = TYPE_GENERATE;

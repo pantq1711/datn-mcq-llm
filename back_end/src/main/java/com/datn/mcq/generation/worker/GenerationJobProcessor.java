@@ -32,9 +32,12 @@ import com.datn.mcq.generation.repository.GenerationJobRepository;
 import com.datn.mcq.generation.service.StoredQcInput;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.llm.prompt.PromptBuilder;
+import com.datn.mcq.qc.dto.GroundingResult;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.dto.SolverVerdict;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
+import com.datn.mcq.qc.service.GroundingService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -85,7 +88,20 @@ public class GenerationJobProcessor {
         public boolean answerCheck() {
             return GenerationJob.TYPE_ANSWER_CHECK.equals(jobType);
         }
+
+        /** W2-3: job chấm "bám tài liệu" của một câu đã sinh; như answer_check chỉ có các trường định danh và questionId. */
+        public boolean grounding() {
+            return GenerationJob.TYPE_GROUNDING_CHECK.equals(jobType);
+        }
     }
+
+    /**
+     * W2-3: đầu vào của một lần chấm "bám tài liệu", dựng từ câu và job đã lưu.
+     *
+     * @param context  đúng đoạn tài liệu model sinh câu đã thấy (generation_job.material_context)
+     * @param refsJson mảng JSON các đoạn đó (generation_job.material_refs), để ghi cùng kết quả
+     */
+    public record GroundingJobInput(QuestionQcInput question, String context, String refsJson) {}
 
     private final GenerationJobRepository generationJobRepository;
     private final GeneratedQuestionRepository generatedQuestionRepository;
@@ -96,6 +112,10 @@ public class GenerationJobProcessor {
     private final TrueFalseQuestionStore trueFalseQuestionStore;
     private final GeneratedQuestionStatementRepository statementRepository;
     private final QcOrchestrator qcOrchestrator;
+
+    /** W2-3: lưu kết quả grounding; nạp bằng field để không đổi constructor. */
+    @Autowired
+    private GroundingService groundingService;
 
     public GenerationJobProcessor(
             GenerationJobRepository generationJobRepository,
@@ -147,6 +167,13 @@ public class GenerationJobProcessor {
         QuestionType jobQuestionType = job.getQuestionType() != null ? job.getQuestionType() : QuestionType.MCQ;
         if (GenerationJob.TYPE_ANSWER_CHECK.equals(job.getJobType())) {
             // W1-2: job chạy lại Solver cho bản giáo viên sửa, không dựng prompt sinh câu.
+            return Optional.of(new ClaimedJobContext(job.getId(), job.getRunId(), job.getTemplateId(), nextAttempt,
+                    null, null, null, null, null, false, jobQuestionType, List.of(), null, null,
+                    job.getJobType(), job.getQuestionId(), null));
+        }
+
+        if (GenerationJob.TYPE_GROUNDING_CHECK.equals(job.getJobType())) {
+            // W2-3: job chấm "bám tài liệu", không dựng prompt sinh câu; đoạn tài liệu đọc ở prepareGrounding.
             return Optional.of(new ClaimedJobContext(job.getId(), job.getRunId(), job.getTemplateId(), nextAttempt,
                     null, null, null, null, null, false, jobQuestionType, List.of(), null, null,
                     job.getJobType(), job.getQuestionId(), null));
@@ -232,7 +259,7 @@ public class GenerationJobProcessor {
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generated_question id=" + ctx.questionId()));
         String skip = skipReason(gq);
         if (skip != null) {
-            finishAnswerCheckJob(ctx.jobId(), skip);
+            finishQuestionJob(ctx.jobId(), skip);
             return Optional.empty();
         }
         Subject subject = catalogService.getSubjectById(catalogService.getTemplateById(gq.getTemplateId()).getSubjectId());
@@ -256,15 +283,52 @@ public class GenerationJobProcessor {
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generated_question id=" + ctx.questionId()));
         String skip = skipReason(gq);
         if (skip != null) {
-            finishAnswerCheckJob(ctx.jobId(), skip);
+            finishQuestionJob(ctx.jobId(), skip);
             return gq.getStatus();
         }
         qcOrchestrator.recordSolver(gq.getId(), verdict);
         QuestionStatus status = qcOrchestrator.decideWithStoredChecks(gq.getId(), verdict.status());
         gq.setStatus(status);
         generatedQuestionRepository.save(gq);
-        finishAnswerCheckJob(ctx.jobId(), null);
+        finishQuestionJob(ctx.jobId(), null);
         return status;
+    }
+
+    /**
+     * W2-3, bước 1 của job grounding_check (transaction ngắn, không gọi mạng): dựng đầu vào cho judge từ câu đã lưu và đoạn
+     * tài liệu chụp ở job. Câu đã bị thay bằng bản giáo viên sửa mới, hoặc đã có kết quả, thì đánh dấu job xong và trả rỗng,
+     * không gọi LLM.
+     */
+    @Transactional
+    public Optional<GroundingJobInput> prepareGrounding(ClaimedJobContext ctx) {
+        GenerationJob job = generationJobRepository.findById(ctx.jobId())
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generation_job id=" + ctx.jobId()));
+        GeneratedQuestion gq = generatedQuestionRepository.findById(ctx.questionId())
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generated_question id=" + ctx.questionId()));
+        String skip = null;
+        if (generatedQuestionRepository.existsByEditedFromQuestionId(gq.getId())) {
+            skip = "skipped: superseded";
+        } else if (groundingService.find(gq.getId()).isPresent()) {
+            skip = "skipped: already checked";
+        }
+        if (skip != null) {
+            finishQuestionJob(ctx.jobId(), skip);
+            return Optional.empty();
+        }
+        QuestionQcInput input = StoredQcInput.of(gq,
+                gq.getQuestionType() == QuestionType.TF ? statementRepository.findByQuestionIdOrderByPositionAsc(gq.getId())
+                        : List.of(), false, false);
+        return Optional.of(new GroundingJobInput(input, job.getMaterialContext(), job.getMaterialRefs()));
+    }
+
+    /**
+     * W2-3, bước 3 của job grounding_check (transaction ngắn): ghi kết quả và đánh dấu job xong trong CÙNG một transaction.
+     * KHÔNG đổi generated_question.status (Q-2, M-10): kết quả chỉ là cảnh báo.
+     */
+    @Transactional
+    public void completeGrounding(ClaimedJobContext ctx, GroundingResult result, String refsJson) {
+        groundingService.record(ctx.questionId(), result, refsJson, true, ctx.jobId());
+        finishQuestionJob(ctx.jobId(), null);
     }
 
     /** W1-2: job answer_check thất bại ngay, không thử lại (lỗi cấu hình như thiếu API key cho Solver). */
@@ -288,7 +352,8 @@ public class GenerationJobProcessor {
         return null;
     }
 
-    private void finishAnswerCheckJob(Integer jobId, String note) {
+    /** Đánh dấu job gắn với một câu (answer_check, grounding_check) đã xong; {@code note} (nếu có) ghi lý do bỏ qua. */
+    private void finishQuestionJob(Integer jobId, String note) {
         GenerationJob job = generationJobRepository.findById(jobId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generation_job id=" + jobId));
         job.setStatus(JobStatus.DONE);
@@ -412,6 +477,38 @@ public class GenerationJobProcessor {
         job.setStatus(JobStatus.DONE);
         job.setUpdatedAt(LocalDateTime.now());
         generationJobRepository.save(job);
+        enqueueGrounding(job, questionId, newStatus);
+    }
+
+    /**
+     * W2-3: câu sinh từ đề có tài liệu (job mang material_context) và còn dùng được (qua QC, hoặc lệch Solver nên có thể
+     * được dùng kèm cờ) được xếp MỘT job grounding_check, trong CÙNG transaction với việc job sinh câu xong. Nhờ đó khi đối
+     * soát thấy job sinh câu done thì job grounding đã có (hiện "đang kiểm"). Câu format_failed hoặc trùng sẽ bị sinh lại nên
+     * không chấm. Mỗi câu tối đa một job (cả chỉ mục duy nhất ở DB lẫn kiểm tra ở đây).
+     */
+    private void enqueueGrounding(GenerationJob origin, Integer questionId, QuestionStatus status) {
+        if (origin.getMaterialContext() == null
+                || !GenerationJob.TYPE_GENERATE.equals(origin.getJobType())
+                || (status != QuestionStatus.QC_PASSED && status != QuestionStatus.GENERATED)
+                || generationJobRepository.findFirstByQuestionIdAndJobTypeOrderByIdDesc(questionId,
+                        GenerationJob.TYPE_GROUNDING_CHECK).isPresent()) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        GenerationJob g = new GenerationJob();
+        g.setJobType(GenerationJob.TYPE_GROUNDING_CHECK);
+        g.setRunId(origin.getRunId());
+        g.setTemplateId(origin.getTemplateId());
+        g.setQuestionType(origin.getQuestionType());
+        g.setQuestionId(questionId);
+        g.setMaterialContext(origin.getMaterialContext());
+        g.setMaterialRefs(origin.getMaterialRefs());
+        g.setStatus(JobStatus.PENDING);
+        g.setAttempt(0);
+        g.setNextRunAt(now);
+        g.setCreatedAt(now);
+        g.setUpdatedAt(now);
+        generationJobRepository.save(g);
     }
 
     @Transactional
