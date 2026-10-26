@@ -50,7 +50,7 @@ public class GroundingChecker {
     static final int MAX_REASON = 600;
     static final int MAX_QUOTE = 400;
     /** Trích dẫn ngắn hơn (sau khi bỏ khoảng trắng) không đủ làm bằng chứng. */
-    static final int MIN_QUOTE = 8;
+    static final int MIN_QUOTE = 15;
 
     static final String INSTRUCTIONS = """
             Bạn là người kiểm tra chất lượng đề kiểm tra. Nhiệm vụ: xác định câu hỏi dưới đây (kể cả đáp án và lời giải của \
@@ -196,6 +196,10 @@ public class GroundingChecker {
     /** Mũ hoặc chỉ số có đúng một chữ/số trong ngoặc nhọn: ^{2} -> ^2, _{n} -> _n (x^{12} giữ nguyên). */
     private static final Pattern SINGLE_BRACE = Pattern.compile("([\\^_])\\{([\\p{L}\\p{N}])}");
     private static final String EDGE_PUNCTUATION = ".,;:!?…\"'";
+    /** Quy đổi phân số LaTeX tương đương: \dfrac, \tfrac -> \frac */
+    private static final Pattern LATEX_FRAC = Pattern.compile("\\\\(?:dfrac|tfrac)(?![a-z])");
+    /** Quy đổi quan hệ bất đẳng thức LaTeX tương đương: \leq -> \le, \geq -> \ge, \neq -> \ne */
+    private static final Pattern LATEX_INEQ = Pattern.compile("\\\\(le|ge|ne)q(?![a-z])");
 
     /**
      * Chuẩn hóa để so khớp (dùng chung cho quote và tài liệu): NFC, chữ thường, bỏ ký hiệu bao công thức và lệnh dàn trang
@@ -207,10 +211,35 @@ public class GroundingChecker {
         String n = Normalizer.normalize(s, Normalizer.Form.NFC).toLowerCase(Locale.ROOT);
         n = MATH_DELIMITERS.matcher(n).replaceAll("");
         n = LATEX_LAYOUT.matcher(n).replaceAll("");
+        n = LATEX_FRAC.matcher(n).replaceAll("\\\\frac");
+        n = LATEX_INEQ.matcher(n).replaceAll("\\\\$1");
+        n = replaceSuperscriptsAndOperators(n);
         StringBuilder out = new StringBuilder(n.length());
         n.codePoints().filter(cp -> !Character.isWhitespace(cp) && !Character.isSpaceChar(cp)
                 && Character.getType(cp) != Character.FORMAT).forEach(cp -> out.appendCodePoint(ascii(cp)));
         return SINGLE_BRACE.matcher(out).replaceAll("$1$2");
+    }
+
+    private static String replaceSuperscriptsAndOperators(String s) {
+        StringBuilder sb = new StringBuilder(s.length() + 8);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\u2070' -> sb.append("^0");
+                case '\u00B9' -> sb.append("^1");
+                case '\u00B2' -> sb.append("^2");
+                case '\u00B3' -> sb.append("^3");
+                case '\u2074' -> sb.append("^4");
+                case '\u2075' -> sb.append("^5");
+                case '\u2076' -> sb.append("^6");
+                case '\u2077' -> sb.append("^7");
+                case '\u2078' -> sb.append("^8");
+                case '\u2079' -> sb.append("^9");
+                case '×' -> sb.append("\\times");
+                default -> sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     private static int ascii(int cp) {

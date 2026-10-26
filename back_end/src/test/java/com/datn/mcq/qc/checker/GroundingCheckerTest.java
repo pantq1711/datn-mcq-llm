@@ -170,7 +170,7 @@ class GroundingCheckerTest {
     void trichDanKhopDuTaiLieuDungDauNgoacLatexKieuKhac() {
         String doc = "Ta có \\((x + 1)^2 = x^2 + 2x + 1\\) và \\[y = 2x + 100\\] với mọi x.";
         assertFound(doc, "(x + 1)^2 = x^2 + 2x + 1");
-        assertFound(doc, "y = 2x + 100");
+        assertFound(doc, "y = 2x + 100 với mọi x");
     }
 
     @Test
@@ -198,7 +198,7 @@ class GroundingCheckerTest {
     void trichDanKhopDuLenhBoCucLatexLeftRightVaKhoangCach() {
         assertFound("Ta có $\\left( a + b \\right)^2 = a^2 + 2ab + b^2$.", "(a+b)^2 = a^2 + 2ab + b^2");
         assertFound("Cho $f(x) = 2\\,x + 10\\;(x \\ge 0)$ và $g$.", "f(x) = 2x + 10 (x \\ge 0)");
-        assertFound("Giá trị $a\\!b + c\\ d = 100$ đúng.", "ab + cd = 100");
+        assertFound("Giá trị $a\\!b + c\\ d = 100$ đúng.", "Giá trị ab + cd = 100 đúng");
     }
 
     @Test
@@ -210,8 +210,8 @@ class GroundingCheckerTest {
     void ngoacNhonQuanhMotKyTuChuSoSauMuVaChiSoDuocBoDoiXung() {
         assertFound("Ta có $x^{2} + y^{2} = 1$ và $a_{n}$ cộng 1.", "x^2 + y^2 = 1 và a_n cộng 1");
         assertFound("Ta có $x^2 + y^2 = 1$ và $a_n$ cộng 1.", "x^{2} + y^{2} = 1 và a_{n} cộng 1");
-        assertFound("Ta có $x^{ 2 } + y^{2} = 1$ nên ok.", "x^2 + y^2 = 1 nên ok");
-        assertFound("Ta xét $x^{2}$.", "Ta xét x^2.");
+        assertFound("Ta có $x^{ 2 } + y^{2} = 1$ là đúng.", "x^2 + y^2 = 1 là đúng");
+        assertFound("Ta xét biểu thức $x^{2}$ ở đây.", "Ta xét biểu thức x^2 ở đây.");
     }
 
     @Test
@@ -240,13 +240,61 @@ class GroundingCheckerTest {
         assertRejected(DOC_HIEU, "$A$ và $B$");
         String doc = "Ta có $(a+b)^2 = a^2 + 2ab + b^2$.";
         assertRejected(doc, "$a^2 + 2ab$");
-        assertFound(doc, "$a^2 + 2ab +$");
+        assertRejected(doc, "$a^2 + 2ab +$");
+        assertFound(doc, "(a+b)^2 = a^2 + 2ab + b^2");
     }
 
     @Test
     void khongGhepHaiDoanKhongLienNhauThanhMotTrichDan() {
         String doc = "$(A + B)^2 = A^2 + 2AB + B^2$.\nVí dụ khác ở đây.\n$(A - B)^2 = A^2 - 2AB + B^2$.";
         assertRejected(doc, "A^2 + 2AB + B^2 và (A - B)^2 = A^2");
+    }
+
+    @Test
+    void quyDoiDoiXungPhanSoLatexDfracVaTfracThanhFrac() {
+        String docD = "Ta có công thức $\\dfrac{a + b}{c} = 1$ với mọi c khác không.";
+        assertFound(docD, "\\frac{a + b}{c} = 1 với mọi c");
+        assertFound(docD, "\\dfrac{a + b}{c} = 1 với mọi c");
+
+        String docT = "Ta có công thức $\\tfrac{a + b}{c} = 1$ với mọi c khác không.";
+        assertFound(docT, "\\frac{a + b}{c} = 1 với mọi c");
+        assertFound(docT, "\\tfrac{a + b}{c} = 1 với mọi c");
+
+        String docF = "Ta có công thức $\\frac{a + b}{c} = 1$ với mọi c khác không.";
+        assertFound(docF, "\\dfrac{a + b}{c} = 1 với mọi c");
+        assertFound(docF, "\\tfrac{a + b}{c} = 1 với mọi c");
+    }
+
+    @Test
+    void quyDoiDoiXungBatDangThucVaKhacLatex() {
+        String doc = "Ta có $x + y \\leq 10$ và $z \\geq 20$ cùng $t \\neq 0$ đúng.";
+        assertFound(doc, "x + y \\le 10 và z \\ge 20");
+        assertFound(doc, "x + y \\leq 10 và z \\geq 20");
+        assertFound(doc, "z \\ge 20 cùng t \\ne 0 đúng");
+        assertFound(doc, "z \\geq 20 cùng t \\neq 0 đúng");
+
+        String docShort = "Ta có $x + y \\le 10$ và $z \\ge 20$ cùng $t \\ne 0$ đúng.";
+        assertFound(docShort, "x + y \\leq 10 và z \\geq 20");
+        assertFound(docShort, "z \\geq 20 cùng t \\neq 0 đúng");
+    }
+
+    @Test
+    void quyDoiDoiXungChuSoMuUnicodeVaDauNhan() {
+        String docUnicode = "Hằng đẳng thức $x² + y² = z²$ và $a³ + b⁴ = 100$ đúng.";
+        assertFound(docUnicode, "x^2 + y^2 = z^2 và a^3");
+        assertFound(docUnicode, "x^{2} + y^{2} = z^{2} và a^3");
+        assertFound(docUnicode, "và a^3 + b^4 = 100 đúng");
+
+        String docAscii = "Hằng đẳng thức $x^2 + y^2 = z^2$ và $a^3 + b^4 = 100$ đúng.";
+        assertFound(docAscii, "x² + y² = z² và a³");
+        assertFound(docAscii, "và a³ + b⁴ = 100 đúng");
+
+        String docTimes = "Phép tính $a × b = c × d$ với mọi số thực đúng.";
+        assertFound(docTimes, "a \\times b = c \\times d với mọi");
+        assertFound(docTimes, "a × b = c × d với mọi");
+
+        String docLatexTimes = "Phép tính $a \\times b = c \\times d$ với mọi số thực đúng.";
+        assertFound(docLatexTimes, "a × b = c × d với mọi");
     }
 
     @Test
