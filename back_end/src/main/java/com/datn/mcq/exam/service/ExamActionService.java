@@ -1,5 +1,6 @@
 package com.datn.mcq.exam.service;
 
+import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.common.exception.ApiErrorException;
 import com.datn.mcq.common.util.JsonStringArray;
 import com.datn.mcq.exam.dto.ExamEditDtos.EditQuestionRequest;
@@ -54,11 +55,14 @@ public class ExamActionService {
     private final QuestionEditService questionEditService;
     private final GenerationService generationService;
     private final ExamSlotSiblings siblings;
+    private final ExamContextService contextService;
+    private final BankService bankService;
 
     public ExamActionService(ExamSlotRepository slotRepository, ExamSlotActionRepository actionRepository,
                              ExamBuildService buildService, ExamViewService viewService, MatrixService matrixService,
                              AssistedKeepService assistedKeepService, QuestionEditService questionEditService,
-                             GenerationService generationService, ExamSlotSiblings siblings) {
+                             GenerationService generationService, ExamSlotSiblings siblings,
+                             ExamContextService contextService, BankService bankService) {
         this.siblings = siblings;
         this.slotRepository = slotRepository;
         this.actionRepository = actionRepository;
@@ -68,6 +72,8 @@ public class ExamActionService {
         this.assistedKeepService = assistedKeepService;
         this.questionEditService = questionEditService;
         this.generationService = generationService;
+        this.contextService = contextService;
+        this.bankService = bankService;
     }
 
     /**
@@ -94,6 +100,10 @@ public class ExamActionService {
             edited = generationService.getQuestionById(slot.getGeneratedQuestionId()).getEditedFromQuestionId() != null;
             Integer bankItemId = assistedKeepService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
             slot.setBankItemId(bankItemId);
+            // W2-3 (quyết định E): câu sinh từ tài liệu của giáo viên vào ngân hàng nhưng chỉ chính họ thấy và dùng lại.
+            if (!contextService.materialsFor(examId, slot.getCellId()).isEmpty()) {
+                bankService.restrictToUser(bankItemId, actorId);
+            }
         }
         // W1-2 (D6): Giữ bản giáo viên sửa thì chỗ ở trạng thái edited (V7), câu chưa sửa là kept.
         slot.setState(edited ? ExamSlot.EDITED : ExamSlot.KEPT);
@@ -133,8 +143,8 @@ public class ExamActionService {
         Integer newBankItemId = null;
         if (ExamSlotAction.SOURCE_BANK.equals(replaceSource)) {
             ExamMatrixCell cell = matrixService.getCell(slot.getCellId());
-            List<Integer> candidates = buildService.bankCandidates(examId, matrixService.getMatrix(cell.getMatrixId()),
-                    cell, 1);
+            List<Integer> candidates = buildService.bankCandidates(examId, actorId,
+                    matrixService.getMatrix(cell.getMatrixId()), cell, 1);
             if (candidates.isEmpty()) {
                 throw ApiErrorException.conflict(BANK_EXHAUSTED, BANK_EXHAUSTED_MESSAGE);
             }

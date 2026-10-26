@@ -58,21 +58,23 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-42 | Solver lỗi với câu LLM gốc không để lại dấu vết, lẫn với "chưa chạy" (bổ sung 24/10, W1-3) | QC | Thấp | Đã sửa |
 | L-43 | Hai ô dùng chung template có thể nhận cùng một câu ngân hàng (bổ sung 24/10, W1-3) | Dữ liệu/DB | Thấp | Đã sửa |
 | L-44 | Khóa ghi hàng ma trận không chờ tạo đề đang dở (bổ sung 25/10, W1-4) | Hàng đợi/đồng thời | Trung bình | Đã sửa |
+| L-45 | Trích dẫn đúng chữ của judge "bám tài liệu" bị coi là không tìm thấy vì bỏ cặp `$` (bổ sung 26/10, W2-3) | QC | Trung bình | Đã sửa |
+| L-46 | Script đo trên Git Bash: `curl` mã 26 và thông báo lỗi gộp (bổ sung 26/10, W2-3) | Môi trường | Thấp | Đã sửa |
 
-**Thống kê theo nhóm** (44 mục):
+**Thống kê theo nhóm** (46 mục):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
-| Môi trường | 10 | 10 | 0 | 0 |
+| Môi trường | 11 | 11 | 0 | 0 |
 | Dữ liệu/DB | 5 | 5 | 0 | 0 |
 | Quy trình git | 2 | 2 | 0 | 0 |
 | LLM & parse | 11 | 10 | 0 | 1 |
-| QC | 8 | 7 | 0 | 1 |
+| QC | 9 | 8 | 0 | 1 |
 | Hàng đợi/đồng thời | 7 | 6 | 0 | 1 |
 | Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **44** | **41** | **0** | **3** |
+| **Tổng** | **46** | **43** | **0** | **3** |
 
-Theo mức độ: Cao 9, Trung bình 22, Thấp 13.
+Theo mức độ: Cao 9, Trung bình 23, Thấp 14.
 
 ---
 
@@ -216,6 +218,19 @@ Theo mức độ: Cao 9, Trung bình 22, Thấp 13.
 - Chống tái phát: ghi biến vào `.env` thay vì `export`. Test gắn cứng `datn_mcq_test` và có guard chặn mọi DB khác
   (`TestSafetyConfiguration`). Phía app chưa có cơ chế chặn nối nhầm DB.
 - Bài học: không để cấu hình kết nối DB phụ thuộc vào trạng thái của một phiên shell.
+- Trạng thái: Đã sửa.
+
+### L-46 Script đo trên Git Bash: `curl` mã 26 và thông báo lỗi gộp (bổ sung 26/10, W2-3)
+- Nhóm: Môi trường
+- Triệu chứng: script đo thật (đăng nhập → tải tài liệu → sinh đề) báo `curl: (26) Failed to open/read local data from
+  file/application` ở bước tải tài liệu, rồi in "không kết nối được", dù app đang chạy và đã đăng nhập được.
+- Nguyên nhân gốc: `curl` trong Git Bash là bản Windows; tham số dạng `-F "file=@/tmp/x"` không được MSYS đổi đường dẫn vì chuỗi
+  không bắt đầu bằng `/` (khác L-08), nên curl không mở được file. Script cũ còn gộp mọi lỗi curl vào một thông báo.
+- Cách phát hiện: người chạy script trên Git Bash (Windows) gửi lại đầu ra; tái hiện bằng server giả và curl thật.
+- Cách sửa: curl chạy trong thư mục tạm với tên file tương đối; tách thông báo lỗi curl (mã thoát, gợi ý theo mã, stderr) khỏi
+  lỗi HTTP (mã trạng thái, `code`, `error`).
+- Chống tái phát: script nằm ngoài repo nên không có test; đã thử khô lại trên Git Bash với curl thật và server giả.
+- Bài học: script chạy trên máy người dùng phải thử trên đúng shell của họ; đừng dồn mọi lỗi vào một thông báo.
 - Trạng thái: Đã sửa.
 
 ## Dữ liệu/DB
@@ -596,6 +611,26 @@ Theo mức độ: Cao 9, Trung bình 22, Thấp 13.
 - Trạng thái: Đã sửa cho đường job sinh câu cho chỗ trong đề; sinh đồng bộ và chạy lại QC chưa ghi `solver_error`. Việc
   còn nợ (đã duyệt 24/10): khi làm công cụ thí nghiệm Solver phải ghi cả hai đường đó (xem `docs/contract/enums.md`, mục
   "Vết QC theo ô đề và ngân hàng có lọc").
+
+### L-45 Trích dẫn đúng chữ của judge "bám tài liệu" bị coi là không tìm thấy vì bỏ cặp `$` (bổ sung 26/10, W2-3)
+- Nhóm: QC
+- Triệu chứng: đo thật đề 4 (Gemini, 5 câu có tài liệu): 2 trên 6 câu bị judge kết luận SUPPORTED nhưng hệ thống hạ xuống
+  UNKNOWN với lý do `evidence_not_found:`. Trích dẫn lưu ở DB là `(A - B)^2 = A^2 - 2AB + B^2.` còn tài liệu có
+  `$(A - B)^2 = A^2 - 2AB + B^2$.`. Một lần judge còn viết `reason` không dấu tiếng Việt.
+- Nguyên nhân gốc: judge chép đúng chữ nhưng bỏ cặp `$` bao công thức. So khớp ban đầu chỉ bỏ khoảng trắng và phân biệt hoa
+  thường, nên `b^2.` không là chuỗi con của `b^2$.`; prompt cũng chưa yêu cầu chép từng ký tự.
+- Cách phát hiện: so `evidence_quote` với file .txt tự soạn sau lần đo thật (test dùng LLM giả luôn trích đúng nên không lộ).
+- Cách sửa: chuẩn hóa đối xứng cho cả quote và tài liệu (bỏ `$`, `\(`, `\)`, `\[`, `\]`, `\left`, `\right`, `\,`, `\;`, `\!`;
+  gộp dấu trừ/gạch dài và dấu nháy cong; bỏ khoảng trắng đặc biệt và ký tự vô hình; `^{x}` → `^x`, `_{x}` → `_x` chỉ khi
+  trong ngoặc đúng một chữ hoặc số); quote còn bị cắt dấu câu hai đầu; độ dài tối thiểu tính sau chuẩn hóa. Không bỏ dấu
+  tiếng Việt, không so mờ. Prompt thêm yêu cầu sao chép từng ký tự, UNKNOWN khi không chép được, `reason` có dấu. Commit
+  `fix(qc): tolerate formula delimiters when verifying grounding evidence quotes`.
+- Chống tái phát: `GroundingCheckerTest` (`trichDanBoCapDauDoLaVanKhopCaDoThatCau75Va76`,
+  `ngoacNhonNhieuKyTuKhongDuocRutGonVaMuKhacThiKhongKhop`, `chuanHoaKhongChoLotTrichDanBiaDoiHeSoDauHoacBoDauTiengViet`,
+  `trichDanChiGomKyHieuHoacNganSauChuanHoaKhongDuLamBangChung`).
+- Bài học: kiểm chứng trích dẫn phải dung sai về cách viết công thức nhưng không nới tới mức bỏ dấu hay so mờ; đo thật sớm
+  với model thật vì LLM giả không lộ lỗi kiểu này.
+- Trạng thái: Đã sửa. Hai câu của đề đo vẫn ghi UNKNOWN trong DB (không chạy lại); đo đề mới để kiểm.
 
 ## Hàng đợi/đồng thời
 

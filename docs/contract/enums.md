@@ -295,6 +295,44 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - `generation_job.exam_slot_id`: job sinh câu cho một chỗ trong đề; job thường và job `answer_check` (V13) để NULL.
   - Hàng đợi `generation_job` (đợt A, ngày 23/10): worker và `POST /api/generation/jobs/process-next` nhận job bằng `SELECT ... WHERE status = 'pending' AND (next_run_at IS NULL OR next_run_at <= :now) ORDER BY next_run_at, id LIMIT 1 FOR UPDATE SKIP LOCKED` rồi đổi sang `running` trong cùng transaction, nên hai luồng hoặc hai instance không nhận trùng job (`:now` là giờ JVM, cùng đồng hồ ghi `next_run_at`). `started_at` (V10) ghi lúc nhận job. Khi worker bật, lúc khởi động và mỗi `WORKER_STALE_CHECK_MS` (mặc định 120000), job `running` có `started_at` (dòng trước V10: `updated_at`) quá `WORKER_STALE_AFTER_SECONDS` (mặc định 300) được trả về `pending`, `next_run_at` = lúc đó, `last_error = 'stale: reset'`, hoàn lại lượt `attempt` đã tăng lúc nhận (không tính vào attempt). Lỗi ở phần sau lời gọi LLM (giải mã, lưu câu, QC) đi cùng đường thử lại/`failed` như lỗi gọi LLM, `last_error` bắt đầu bằng `Lỗi sau lời gọi LLM:`. Lưu câu thì job đã có `question_id` nhưng vẫn `running`; job chỉ `done` cùng transaction với trạng thái QC cuối của câu (L-39, ngày 24/10), nên đối soát không coi câu đang QC là lệch Solver.
   - Câu `tf` trong đề theo ma trận (ngày 23/10, đợt 2): mỗi job có một mẫu nhãn bắt buộc chọn ngẫu nhiên trong 14 mẫu có 1–3 ý Đúng, khác mẫu của job `tf` gần nhất cùng đề; lưu ở `generation_job.prompt_note` dạng `Mẫu nhãn bắt buộc (T,F,F,T): ý a phải Đúng, ý b phải Sai, ...` (truy vấn: `prompt_note LIKE '%Mẫu nhãn bắt buộc (%'`). Nhãn trả về khác mẫu thì thêm cảnh báo `label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)` vào `warnings`, câu vẫn được dùng nhưng gắn cờ "cần xem kỹ". Chỉ luồng ma trận (run `production`).
+  - `lesson_material` (V18, W2-3): tài liệu bài học của một giáo viên; chỉ lưu văn bản đã trích (`extracted_text`) và `sha256`
+    của file gốc, không lưu file gốc. `mime_type` do server nhận dạng từ nội dung (không tin Content-Type hay đuôi file):
+    `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (docx, `extract_method = pandoc`),
+    `application/pdf` (pdf, `pdfbox`, có `page_count`), `text/plain` (txt, `plain`). `char_count = char_length(extracted_text)`;
+    trần DB 10 MiB và 1.000.000 ký tự (giới hạn nghiệp vụ chặt hơn ở cấu hình ứng dụng). `warnings`: mảng JSON hoặc NULL.
+    `UNIQUE (owner_id, sha256)`; xóa người dùng xóa tài liệu của họ.
+  - `exam_generation_context` (V19, W2-3): ngữ cảnh sinh câu của MỘT đề. `cell_id` NULL là cả đề (sinh theo bài, hoặc "cả ma
+    trận"), khác NULL là một ô; mỗi đề tối đa một dòng cho mỗi phạm vi (`uq_egc_scope`, COALESCE). `extra_instruction`: "yêu cầu
+    thêm cho AI", 1–1000 ký tự, hoặc NULL. Xóa đề xóa dây chuyền. `exam_context_material(context_id, material_id)`: tài liệu của
+    phạm vi; khóa ngoại tới `lesson_material` KHÔNG xóa dây chuyền (xóa tài liệu đang dùng bị chặn, 409 `MATERIAL_IN_USE`).
+    Tài liệu hiệu lực của ô = hợp tài liệu cả đề và của ô; yêu cầu thêm hiệu lực = của ô, không có thì của cả đề.
+  - `generation_job.material_context` / `material_refs` (V19, ghi từ W2-3 bước 5): ảnh chụp đoạn tài liệu đã đưa vào prompt của
+    job (đã bỏ mọi `<<<`, `>>>`; mỗi đoạn có dòng đầu `[Tài liệu n, đoạn k]`, không có tên file) và danh sách đoạn (mảng JSON
+    `{materialId, sha256, from, to, rank, score, selection}`, `selection` là `whole`, `ranked` hoặc `fallback`, thứ tự theo
+    tài liệu); cùng NULL hoặc cùng có; `material_context` tối đa 12000 ký tự. `[from, to)` là khoảng của
+    `lesson_material.extracted_text`. NULL với mọi job không có tài liệu và job cũ. Không đưa ra API.
+  - `generation_job.job_type = 'grounding_check'` (V20, W2-3): chấm "bám tài liệu" một câu; có `question_id` và `material_context`
+    (bắt buộc), không gắn chỗ (`exam_slot_id` NULL), xếp cùng transaction với lúc job sinh câu xong, hoặc (bước 8) khi giáo viên
+    sửa câu: bản sửa mới nhận một job riêng chép nguyên `material_context`/`material_refs` của chuỗi bản sửa (job grounding
+    gần nhất, nếu không có thì job sinh câu). Mỗi câu (mỗi phiên bản) tối đa một job loại
+    này (chỉ mục duy nhất một phần `uq_gj_grounding_question`). `chk_gj_question_job`: mọi job khác `generate` bắt buộc có
+    `question_id` và không gắn chỗ (tổng quát hóa `chk_gj_answer_check`).
+  - `question_grounding` (V20): kết quả chấm của một câu (mỗi câu một dòng). `verdict`: `supported`, `not_supported`, `unknown`;
+    `reason` ≤ 600 ký tự; `evidence_quote` ≤ 400 ký tự; `evidence_found`: server có tìm thấy trích dẫn trong đoạn tài liệu đã đưa
+    vào prompt không (NULL khi không có trích dẫn). `supported` BẮT BUỘC có trích dẫn và `evidence_found = TRUE` (`judge` nói bám tài
+    liệu mà không chỉ ra được chỗ nào thì bị hạ xuống `unknown`). `material_refs` chép từ job. `generated_with_material` (mặc định
+    TRUE) để so nhóm có/không tài liệu khi đo. KHÔNG đổi `generated_question.status` (Q-2, M-10): chỉ là cảnh báo.
+  - Đo chi phí (V21, W2-3): `quality_check_result.token_count` (INT) và `latency_ms` (DOUBLE PRECISION, mili giây) là số liệu của
+    lượt gọi Solver cho ra dòng `answer_check` (cả khi Solver chạy trong job sinh câu hay ở job `answer_check` riêng);
+    `question_grounding.token_count`/`latency_ms` là của lượt gọi judge. Cùng quy tắc: ≥ 0 hoặc NULL; NULL với dòng cũ (trước
+    V21) và với kết quả Solver CHÉP từ bản trước (không có lượt gọi nào, nên không bị đếm hai lần). Dòng khác `answer_check` luôn
+    NULL (`chk_qcr_usage_answer_check`). Chỉ lưu lượt gọi thành công cho ra kết quả; lượt thử lại thất bại không được tính.
+    Không có cột tiền: `LlmClient` không tính giá (`cost_usd` luôn 0). Tổng hợp: `docs/thong-ke/06-chi-phi.sql`. Không đưa ra API.
+  - Lý do "cần xem kỹ" thêm (W2-3): `grounding_not_supported`, `grounding_unknown` (từ kết quả), `grounding_pending`, `grounding_failed`
+    (từ trạng thái job).
+  - `lesson_material.extracted_text`: văn bản thường (docx đã làm sạch markdown, giữ `$...$`); xem `docs/api/README.md` mục 9.3.
+  - `bank_item.visible_to_user_id` (V19): NULL là câu dùng chung (mọi câu cũ); khác NULL thì chỉ người dùng đó thấy và dùng
+    lại. Đặt khi Giữ câu sinh từ đề có tài liệu đính kèm. Không xóa dây chuyền theo `users`.
   - Cờ "cần xem kỹ" bỏ qua cảnh báo `json: đã sửa ... escape LaTeX` (vẫn lưu ở `warnings`); cảnh báo `<trường>: đã tự đóng $` và các cảnh báo khác vẫn bật cờ.
 
 - Giáo viên sửa câu trong đề (W1-2, V13, ngày 24/10):

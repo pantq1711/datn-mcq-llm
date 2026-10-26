@@ -17,6 +17,8 @@ import java.util.Map;
  * @param learningOutcomes      yêu cầu cần đạt theo mức (chỉ các mức ô dùng)
  * @param difficulty            mức của câu mcq/sa; null với tf
  * @param statementDifficulties 4 mức của ý a-d (tf); rỗng với mcq/sa
+ * @param extraInstruction      (W2-3) "yêu cầu thêm cho AI" của giáo viên cho cả bài hoặc ô này, đã chuẩn hóa; null khi
+ *                              không có. Luôn được đưa vào prompt như DỮ LIỆU ({@link MatrixPromptDraftV0#extraBlock})
  */
 public record MatrixCellSpec(
         String subjectName,
@@ -26,12 +28,22 @@ public record MatrixCellSpec(
         Map<Difficulty, String> learningOutcomes,
         QuestionType questionType,
         Difficulty difficulty,
-        List<Difficulty> statementDifficulties
+        List<Difficulty> statementDifficulties,
+        String extraInstruction
 ) {
     public MatrixCellSpec {
         learningOutcomes = learningOutcomes == null ? Map.of() : java.util.Collections.unmodifiableMap(
                 new LinkedHashMap<>(learningOutcomes));
         statementDifficulties = statementDifficulties == null ? List.of() : List.copyOf(statementDifficulties);
+        extraInstruction = extraInstruction == null || extraInstruction.isBlank() ? null : extraInstruction;
+    }
+
+    /** Chữ ký trước W2-3 (không có yêu cầu thêm). */
+    public MatrixCellSpec(String subjectName, Integer gradeLevel, String topic, String content,
+                          Map<Difficulty, String> learningOutcomes, QuestionType questionType, Difficulty difficulty,
+                          List<Difficulty> statementDifficulties) {
+        this(subjectName, gradeLevel, topic, content, learningOutcomes, questionType, difficulty,
+                statementDifficulties, null);
     }
 
     /** JSON lưu vào experiment_run.hyperparams. */
@@ -55,7 +67,10 @@ public record MatrixCellSpec(
                 + ",\"learningOutcomes\":" + outcomes
                 + ",\"questionType\":" + SimpleJson.quote(questionType.getDbValue())
                 + ",\"difficulty\":" + (difficulty == null ? "null" : SimpleJson.quote(difficulty.getDbValue()))
-                + ",\"statementDifficulties\":[" + String.join(",", levels) + "]}";
+                + ",\"statementDifficulties\":[" + String.join(",", levels) + "]"
+                // Chỉ thêm khóa khi có yêu cầu: JSON của run cũ và của ô không có yêu cầu giữ nguyên.
+                + (extraInstruction == null ? "" : ",\"extraInstruction\":" + SimpleJson.quote(extraInstruction))
+                + "}";
     }
 
     public static MatrixCellSpec fromJson(String json) {
@@ -79,7 +94,8 @@ public record MatrixCellSpec(
                 outcomes,
                 DbEnum.fromDbValue(QuestionType.class, String.valueOf(m.get("questionType"))),
                 m.get("difficulty") == null ? null : DbEnum.fromDbValue(Difficulty.class, String.valueOf(m.get("difficulty"))),
-                levels);
+                levels,
+                m.get("extraInstruction") instanceof String extra ? extra : null);
     }
 
     private static String quoteOrNull(String s) {

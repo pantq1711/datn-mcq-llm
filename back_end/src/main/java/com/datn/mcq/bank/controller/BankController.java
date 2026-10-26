@@ -17,6 +17,8 @@ import java.util.List;
 
 /**
  * Ngân hàng câu hỏi dùng chung (quyết định H1): giáo viên và admin chỉ ĐỌC. Sửa, xóa câu ngân hàng chưa làm (Q-4c).
+ * Ngoại lệ (W2-3, quyết định E): câu sinh từ tài liệu của một giáo viên chỉ chính giáo viên đó thấy; người khác (kể cả
+ * admin) không thấy trong danh sách, chủ đề, và chi tiết là 404.
  */
 @RestController
 @RequestMapping("/api/bank-items")
@@ -47,7 +49,8 @@ public class BankController {
      * @param size         từ 1 đến 50 (mặc định 20)
      */
     @GetMapping
-    public BankPageDto list(@RequestParam(required = false) Integer subjectId,
+    public BankPageDto list(CurrentUser user,
+                            @RequestParam(required = false) Integer subjectId,
                             @RequestParam(required = false) Integer gradeLevel,
                             @RequestParam(required = false) QuestionType questionType,
                             @RequestParam(required = false) String topic,
@@ -61,13 +64,13 @@ public class BankController {
                             @RequestParam(defaultValue = "0") int page,
                             @RequestParam(defaultValue = "20") int size) {
         return bankService.search(subjectId, gradeLevel, questionType, topic, content, difficulty, levels, origin, q,
-                usage, sort, page, size);
+                usage, sort, page, size, user.id());
     }
 
     /** Chủ đề có câu trong ngân hàng kèm số câu, để dựng bộ lọc. */
     @GetMapping("/topics")
-    public List<TopicDto> topics(@RequestParam(required = false) Integer subjectId) {
-        return bankService.topics(subjectId);
+    public List<TopicDto> topics(CurrentUser user, @RequestParam(required = false) Integer subjectId) {
+        return bankService.topics(subjectId, user.id());
     }
 
     /**

@@ -59,11 +59,12 @@ public class BankService {
      * @param q      tìm trong đề, phương án, đáp số và các ý (không phân biệt hoa thường, tối đa 100 ký tự)
      * @param usage  {@code used} hoặc {@code unused}
      * @param sort   {@code newest} (mặc định), {@code oldest}, {@code least_used}, {@code recently_used}
+     * @param viewerId người xem: câu riêng tư (sinh từ tài liệu của một giáo viên, V19) chỉ hiện với chính người đó
      */
     @Transactional(readOnly = true)
     public BankPageDto search(Integer subjectId, Integer gradeLevel, QuestionType questionType, String topic,
                               String content, Difficulty difficulty, String levels, String origin, String q,
-                              String usage, String sort, int page, int size) {
+                              String usage, String sort, int page, int size, Integer viewerId) {
         if (page < 0) {
             throw new IllegalArgumentException("page phải từ 0");
         }
@@ -104,7 +105,8 @@ public class BankService {
                     "sort phải là newest, oldest, least_used hoặc recently_used");
         };
         BankSearchRepository.Filter filter = new BankSearchRepository.Filter(subjectId, gradeLevel, questionType,
-                blankToNull(topic), blankToNull(content), difficulty, lv, org, text == null ? null : text.strip(), use);
+                blankToNull(topic), blankToNull(content), difficulty, lv, org, text == null ? null : text.strip(), use,
+                viewerId);
         long total = searchRepository.count(filter);
         List<BankSearchRepository.Row> rows = searchRepository.search(filter, order, page * size, size);
         Map<Integer, List<BankItemStatement>> statements = statementsOf(rows);
@@ -119,7 +121,7 @@ public class BankService {
      */
     @Transactional(readOnly = true)
     public BankItemDetailDto detail(Integer id, Integer actorId) {
-        BankSearchRepository.Row row = searchRepository.findRow(id)
+        BankSearchRepository.Row row = searchRepository.findRow(id, actorId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu ngân hàng id=" + id));
         BankListItemDto item = listItem(row, row.questionType() == QuestionType.TF
                 ? bankItemStatementRepository.findByBankItemIdInOrderByBankItemIdAscPositionAsc(List.of(id))
@@ -137,8 +139,20 @@ public class BankService {
 
     /** W1-3: chủ đề có câu trong ngân hàng kèm số câu, theo môn và khối (để dựng ô chọn bộ lọc). */
     @Transactional(readOnly = true)
-    public List<TopicDto> topics(Integer subjectId) {
-        return searchRepository.topics(subjectId);
+    public List<TopicDto> topics(Integer subjectId, Integer viewerId) {
+        return searchRepository.topics(subjectId, viewerId);
+    }
+
+    /**
+     * W2-3 (quyết định E): câu ngân hàng sinh từ tài liệu của giáo viên chỉ chính họ thấy và dùng lại. Gọi trong transaction
+     * của nơi Giữ câu, ngay sau khi câu vào ngân hàng.
+     */
+    @Transactional
+    public void restrictToUser(Integer bankItemId, Integer userId) {
+        BankItem item = bankItemRepository.findById(bankItemId)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu ngân hàng id=" + bankItemId));
+        item.setVisibleToUserId(userId);
+        bankItemRepository.save(item);
     }
 
     /** Câu nguồn {@code questionId} (generated_question) đã có trong ngân hàng. */
@@ -209,8 +223,8 @@ public class BankService {
     }
 
     /**
-     * Chép câu Trả lời ngắn vào ngân hàng (V4, GĐ2): không có phương án và correct_option; sa_answer là đáp số cuối
-     * giáo viên chốt (đã kiểm ở chế độ STRICT). Duyệt lại thì cập nhật dòng cũ.
+     * Chép câu Trả lời ngắn vào ngân hàng (V4, GĐ2): không có phương án và correct_option; sa_answer là đáp số của câu
+     * được Giữ. Chép lại thì cập nhật dòng cũ.
      */
     @Transactional
     public BankItem createOrUpdateShortAnswerFromReview(

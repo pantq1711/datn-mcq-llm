@@ -132,7 +132,7 @@ class StatisticsSqlTest extends ExamFlowTestBase {
     void coMotCauLenhSelectDocLapMoiFile() throws IOException {
         try (var files = Files.list(DIR)) {
             List<Path> sqlFiles = files.filter(p -> p.toString().endsWith(".sql")).sorted().toList();
-            assertEquals(4, sqlFiles.size());
+            assertEquals(6, sqlFiles.size());
             for (Path p : sqlFiles) {
                 // bỏ phần chú thích (-- ...) trước khi kiểm
                 String sql = Files.readString(p, StandardCharsets.UTF_8).lines()

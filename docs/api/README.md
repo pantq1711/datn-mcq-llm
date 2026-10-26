@@ -87,6 +87,9 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | POST | `/api/exam-matrices/samples/{key}` | Tạo ma trận từ mẫu có sẵn |
 | POST | `/api/exams/build` | Tạo đề theo ma trận một lần bấm (chế độ giáo viên). Sinh câu qua hàng đợi, có thể tốn phí |
 | POST | `/api/exams/build-by-lesson` | Sinh theo bài (không cần ma trận): môn, khối, bài, số câu theo dạng và mức (mục 7.2a). Có thể tốn phí |
+| POST | `/api/materials` | Tải tài liệu bài học (.docx, .pdf, .txt; multipart, tối đa 10 MB). Chỉ lưu văn bản đã trích (mục 9) |
+| GET | `/api/materials` | Tài liệu của tôi, mới nhất trước, có phân trang, không kèm văn bản (mục 9) |
+| GET, DELETE | `/api/materials/{id}` | Chi tiết kèm 500 ký tự đầu của văn bản / xóa tài liệu của tôi (mục 9) |
 | GET | `/api/exams/{id}/progress` | Tiến độ theo ô |
 | GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
@@ -242,6 +245,12 @@ POST /api/generation/jobs/enqueue
 
 Ngân hàng là dữ liệu đã duyệt nên có đáp án, đáp số và nhãn cuối. Ngân hàng dùng chung cho mọi
 giáo viên (H1). Giáo viên và admin chỉ ĐỌC; sửa, xóa câu ngân hàng chưa làm (Q-4c).
+
+**Câu riêng tư (W2-3, quyết định E).** Câu sinh từ đề có tài liệu bài học đính kèm, khi giáo viên Giữ, vẫn vào ngân hàng
+nhưng đánh dấu `bank_item.visible_to_user_id` = người Giữ: CHỈ người đó thấy trong danh sách, chủ đề, chi tiết (`GET
+/api/bank-items/{id}` của người khác, kể cả admin, là 404) và dùng lại được; người khác không nhận câu đó làm ứng viên khi tạo
+đề hay Đổi bằng câu ngân hàng. Câu không dựa trên tài liệu (kể cả đề chỉ có "yêu cầu thêm") vẫn dùng chung. Không có cờ riêng
+trong payload: người xem chỉ thấy câu của mình hoặc câu dùng chung.
 
 **Danh sách** (W1-3: thay danh sách không phân trang; đổi hợp đồng so với trước, frontend chưa dùng):
 
@@ -400,7 +409,7 @@ Backend kiểm tra cú pháp bề mặt, không bảo đảm KaTeX render đư�
 | Mức | Trường hợp | Hệ quả |
 |---|---|---|
 | Lỗi | Ký tự điều khiển, số dấu `$` lẻ, ngoặc `{}` không cân bằng, lệnh nằm ngoài `$...$`, thiếu đối số `\frac`/`\sqrt`, `\left`/`\right` hoặc `\begin`/`\end` không khớp, ở đề, 4 phương án (`mcq`), 4 ý (`tf`) hoặc đáp số (`sa`) | Câu sinh ra thành `format_failed`; bản sửa của giáo viên bị từ chối (400) |
-| Cảnh báo | Lệnh nằm ngoài danh sách cho phép, ví dụ `\widehat`, `\alpha`; môi trường ngoài danh sách (ví dụ `array`) khi cấu trúc cân bằng; mọi lỗi định dạng trong `explanation` | Không ảnh hưởng trạng thái, không trả về API. Lời giải còn lỗi nghiêm trọng được lưu `explanation = null` khi vào ngân hàng |
+| Cảnh báo | Lệnh nằm ngoài danh sách cho phép, ví dụ `\widehat`, `\alpha`; môi trường ngoài danh sách (ví dụ `array`) khi cấu trúc cân bằng; mọi lỗi định dạng trong `explanation` | Không ảnh hưởng trạng thái, không trả về API. Lời giải luôn được giữ nguyên khi vào ngân hàng, kể cả khi còn lỗi LaTeX (quyết định 23/10) |
 
 Trước khi kiểm tra, backend đổi chuỗi `\n` theo nghĩa đen (dấu `\` rồi chữ `n`, do model viết `\\n` trong JSON)
 thành ký tự xuống dòng ở các trường văn bản (đề, phương án, ý, lời giải; đáp số `sa` chỉ trim), chỉ khi nằm ngoài
@@ -524,7 +533,39 @@ POST /api/exams/build
 
 - `title` bỏ trống thì lấy tên ma trận. Người tạo đề là người đăng nhập (`teacherId` đã bỏ khỏi API từ W1-1; gửi lên
   thì bị bỏ qua). Ma trận phải của chính người gọi, không thì 404. Đề có `mode = teacher`, `status = draft`.
-- Ngân hàng câu dùng chung cho mọi giáo viên (H1): câu ngân hàng khớp ô được lấy bất kể ai đã đưa vào.
+- **Tài liệu bài học và "yêu cầu thêm cho AI" (W2-3, tùy chọn).** Body nhận thêm:
+  `materialIds` (tài liệu của chính người gọi, mục 9, áp cho cả ma trận) và `cells`: mảng
+  `{"cellId", "materialIds", "extraInstruction"}` cho từng ô (`cellId` phải thuộc ma trận, mỗi ô tối đa một phần tử).
+  Tài liệu hiệu lực của một ô là hợp của tài liệu cả ma trận và của ô; yêu cầu thêm hiệu lực là của ô.
+  - Tối đa 5 tài liệu KHÁC NHAU trong cả lần tạo đề (trùng id tính một); `extraInstruction` tối đa 1000 ký tự (trim, bỏ
+    ký tự điều khiển và ký tự ẩn). Lưu theo từng đề (không gắn vào ma trận) ở `exam_generation_context`.
+  - **Ô có tài liệu hoặc có yêu cầu thêm thì BỎ QUA ngân hàng khi tạo đề** (câu ngân hàng không theo được tài liệu hay yêu
+    cầu): mọi chỗ của ô sinh qua hàng đợi. Ô không có thì lấy ngân hàng như trên.
+  - Yêu cầu thêm đi vào prompt như DỮ LIỆU: khối riêng có ranh giới `<<< >>>` (bỏ `<<<`, `>>>` trong nội dung, gộp khoảng
+    trắng), đặt sau mọi quy tắc và yêu cầu đầu ra, kèm lời dặn không được đổi dạng câu, mức độ, số lượng, số ý, mẫu nhãn,
+    định dạng JSON hay tắt kiểm tra chất lượng. Các thông số đó và QC do hệ thống quyết định, không do prompt. Lần sinh lại
+    và Đổi câu của ô giữ yêu cầu này (yêu cầu riêng của lượt Đổi câu đặt sau cùng).
+  - **Đoạn tài liệu vào prompt (W2-3 bước 5).** Không nhồi cả tài liệu: mỗi job chỉ nhận tối đa 6000 ký tự trong tối đa 4
+    đoạn (mỗi đoạn ≤ 1500 ký tự). Tài liệu nhỏ (tổng ≤ 6000 ký tự) được đưa cả. Tài liệu dài: chia đoạn theo dòng trống, xếp
+    hạng bằng từ khóa (BM25 trên âm tiết và cặp âm tiết, bỏ dấu tiếng Việt, đoạn có tiêu đề khớp tên bài được cộng điểm) giữa
+    đoạn và tên bài + nội dung + yêu cầu cần đạt của ô; không đoạn nào trùng từ thì lấy các đoạn rải đều. Chỗ thứ k của ô lấy
+    cửa sổ hạng bắt đầu từ `(k × 2 + số job đã có của chỗ) mod 8`, nên các câu cùng ô phủ phần khác nhau của tài liệu và lần
+    sinh lại, Đổi câu dịch sang đoạn khác. Không dùng embedding (không tốn lượt gọi).
+  - Đoạn đã chọn được chụp vào `generation_job.material_context` (đúng văn bản đưa vào prompt, đã bỏ mọi `<<<`, `>>>`) và
+    `material_refs` (mảng `{materialId, sha256, from, to, rank, score, selection}`, `selection` là `whole`, `ranked` hoặc
+    `fallback`). `[from, to)` là khoảng của `lesson_material.extracted_text`, nên dựng lại được model đã thấy gì từ
+    văn bản đã lưu. Hai cột này không đưa ra API.
+  - Trong prompt, đoạn nằm trong khối DỮ LIỆU `<<<TÀI_LIỆU ... HẾT_TÀI_LIỆU>>>`, sau thông số của ô và TRƯỚC các quy tắc và yêu
+    cầu đầu ra (nên yêu cầu đầu ra của hệ thống luôn ở cuối); lời dặn nói rõ mọi câu lệnh trong tài liệu chỉ là nội dung, không
+    làm theo, và tài liệu không đổi được dạng câu, mức độ, số lượng, số ý, mẫu nhãn, JSON. Tên file không đưa vào prompt.
+  - Chưa làm (bước sau của task): bước QC "bám tài liệu" (grounding).
+  - Đổi câu bằng câu ngân hàng (`source = "bank"`) ở ô có tài liệu vẫn được phép: câu lấy từ ngân hàng không theo tài liệu
+    của đề (quyết định của chủ dự án).
+  - Lỗi (không tạo đề, không để lại gì): 400 `TOO_MANY_MATERIALS`, `INSTRUCTION_TOO_LONG`, `INVALID_REQUEST` (ô không thuộc
+    ma trận, ô lặp, id rỗng); 404 nếu có tài liệu không phải của người gọi hoặc không tồn tại.
+- Ngân hàng câu dùng chung cho mọi giáo viên (H1): câu ngân hàng khớp ô được lấy bất kể ai đã đưa vào. Ngoại lệ (W2-3,
+  mục "Ngân hàng câu hỏi"): câu sinh từ tài liệu của một giáo viên chỉ chính giáo viên đó thấy và dùng lại; câu đó không là
+  ứng viên khi người khác tạo đề hay Đổi bằng câu ngân hàng.
 - Mỗi ô lấy câu ngân hàng khớp ô trước: cùng môn, cùng dạng, cùng mức (`tf`: cùng 4 mức theo thứ tự), cùng chủ đề của
   template gốc (so sau trim, không phân biệt hoa thường); nếu câu ngân hàng được sinh từ một ô ma trận thì còn phải cùng
   nội dung. Một câu ngân hàng chỉ vào MỘT chỗ của đề (kể cả khi nhiều ô dùng chung template). Giữa các đề chỉ xếp hạng
@@ -581,6 +622,10 @@ POST /api/exams/build-by-lesson
   (4 mức ý a-d) và KHÔNG có `difficulty`; `tf` bỏ trống `statementDifficulties` thì mặc định dễ, dễ, vừa, khó. Phần I/II/III
   suy từ dạng câu. `questionCount` 1-50 mỗi nhóm. **Tổng số câu tối đa 50 mỗi lần**; vượt thì 400 (`Một lần sinh theo bài
   tối đa 50 câu (hiện N)`).
+- Tùy chọn (W2-3): `materialIds` (tài liệu bài học của chính người gọi, mục 9, tối đa 5 khác nhau) và `extraInstruction`
+  ("yêu cầu thêm cho AI", tối đa 1000 ký tự). Áp cho CẢ lần sinh (mọi nhóm câu). Có tài liệu hoặc yêu cầu thì bỏ qua ngân
+  hàng, sinh mọi chỗ qua hàng đợi; quy tắc, lỗi và cách đưa vào prompt như mục 7.2 (khối "yêu cầu thêm" là DỮ LIỆU, không
+  đổi định dạng, số lượng, mức độ hay QC). Câu sinh từ đề có tài liệu khi Giữ vào ngân hàng thì chỉ người sinh thấy.
 - Yêu cầu cần đạt: giáo viên không phải nhập. Mỗi mức ô dùng có mặc định theo tên bài ("Nhận biết…", "Hiểu và vận dụng
   trực tiếp…", "Vận dụng…"); `learningOutcomes` ghi đè theo mức.
 - Ngân hàng: khớp theo môn, dạng, mức và **chủ đề = tên bài** (so sau trim, không phân biệt hoa thường). Khi không nhập
@@ -591,12 +636,13 @@ POST /api/exams/build-by-lesson
 - Lỗi: 400 `{"error": …}` (dữ liệu sai; không tạo gì), 404 (`subjectId` không tồn tại), 403 (admin), 401. Mọi lỗi đều
   không để lại ma trận, template hay đề (một transaction).
 - Chỉ lọc và thống kê theo loại đề: `kind` có trong danh sách (7.0), xem đề (7.4) và kết quả tạo đề; `GET /api/exams?kind=lesson`.
-- **Việc kế tiếp (chưa làm): danh mục bài `lesson_catalog`** (môn, khối, chương, số bài, tên bài) và tài liệu bài học.
+- **Việc kế tiếp (chưa làm): danh mục bài `lesson_catalog`** (môn, khối, chương, số bài, tên bài). Tài liệu bài học do giáo viên
+  tải lên đã có (mục 9).
   Đề xuất: bảng `lesson_catalog(id, subject_id, grade_level, chapter, lesson_no, title)`; `build-by-lesson` nhận thêm
   `lessonId` TÙY CHỌN, khi có thì `lesson`/`gradeLevel`/`subjectId` lấy từ danh mục (không gửi cũng được). Các trường hiện có
   giữ nguyên nghĩa nên API cũ không vỡ; chỗ lấy tên bài là `MatrixService.resolveLesson`. Tên bài vẫn là chủ đề khớp ngân
-  hàng, nên câu cũ sinh theo chuỗi vẫn dùng lại được nếu tên trùng danh mục. Tài liệu bài học (nội dung SGK) sẽ thêm vào
-  `MatrixCellSpec` (JSON ở `experiment_run.hyperparams`, khóa lạ được bỏ qua nên tương thích ngược).
+  hàng, nên câu cũ sinh theo chuỗi vẫn dùng lại được nếu tên trùng danh mục. "Yêu cầu thêm cho AI" đã nằm ở `MatrixCellSpec`
+  (JSON ở `experiment_run.hyperparams`, khóa `extraInstruction`; run cũ không có khóa này).
 
 ### 7.3. Tiến độ
 
@@ -635,6 +681,11 @@ khác để sinh lại).
   do (vẫn lưu trong `warnings`). `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
   `solver_pending` (Solver đang kiểm lại, thay `solver_not_run`), `solver_failed` (kiểm lại thất bại) và
   `duplicate: <id>` (bản sửa trùng câu khác).
+- W2-3, câu sinh từ đề có tài liệu bài học (mục 7.2, 9) có thêm lý do của QC "bám tài liệu" (mục 7.7a):
+  `grounding_not_supported` (judge cho là đáp án, lời giải hoặc câu hỏi không khớp tài liệu), `grounding_unknown` (đoạn tài
+  liệu không đủ để kết luận, hoặc judge nói "bám tài liệu" mà trích dẫn không kiểm chứng được), `grounding_pending` (đang chờ
+  hoặc đang chấm) và `grounding_failed` (chấm lỗi, không có kết quả). Đây chỉ là CẢNH BÁO: câu giữ nguyên trạng thái (vẫn
+  `qc_passed` nếu đã qua QC), không bị loại, giáo viên vẫn Giữ được. Kết luận `SUPPORTED` không thêm lý do nào.
 - W1-2: câu hệ thống sinh chưa Giữ có `qcState`: `checking` (Solver đang kiểm lại bản sửa), `passed` (không còn lý do cần
   xem kỹ), `needs_review` (có lý do). Chỗ khác không có trường này. Mọi câu có `edited` (câu hiện tại là bản giáo viên
   sửa, kể cả khi đã Giữ) và, khi `edited`, `originalQuestionId` (bản gốc LLM).
@@ -859,6 +910,55 @@ không có hoặc của giáo viên khác, hoặc chỗ không thuộc đề: 40
   `editDistance`. `questionId` là câu bị thao tác (Đổi: câu bị đổi ra khỏi chỗ).
 - Không có `raw_llm_output`, prompt, `prompt_note`, token, độ trễ hay chi phí. Dữ liệu cũ (trước V14) có
   `solverReasoning = null`.
+- **Hạn chế đã biết (W2-3, chưa sửa):** bước dedup so với câu của mọi giáo viên cùng môn, nên `qc.dedup.comparedTo.questionId`
+  có thể trỏ tới câu sinh từ tài liệu riêng tư của giáo viên khác (câu đó không hiện trong ngân hàng của người xem). Chỉ lộ id
+  câu và độ tương đồng, không lộ nội dung.
+
+### 7.7a. QC "bám tài liệu" (W2-3)
+
+Chỉ chạy với câu SINH từ đề có tài liệu bài học đính kèm. Khi job sinh câu xong và câu còn dùng được (qua QC, hoặc lệch Solver
+nên có thể được dùng kèm cờ; không phải `format_failed` hay `duplicate`), hệ thống xếp MỘT job `grounding_check` trong CÙNG
+transaction. Worker chấm bằng một LLM judge (mô hình `app.llm.grounding-model`, mặc định bằng model của Solver, nhiệt độ 0),
+ngoài transaction DB, thử lại có giới hạn như mọi job, thiếu API key thì thất bại ngay.
+
+- Judge được thấy câu hỏi, đáp án và lời giải của người soạn (khác Solver) cùng ĐÚNG các đoạn tài liệu mà model sinh câu đã thấy
+  (`generation_job.material_context`). Tài liệu và câu hỏi là dữ liệu trong khối có ranh giới, mọi lệnh trong đó không được làm
+  theo. Đầu ra bị ép theo schema: `verdict` (`SUPPORTED`, `NOT_SUPPORTED`, `UNKNOWN`), `reason` (ngắn), `evidence_quote`.
+- **Kiểm chứng trích dẫn:** `SUPPORTED` bắt buộc kèm trích dẫn nguyên văn đủ dài (từ 8 ký tự không kể khoảng trắng) mà server
+  tìm thấy trong đoạn tài liệu đã đưa. So khớp chuẩn hóa như nhau cho cả hai phía: không phân biệt hoa thường, bỏ mọi
+  khoảng trắng và ký tự vô hình, bỏ ký hiệu bao công thức (`$`, `\(`, `\)`, `\[`, `\]`) và lệnh dàn trang LaTeX (`\left`,
+  `\right`, `\,`, `\;`, `\!`), gộp dấu trừ/gạch dài và dấu nháy cong về ASCII, rút `^{x}`/`_{x}` về `^x`/`_x` khi trong
+  ngoặc đúng một chữ hoặc số (`x^{12}` giữ nguyên); quote còn bị cắt dấu câu và dấu nháy hai đầu. Không bỏ dấu tiếng Việt,
+  không so mờ, nên đổi chữ, số, dấu hay hệ số vẫn không khớp; độ dài tối thiểu tính sau chuẩn hóa. Không tìm thấy thì `SUPPORTED` bị hạ
+  xuống `UNKNOWN` (lý do bắt đầu bằng `evidence_not_found:`). `NOT_SUPPORTED` và `UNKNOWN` giữ nguyên kết luận;
+  `evidenceFound` cho biết trích dẫn của judge có thật hay không.
+- Kết quả ở bảng `question_grounding` (V20; mỗi câu một dòng, kèm `generated_with_material` để so nhóm có/không tài liệu khi
+  đo). KHÔNG đổi `generated_question.status` (Q-2 không đổi). Cờ "cần xem kỹ" xem mục 7.4.
+- Vết QC (mục 7.7): mỗi phiên bản có `qc.grounding`, `null` với câu không dùng tài liệu:
+
+```json
+"grounding": {"state": "supported", "reason": "Khớp định lý bình phương của một tổng.",
+  "evidenceQuote": "Bình phương của một tổng bằng tổng bình phương hai số cộng hai lần tích", "evidenceFound": true,
+  "judgeModel": "gemini-3.5-flash-lite", "checkedAt": "2026-10-26T09:30:00",
+  "materialRefs": [{"materialId": 12, "sha256": "9f2c…", "from": 0, "to": 1480, "rank": 0, "score": 3.2, "selection": "ranked"}],
+  "error": null, "job": {"jobId": 301, "createdAt": "…", "status": "done", "attempt": 1, "error": null}}
+```
+
+  `state`: `supported`, `not_supported`, `unknown` (đã có kết quả), `pending` (job đang chờ hoặc chạy), `error` (job lỗi, không có
+  kết quả; `error` là lý do) hoặc `not_run` (job đã bỏ qua, ví dụ câu đã bị bản giáo viên sửa thay). `materialRefs` là các đoạn tài
+  liệu (khoảng `[from, to)` của văn bản đã trích) judge đã thấy.
+- **Bản giáo viên sửa (`PUT /api/exams/{examId}/slots/{slotId}/question`):** khi bản sửa thật sự đổi nội dung và còn dùng được
+  (qua QC, hoặc đang chờ Solver), hệ thống xếp thêm MỘT job `grounding_check` cho bản mới, vì judge thấy cả đề, phương án, đáp
+  án và lời giải (đổi lời giải cũng chấm lại). Job dùng lại NGUYÊN các đoạn tài liệu của chuỗi bản sửa (không chọn lại), nên
+  `materialRefs` của các bản giống nhau. Request không gọi LLM; worker chấm sau. Bản trước mà job còn chờ thì bị bỏ qua
+  (`state = not_run`, đã có bản sửa thay), kết quả đã có của bản trước giữ nguyên. Câu không dùng tài liệu, sửa không đổi gì
+  hoặc bị 400 thì không xếp job.
+- Chưa làm: đường chấm nhóm "không tài liệu" cho thí nghiệm (cột `generated_with_material` đã có sẵn). Thống kê:
+  `docs/thong-ke/05-grounding.sql`.
+- Đo chi phí (V21): token và độ trễ của lượt gọi judge được lưu ở `question_grounding` (và của Solver ở `quality_check_result`);
+  không đưa ra API, chỉ để thống kê (`docs/thong-ke/06-chi-phi.sql`).
+- Giới hạn: judge là LLM cùng họ với model sinh câu nên có thể thiên vị; kết quả chưa được đối chiếu với nhãn của người. Câu chỉ cần
+  kiến thức phổ thông sẽ ra `UNKNOWN` (không phải lỗi). Mỗi câu có tài liệu tốn thêm 1 lượt gọi LLM.
 
 ## 8. Đăng nhập và phân quyền (W1-1)
 
@@ -981,3 +1081,96 @@ Retry-After: 873
 `http://localhost`, nên chỉ đặt `false` khi dev qua http với host khác localhost), `CORS_ALLOWED_ORIGINS`,
 `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`. Swagger UI (`/swagger-ui.html`) có nút **Authorize**: đăng nhập bằng
 `POST /api/auth/login`, dán `accessToken`. `GET /actuator/health` công khai nhưng chỉ trả chi tiết cho người đã đăng nhập.
+
+## 9. Tài liệu bài học đính kèm (W2-3)
+
+Giáo viên tải tài liệu bài dạy (.docx, .pdf, .txt) để câu hỏi bám nội dung đã dạy. Bước này mới có API tải lên và quản lý
+tài liệu; việc gắn tài liệu vào yêu cầu sinh câu và bước QC "bám tài liệu" làm ở các bước sau của task. Chỉ giáo viên
+(admin không dùng); tài liệu thuộc người tải lên, của người khác trả 404 như không tồn tại. Gắn tài liệu vào đề: mục 7.2 và 7.2a.
+
+**Server chỉ lưu văn bản đã trích và sha256 của file gốc, KHÔNG lưu file gốc** (không tải lại được file đã đưa lên).
+
+### 9.1. Tải lên
+
+```http
+POST /api/materials
+Content-Type: multipart/form-data   (phần "file")
+```
+
+- Loại file nhận dạng từ NỘI DUNG (magic bytes); đuôi file và Content-Type client gửi bị bỏ qua. `.doc` cũ, `.rtf`, ảnh,
+  `.xlsx`, `.pptx`, văn bản UTF-16 hoặc không phải UTF-8 đều bị từ chối (415).
+- Tối đa 10 MB mỗi file, một file mỗi lần gọi (giới hạn 5 tài liệu cho mỗi lần sinh áp dụng ở bước gắn vào đề).
+- **201** tạo mới; **200** và trả lại bản cũ khi chính giáo viên này đã tải đúng file đó (cùng sha256, kể cả đổi tên file).
+
+```json
+{"id": 12, "fileName": "bai3.docx", "kind": "docx", "sizeBytes": 48211, "charCount": 5120, "pageCount": null,
+ "sha256": "9f2c…", "extractMethod": "pandoc",
+ "warnings": [{"code": "MATHTYPE_FORMULAS_DROPPED", "count": 12, "total": 15, "message": "Có 12/15 công thức MathType …"}],
+ "createdAt": "2026-10-25T21:30:00"}
+```
+
+`pageCount` chỉ có với pdf (không có key với loại khác). `kind` là `docx`, `pdf` hoặc `txt`. `warnings` luôn là mảng (có thể rỗng):
+
+| `code` | Ý nghĩa |
+|---|---|
+| `MATHTYPE_FORMULAS_DROPPED` | docx có `count` công thức MathType (đối tượng nhúng) trong tổng `total` công thức mà hệ thống chưa đọc được; chúng KHÔNG có trong văn bản trích |
+| `FORMULA_LOSS_HIGH` | như trên nhưng từ 30% công thức trở lên bị mất: câu hỏi sinh ra có thể thiếu hoặc sai công thức. Frontend nên cảnh báo rõ |
+| `FORMULA_IMAGES_NOT_READ` | docx có `count` ảnh ngoài đối tượng công thức (có thể là công thức dạng ảnh); không OCR |
+| `PDF_TEXT_QUALITY_LOW` | pdf có nhiều ký tự lỗi (thường do công thức hoặc font đặc biệt) |
+
+Mã lỗi (body `{"error", "code"}`):
+
+| HTTP | `code` | Khi nào |
+|---|---|---|
+| 400 | `EMPTY_FILE`, `MISSING_FILE`, `INVALID_MULTIPART` | file rỗng; thiếu phần `file`; multipart hỏng |
+| 409 | `MATERIAL_QUOTA_EXCEEDED` | đã lưu đủ 50 tài liệu (xóa bớt rồi tải lại; tải lại file đã có vẫn được 200) |
+| 413 | `FILE_TOO_LARGE` | quá giới hạn (mặc định 10 MB; thông báo ghi rõ "tối đa N MB", lấy từ `spring.servlet.multipart.max-file-size`) |
+| 415 | `UNSUPPORTED_FILE_TYPE` | không phải docx, pdf hay txt UTF-8 (thông báo nói rõ với `.doc`, UTF-16, sai bảng mã) |
+| 422 | `NO_EXTRACTABLE_TEXT` | không có chữ: PDF scan (không OCR), docx chỉ có ảnh hoặc công thức MathType, txt rỗng |
+| 422 | `INVALID_FILE`, `EXTRACTION_FAILED` | file hỏng, nghi zip bomb, XML có DTD; pandoc không đọc được |
+| 422 | `TEXT_TOO_LONG`, `TOO_MANY_PAGES` | quá 300.000 ký tự hoặc 200 trang (không cắt âm thầm) |
+| 422 | `MATERIAL_ENCRYPTED` | pdf có mật khẩu hoặc cấm sao chép nội dung |
+| 429 | `TOO_MANY_UPLOADS` | quá 30 lần tải mỗi giờ (tính cả lần lỗi; bộ đếm trong bộ nhớ) |
+| 503 | `EXTRACTOR_UNAVAILABLE` | docx cần pandoc mà máy chủ chưa cài (pdf và txt vẫn dùng được) |
+| 503 | `EXTRACTOR_BUSY`, `EXTRACTION_TIMEOUT` | đang trích tối đa 2 tài liệu cùng lúc / một lần trích quá 30 giây |
+
+### 9.2. Danh sách, chi tiết, xóa
+
+- `GET /api/materials?page=0&size=10` → `{"items": [...], "page", "size", "totalItems", "totalPages"}`; `size` từ 1 đến 50
+  (sai thì 400). Mục không có văn bản.
+- `GET /api/materials/{id}` → như trên kèm `textPreview`: tối đa 500 ký tự đầu của văn bản đã trích (để giáo viên kiểm tra
+  dấu tiếng Việt và công thức). Không có API trả văn bản đầy đủ.
+- `DELETE /api/materials/{id}` → 204. Tài liệu đã gắn vào một đề (mục 7.2, 7.2a) thì 409 `MATERIAL_IN_USE` (thông báo nêu số
+  đề), không xóa được. Gắn tài liệu vào đề giữ khóa chia sẻ trên hàng tài liệu, nên xóa đúng lúc đang gắn thì phải chờ rồi bị
+  chặn (409), không thành lỗi 500.
+
+### 9.3. Văn bản trích
+
+- docx đọc bằng pandoc: công thức Equation gốc của Word (OMML) thành `$...$`. **Công thức MathType (đối tượng nhúng) bị
+  bỏ**, được đếm và báo trong `warnings`; tách từng công thức ra văn bản là việc của một bước sau (dùng bộ đọc MTEF của
+  `tools/bank-import`).
+- pdf đọc bằng PDFBox, không OCR. Công thức trong PDF thường bị méo khi trích.
+- Văn bản chuẩn hóa Unicode NFC, bỏ ký tự điều khiển và ký tự ẩn (bidi, độ rộng bằng không).
+- **docx được làm sạch markdown ngay khi trích (W2-3 bước 5)**: `extracted_text` lưu trong DB là văn bản thường, không còn `**`,
+  `_`, dấu `\` thoát ký tự, `#` của tiêu đề, `>` của trích dẫn, dòng kẻ bảng; liên kết chỉ còn chữ hiển thị; danh sách `- `.
+  Công thức `$...$` và `$$...$$` giữ nguyên từng ký tự. Chỉ số trên/dưới định dạng Word giữ nghĩa bằng ký hiệu (`x²` thành `x^2`,
+  `H₂O` thành `H_2O`; bỏ dấu đóng của cặp pandoc); `~~gạch ngang~~` chỉ bỏ dấu. Offset `[from, to)` của đoạn trích tính trên đúng
+  văn bản này.
+  (Tài liệu docx tải lên trước thay đổi này, nếu có, vẫn còn markdown; không chuyển đổi vì chưa có dữ liệu thật.)
+
+### 9.4. Hạn chế đã biết
+
+- **Rủi ro hết bộ nhớ (OOM) khi trích PDF:** PDFBox không có trần bộ nhớ cho luồng nén khi giải nén. Đã giảm bằng: file tối đa
+  10 MB, tối đa 200 trang, tối đa 30 giây, tối đa 2 lần trích đồng thời, luồng PDF đệm bằng file tạm (không giữ trong heap),
+  và chỉ giáo viên đã đăng nhập mới tải lên được. Nhưng một PDF độc vẫn có thể ăn nhiều heap; image backend đặt
+  `-XX:+ExitOnOutOfMemoryError` nên khi đó tiến trình thoát và container khởi động lại. Chỉ xử lý triệt để bằng cách trích PDF
+  ngoài tiến trình (chưa làm).
+- **Bộ nhớ của pandoc:** mỗi lần đọc docx bị giới hạn heap `MATERIAL_PANDOC_HEAP_MB` (768 MB) và 30 giây. `mem_limit` của
+  `app` là 1 GB và heap JVM chiếm 55%, nên trần này là giới hạn trên, chưa đo với tài liệu lớn: nếu container bị `OOMKilled`
+  khi tải docx lớn, hạ `MATERIAL_PANDOC_HEAP_MB` hoặc tăng `mem_limit`.
+- **qc-trace và câu riêng tư:** `qc.dedup.comparedTo.questionId` có thể trỏ tới câu riêng tư của giáo viên khác (chỉ lộ id và độ
+  tương đồng); xem mục 7.7. Chưa sửa.
+- Tài liệu ảnh hưởng tới câu được SINH và được dùng để chấm "bám tài liệu" (mục 7.7a); bản giáo viên sửa chưa được chấm lại.
+- Cấu hình giới hạn: `app.materials.*` (biến `MATERIAL_MAX_FILE_BYTES`, `MATERIAL_MAX_CHARS`, `MATERIAL_MAX_PAGES`,
+  `MATERIAL_MAX_PER_OWNER`, `MATERIAL_MAX_UPLOADS_PER_HOUR`, `MATERIAL_MAX_CONCURRENT`, `MATERIAL_EXTRACT_TIMEOUT`,
+  `MATERIAL_PANDOC_HEAP_MB`). Caddy cho phép body tới 12 MB; Tomcat đọc bỏ tối đa 25 MB phần thừa để trả được 413.

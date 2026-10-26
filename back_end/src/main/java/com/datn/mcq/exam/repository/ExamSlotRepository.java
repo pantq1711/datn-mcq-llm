@@ -42,6 +42,9 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
      * theo chuỗi {@code edited_from_question_id} của bản giáo viên sửa; câu có thể vào ngân hàng qua duyệt chấm mù, không chỉ
      * qua Giữ). Đề đang tạo chưa có chỗ hay nhật ký nên không đổi kết quả khi tạo đề.
      *
+     * <p>W2-3: {@code ownerId} là người tạo đề; câu ngân hàng riêng tư của người khác (visible_to_user_id, V19) không là
+     * ứng viên, còn câu riêng tư của chính người này thì dùng lại được.
+     *
      * <p>W1-4: {@code anyContent} = true (chỉ ô của ma trận ẩn sinh theo bài không nhập nội dung) bỏ điều kiện về nội dung
      * của ô nguồn; false giữ nguyên hành vi cũ.
      */
@@ -67,6 +70,7 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
                        WHERE u.exam_id <> :examId
                        GROUP BY u.bank_item_id) us ON us.bank_item_id = b.id
             WHERE b.question_type = :type
+              AND (b.visible_to_user_id IS NULL OR b.visible_to_user_id = :ownerId)
               AND t.subject_id = :subjectId
               AND lower(btrim(coalesce(t.topic, ''))) = lower(btrim(:topic))
               AND (CAST(:anyContent AS boolean)
@@ -85,6 +89,7 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
             LIMIT :limit
             """, nativeQuery = true)
     List<Integer> findBankCandidates(@Param("examId") Integer examId,
+                                     @Param("ownerId") Integer ownerId,
                                      @Param("subjectId") Integer subjectId,
                                      @Param("type") String type,
                                      @Param("topic") String topic,

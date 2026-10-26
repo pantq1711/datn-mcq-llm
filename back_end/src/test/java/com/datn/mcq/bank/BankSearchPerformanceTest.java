@@ -135,9 +135,9 @@ class BankSearchPerformanceTest {
     @Test
     void chonCauKhiTaoDeVoiBaNghinCau() throws Exception {
         // Truy vấn chọn câu khi tạo đề (có xếp hạng theo mức dùng) cũng phải nhanh.
-        slotRepository.findBankCandidates(-1, subject, "mcq", "Chủ đề 7", "", "easy", "", false, 20);  // làm nóng
+        slotRepository.findBankCandidates(-1, -1, subject, "mcq", "Chủ đề 7", "", "easy", "", false, 20);  // làm nóng
         long start = System.nanoTime();
-        var picked = slotRepository.findBankCandidates(-1, subject, "mcq", "Chủ đề 7", "", "easy", "", false, 20);
+        var picked = slotRepository.findBankCandidates(-1, -1, subject, "mcq", "Chủ đề 7", "", "easy", "", false, 20);
         long ms = (System.nanoTime() - start) / 1_000_000;
         System.out.println("[perf] chọn câu khi tạo đề: " + ms + " ms, " + picked.size() + " câu");
         assertTrue(ms < LIMIT_MS, "chọn câu mất " + ms + " ms (ngưỡng " + LIMIT_MS + " ms)");

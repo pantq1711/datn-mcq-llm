@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -104,5 +105,15 @@ class TfSolverCheckerTest {
         assertEquals(TfPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON, client.lastSchema);
         assertTrue(client.lastPrompt.contains("a) Ý một"));
         assertFalse(client.lastPrompt.contains("label_"), "Solver không thấy nhãn người soạn");
+    }
+
+    @Test
+    void checkTrueFalseMangSoLieuLuotGoiLlmCuaChinNoCoParseThuanThiKhong() {
+        client.response = judge("T", "T", "F", "F");
+        AnswerSolverChecker.TfSolverOutcome out = checker.checkTrueFalse("Cho $P$.",
+                List.of("Ý một", "Ý hai", "Ý ba", "Ý bốn"), LLM_LABELS);
+        assertEquals(1, out.usage().tokenCount());
+        assertEquals(1.0, out.usage().latencyMs());
+        assertNull(compare(judge("T", "T", "F", "F")).usage(), "phân tích thuần không có lượt gọi LLM nào");
     }
 }

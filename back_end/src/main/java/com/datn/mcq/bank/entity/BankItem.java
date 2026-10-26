@@ -153,6 +153,20 @@ public class BankItem {
         this.difficulty = difficulty;
     }
 
+    /**
+     * V19 (W2-3): null là câu dùng chung; khác null thì chỉ người dùng này thấy và dùng lại (câu sinh từ tài liệu của họ).
+     */
+    @Column(name = "visible_to_user_id")
+    private Integer visibleToUserId;
+
+    public Integer getVisibleToUserId() {
+        return visibleToUserId;
+    }
+
+    public void setVisibleToUserId(Integer visibleToUserId) {
+        this.visibleToUserId = visibleToUserId;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }

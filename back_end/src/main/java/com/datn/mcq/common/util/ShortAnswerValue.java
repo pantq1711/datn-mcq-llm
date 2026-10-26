@@ -26,8 +26,8 @@ import java.util.List;
  * sqrt   := '\sqrt{' DIGITS '}' | '√{' DIGITS '}' | '√' DIGITS   (1 &lt;= số dưới căn &lt;= 10^12)
  * </pre>
  *
- * <p>STRICT (đáp số LLM sinh và đáp số cuối vào ngân hàng) chặn thêm: chữ số 0 thừa ở đầu (05, \frac{05}{2}) và
- * dấu "-" trước một giá trị bằng 0 (-0, -0,0, -\frac{0}{3}). LENIENT (đáp số giáo viên nhập mù, đáp số Solver)
+ * <p>STRICT (đáp số LLM sinh, bước format) chặn thêm: chữ số 0 thừa ở đầu (05, \frac{05}{2}) và
+ * dấu "-" trước một giá trị bằng 0 (-0, -0,0, -\frac{0}{3}). LENIENT (đáp số Solver, so khớp khi dedup)
  * chỉ cần phân tích được. Phân số mà tử và mẫu viết ra có ước chung (2/4, \frac{6}{8}) vẫn hợp lệ, kèm cảnh báo.
  */
 public final class ShortAnswerValue {

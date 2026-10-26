@@ -554,10 +554,26 @@ public class GenerationService {
                 spec.toJson());
     }
 
-    /** V7: một job sinh câu cho một chỗ trong đề, thuộc run của ô. */
+    /**
+     * Ảnh chụp đoạn tài liệu bài học của một job sinh câu (W2-3): {@code context} là khối văn bản đưa vào prompt, {@code
+     * refsJson} là mảng JSON các đoạn đã chọn (để truy vết).
+     */
+    public record MaterialSnapshot(String context, String refsJson) {}
+
+    /** V7: một job sinh câu cho một chỗ trong đề, thuộc run của ô (không có tài liệu). */
     @Transactional
     public GenerationJob enqueueMatrixJob(Integer runId, Integer templateId, MatrixCellSpec spec, Integer examSlotId,
                                           LocalDateTime nextRunAt, String promptNote) {
+        return enqueueMatrixJob(runId, templateId, spec, examSlotId, nextRunAt, promptNote, null);
+    }
+
+    /**
+     * V7: một job sinh câu cho một chỗ trong đề. W2-3: {@code material} (null khi không có tài liệu) được ghi vào
+     * generation_job.material_context/material_refs; worker dựng prompt từ đúng ảnh chụp này.
+     */
+    @Transactional
+    public GenerationJob enqueueMatrixJob(Integer runId, Integer templateId, MatrixCellSpec spec, Integer examSlotId,
+                                          LocalDateTime nextRunAt, String promptNote, MaterialSnapshot material) {
         LocalDateTime now = LocalDateTime.now();
         GenerationJob job = new GenerationJob();
         job.setQuestionType(spec.questionType());
@@ -568,6 +584,8 @@ public class GenerationService {
                 ? joinLevels(spec.statementDifficulties()) : null);
         job.setExamSlotId(examSlotId);
         job.setPromptNote(promptNote == null || promptNote.isBlank() ? null : promptNote);
+        job.setMaterialContext(material == null ? null : material.context());
+        job.setMaterialRefs(material == null ? null : material.refsJson());
         job.setStatus(JobStatus.PENDING);
         job.setAttempt(0);
         job.setNextRunAt(nextRunAt != null ? nextRunAt : now);
@@ -587,6 +605,13 @@ public class GenerationService {
     public java.util.Optional<GenerationJob> latestAnswerCheckJob(Integer questionId) {
         return generationJobRepository.findFirstByQuestionIdAndJobTypeOrderByIdDesc(questionId,
                 GenerationJob.TYPE_ANSWER_CHECK);
+    }
+
+    /** W2-3: job grounding (chấm "bám tài liệu") của một câu; rỗng khi câu không có tài liệu hoặc chưa được xếp job. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<GenerationJob> latestGroundingJob(Integer questionId) {
+        return generationJobRepository.findFirstByQuestionIdAndJobTypeOrderByIdDesc(questionId,
+                GenerationJob.TYPE_GROUNDING_CHECK);
     }
 
     /** W1-3: mọi job sinh câu (không kể answer_check) của một chỗ trong đề, theo thứ tự tạo. */

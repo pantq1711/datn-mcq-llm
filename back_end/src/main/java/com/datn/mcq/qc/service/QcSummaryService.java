@@ -7,10 +7,12 @@ import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.generation.parser.LlmOutputRepair;
+import com.datn.mcq.qc.dto.GroundingVerdict;
 import com.datn.mcq.qc.dto.TfJudgement;
 import com.datn.mcq.qc.entity.QualityCheckResult;
 import com.datn.mcq.qc.repository.AnswerCheckStatementRepository;
 import com.datn.mcq.qc.repository.QualityCheckResultRepository;
+import com.datn.mcq.qc.repository.QuestionGroundingRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,18 +37,30 @@ public class QcSummaryService {
     public static final String WARNING_PREFIX = "warning: ";
     /** W1-2: dedup báo trùng (bản giáo viên sửa), dạng "duplicate: &lt;id câu bị trùng&gt;". */
     public static final String DUPLICATE_PREFIX = "duplicate: ";
+    /** W2-3: QC "bám tài liệu" kết luận đáp án/lời giải/câu hỏi không khớp tài liệu (chỉ cảnh báo, câu giữ nguyên trạng thái). */
+    public static final String GROUNDING_NOT_SUPPORTED = "grounding_not_supported";
+    /** W2-3: QC "bám tài liệu" không kết luận được (đoạn tài liệu không đủ, hoặc bằng chứng không kiểm chứng được). */
+    public static final String GROUNDING_UNKNOWN = "grounding_unknown";
 
     /**
      * @param answerCheckPassed null khi không có dòng answer_check (Solver chưa chạy hoặc lỗi)
      * @param warnings          cảnh báo bước format (V5)
      * @param duplicateOf       (W1-2) câu bị trùng khi dòng dedup không qua; null khi không trùng
+     * @param grounding         (W2-3) kết luận "bám tài liệu"; null khi câu không có kết quả (không dùng tài liệu, chưa chấm
+     *                          hoặc chấm lỗi)
      */
     public record QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
-                            boolean hasUndecidable, List<String> warnings, Integer duplicateOf) {
+                            boolean hasUndecidable, List<String> warnings, Integer duplicateOf,
+                            GroundingVerdict grounding) {
+
+        public QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
+                         boolean hasUndecidable, List<String> warnings, Integer duplicateOf) {
+            this(dedupRan, answerCheckPassed, judgeSaKind, hasUndecidable, warnings, duplicateOf, null);
+        }
 
         public QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
                          boolean hasUndecidable, List<String> warnings) {
-            this(dedupRan, answerCheckPassed, judgeSaKind, hasUndecidable, warnings, null);
+            this(dedupRan, answerCheckPassed, judgeSaKind, hasUndecidable, warnings, null, null);
         }
 
         /** Lý do "cần xem kỹ"; rỗng khi câu qua QC sạch. */
@@ -68,6 +82,11 @@ public class QcSummaryService {
             }
             if (hasUndecidable) {
                 reasons.add(STATEMENT_UNDECIDABLE);
+            }
+            if (grounding == GroundingVerdict.NOT_SUPPORTED) {
+                reasons.add(GROUNDING_NOT_SUPPORTED);
+            } else if (grounding == GroundingVerdict.UNKNOWN) {
+                reasons.add(GROUNDING_UNKNOWN);
             }
             if (!dedupRan) {
                 reasons.add(DEDUP_NOT_RUN);
@@ -94,16 +113,23 @@ public class QcSummaryService {
                              String judgeSaAnswer, List<TfJudgement> judgeLabels, String reasoning,
                              LocalDateTime checkedAt) {}
 
+    /** W2-3: kết quả "bám tài liệu" đã lưu; {@code materialRefs} là mảng JSON các đoạn tài liệu đã dùng. */
+    public record GroundingStep(GroundingVerdict verdict, String reason, String evidenceQuote, Boolean evidenceFound,
+                                String judgeModel, String materialRefs, LocalDateTime checkedAt) {}
+
     /** Chi tiết từng bước QC đã lưu của một câu (W1-3, vết QC); bước chưa có dòng thì null. */
-    public record QcDetail(FormatStep format, DedupStep dedup, SolverStep solver) {}
+    public record QcDetail(FormatStep format, DedupStep dedup, SolverStep solver, GroundingStep grounding) {}
 
     private final QualityCheckResultRepository resultRepository;
     private final AnswerCheckStatementRepository statementRepository;
+    private final QuestionGroundingRepository groundingRepository;
 
     public QcSummaryService(QualityCheckResultRepository resultRepository,
-                            AnswerCheckStatementRepository statementRepository) {
+                            AnswerCheckStatementRepository statementRepository,
+                            QuestionGroundingRepository groundingRepository) {
         this.resultRepository = resultRepository;
         this.statementRepository = statementRepository;
+        this.groundingRepository = groundingRepository;
     }
 
     /** Lý do bước format không qua đã lưu (V8); rỗng khi câu qua format hoặc chưa có dòng format. */
@@ -137,7 +163,11 @@ public class QcSummaryService {
                 }
             }
         }
-        return new QcDetail(format, dedup, solver);
+        GroundingStep grounding = groundingRepository.findByQuestionId(questionId)
+                .map(g -> new GroundingStep(GroundingVerdict.fromDb(g.getVerdict()), g.getReason(), g.getEvidenceQuote(),
+                        g.getEvidenceFound(), g.getJudgeModel(), g.getMaterialRefs(), g.getCheckedAt()))
+                .orElse(null);
+        return new QcDetail(format, dedup, solver, grounding);
     }
 
     @Transactional(readOnly = true)
@@ -156,6 +186,8 @@ public class QcSummaryService {
                 undecidable,
                 JsonStringArray.read(format.map(QualityCheckResult::getWarnings).orElse(null)),
                 dedup.filter(d -> Boolean.FALSE.equals(d.getPassed()))
-                        .map(QualityCheckResult::getComparedToQuestionId).orElse(null));
+                        .map(QualityCheckResult::getComparedToQuestionId).orElse(null),
+                groundingRepository.findByQuestionId(questionId).map(g -> GroundingVerdict.fromDb(g.getVerdict()))
+                        .orElse(null));
     }
 }

@@ -68,6 +68,8 @@ public final class MatrixDtos {
      * @param content          phạm vi, nội dung cụ thể trong bài (tùy chọn)
      * @param title            tên đề; bỏ trống thì lấy tên bài
      * @param learningOutcomes yêu cầu cần đạt theo mức (khóa easy, medium, hard), ghi đè mặc định; tùy chọn
+     * @param materialIds      (W2-3) tài liệu bài học đính kèm (của chính người gọi, tối đa 5); tùy chọn
+     * @param extraInstruction (W2-3) "yêu cầu thêm cho AI" cho cả lần sinh, tối đa 1000 ký tự; tùy chọn
      */
     public record CreateLessonRequest(
             Integer subjectId,
@@ -76,7 +78,9 @@ public final class MatrixDtos {
             String content,
             String title,
             Map<String, String> learningOutcomes,
-            List<LessonCellInput> cells
+            List<LessonCellInput> cells,
+            List<Integer> materialIds,
+            String extraInstruction
     ) {}
 
     /** Body tạo ma trận từ mẫu có sẵn. */

@@ -1,5 +1,6 @@
 package com.datn.mcq.bank.controller;
 
+import com.datn.mcq.config.AuthTestSupport;
 import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,6 +23,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -51,13 +53,15 @@ class BankItemsSnapshotTest {
     private int mcqItem;
     private int saItem;
     private int tfItem;
+    /** W2-3: danh sách ngân hàng lọc theo người xem (câu riêng tư), nên mọi lần gọi cần giáo viên đăng nhập. */
+    private int teacher;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).apply(springSecurity()).build();
         TestDataCleaner.cleanAll(dataSource, jdbc, "BankItemsSnapshotTest.setUp");
         int subject = insert("INSERT INTO subject (name) VALUES ('Toán Ngân hàng')");
-        int teacher = insert("INSERT INTO users (name, email, role) VALUES ('GV', 'gv.bank@test', 'teacher')");
+        teacher = insert("INSERT INTO users (name, email, role) VALUES ('GV', 'gv.bank@test', 'teacher')");
         int template = insert("INSERT INTO question_template (subject_id, source_question, is_active)"
                 + " VALUES (?, 'Mẫu', TRUE)", subject);
         int mcqRun = insert("INSERT INTO experiment_run (subject_id, strategy, model_name, temperature, prompt_text,"
@@ -114,7 +118,7 @@ class BankItemsSnapshotTest {
     }
 
     private JsonNode items() throws Exception {
-        String body = mockMvc.perform(get("/api/bank-items").param("size", "50"))
+        String body = mockMvc.perform(get("/api/bank-items").param("size", "50").with(AuthTestSupport.teacher(teacher)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         JsonNode root = objectMapper.readTree(body);
@@ -171,7 +175,7 @@ class BankItemsSnapshotTest {
     void locTheoDangCau() throws Exception {
         for (String[] c : new String[][] {{"mcq", String.valueOf(mcqItem)}, {"sa", String.valueOf(saItem)},
                 {"tf", String.valueOf(tfItem)}}) {
-            String body = mockMvc.perform(get("/api/bank-items").param("questionType", c[0]))
+            String body = mockMvc.perform(get("/api/bank-items").param("questionType", c[0]).with(AuthTestSupport.teacher(teacher)))
                     .andExpect(status().isOk())
                     .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
             JsonNode items = objectMapper.readTree(body).get("items");
@@ -180,7 +184,8 @@ class BankItemsSnapshotTest {
             assertEquals(c[0], items.get(0).get("questionType").asText());
         }
         assertEquals(3, items().size());
-        mockMvc.perform(get("/api/bank-items").param("questionType", "essay")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/bank-items").param("questionType", "essay").with(AuthTestSupport.teacher(teacher)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

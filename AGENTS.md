@@ -22,3 +22,8 @@ Nếu tài liệu đó mâu thuẫn với file này, tài liệu đó thắng.
 Không phải AI client nào cũng tự động đọc `AGENTS.md`. Khi giao việc, hãy tham chiếu rõ trong prompt,
 ví dụ: `Tuân thủ docs/ai-development-rules.md v2. Lượt này chỉ làm bước inspect và plan.`,
 hoặc cấu hình client để nạp tài liệu này.
+
+## Quy ước commit
+
+- Commit message bằng tiếng Anh, KHÔNG có dòng Co-Authored-By, Claude-Session hay chữ ký AI; PR description không có dòng "Generated with ...".
+- Không dùng git commit --no-verify (repo dùng hook commit-msg để lọc các dòng trên).

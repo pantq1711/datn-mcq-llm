@@ -3,6 +3,7 @@ package com.datn.mcq.generation.entity;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.enums.QuestionType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -10,6 +11,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -87,16 +90,52 @@ public class GenerationJob {
     @Column(name = "prompt_note", columnDefinition = "TEXT")
     private String promptNote;
 
+    /**
+     * V19 (W2-3): đúng đoạn tài liệu bài học đã đưa vào prompt của job (ảnh chụp, đã bỏ ranh giới nguy hiểm); null khi
+     * không có tài liệu. Dùng để truy lại model đã thấy gì; không đưa ra API.
+     */
+    @JsonIgnore
+    @Column(name = "material_context", columnDefinition = "TEXT")
+    private String materialContext;
+
+    /** V19: mảng JSON các đoạn đã chọn (materialId, sha256, from, to, rank, score, selection); cùng NULL với material_context. */
+    @JsonIgnore
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "material_refs", columnDefinition = "jsonb")
+    private String materialRefs;
+
     /** Job sinh câu (mọi job trước V13). */
     public static final String TYPE_GENERATE = "generate";
     /** V13 (W1-2): chạy lại Solver cho một bản giáo viên sửa; có question_id, không gắn chỗ. */
     public static final String TYPE_ANSWER_CHECK = "answer_check";
+
+    /**
+     * V20 (W2-3): chấm "bám tài liệu" cho một câu đã sinh từ đề có tài liệu; có question_id và material_context, không gắn
+     * chỗ. Mỗi câu tối đa một job loại này.
+     */
+    public static final String TYPE_GROUNDING_CHECK = "grounding_check";
 
     /** V13: loại job, luôn có trong JSON. */
     @Column(name = "job_type", nullable = false, length = 20, updatable = false)
     private String jobType = TYPE_GENERATE;
 
     public GenerationJob() {}
+
+    public String getMaterialContext() {
+        return materialContext;
+    }
+
+    public void setMaterialContext(String materialContext) {
+        this.materialContext = materialContext;
+    }
+
+    public String getMaterialRefs() {
+        return materialRefs;
+    }
+
+    public void setMaterialRefs(String materialRefs) {
+        this.materialRefs = materialRefs;
+    }
 
     public String getJobType() {
         return jobType;

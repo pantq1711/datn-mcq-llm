@@ -3,7 +3,7 @@
  * transaction (AssistedKeepService). Luồng chấm mù và form chấm đã gỡ ngày 25/10/2026 (docs/ai-development-rules.md, v2).
  *
  * <p>Bảng sở hữu: teacher_review, teacher_review_statement. Bảng label_assignment và teacher_review_reason còn trong
- * DB (dữ liệu cũ, không có code ghi); entity LabelAssignment còn lại để chờ quyết định gỡ sau.
+ * DB (dữ liệu cũ, không có entity hay code ghi).
  * <br>Được phép phụ thuộc: generation, bank, catalog, experiment, user, common.
  *
  * <p>Cấu trúc bên trong khi thêm code: entity, repository, service, controller, dto.

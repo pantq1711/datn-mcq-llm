@@ -12,6 +12,7 @@ import com.datn.mcq.enums.DbEnum;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
+import com.datn.mcq.llm.dto.LlmUsage;
 import com.datn.mcq.llm.prompt.PromptBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -23,12 +24,24 @@ import java.util.Map;
 @Component
 public class AnswerSolverChecker {
 
+    /**
+     * @param usage token và độ trễ của lượt gọi Solver; null khi kết quả đến từ phân tích thuần (không có lượt gọi)
+     */
     public record SolverCheckOutcome(
             boolean passed,
             AnswerChoice judgeAnswer,
             String judgeModel,
-            String reasoning
-    ) {}
+            String reasoning,
+            LlmUsage usage
+    ) {
+        public SolverCheckOutcome(boolean passed, AnswerChoice judgeAnswer, String judgeModel, String reasoning) {
+            this(passed, judgeAnswer, judgeModel, reasoning, null);
+        }
+
+        SolverCheckOutcome withUsage(LlmUsage newUsage) {
+            return new SolverCheckOutcome(passed, judgeAnswer, judgeModel, reasoning, newUsage);
+        }
+    }
 
     /** Cấu trúc JSON bắt buộc cho phản hồi của Solver (Gemini responseSchema). */
     public static final String SOLVER_RESPONSE_SCHEMA_JSON = """
@@ -67,7 +80,8 @@ public class AnswerSolverChecker {
         String prompt = promptBuilder.buildSolverPrompt(questionText, optionA, optionB, optionC, optionD);
         LlmCallResult result = llmClient.callJsonModeWithSchema(
                 prompt, solverModel, 0.0, SOLVER_RESPONSE_SCHEMA_JSON);
-        return parseAndCompare(result.rawText(), result.modelName(), generatorCorrectOption);
+        return parseAndCompare(result.rawText(), result.modelName(), generatorCorrectOption)
+                .withUsage(LlmUsage.of(result));
     }
 
     /**
@@ -82,8 +96,18 @@ public class AnswerSolverChecker {
             SaJudgeKind judgeKind,
             String judgeAnswer,
             String judgeModel,
-            String reasoning
-    ) {}
+            String reasoning,
+            LlmUsage usage
+    ) {
+        public SaSolverOutcome(boolean passed, SaJudgeKind judgeKind, String judgeAnswer, String judgeModel,
+                               String reasoning) {
+            this(passed, judgeKind, judgeAnswer, judgeModel, reasoning, null);
+        }
+
+        SaSolverOutcome withUsage(LlmUsage newUsage) {
+            return new SaSolverOutcome(passed, judgeKind, judgeAnswer, judgeModel, reasoning, newUsage);
+        }
+    }
 
     /**
      * Kết quả Solver cho câu Đúng/Sai (V4, GĐ3).
@@ -95,10 +119,19 @@ public class AnswerSolverChecker {
             boolean passed,
             List<TruthChoice> judgeLabels,
             String judgeModel,
-            String reasoning
+            String reasoning,
+            LlmUsage usage
     ) {
         public TfSolverOutcome {
             judgeLabels = List.copyOf(judgeLabels);
+        }
+
+        public TfSolverOutcome(boolean passed, List<TruthChoice> judgeLabels, String judgeModel, String reasoning) {
+            this(passed, judgeLabels, judgeModel, reasoning, null);
+        }
+
+        TfSolverOutcome withUsage(LlmUsage newUsage) {
+            return new TfSolverOutcome(passed, judgeLabels, judgeModel, reasoning, newUsage);
         }
     }
 
@@ -109,7 +142,7 @@ public class AnswerSolverChecker {
         String prompt = TfPromptDraftV0.buildSolverPrompt(questionText, statements);
         LlmCallResult result = llmClient.callJsonModeWithSchema(
                 prompt, solverModel, 0.0, TfPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON);
-        return parseAndCompareTrueFalse(result.rawText(), result.modelName(), llmLabels);
+        return parseAndCompareTrueFalse(result.rawText(), result.modelName(), llmLabels).withUsage(LlmUsage.of(result));
     }
 
     /**
@@ -160,7 +193,7 @@ public class AnswerSolverChecker {
         String prompt = SaPromptDraftV0.buildSolverPrompt(questionText);
         LlmCallResult result = llmClient.callJsonModeWithSchema(
                 prompt, solverModel, 0.0, SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON);
-        return parseAndCompareShortAnswer(result.rawText(), result.modelName(), llmAnswer);
+        return parseAndCompareShortAnswer(result.rawText(), result.modelName(), llmAnswer).withUsage(LlmUsage.of(result));
     }
 
     /**

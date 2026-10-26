@@ -175,7 +175,7 @@ Chưa phải hợp đồng. AI không tự chọn; khi chạm vào → dừng th
 | Q-2 | `qc_passed` nghĩa chính xác là gì: chỉ qua format? Bắt buộc dedup? `answer_check` sai hoặc lỗi có chặn không? | **Đã chốt (2026-10-21)**: `QC_PASSED` yêu cầu đồng thời: format hợp lệ; dedup đã chạy và không phát hiện trùng; `answer_check` thực thi thành công và nhất quán. Logic pipeline hiện tại chưa theo định nghĩa này (xem F-7) và còn chờ triển khai. |
 | Q-3 | Luồng tạo experiment run (endpoint/công cụ nào), và `purpose` lấy từ đâu; có cho phép giá trị mặc định không? | **Thu hẹp (25/10)**: phần liên quan thí nghiệm C1/C2/C3 ngưng. **Vẫn mở** cho các thử nghiệm mới (Solver bắt lỗi, ngưỡng dedup): cần đường tạo run `experiment` riêng vì `generate-sync` gắn cứng `production`. Giữ `Purpose.EXPERIMENT`, `DedupScope.forExperiment`, `ExperimentService.createRun`. Gặp thì dừng hỏi (M-4). |
 | Q-4a | **[NGƯNG 25/10]** Seed demo: giữ, xóa, hay chỉ bật theo profile; run seed mang `purpose` gì; có được ghi kết quả QC không phải từ pipeline thật không? | **Đã chốt (25/10)**: gỡ hẳn seed demo (`MathDemoSeedService`, `/api/reviews/demo/seed-math`). |
-| Q-4b | Câu production đã `rejected` có được duyệt lại không? | Chờ |
+| Q-4b | **[NGƯNG 25/10]** Câu production đã `rejected` có được duyệt lại không? | Không còn câu mới ở trạng thái `rejected` (chỉ form chấm mù đặt trạng thái này, đã gỡ). |
 | Q-4c | `bank_item` đã nằm trong đề có được sửa/gỡ không? | Chờ |
 | Q-5 | `llm_difficulty` là kết quả của bước chấm độ khó riêng (theo comment V1) hay là độ khó mục tiêu khi sinh? | Chờ |
 | Q-6 | **[NGƯNG 25/10]** Phạm vi xác thực người chấm; có bắt buộc `label_assignment` khi chấm experiment không? | **Đã chốt (25/10)**: không còn luồng chấm; xác thực JWT (W1-1) áp dụng cho mọi API; `label_assignment` không dùng. |
@@ -197,21 +197,21 @@ Chưa phải hợp đồng. AI không tự chọn; khi chạm vào → dừng th
 | F-3 | Các `@SpringBootTest` dùng datasource từ `.env`, không có `@Transactional`/Testcontainers → chạy test sẽ chạy Flyway và ghi dữ liệu vào DB được cấu hình. | `TeacherReviewSecurityAndIntegrityTest`, `BackEndApplicationTests`, `application.yaml` |
 | F-4 | `generateSync` và `enqueueJobs` hardcode `Purpose.PRODUCTION`; `ExperimentService.createRun` mặc định `PRODUCTION` khi null, trong khi DB mặc định `'experiment'` (V2 dòng 7). | `GenerationService`, `ExperimentService` |
 | F-5 | **[NGƯNG 25/10: seed đã gỡ]** `MathDemoSeedService` tạo run `PRODUCTION`, ghi kết quả `answer_check` dựng sẵn với tên model thật, ép `QC_PASSED`; mở qua `POST /api/reviews/demo/seed-math`. | `MathDemoSeedService` dòng 215–222 |
-| F-6 | Danh sách review lọc theo `status` không phân biệt `purpose` → với câu experiment, tham số lọc có thể làm lộ kết quả QC dù payload đã giấu `status`. | `TeacherReviewService.listQuestionsForReview` |
+| F-6 | **[NGƯNG 25/10: form chấm đã gỡ]** Danh sách review lọc theo `status` không phân biệt `purpose` → với câu experiment, tham số lọc có thể làm lộ kết quả QC dù payload đã giấu `status`. | `TeacherReviewService.listQuestionsForReview` |
 | F-7 | Pipeline QC hiện là format → answer_check; không có dedup; `answer_check` sai hoặc lỗi vẫn trả `QC_PASSED`. | `QcOrchestrator.evaluateAndSave` |
 | F-8 | `llm_difficulty` được gán bằng độ khó mục tiêu khi sinh; `difficulty_judge_model` không được ghi. | `GenerationService.saveParsedQuestion`, `GenerationJobProcessor` |
 | F-9 | Claim job không khóa hàng (không `SKIP LOCKED`, trái comment V2 dòng 27); không xử lý job kẹt `running`; job đánh dấu `done` trước khi QC chạy. | `GenerationJobRepository`, `GenerationJobPoller` |
 | F-10 | `BankService` gọi trực tiếp `ExamQuestionRepository` (trái backend-structure quy tắc 2 và "bank chỉ phụ thuộc common/config"). `review` phụ thuộc `experiment`, `catalog`, `generation.worker` chưa có trong tài liệu. | `BankService`, `TeacherReviewService` |
 | F-11 | **[NGƯNG 25/10]** Payload production trả `explanation`; fixture test có explanation nêu đáp án và test khẳng định trường này có mặt. Xung đột tiềm ẩn với M-6 → Q-1. | `TeacherReviewSecurityAndIntegrityTest` |
 | F-12 | **[NGƯNG 25/10]** Test payload hiện gọi service trực tiếp + `ObjectMapper` tự tạo; không có MockMvc cho `/api/reviews`. | Thư mục test |
-| F-13 | Duyệt lại production cập nhật `bank_item` mà không kiểm tra câu đã nằm trong đề; chỉ đường gỡ có kiểm tra. | `BankService.createOrUpdateFromReview` |
-| F-14 | Sau khi production `rejected`, điều kiện QC chặn việc duyệt lại. | `TeacherReviewService.submitReview` |
+| F-13 | **[NGƯNG 25/10: đường duyệt/gỡ của chấm mù đã gỡ]** Duyệt lại production cập nhật `bank_item` mà không kiểm tra câu đã nằm trong đề; chỉ đường gỡ có kiểm tra. | `BankService.createOrUpdateFromReview` |
+| F-14 | **[NGƯNG 25/10]** Sau khi production `rejected`, điều kiện QC chặn việc duyệt lại. | `TeacherReviewService.submitReview` |
 | F-15 | **[NGƯNG 25/10: form chấm đã gỡ; xác thực có từ W1-1]** Không có xác thực; `reviewerId` lấy từ body, null → giáo viên mặc định; không kiểm tra `label_assignment`. | `TeacherReviewService.submitReview` |
 | F-16 | `cost_usd` luôn 0.0. | `LlmClient` |
 | F-17 | `LlmClient` dùng biến hệ thống `GEMINI_API_KEY`/`LLM_API_KEY` khi cấu hình trống. | `LlmClient.resolveApiKey` |
 | F-18 | Comment V1 về `exam_question` kiểm tra `in_bank` đã lỗi thời sau V2; README ghi "chưa có code". | V1 dòng 270–271, `README.md` |
 | F-19 | Các file trong diff chưa commit đang ở LF, Git cảnh báo sẽ đổi sang CRLF. | Output `git diff` |
-| F-20 | Experiment trả `latexValid = true` cố định thay vì giá trị trung tính. | `TeacherReviewService` |
+| F-20 | **[NGƯNG 25/10]** Experiment trả `latexValid = true` cố định thay vì giá trị trung tính. | `TeacherReviewService` |
 
 ### 11.2 Cần xác minh thêm
 
@@ -226,7 +226,7 @@ Chưa phải hợp đồng. AI không tự chọn; khi chạm vào → dừng th
 
 ### 11.3 Chờ quyết định nghiệp vụ
 
-F-4, F-5 → Q-3, Q-4a · F-7 → Q-2 · F-8 → Q-5 · F-10 → Q-8 · F-11 → Q-1 · F-13, F-14 → Q-4b, Q-4c · F-15 → Q-6 · F-3 → Q-7.
+F-4, F-5 → Q-3, Q-4a · F-7 → Q-2 · F-8 → Q-5 · F-10 → Q-8 · F-11 → Q-1 · F-13, F-14 → Q-4b (ngưng), Q-4c · F-15 → Q-6 · F-3 → Q-7.
 
 ---
 
@@ -275,7 +275,8 @@ Xác nhận: không chạy lệnh thuộc M-27 / không gọi API tính phí / k
 - 2026-10-23: thêm "Quyết định ngày 23/10/2026 – bỏ thí nghiệm C1/C2/C3, chương thử nghiệm mới" (bỏ thí nghiệm so sánh
   C1/C2/C3; giáo viên dùng thử và khảo sát qua chế độ giáo viên; 4 thử nghiệm mới). Không đổi số phiên bản tài liệu.
 - v2 (2026-10-25): thêm "Quyết định ngày 25/10/2026 – gỡ chấm mù, seed demo, C1/C2/C3". Ngưng M-6, M-7, M-8, M-11,
-  Q-1, Q-4a, Q-6, F-5, F-11, F-12, F-15; thu hẹp Q-3; cập nhật M-9, M-12, M-16, M-17, M-27.
+  Q-1, Q-4a, Q-6, F-5, F-11, F-12, F-15; thu hẹp Q-3; cập nhật M-9, M-12, M-16, M-17, M-27. Dọn tiếp (bước 0b): ngưng
+  thêm Q-4b, F-6, F-13, F-14, F-20; gỡ entity `LabelAssignment` (bảng `label_assignment` giữ nguyên).
 ## Quyết định ngày 21/10/2026 (thay thế các comment xung đột trong V1__init_schema.sql)
 
 Không sửa file V1 (đã chạy, sửa sẽ lệch checksum Flyway). Khi comment trong V1 mâu thuẫn với mục này, mục này thắng.
@@ -340,4 +341,4 @@ duyệt E1 = A, E2 = A, E3 = A, E4 = A, E5 = A). Chế độ giáo viên (`/api/
 4. **`/api/generation/*`, `GET`/`POST /api/catalog/templates` chỉ tồn tại khi `app.experiment.enabled=true`** (mặc định
    `false`, không bật ở prod). Chúng phục vụ công cụ thí nghiệm (sinh đồng bộ, bơm job, chạy job, thử tải với Gemini giả).
 5. **Việc chưa làm (cố ý):** `exam_question` (F-10) giữ nguyên, xử lý ở task sau. Không DROP bảng hay cột nào; migration chỉ
-   đi tiến. Q-3 còn mở cho thử nghiệm mới (xem bảng mục 10). Q-4b, Q-4c, Q-5, Q-8 không đổi.
+   đi tiến. Q-3 còn mở cho thử nghiệm mới (xem bảng mục 10). Q-4c, Q-5, Q-8 không đổi; Q-4b ngưng.
