@@ -15,6 +15,7 @@ import java.text.Normalizer;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * QC "bám tài liệu" (W2-3 bước 6): một LLM judge đánh giá câu hỏi, đáp án và lời giải có dựa trên và nhất quán với các đoạn
@@ -65,6 +66,10 @@ public class GroundingChecker {
             - UNKNOWN: các đoạn tài liệu được cung cấp không đủ để kết luận (kể cả khi câu hỏi chỉ cần kiến thức phổ thông \
             không xuất hiện trong các đoạn). Để evidence_quote là chuỗi rỗng.
             - Chỉ đánh giá theo các đoạn được cung cấp, không dùng kiến thức bên ngoài để bù cho phần tài liệu thiếu.
+            - evidence_quote phải SAO CHÉP từng ký tự từ khối TÀI_LIỆU (kể cả dấu tiếng Việt và dấu $ bao công thức), \
+            không viết lại, không thêm bớt dấu, không sửa công thức, không chép từ khối CÂU_HỎI.
+            - Không sao chép nguyên văn được đoạn nào từ khối TÀI_LIỆU thì verdict là UNKNOWN.
+            - reason viết bằng tiếng Việt có dấu.
             """;
 
     static final String OUTPUT_REMINDER = "Trả về DUY NHẤT một đối tượng JSON có đủ 3 trường: \"reason\" (lý do ngắn gọn, "
@@ -173,16 +178,58 @@ public class GroundingChecker {
         return s.isEmpty() ? null : s;
     }
 
-    /** Trích dẫn có trong đoạn tài liệu (không phân biệt hoa thường và khoảng trắng) và đủ dài để làm bằng chứng. */
+    /**
+     * Trích dẫn có trong đoạn tài liệu và đủ dài để làm bằng chứng. So khớp sau {@link #squash} cho CẢ HAI phía; riêng quote
+     * còn bị cắt dấu câu và dấu nháy ở hai đầu (chỉ làm quote ngắn đi, nên không thể làm lọt quote bịa). Độ dài tối thiểu
+     * tính SAU chuẩn hóa, nên quote chỉ toàn ký hiệu bao công thức không đủ làm bằng chứng.
+     */
     static boolean quoteInContext(String quote, String context) {
-        String q = squash(quote);
+        String q = trimEdges(squash(quote));
         return q.length() >= MIN_QUOTE && context != null && squash(context).contains(q);
     }
 
+    /** Ký hiệu bao công thức: $, \( \) \[ \]. Judge hay bỏ chúng khi chép công thức. */
+    private static final Pattern MATH_DELIMITERS = Pattern.compile("\\$|\\\\[()\\[\\]]");
+    /** Lệnh LaTeX chỉ để dàn trang: \left, \right (không phải đầu của lệnh dài hơn như \leftarrow) và \, \; \! "\ ". */
+    private static final Pattern LATEX_LAYOUT = Pattern.compile("\\\\(?:left|right)(?![a-z])|\\\\[,;! ]");
+    /** Mũ hoặc chỉ số có đúng một chữ/số trong ngoặc nhọn: ^{2} -> ^2, _{n} -> _n (x^{12} giữ nguyên). */
+    private static final Pattern SINGLE_BRACE = Pattern.compile("([\\^_])\\{([\\p{L}\\p{N}])}");
+    private static final String EDGE_PUNCTUATION = ".,;:!?…\"'";
+
+    /**
+     * Chuẩn hóa để so khớp (dùng chung cho quote và tài liệu): NFC, chữ thường, bỏ ký hiệu bao công thức và lệnh dàn trang
+     * LaTeX, gộp các dấu gạch/trừ và dấu nháy kiểu khác về ASCII, bỏ mọi khoảng trắng, khoảng trắng đặc biệt và ký tự vô
+     * hình, rút ngắn mũ/chỉ số một ký tự. KHÔNG bỏ dấu tiếng Việt và không so mờ: đổi chữ, số, dấu hay hệ số vẫn làm quote
+     * không khớp.
+     */
     private static String squash(String s) {
         String n = Normalizer.normalize(s, Normalizer.Form.NFC).toLowerCase(Locale.ROOT);
+        n = MATH_DELIMITERS.matcher(n).replaceAll("");
+        n = LATEX_LAYOUT.matcher(n).replaceAll("");
         StringBuilder out = new StringBuilder(n.length());
-        n.codePoints().filter(cp -> !Character.isWhitespace(cp)).forEach(out::appendCodePoint);
-        return out.toString();
+        n.codePoints().filter(cp -> !Character.isWhitespace(cp) && !Character.isSpaceChar(cp)
+                && Character.getType(cp) != Character.FORMAT).forEach(cp -> out.appendCodePoint(ascii(cp)));
+        return SINGLE_BRACE.matcher(out).replaceAll("$1$2");
+    }
+
+    private static int ascii(int cp) {
+        return switch (cp) {
+            case 0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2212 -> '-';
+            case 0x2018, 0x2019, 0x201A -> '\'';
+            case 0x201C, 0x201D, 0x201E -> '"';
+            default -> cp;
+        };
+    }
+
+    private static String trimEdges(String s) {
+        int from = 0;
+        int to = s.length();
+        while (from < to && EDGE_PUNCTUATION.indexOf(s.charAt(from)) >= 0) {
+            from++;
+        }
+        while (to > from && EDGE_PUNCTUATION.indexOf(s.charAt(to - 1)) >= 0) {
+            to--;
+        }
+        return s.substring(from, to);
     }
 }

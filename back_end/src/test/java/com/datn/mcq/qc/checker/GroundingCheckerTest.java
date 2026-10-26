@@ -88,6 +88,16 @@ class GroundingCheckerTest {
     }
 
     @Test
+    void promptEpJudgeSaoChepNguyenVanCoDauVaDauDollarVaLyDoTiengVietCoDau() {
+        String p = GroundingChecker.buildPrompt(mcq(), CONTEXT);
+        assertTrue(p.contains("SAO CHÉP từng ký tự từ khối TÀI_LIỆU"), p);
+        assertTrue(p.contains("kể cả dấu tiếng Việt và dấu $ bao công thức"), p);
+        assertTrue(p.contains("không viết lại, không thêm bớt dấu, không sửa công thức, không chép từ khối CÂU_HỎI"), p);
+        assertTrue(p.contains("Không sao chép nguyên văn được đoạn nào từ khối TÀI_LIỆU thì verdict là UNKNOWN"), p);
+        assertTrue(p.contains("reason viết bằng tiếng Việt có dấu"), p);
+    }
+
+    @Test
     void promptCauTfVaSaCoDapAnTungYHoacDapSo() {
         QuestionQcInput tf = QuestionQcInput.trueFalse(2, true, "Cho biểu thức $A = x^2$.",
                 List.of("$A \\ge 0$", "$A < 0$", "$A = 0$ khi $x = 0$", "$A$ luôn dương"), List.of("T", "F", "T", "F"),
@@ -128,6 +138,115 @@ class GroundingCheckerTest {
         GroundingResult r = GroundingChecker.parse(reply("SUPPORTED", "$(a+b)^2=a^2+2ab+b^2$", "ok"), CONTEXT, MODEL);
         assertEquals(GroundingVerdict.SUPPORTED, r.verdict());
         assertEquals(Boolean.TRUE, r.evidenceFound());
+    }
+
+    // ---------- chuẩn hóa khi so khớp trích dẫn (đo thật đề 4: judge bỏ cặp $ quanh công thức) ----------
+
+    /** Đoạn tài liệu giống file đo thật: công thức bọc trong $...$ và có "$." ở cuối dòng. */
+    private static final String DOC_HIEU = "[Tài liệu 1, đoạn 1]\nII. Bình phương của một hiệu\n"
+            + "$(A - B)^2 = A^2 - 2AB + B^2$.\nVới hai biểu thức bất kì $A$ và $B$, ta có hằng đẳng thức.";
+
+    private static void assertFound(String context, String quote) {
+        GroundingResult r = GroundingChecker.parse(reply("SUPPORTED", quote, "ok"), context, MODEL);
+        assertEquals(GroundingVerdict.SUPPORTED, r.verdict(), "quote: " + quote);
+        assertEquals(Boolean.TRUE, r.evidenceFound(), "quote: " + quote);
+    }
+
+    private static void assertRejected(String context, String quote) {
+        GroundingResult r = GroundingChecker.parse(reply("SUPPORTED", quote, "ok"), context, MODEL);
+        assertEquals(GroundingVerdict.UNKNOWN, r.verdict(), "quote: " + quote);
+        assertEquals(Boolean.FALSE, r.evidenceFound(), "quote: " + quote);
+        assertTrue(r.reason().startsWith(GroundingChecker.EVIDENCE_NOT_FOUND_PREFIX), r.reason());
+    }
+
+    @Test
+    void trichDanBoCapDauDoLaVanKhopCaDoThatCau75Va76() {
+        assertFound(DOC_HIEU, "(A - B)^2 = A^2 - 2AB + B^2.");
+        assertFound(DOC_HIEU, "$(A - B)^2 = A^2 - 2AB + B^2$.");
+        assertFound(DOC_HIEU, "(A - B)^2 = A^2 - 2AB + B^2");
+    }
+
+    @Test
+    void trichDanKhopDuTaiLieuDungDauNgoacLatexKieuKhac() {
+        String doc = "Ta có \\((x + 1)^2 = x^2 + 2x + 1\\) và \\[y = 2x + 100\\] với mọi x.";
+        assertFound(doc, "(x + 1)^2 = x^2 + 2x + 1");
+        assertFound(doc, "y = 2x + 100");
+    }
+
+    @Test
+    void trichDanKhopDuDauTruVaDauGachKhacKyTu() {
+        String ascii = "Hiệu hai bình phương: $a^2 - b^2 = (a - b)(a + b)$.";
+        assertFound(ascii, "a^2 − b^2 = (a − b)(a + b)");
+        assertFound(ascii, "a^2 – b^2 = (a — b)(a + b)");
+        assertFound("Hiệu hai bình phương: $a^2 − b^2 = (a − b)(a + b)$.", "a^2 - b^2 = (a - b)(a + b)");
+    }
+
+    @Test
+    void trichDanKhopDuKhoangTrangDacBietVaKyTuVoHinh() {
+        String doc = "Phát biểu: bình phương của​ một hiệu bằng﻿ bình phương biểu thức thứ nhất.";
+        assertFound(doc, "bình phương của một hiệu bằng bình phương biểu thức thứ nhất");
+    }
+
+    @Test
+    void trichDanKhopDuDauCauVaDauNhayOHaiDau() {
+        String doc = "Phát biểu: bình phương của một hiệu bằng bình phương biểu thức thứ nhất, trừ hai lần tích.";
+        assertFound(doc, "“…Bình phương của một hiệu bằng bình phương biểu thức thứ nhất.”");
+        assertFound(doc, "\"bình phương của một hiệu bằng bình phương biểu thức thứ nhất;\"");
+    }
+
+    @Test
+    void trichDanKhopDuLenhBoCucLatexLeftRightVaKhoangCach() {
+        assertFound("Ta có $\\left( a + b \\right)^2 = a^2 + 2ab + b^2$.", "(a+b)^2 = a^2 + 2ab + b^2");
+        assertFound("Cho $f(x) = 2\\,x + 10\\;(x \\ge 0)$ và $g$.", "f(x) = 2x + 10 (x \\ge 0)");
+        assertFound("Giá trị $a\\!b + c\\ d = 100$ đúng.", "ab + cd = 100");
+    }
+
+    @Test
+    void lenhLatexKhacBatDauBangLeftHoacRightKhongBiBoNhamTienTo() {
+        assertRejected("Ta có $x \\leftarrow y$ trong sơ đồ ví dụ này.", "x arrow y trong sơ đồ");
+    }
+
+    @Test
+    void ngoacNhonQuanhMotKyTuChuSoSauMuVaChiSoDuocBoDoiXung() {
+        assertFound("Ta có $x^{2} + y^{2} = 1$ và $a_{n}$ cộng 1.", "x^2 + y^2 = 1 và a_n cộng 1");
+        assertFound("Ta có $x^2 + y^2 = 1$ và $a_n$ cộng 1.", "x^{2} + y^{2} = 1 và a_{n} cộng 1");
+        assertFound("Ta có $x^{ 2 } + y^{2} = 1$ nên ok.", "x^2 + y^2 = 1 nên ok");
+        assertFound("Ta xét $x^{2}$.", "Ta xét x^2.");
+    }
+
+    @Test
+    void ngoacNhonNhieuKyTuKhongDuocRutGonVaMuKhacThiKhongKhop() {
+        String doc = "Cho $x^{12} = 4096$ nên kết quả đúng.";
+        assertRejected(doc, "x^{1}2 = 4096 nên kết quả");
+        assertRejected(doc, "x^12 = 4096 nên kết quả");
+        assertFound(doc, "x^{12} = 4096 nên kết quả");
+        assertRejected("Ta có $x^{2} + y^{2} = 1$ nên đúng.", "x^3 + y^2 = 1 nên đúng");
+        assertRejected("Ta có $a_{n+1} = a_n + 2$ với mọi n.", "a_{n} + 1 = a_n + 2 với");
+    }
+
+    @Test
+    void chuanHoaKhongChoLotTrichDanBiaDoiHeSoDauHoacBoDauTiengViet() {
+        assertRejected(DOC_HIEU, "(A - B)^2 = A^2 - 3AB + B^2.");
+        assertRejected(DOC_HIEU, "(A + B)^2 = A^2 - 2AB + B^2.");
+        assertRejected(DOC_HIEU, "(A - B)^2 = A^2 + 2AB + B^2.");
+        assertRejected(DOC_HIEU, "II. Binh phuong cua mot hieu");
+        assertRejected("Phát biểu: bình phương của một hiệu bằng bình phương biểu thức thứ nhất.",
+                "binh phuong cua mot hieu bang binh phuong bieu thuc thu nhat");
+    }
+
+    @Test
+    void trichDanChiGomKyHieuHoacNganSauChuanHoaKhongDuLamBangChung() {
+        assertRejected(DOC_HIEU, "$$$$$$$$$$$$");
+        assertRejected(DOC_HIEU, "$A$ và $B$");
+        String doc = "Ta có $(a+b)^2 = a^2 + 2ab + b^2$.";
+        assertRejected(doc, "$a^2 + 2ab$");
+        assertFound(doc, "$a^2 + 2ab +$");
+    }
+
+    @Test
+    void khongGhepHaiDoanKhongLienNhauThanhMotTrichDan() {
+        String doc = "$(A + B)^2 = A^2 + 2AB + B^2$.\nVí dụ khác ở đây.\n$(A - B)^2 = A^2 - 2AB + B^2$.";
+        assertRejected(doc, "A^2 + 2AB + B^2 và (A - B)^2 = A^2");
     }
 
     @Test

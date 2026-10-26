@@ -925,7 +925,11 @@ ngoài transaction DB, thử lại có giới hạn như mọi job, thiếu API 
   (`generation_job.material_context`). Tài liệu và câu hỏi là dữ liệu trong khối có ranh giới, mọi lệnh trong đó không được làm
   theo. Đầu ra bị ép theo schema: `verdict` (`SUPPORTED`, `NOT_SUPPORTED`, `UNKNOWN`), `reason` (ngắn), `evidence_quote`.
 - **Kiểm chứng trích dẫn:** `SUPPORTED` bắt buộc kèm trích dẫn nguyên văn đủ dài (từ 8 ký tự không kể khoảng trắng) mà server
-  tìm thấy trong đoạn tài liệu đã đưa (không phân biệt hoa thường và khoảng trắng). Không tìm thấy thì `SUPPORTED` bị hạ
+  tìm thấy trong đoạn tài liệu đã đưa. So khớp chuẩn hóa như nhau cho cả hai phía: không phân biệt hoa thường, bỏ mọi
+  khoảng trắng và ký tự vô hình, bỏ ký hiệu bao công thức (`$`, `\(`, `\)`, `\[`, `\]`) và lệnh dàn trang LaTeX (`\left`,
+  `\right`, `\,`, `\;`, `\!`), gộp dấu trừ/gạch dài và dấu nháy cong về ASCII, rút `^{x}`/`_{x}` về `^x`/`_x` khi trong
+  ngoặc đúng một chữ hoặc số (`x^{12}` giữ nguyên); quote còn bị cắt dấu câu và dấu nháy hai đầu. Không bỏ dấu tiếng Việt,
+  không so mờ, nên đổi chữ, số, dấu hay hệ số vẫn không khớp; độ dài tối thiểu tính sau chuẩn hóa. Không tìm thấy thì `SUPPORTED` bị hạ
   xuống `UNKNOWN` (lý do bắt đầu bằng `evidence_not_found:`). `NOT_SUPPORTED` và `UNKNOWN` giữ nguyên kết luận;
   `evidenceFound` cho biết trích dẫn của judge có thật hay không.
 - Kết quả ở bảng `question_grounding` (V20; mỗi câu một dòng, kèm `generated_with_material` để so nhóm có/không tài liệu khi
