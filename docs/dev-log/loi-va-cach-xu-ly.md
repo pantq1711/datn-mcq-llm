@@ -510,7 +510,8 @@ Theo mức độ: Cao 10, Trung bình 23, Thấp 14.
 - Cách phát hiện: đo thật 26/10 bằng `measure_tf.sql` (ngoài repo) và đọc tay từng lần sinh.
 - Cách sửa: (a) prompt `matrix-tf-v3-draft`: mẫu là MỤC TIÊU ("Mẫu nhãn mục tiêu"), nhãn phải theo đúng/sai thật, muốn ý Sai thì
   đổi hệ số, dấu hoặc kết luận, được lệch mẫu khi không viết được ý hợp lý, cấm gán nhãn trái lời giải và nhắc tới mẫu trong
-  lời giải; `fromNote` nhận cả tiền tố cũ, cảnh báo đổi thành `label: khác mẫu mục tiêu`. (b) kiểm tra định dạng không tốn LLM
+  lời giải; `fromNote` nhận cả tiền tố cũ, cảnh báo đổi thành `label: khác mẫu mục tiêu` và không còn bật "cần xem kỹ" (vẫn
+  lưu ở `warnings` và hiện trong vết QC để thống kê mức tuân thủ). (b) kiểm tra định dạng không tốn LLM
   (`TfExplanationLeak`): lời giải tf của LLM nhắc tới mẫu nhãn, yêu cầu gán nhãn hoặc tự sửa đề ("xin lỗi", "ta làm lại"…) thì
   câu thành `format_failed` (dừng trước Solver), sinh lại với lý do trong ghi chú; so không phân biệt dấu, các cụm lấy từ 6 ca
   thật; chỉ áp cho đầu ra LLM (cờ `QuestionQcInput.llmOutput`), không áp cho chữ giáo viên sửa.

@@ -37,7 +37,19 @@ class QcSummaryReviewReasonsTest {
     void canhBaoTuDongDongDoLaVanBatCanXemKy() {
         assertEquals(List.of("warning: statement_b: đã tự đóng $"),
                 reasons("json: đã sửa 1 escape LaTeX (\\circ)", "statement_b: đã tự đóng $"));
-        assertEquals(List.of("warning: label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)"),
-                reasons("label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)"));
+        assertEquals(List.of("warning: label: 4 ý cùng nhãn T"), reasons("label: 4 ý cùng nhãn T"));
+    }
+
+    /**
+     * Từ 26/10 mẫu nhãn tf là mục tiêu: nhãn lệch mẫu vì tính đúng là hợp lệ, nên không bật "cần xem kỹ" (cảnh báo vẫn lưu ở
+     * warnings và hiện trong vết QC để thống kê mức tuân thủ). Dòng cũ ghi "bắt buộc" cũng vậy.
+     */
+    @Test
+    void canhBaoLechMauMucTieuKhongBatCanXemKy() {
+        assertEquals(List.of(), reasons("label: khác mẫu mục tiêu T,F,F,T (nhận T,T,F,F)"));
+        assertEquals(List.of(), reasons("label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)"), "dữ liệu trước 26/10");
+        assertEquals(List.of("warning: label: 4 ý cùng nhãn T", "warning: statement_b: đã tự đóng $"),
+                reasons("label: khác mẫu mục tiêu T,T,T,T (nhận T,T,T,F)", "label: 4 ý cùng nhãn T",
+                        "statement_b: đã tự đóng $"), "các cảnh báo khác cùng lúc vẫn bật cờ");
     }
 }

@@ -587,7 +587,8 @@ POST /api/exams/build
   hợp lý (ưu tiên tính đúng). `v2` (23/10) ghi "mẫu nhãn bắt buộc" kèm "ý a phải Đúng…" nên model gán nhãn theo mẫu bất chấp toán
   học (xem `docs/dev-log/loi-va-cach-xu-ly.md`, L-47). Prompt bỏ dòng "không bắt buộc số ý Đúng" và, khi ý d ở mức Vận dụng, dặn
   ý d phải cần suy luận thêm, không chỉ là hệ quả trực tiếp của ý c. Nhãn trả về khác mẫu thì câu vẫn dùng được, kèm cảnh báo
-  `label: khác mẫu mục tiêu ...` (dữ liệu cũ: `khác mẫu bắt buộc`) và cờ "cần xem kỹ".
+  `label: khác mẫu mục tiêu ...` (dữ liệu cũ: `khác mẫu bắt buộc`); cảnh báo này chỉ lưu ở `warnings` và hiện trong vết QC
+  (`qc.format.warnings`) để thống kê mức tuân thủ, KHÔNG bật cờ "cần xem kỹ" (từ 26/10; trước đó có).
 - Mỗi lần gọi tiến độ, xem đề hoặc thao tác, backend đối soát các job đã xong:
   - câu `qc_passed`: chỗ đó có câu;
   - câu lệch Solver (trạng thái `generated`): sinh lại 1 lần; vẫn lệch thì dùng câu đó, kèm cờ "cần xem kỹ";
@@ -682,7 +683,8 @@ khác để sinh lại).
   `statement_undecidable` (`tf`), `solver_not_run` (Solver chưa chạy hoặc lỗi), `dedup_not_run`, và
   `warning: <cảnh báo format>` (ví dụ `warning: label: 4 ý cùng nhãn T`, `warning: option_a: đã tự đóng $`,
   `warning: label: khác mẫu mục tiêu T,F,F,T (nhận T,T,F,F)`; dữ liệu trước 26/10 ghi `khác mẫu bắt buộc`). Cảnh báo `json: đã sửa ... escape LaTeX` không phải lý
-  do (vẫn lưu trong `warnings`). `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
+  do (vẫn lưu trong `warnings`). Từ 26/10 cảnh báo `label: khác mẫu mục tiêu ...` (mẫu nhãn tf là mục tiêu, lệch vì tính đúng là hợp lệ)
+  cũng không phải lý do (vẫn lưu trong `warnings` và hiện trong vết QC), ví dụ ở trên chỉ còn các cảnh báo khác. `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
   `solver_pending` (Solver đang kiểm lại, thay `solver_not_run`), `solver_failed` (kiểm lại thất bại) và
   `duplicate: <id>` (bản sửa trùng câu khác).
 - W2-3, câu sinh từ đề có tài liệu bài học (mục 7.2, 9) có thêm lý do của QC "bám tài liệu" (mục 7.7a):

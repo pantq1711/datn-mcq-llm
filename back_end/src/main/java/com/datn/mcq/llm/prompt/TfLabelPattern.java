@@ -85,6 +85,18 @@ public final class TfLabelPattern {
         return m.find() ? m.group(1) + m.group(2) + m.group(3) + m.group(4) : null;
     }
 
+    private static final String DEVIATION_PREFIX = "label: khác mẫu mục tiêu ";
+    /** Tiền tố trước 26/10, còn trong dữ liệu cũ. */
+    private static final String OLD_DEVIATION_PREFIX = "label: khác mẫu bắt buộc ";
+
+    /**
+     * Cảnh báo là "nhãn khác mẫu mục tiêu" (kể cả dòng cũ ghi "bắt buộc"). Lệch mẫu vì tính đúng là hợp lệ nên cảnh báo này chỉ
+     * để thống kê mức tuân thủ, không bật "cần xem kỹ".
+     */
+    public static boolean isDeviationWarning(String warning) {
+        return warning != null && (warning.startsWith(DEVIATION_PREFIX) || warning.startsWith(OLD_DEVIATION_PREFIX));
+    }
+
     /**
      * Cảnh báo khi 4 nhãn LLM trả về khác mẫu mục tiêu, ví dụ "label: khác mẫu mục tiêu T,F,F,T (nhận T,T,F,F)"; null khi
      * khớp, khi không có mẫu, hoặc khi nhãn thiếu hay không phải T/F (đã là lỗi format).
@@ -104,7 +116,7 @@ public final class TfLabelPattern {
         if (got.toString().equals(pattern)) {
             return null;
         }
-        return "label: khác mẫu mục tiêu " + String.join(",", pattern.split("")) + " (nhận "
+        return DEVIATION_PREFIX + String.join(",", pattern.split("")) + " (nhận "
                 + String.join(",", got.toString().split("")) + ")";
     }
 }

@@ -84,6 +84,17 @@ class TfLabelPatternTest {
     }
 
     @Test
+    void nhanDienCanhBaoLechMauKeCaDuLieuCu() {
+        String warning = TfLabelPattern.mismatchWarning("TFFT", List.of("T", "T", "F", "F"));
+        assertTrue(TfLabelPattern.isDeviationWarning(warning), warning);
+        assertTrue(TfLabelPattern.isDeviationWarning("label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)"));
+        assertFalse(TfLabelPattern.isDeviationWarning("label: 4 ý cùng nhãn T"));
+        assertFalse(TfLabelPattern.isDeviationWarning("statement_b: đã tự đóng $"));
+        assertFalse(TfLabelPattern.isDeviationWarning(""));
+        assertFalse(TfLabelPattern.isDeviationWarning(null));
+    }
+
+    @Test
     void canhBaoKhiNhanKhacMauMucTieu() {
         assertNull(TfLabelPattern.mismatchWarning("TFFT", List.of("T", "F", "F", "T")));
         assertEquals("label: khác mẫu mục tiêu T,F,F,T (nhận T,T,F,F)",

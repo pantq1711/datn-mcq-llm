@@ -519,8 +519,8 @@ class ExamBuildTest {
         assertEquals("T", tf.get("statements").get(0).get("label").asText());
         assertEquals("hard", tf.get("statements").get(3).get("difficulty").asText());
         assertTrue(tf.get("needsReview").asBoolean());
-        assertEquals(List.of("warning: label: khác mẫu mục tiêu " + comma(tfPattern(examId)) + " (nhận T,T,T,T)",
-                "warning: label: 4 ý cùng nhãn T"), texts(tf.get("reviewReasons")));
+        assertEquals(List.of("warning: label: 4 ý cùng nhãn T"), texts(tf.get("reviewReasons")),
+                "lệch mẫu mục tiêu không còn bật cờ; 4 ý cùng nhãn vẫn bật");
 
         JsonNode sa = view.get("parts").get(2).get("items").get(0);
         assertEquals("5", sa.get("saAnswer").asText());
@@ -858,8 +858,12 @@ class ExamBuildTest {
         assertEquals(0, view.get("needsReviewCount").asInt(), "nhãn khớp mẫu thì không gắn cờ");
     }
 
+    /**
+     * Từ 26/10 mẫu nhãn là mục tiêu, lệch mẫu vì tính đúng là hợp lệ: câu không bị loại, KHÔNG bật "cần xem kỹ", nhưng cảnh báo
+     * vẫn lưu ở warnings của dòng format và hiện trong vết QC để thống kê mức tuân thủ mẫu.
+     */
     @Test
-    void nhanKhacMauBatBuocCanhBaoVaCanXemKyKhongLoaiCau() throws Exception {
+    void nhanKhacMauMucTieuChiCanhBaoTrongVetQcKhongBatCanXemKyVaKhongLoaiCau() throws Exception {
         int examId = build("{\"matrixId\": " + matrixId + "}").get("examId").asInt();
         String required = tfPattern(examId);
         String other = TfLabelPattern.ALL.stream().filter(p -> !p.equals(required)).findFirst().orElseThrow();
@@ -871,13 +875,23 @@ class ExamBuildTest {
         assertEquals("ready", view.get("buildStatus").asText());
         JsonNode tf = view.get("parts").get(1).get("items").get(0);
         assertEquals("ready", tf.get("state").asText(), "không loại câu");
-        assertTrue(tf.get("needsReview").asBoolean());
-        String warning = "label: khác mẫu mục tiêu " + comma(required) + " (nhận " + comma(other) + ")";
-        assertEquals(List.of("warning: " + warning), texts(tf.get("reviewReasons")));
+        assertFalse(tf.get("needsReview").asBoolean(), "lệch mẫu mục tiêu không bật cờ");
+        assertEquals(List.of(), texts(tf.get("reviewReasons")));
+        assertEquals(0, view.get("needsReviewCount").asInt());
+        assertEquals(0, json(perform(get("/api/exams")).andExpect(status().isOk())).get("items").get(0)
+                .get("needsReviewSlots").asInt(), "danh sách đề cũng không đếm");
         assertEquals("qc_passed", jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
                 String.class, tf.get("questionId").asInt()));
+
+        String warning = "label: khác mẫu mục tiêu " + comma(required) + " (nhận " + comma(other) + ")";
         assertEquals("[\"" + warning + "\"]", jdbc.queryForObject("SELECT warnings::text FROM quality_check_result"
-                + " WHERE question_id = ? AND check_type = 'format'", String.class, tf.get("questionId").asInt()));
+                + " WHERE question_id = ? AND check_type = 'format'", String.class, tf.get("questionId").asInt()),
+                "cảnh báo vẫn được lưu");
+        JsonNode trace = json(perform(get("/api/exams/" + examId + "/slots/" + slotId(examId, "tf", 1) + "/qc-trace"))
+                .andExpect(status().isOk())).get("lineages").get(0).get("versions").get(0);
+        assertEquals(List.of(warning), texts(trace.get("qc").get("format").get("warnings")),
+                "vết QC vẫn cho thấy mức tuân thủ mẫu");
+        assertEquals(List.of(), texts(trace.get("reviewReasons")));
     }
 
     // ---------- ngày 23/10 (đợt 3): Đổi câu kèm yêu cầu của giáo viên ----------
