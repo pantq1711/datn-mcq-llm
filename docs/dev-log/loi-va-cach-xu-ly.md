@@ -707,6 +707,8 @@ Theo mức độ: Cao 10, Trung bình 23, Thấp 14.
   - Các câu cùng đề được truyền qua `DedupScope.extraCandidates` vẫn được bắt trùng bình thường.
   - `DedupScopeResolver` và `QuestionEditService` truyền `creatorUserId` vào `DedupScope`.
   - **Lưu ý số liệu thực nghiệm:** Việc thu hẹp phạm vi ứng viên dedup khiến tỷ lệ dedup trước và sau W2-4a không thể so sánh trực tiếp (trước đây số câu ứng viên rộng hơn do gộp cả câu riêng tư của người khác).
+  - **Đánh đổi:** Câu chưa vào ngân hàng (nháp) của giáo viên khác không còn là ứng viên so trùng, nên hai giáo viên có thể cùng đưa hai câu gần giống vào ngân hàng dùng chung nếu cả hai cùng chọn Giữ câu; đây là đánh đổi chấp nhận được để bảo vệ tính riêng tư tuyệt đối của đề và tài liệu đang soạn dở.
+  - **Ghi chú hiệu năng:** Mệnh đề EXISTS theo `exam_slot` và `generation_job` cho từng ứng viên chưa vào ngân hàng có thể chậm khi số lượng câu sinh lớn; trong tương lai khi dữ liệu lớn cần đánh index bổ sung trên `generation_job(question_id)` và `exam_slot(generated_question_id)` (hiện chưa làm).
 - Chống tái phát: `HardeningW24aItem2Test` (`dedup_trungTrongCungDeVanBiBat`, `dedup_giaoVienBKhongBiChanBoiCauRiengTuCuaGiaoVienA`, `dedup_giaoVienABiChanBoiChinhCauRiengTuCuaMinh`).
 - Bài học: Khi bổ sung tính năng câu riêng tư (W2-3), mọi câu truy vấn ứng viên dùng chung trong toàn hệ thống (dedup, search, recommend) phải được rà soát và siết chặt theo ngữ cảnh người dùng.
 - Trạng thái: Đã sửa.

@@ -27,8 +27,9 @@ import java.util.regex.Pattern;
  *   <li><b>Xếp hạng</b> bằng từ khóa (BM25) giữa chunk và tên bài + mục tiêu: đơn vị là âm tiết và cặp âm tiết liền nhau
  *       (cặp có trọng số gấp đôi), bỏ dấu tiếng Việt để người dùng viết không dấu vẫn khớp; chunk có tiêu đề khớp tên bài
  *       được nhân {@value #HEADING_BOOST}. Không có chunk nào trùng từ nào thì lấy chunk rải đều (mode {@code fallback}).</li>
- *   <li><b>Cửa sổ theo chỗ:</b> chỗ thứ k lấy các chunk hạng từ {@code (k × WINDOW_STEP + lần sinh lại) mod TOP_K} trở đi,
- *       nên các câu cùng ô phủ các phần khác nhau của tài liệu và lần sinh lại dịch sang đoạn khác.</li>
+ *   <li><b>Cửa sổ theo chỗ:</b> luôn giữ đoạn hạng 0 (đoạn liên quan nhất) trong mọi job; các đoạn còn lại lấy từ các chunk
+ *       hạng 1 trở đi, xoay vòng theo {@code (slotIndex × WINDOW_STEP + attempt) mod (TOP_K - 1)}, nên các câu cùng ô vừa
+ *       bám sát nội dung cốt lõi của bài vừa phủ các phần bổ trợ khác nhau, và lần sinh lại dịch sang các đoạn khác.</li>
  * </ol>
  *
  * <p>Hàm thuần, xác định: cùng đầu vào cho cùng kết quả. Văn bản đoạn ({@link Passage#text()}) là bản gốc để offset khớp;
@@ -137,16 +138,23 @@ public final class PassageSelector {
             return assemble(live, picked, "fallback");
         }
         int k = Math.min(TOP_K, n);
-        int start = (slotIndex * WINDOW_STEP + attempt) % k;
-        int chars = 0;
-        for (int j = 0; j < k && picked.size() < MAX_PASSAGES; j++) {
-            int rank = (start + j) % k;
-            Chunk c = chunks.get(order.get(rank));
-            if (!picked.isEmpty() && chars + (c.to() - c.from()) > MAX_CHARS_PER_JOB) {
-                break;
+        // W2-4a (Mục 3): luôn giữ đoạn hạng 0 trong mọi job, chỉ xoay các chỗ còn lại
+        Chunk c0 = chunks.get(order.get(0));
+        int chars = c0.to() - c0.from();
+        picked.add(passage(live, c0, 0, scores[order.get(0)], "ranked"));
+
+        int poolSize = k - 1;
+        if (poolSize > 0) {
+            int shift = (slotIndex * WINDOW_STEP + attempt) % poolSize;
+            for (int j = 0; j < poolSize && picked.size() < MAX_PASSAGES; j++) {
+                int rank = 1 + ((shift + j) % poolSize);
+                Chunk c = chunks.get(order.get(rank));
+                if (chars + (c.to() - c.from()) > MAX_CHARS_PER_JOB) {
+                    break;
+                }
+                chars += c.to() - c.from();
+                picked.add(passage(live, c, rank, scores[order.get(rank)], "ranked"));
             }
-            chars += c.to() - c.from();
-            picked.add(passage(live, c, rank, scores[order.get(rank)], "ranked"));
         }
         return assemble(live, picked, "ranked");
     }

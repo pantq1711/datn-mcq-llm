@@ -229,4 +229,48 @@ class PassageSelectorTest {
             assertNull(s.refsJson());
         }
     }
+
+    /**
+     * W2-4a (Mục 3): luôn giữ đoạn hạng 0 trong mọi job, chỉ xoay các chỗ còn lại; kiểm tra cho slotIndex 0..3 và attempt.
+     */
+    @Test
+    void luonGiuDoanHangKhongTrongMoiJobVaChiXoayCacChoConLai() {
+        String text = join(longDocWithTargetAt(11));
+        List<Source> sources = List.of(source(1, text));
+
+        // 1. Kiểm tra cho slotIndex từ 0 đến 3 và attempt từ 0 đến 2: luôn luôn có đoạn rank 0
+        for (int slot = 0; slot <= 3; slot++) {
+            for (int attempt = 0; attempt <= 2; attempt++) {
+                Selection s = PassageSelector.select(sources, TOPIC, "Bình phương của một tổng", slot, attempt);
+                assertEquals("ranked", s.mode());
+                assertTrue(s.passages().stream().anyMatch(p -> p.rank() == 0),
+                        "slot " + slot + ", attempt " + attempt + " phải luôn chứa đoạn hạng 0");
+                Passage best = s.passages().stream().filter(p -> p.rank() == 0).findFirst().orElseThrow();
+                assertTrue(best.text().contains("Hằng đẳng thức đáng nhớ thứ nhất"), "nội dung đoạn hạng 0 đúng");
+            }
+        }
+
+        // 2. Các slot khác nhau thì tập các đoạn phụ khác nhau (chỉ xoay các chỗ còn lại)
+        Selection s0 = PassageSelector.select(sources, TOPIC, "Bình phương của một tổng", 0, 0);
+        Selection s1 = PassageSelector.select(sources, TOPIC, "Bình phương của một tổng", 1, 0);
+        Selection s2 = PassageSelector.select(sources, TOPIC, "Bình phương của một tổng", 2, 0);
+        Selection s3 = PassageSelector.select(sources, TOPIC, "Bình phương của một tổng", 3, 0);
+
+        assertTrue(s0.passages().stream().anyMatch(p -> p.rank() == 0));
+        assertTrue(s1.passages().stream().anyMatch(p -> p.rank() == 0));
+        assertTrue(s2.passages().stream().anyMatch(p -> p.rank() == 0));
+        assertTrue(s3.passages().stream().anyMatch(p -> p.rank() == 0));
+
+        assertNotEquals(s0.passages(), s1.passages(), "slot 0 và 1 khác các đoạn phụ");
+        assertNotEquals(s1.passages(), s2.passages(), "slot 1 và 2 khác các đoạn phụ");
+        assertNotEquals(s2.passages(), s3.passages(), "slot 2 và 3 khác các đoạn phụ");
+
+        // 3. Lần sinh lại (attempt) dịch chuyển các đoạn phụ nhưng vẫn giữ rank 0
+        Selection retry1 = PassageSelector.select(sources, TOPIC, "Bình phương của một tổng", 0, 1);
+        Selection retry2 = PassageSelector.select(sources, TOPIC, "Bình phương của một tổng", 0, 2);
+        assertTrue(retry1.passages().stream().anyMatch(p -> p.rank() == 0));
+        assertTrue(retry2.passages().stream().anyMatch(p -> p.rank() == 0));
+        assertNotEquals(s0.passages(), retry1.passages(), "attempt 1 dịch cửa sổ phụ");
+        assertNotEquals(retry1.passages(), retry2.passages(), "attempt 2 dịch tiếp cửa sổ phụ");
+    }
 }
