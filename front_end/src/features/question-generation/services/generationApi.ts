@@ -1,18 +1,18 @@
 import axiosInstance from "../../../services/apiClient";
 
-export interface ProcessNextJobResult {
-    job?: GenerationJob;
-    status: string;
-}
+// export interface ProcessNextJobResult {
+//     job?: GenerationJob;
+//     status: string;
+// }
 
-import type { QuestionTemplate, Subject, GenerateQuestionPayload, GenerateResponse, GenerationStatusResponse, GenerationResultResponse, GenerationJob } from "../types/generation.types";
+import type { QuestionTemplate, Subject, GenerateQuestionPayload, GenerateResponse, GenerationStatusResponse, GenerationResultResponse } from "../types/generation.types";
 
-export async function createGenerationTask(
-    payload: GenerateQuestionPayload
-): Promise<GenerateResponse> {
-    const response = await axiosInstance.post<GenerateResponse>("/api/generation/generate-sync", payload);
-    return response.data;
-}
+// export async function createGenerationTask(
+//     payload: GenerateQuestionPayload
+// ): Promise<GenerateResponse> {
+//     const response = await axiosInstance.post<GenerateResponse>("/api/generation/generate-sync", payload);
+//     return response.data;
+// }
 
 export async function getGenerationStatus(
     taskId: string | number
@@ -37,21 +37,21 @@ export async function getCatalogSubjects(): Promise<Subject[]> {
     return response.data;
 }
 
-export async function getCatalogTemplates(subjectId?: number): Promise<QuestionTemplate[]> {
-    const response = await axiosInstance.get<QuestionTemplate[]>("/api/catalog/templates", {
-        params: subjectId ? { subjectId } : undefined,
-    });
-    return response.data;
-}
+// export async function getCatalogTemplates(subjectId?: number): Promise<QuestionTemplate[]> {
+//     const response = await axiosInstance.get<QuestionTemplate[]>("/api/catalog/templates", {
+//         params: subjectId ? { subjectId } : undefined,
+//     });
+//     return response.data;
+// }
 
-export async function processNextJob(runAnswerCheck = true): Promise<ProcessNextJobResult> {
-    const response = await axiosInstance.post<ProcessNextJobResult>("/api/generation/jobs/process-next", null, {
-        params: { runAnswerCheck },
-    });
-    return response.data;
-}
+// export async function processNextJob(runAnswerCheck = true): Promise<ProcessNextJobResult> {
+//     const response = await axiosInstance.post<ProcessNextJobResult>("/api/generation/jobs/process-next", null, {
+//         params: { runAnswerCheck },
+//     });
+//     return response.data;
+// }
 
-export async function getGenerationJobs(): Promise<GenerationJob[]> {
-    const response = await axiosInstance.get<GenerationJob[]>("/api/generation/jobs");
-    return response.data;
-}
+// export async function getGenerationJobs(): Promise<GenerationJob[]> {
+//     const response = await axiosInstance.get<GenerationJob[]>("/api/generation/jobs");
+//     return response.data;
+// }

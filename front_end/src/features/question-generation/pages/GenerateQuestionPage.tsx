@@ -10,7 +10,7 @@ import GenerationProgress from "../components/GenerationProgress";
 import GenerationResult from "../components/GenerationResult";
 // import TemplateSelector from "../components/TemplateSelector";
 
-import { getCatalogTemplates, getCatalogSubjects, createGenerationTask, getGenerationStatus, getGenerationResult, } from "../services/generationApi";
+import { getCatalogSubjects, getGenerationStatus, getGenerationResult, } from "../services/generationApi";
 import type { TemplateOption, SubjectOption, GenerationResultItem, GenerationStatus, } from "../types/generation.types";
 
 import "./GenerateQuestionPage.css";
@@ -308,31 +308,32 @@ export default function GenerateQuestionPage() {
         setLoading(true);
 
         try {
-            setGenerationStatus("RUNNING");
-            setCompletedCount(0);
-            setCurrentQuestion(0);
-            setErrorMessage(undefined);
-            setGeneratedQuestions([]);
+            // setGenerationStatus("RUNNING");
+            // setCompletedCount(0);
+            // setCurrentQuestion(0);
+            // setErrorMessage(undefined);
+            // setGeneratedQuestions([]);
 
-            const questionMatrix = cognitiveLevels.flatMap((level) =>
-                topics.map((topic) => ({
-                    topicId: topic.id,
-                    topicName: topic.name,
-                    cognitiveLevel: level.key,
-                    questionCount: matrixCounts[level.key][topic.id] ?? 0,
-                })),
-            );
+            // const questionMatrix = cognitiveLevels.flatMap((level) =>
+            //     topics.map((topic) => ({
+            //         topicId: topic.id,
+            //         topicName: topic.name,
+            //         cognitiveLevel: level.key,
+            //         questionCount: matrixCounts[level.key][topic.id] ?? 0,
+            //     })),
+            // );
 
-            const payload = {
-                lessonContent,
-                selectedSegments,
-                questionCount: totalQuestionCount,
-                questionMatrix,
-            };
+            // const payload = {
+            //     lessonContent,
+            //     selectedSegments,
+            //     questionCount: totalQuestionCount,
+            //     questionMatrix,
+            // };
 
-            const response = await createGenerationTask(payload);
-            setTaskId(response.taskId);
-            message.success("Đã khởi tạo tiến trình sinh câu hỏi!");
+            // const response = await createGenerationTask(payload);
+            // setTaskId(response.taskId);
+            // message.success("Đã khởi tạo tiến trình sinh câu hỏi!");
+            console.log("Đã khởi tạo tiến trình sinh câu hỏi!");
         } catch (error) {
             console.error("Lỗi tạo task:", error);
             setGenerationStatus("FAILED");

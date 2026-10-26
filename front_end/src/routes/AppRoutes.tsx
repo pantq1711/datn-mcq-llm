@@ -1,8 +1,8 @@
 import { Routes, Route } from "react-router-dom";
 
 import TeacherLayout from "../layouts/TeacherLayout";
-import ReviewQuestionDetailPage from "../features/teacher-review/pages/ReviewQuestionDetailPage";
-import ReviewQuestionsPage from "../features/teacher-review/pages/ReviewQuestionsPage";
+// import ReviewQuestionDetailPage from "../features/teacher-review/pages/ReviewQuestionDetailPage";
+// import ReviewQuestionsPage from "../features/teacher-review/pages/ReviewQuestionsPage";
 import DashboardPage from "../features/dashboard/pages/DashboardPage";
 import AuthLayout from "../layouts/AuthLayout";
 import LoginPage from "../features/auth/pages/LoginPage";
@@ -16,11 +16,11 @@ import ExperimentListPage from "../features/experiment/pages/ExperimentListPage"
 import ExperimentDetailPage from "../features/experiment/pages/ExperimentDetailPage";
 import ExperimentComparisonPage from "../features/experiment/pages/ExperimentComparisonPage";
 import GenerateQuestionPage from "../features/question-generation/pages/GenerateQuestionPage";
-import GenerationHistoryPage from "../features/question-generation/pages/GenerationHistoryPage";
+// import GenerationHistoryPage from "../features/question-generation/pages/GenerationHistoryPage";
 import ExamMatrixListPage from "../features/exam-matrix/pages/ExamMatrixListPage";
 import TestKaTeX from "../features/test-katex/pages/TestKaTeX";
 import ExamMatrixFormPage from "../features/exam-matrix/pages/ExamMatrixFormPage";
-import JobProcessorPage from "../features/question-generation/pages/JobProcessorPage";
+// import JobProcessorPage from "../features/question-generation/pages/JobProcessorPage";
 
 export default function AppRoutes() {
     return (
@@ -33,8 +33,8 @@ export default function AppRoutes() {
 
             <Route path="" element={<TeacherLayout />}>
                 <Route path="" element={<DashboardPage />} />
-                <Route path="review" element={<ReviewQuestionsPage />} />
-                <Route path="review/:id" element={<ReviewQuestionDetailPage />} />
+                {/* <Route path="review" element={<ReviewQuestionsPage />} />
+                <Route path="review/:id" element={<ReviewQuestionDetailPage />} /> */}
                 <Route path="question-bank" element={<QuestionBankPage />} />
                 <Route path="exams" element={<ExamListPage />} />
                 <Route path="exams/generate" element={<GenerateExamPage />} />
@@ -43,8 +43,8 @@ export default function AppRoutes() {
                 <Route path="experiments/:id" element={<ExperimentDetailPage />} />
                 <Route path="experiments/comparison" element={<ExperimentComparisonPage />} />
                 <Route path="generate" element={<GenerateQuestionPage />} />
-                <Route path="generation-history" element={<GenerationHistoryPage />} />
-                <Route path="job-processor" element={<JobProcessorPage />} />
+                {/* <Route path="generation-history" element={<GenerationHistoryPage />} /> */}
+                {/* <Route path="job-processor" element={<JobProcessorPage />} /> */}
                 <Route path="exam-matrices" element={<ExamMatrixListPage />} />
                 <Route path="exam-matrices/new" element={<ExamMatrixFormPage />} />
                 <Route path="exam-matrices/:id/edit" element={<ExamMatrixFormPage />} />

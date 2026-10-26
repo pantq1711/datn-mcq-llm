@@ -3,7 +3,7 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 import { Card, Typography, Input, Alert, Button, Space, message } from "antd";
 import { ThunderboltOutlined } from "@ant-design/icons";
-import { seedDemoMathQuestions } from "../../teacher-review/services/teacherReviewApi";
+// import { seedDemoMathQuestions } from "../../teacher-review/services/teacherReviewApi";
 
 const { Title, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -45,18 +45,18 @@ export function validateLatex(
 export default function TestKaTeX() {
     const [seeding, setSeeding] = useState<boolean>(false);
 
-    const handleSeedMath = async () => {
-        setSeeding(true);
-        try {
-            const res = await seedDemoMathQuestions();
-            message.success(res.message || "Đã khởi tạo dữ liệu câu hỏi Toán mẫu thành công!");
-        } catch (error) {
-            console.error("Lỗi khi seed dữ liệu Toán:", error);
-            message.error("Không thể khởi tạo dữ liệu mẫu Toán.");
-        } finally {
-            setSeeding(false);
-        }
-    };
+    // const handleSeedMath = async () => {
+    //     setSeeding(true);
+    //     try {
+    //         const res = await seedDemoMathQuestions();
+    //         message.success(res.message || "Đã khởi tạo dữ liệu câu hỏi Toán mẫu thành công!");
+    //     } catch (error) {
+    //         console.error("Lỗi khi seed dữ liệu Toán:", error);
+    //         message.error("Không thể khởi tạo dữ liệu mẫu Toán.");
+    //     } finally {
+    //         setSeeding(false);
+    //     }
+    // };
 
     // State lưu giá trị input người dùng nhập vào
     const [inputLatex, setInputLatex] = useState(
@@ -99,7 +99,7 @@ export default function TestKaTeX() {
                         type="primary"
                         icon={<ThunderboltOutlined />}
                         loading={seeding}
-                        onClick={handleSeedMath}
+                    // onClick={handleSeedMath}
                     >
                         Tạo câu hỏi Toán mẫu (Seed Demo Math)
                     </Button>

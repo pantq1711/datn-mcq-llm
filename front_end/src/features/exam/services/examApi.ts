@@ -7,7 +7,7 @@ export async function getCatalogSubjects(): Promise<Subject[]> {
 }
 
 export async function generateExam(payload: GenerateExamPayload): Promise<GeneratedExamCode[]> {
-    const response = await axiosInstance.post<GeneratedExamCode[]>("/api/exams/generate", payload);
+    const response = await axiosInstance.post<GeneratedExamCode[]>("/api/exams/build", payload);
     return response.data;
 }
 

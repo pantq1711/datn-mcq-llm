@@ -26,16 +26,16 @@ const menuItems: MenuItem[] = [
         icon: <FormOutlined />,
         label: "Sinh câu hỏi",
     },
-    {
-        key: "/job-processor",
-        icon: <OrderedListOutlined />,
-        label: "Quản lý job sinh câu hỏi",
-    },
-    {
-        key: "/review",
-        icon: <SafetyCertificateOutlined />,
-        label: "Duyệt câu hỏi",
-    },
+    // {
+    //     key: "/job-processor",
+    //     icon: <OrderedListOutlined />,
+    //     label: "Quản lý job sinh câu hỏi",
+    // },
+    // {
+    //     key: "/review",
+    //     icon: <SafetyCertificateOutlined />,
+    //     label: "Duyệt câu hỏi",
+    // },
     {
         key: "/question-bank",
         icon: <ReadOutlined />,
@@ -66,13 +66,13 @@ export default function Sidebar() {
         navigate(key);
     };
 
-const selectedKey = menuItems
-    .filter((item): item is MenuItem => !!item && "key" in item)
-    .map((item) => item.key)
-    .find((key) => {
-        if (typeof key !== "string") return false;
-        return location.pathname === key || location.pathname.startsWith(`${key}/`);
-    }) ?? "/";
+    const selectedKey = menuItems
+        .filter((item): item is MenuItem => !!item && "key" in item)
+        .map((item) => item.key)
+        .find((key) => {
+            if (typeof key !== "string") return false;
+            return location.pathname === key || location.pathname.startsWith(`${key}/`);
+        }) ?? "/";
 
     return (
         <aside className="app-sidebar">
