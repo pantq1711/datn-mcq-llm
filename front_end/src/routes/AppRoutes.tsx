@@ -20,6 +20,9 @@ import ExamDetailPage from "../features/exam/pages/ExamDetailPage";
 import ExamMatrixListPage from "../features/exam-matrix/pages/ExamMatrixListPage";
 import TestKaTeX from "../features/test-katex/pages/TestKaTeX";
 import ExamMatrixFormPage from "../features/exam-matrix/pages/ExamMatrixFormPage";
+import { RequireAuth } from "../components/common/RequireAuth/RequireAuth";
+import ProfilePage from "../features/auth/pages/ProfilePage";
+import UserManagementPage from "../features/admin/pages/UserManagementPage";
 // import JobProcessorPage from "../features/question-generation/pages/JobProcessorPage";
 
 export default function AppRoutes() {
@@ -29,26 +32,33 @@ export default function AppRoutes() {
                 <Route path="login" element={<LoginPage />} />
                 <Route path="register" element={<RegisterPage />} />
                 <Route path="forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="profile" element={<ProfilePage />} />
             </Route>
 
-            <Route path="" element={<TeacherLayout />}>
-                <Route path="" element={<DashboardPage />} />
-                {/* <Route path="review" element={<ReviewQuestionsPage />} />
-                <Route path="review/:id" element={<ReviewQuestionDetailPage />} /> */}
-                <Route path="question-bank" element={<QuestionBankPage />} />
-                <Route path="exams" element={<ExamListPage />} />
-                <Route path="exams/generate" element={<GenerateExamPage />} />
-                <Route path="exams/:id" element={<ExamDetailPage />} />
-                {/* <Route path="experiments" element={<ExperimentListPage />} />
-                <Route path="experiments/:id" element={<ExperimentDetailPage />} />
-                <Route path="experiments/comparison" element={<ExperimentComparisonPage />} /> */}
-                {/* <Route path="generate" element={<GenerateQuestionPage />} /> */}
-                {/* <Route path="generation-history" element={<GenerationHistoryPage />} /> */}
-                {/* <Route path="job-processor" element={<JobProcessorPage />} /> */}
-                <Route path="exam-matrices" element={<ExamMatrixListPage />} />
-                <Route path="exam-matrices/new" element={<ExamMatrixFormPage />} />
-                <Route path="exam-matrices/:id/edit" element={<ExamMatrixFormPage />} />
-                <Route path="test-katex" element={<TestKaTeX />} />
+            <Route element={<RequireAuth />}>
+                <Route element={<TeacherLayout />}>
+                    <Route path="" element={<DashboardPage />} />
+                    {/* <Route path="review" element={<ReviewQuestionsPage />} />
+                    <Route path="review/:id" element={<ReviewQuestionDetailPage />} /> */}
+                    <Route path="question-bank" element={<QuestionBankPage />} />
+                    <Route path="exams" element={<ExamListPage />} />
+                    <Route path="exams/generate" element={<GenerateExamPage />} />
+                    <Route path="exams/:id" element={<ExamDetailPage />} />
+                    {/* <Route path="experiments" element={<ExperimentListPage />} />
+                    <Route path="experiments/:id" element={<ExperimentDetailPage />} />
+                    <Route path="experiments/comparison" element={<ExperimentComparisonPage />} />
+                    <Route path="generate" element={<GenerateQuestionPage />} />
+                    <Route path="generation-history" element={<GenerationHistoryPage />} />
+                    <Route path="job-processor" element={<JobProcessorPage />} /> */}
+                    <Route path="exam-matrices" element={<ExamMatrixListPage />} />
+                    <Route path="exam-matrices/new" element={<ExamMatrixFormPage />} />
+                    <Route path="exam-matrices/:id/edit" element={<ExamMatrixFormPage />} />
+                    <Route path="test-katex" element={<TestKaTeX />} />
+                </Route>
+
+                <Route element={<RequireAuth allowedRoles={["admin", "AD"]} />}>
+                    <Route path="admin/users" element={<UserManagementPage />} />
+                </Route>
             </Route>
         </Routes>
     );

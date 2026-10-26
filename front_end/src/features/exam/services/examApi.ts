@@ -1,5 +1,5 @@
 import axiosInstance from "../../../services/apiClient";
-import type { Subject, GenerateExamPayload, GeneratedExamCode, ExamQuestionItem } from "../types/exam.types";
+import type { Subject, GenerateExamPayload, GeneratedExamCode, ExamQuestionItem, ExamListResponse, GetMyExamsParams } from "../types/exam.types";
 
 export async function getCatalogSubjects(): Promise<Subject[]> {
     const response = await axiosInstance.get<Subject[]>("/api/catalog/subjects");
@@ -57,4 +57,21 @@ export async function updateQuestion(
         throw new Error(err);
     }
     return response.data;
+}
+
+export async function getMyExams(params?: GetMyExamsParams): Promise<ExamListResponse> {
+    try {
+        const cleanParams: Record<string, any> = {};
+        if (params?.page !== undefined) cleanParams.page = params.page;
+        if (params?.size !== undefined) cleanParams.size = params.size;
+        if (params?.kind) cleanParams.kind = params.kind;
+
+        const response = await axiosInstance.get<ExamListResponse>("/api/exams", {
+            params: cleanParams,
+        });
+        return response.data;
+    } catch (error: any) {
+        const errMsg = error.response?.data?.message || "Không thể tải danh sách đề thi";
+        throw new Error(errMsg);
+    }
 }

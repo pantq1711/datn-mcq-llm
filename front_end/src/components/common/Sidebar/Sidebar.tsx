@@ -1,57 +1,50 @@
 import { Menu } from "antd";
-import { FileTextOutlined, HomeOutlined, ReadOutlined, TableOutlined } from "@ant-design/icons";
+import { FileTextOutlined, HomeOutlined, ReadOutlined, TableOutlined, TeamOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
+import { useAuth } from "../../../context/AuthContext";
 import "./Sidebar.css";
 
 type MenuItem = Required<MenuProps>["items"][number];
 
-const menuItems: MenuItem[] = [
-    {
-        key: "/",
-        icon: <HomeOutlined />,
-        label: "Tổng quan",
-    },
-    // {
-    //     key: "/generate",
-    //     icon: <FormOutlined />,
-    //     label: "Sinh câu hỏi",
-    // },
-    // {
-    //     key: "/job-processor",
-    //     icon: <OrderedListOutlined />,
-    //     label: "Quản lý job sinh câu hỏi",
-    // },
-    // {
-    //     key: "/review",
-    //     icon: <SafetyCertificateOutlined />,
-    //     label: "Duyệt câu hỏi",
-    // },
-    {
-        key: "/question-bank",
-        icon: <ReadOutlined />,
-        label: "Ngân hàng câu hỏi",
-    },
-    {
-        key: "/exam-matrices",
-        icon: <TableOutlined />,
-        label: "Quản lý ma trận",
-    },
-    {
-        key: "/exams",
-        icon: <FileTextOutlined />,
-        label: "Đề thi",
-    },
-    // {
-    //     key: "/experiments",
-    //     icon: <ExperimentOutlined />,
-    //     label: "Thực nghiệm",
-    // },
-];
-
 export default function Sidebar() {
     const navigate = useNavigate();
     const location = useLocation();
+    const { user } = useAuth();
+
+    const isAdmin = user?.role === "admin" || user?.role === "AD";
+
+    const menuItems: MenuItem[] = [
+        {
+            key: "/",
+            icon: <HomeOutlined />,
+            label: "Tổng quan",
+        },
+        {
+            key: "/question-bank",
+            icon: <ReadOutlined />,
+            label: "Ngân hàng câu hỏi",
+        },
+        {
+            key: "/exam-matrices",
+            icon: <TableOutlined />,
+            label: "Quản lý ma trận",
+        },
+        {
+            key: "/exams",
+            icon: <FileTextOutlined />,
+            label: "Đề thi",
+        },
+        ...(isAdmin
+            ? [
+                {
+                    key: "/admin/users",
+                    icon: <TeamOutlined />,
+                    label: "Quản trị tài khoản",
+                },
+            ]
+            : []),
+    ];
 
     const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
         navigate(key);

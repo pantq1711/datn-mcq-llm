@@ -1,54 +1,59 @@
-import { Button, Card, Typography } from "antd";
+import { Button, Card, Typography, message } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 import ExamTable from "../components/ExamTable";
-import type { ExamTableItem } from "../components/ExamTable";
+import type { ExamListItem } from "../types/exam.types";
+import { getMyExams } from "../services/examApi";
+
 import "./ExamListPage.css";
 
 const { Title } = Typography;
 
 export default function ExamListPage() {
-    const examData: ExamTableItem[] = [
-        {
-            id: 1,
-            title: "Đề thi Toán lớp 10 - Học kỳ 1",
-            subject: "Toán",
-            questionCount: 40,
-            duration: 60,
-            status: "PUBLISHED",
-            createdAt: "2023-10-01",
-        },
-        {
-            id: 2,
-            title: "Đề thi Văn lớp 10 - Học kỳ 1",
-            subject: "Ngữ Văn",
-            questionCount: 35,
-            duration: 90,
-            status: "DRAFT",
-            createdAt: "2023-10-02",
-        },
-        {
-            id: 3,
-            title: "Đề thi Lý lớp 10 - Học kỳ 1",
-            subject: "Vật Lý",
-            questionCount: 30,
-            duration: 45,
-            status: "ARCHIVED",
-            createdAt: "2023-10-03",
-        },
-    ];
     const navigate = useNavigate();
 
-    const handleViewExam = (exam: ExamTableItem) => {
-        console.log("View exam:", exam);
-        navigate(`/exams/${exam.id}`);
+    // 1. Khởi tạo các state theo yêu cầu
+    const [exams, setExams] = useState<ExamListItem[]>([]);
+    const [loading, setLoading] = useState<boolean>(false);
+    const [page, setPage] = useState<number>(1);
+    const [pageSize, setPageSize] = useState<number>(10);
+    const [total, setTotal] = useState<number>(0);
+    const [selectedKind, setSelectedKind] = useState<string>(""); // Tùy chọn lọc theo loại đề
+
+    // 2. Hàm gọi API lấy danh sách đề thi
+    const fetchExams = async (currentPage: number, currentPageSize: number) => {
+        setLoading(true);
+        try {
+            // Lưu ý: Ant Design page bắt đầu từ 1, backend Spring Data bắt đầu từ 0
+            const res = await getMyExams({
+                page: currentPage - 1,
+                size: currentPageSize,
+            });
+            setExams(res.items);
+            setTotal(res.totalItems);
+        } catch (error) {
+            message.error("Không thể tải danh sách đề thi. Vui lòng thử lại!");
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const handlePageChange = (page: number, pageSize: number) => {
-        console.log("Page:", page);
-        console.log("Page size:", pageSize);
+    // 3. Sử dụng useEffect để gọi API khi page, pageSize hoặc selectedKind thay đổi
+    useEffect(() => {
+        fetchExams(page, pageSize);
+    }, [page, pageSize]);
+
+    const handleViewExam = (exam: ExamListItem) => {
+        navigate(`/exams/${exam.examId}`);
     };
+
+    const handlePageChange = (newPage: number, newPageSize: number) => {
+        setPage(newPage);
+        setPageSize(newPageSize);
+    };
+
 
     return (
         <div className="exam-list-page">
@@ -73,10 +78,11 @@ export default function ExamListPage() {
             <div className="exam-list-page-table">
                 <Card>
                     <ExamTable
-                        data={examData}
-                        total={100}
-                        page={1}
-                        pageSize={10}
+                        data={exams}
+                        loading={loading}
+                        total={total}
+                        page={page}
+                        pageSize={pageSize}
                         onView={handleViewExam}
                         onPageChange={handlePageChange}
                     />

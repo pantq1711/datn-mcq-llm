@@ -1,15 +1,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-    Alert,
-    Button,
-    Form,
-    Input,
-    Space,
-    Typography,
-} from "antd";
+import { Alert, Button, Form, Input, message, Space, Typography } from "antd";
 import { Controller, useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
+import { changePassword } from "../services/authApi";
 import "./ForgotPasswordPage.css";
 
 const { Title, Text } = Typography;
@@ -25,6 +19,8 @@ const forgotPasswordSchema = z.object({
 type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPage() {
+    const navigate = useNavigate();
+
     const {
         control,
         handleSubmit,
@@ -40,12 +36,10 @@ export default function ForgotPasswordPage() {
     const onSubmit = async (values: ForgotPasswordFormValues) => {
         try {
             console.log("Forgot password:", values);
-
-            // TODO:
-            // Gọi API quên mật khẩu tại đây.
-            //
-            // Ví dụ:
-            // await authService.forgotPassword(values.email);
+            await changePassword(values.email);
+            // Ví dụ: hiển thị thông báo thành công, chuyển hướng
+            message.success("Hệ thống đã gửi hướng dẫn đặt lại mật khẩu tới email của bạn.");
+            navigate("/auth/login");
         } catch (error) {
             setError("email", {
                 type: "server",

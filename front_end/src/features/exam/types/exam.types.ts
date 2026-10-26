@@ -1,4 +1,7 @@
 export type ExamQuestionDifficulty = "easy" | "medium" | "hard";
+export type ExamKind = "matrix" | "lesson" | "manual";
+export type ExamStatus = "draft" | "confirmed";
+export type ExamMode = "teacher" | "manual";
 
 export interface ExamPreviewData {
     title: string;
@@ -75,3 +78,33 @@ export type QuestionReplacementCandidate = Omit<
 > & {
     id?: ExamQuestionItem["id"];
 };
+
+export interface ExamListItem {
+    examId: number;
+    examCode: string;
+    title: string;
+    mode: ExamMode;
+    kind: ExamKind;
+    status: ExamStatus;
+    matrixId: number | null;
+    createdAt: string;
+    totalSlots: number;
+    readySlots: number;
+    keptSlots: number;
+    needsReviewSlots: number;
+    generatingSlots: number;
+    failedSlots: number;
+}
+
+export interface ExamListResponse {
+    items: ExamListItem[];
+    page: number;         // 0-indexed theo Spring / Backend
+    size: number;
+    totalItems: number;
+    totalPages: number;
+}
+export interface GetMyExamsParams {
+    page?: number;
+    size?: number;
+    kind?: ExamKind;
+}

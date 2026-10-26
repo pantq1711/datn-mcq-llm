@@ -1,16 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-    Button,
-    Checkbox,
-    Form,
-    Input,
-    Space,
-    Typography,
-} from "antd";
+import { Button, Checkbox, Form, Input, Space, Typography, } from "antd";
 import { Controller, useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
+import { useAuth } from "../../../context/AuthContext";
+import { login } from '../services/authApi';
 import "./LoginForm.css";
+import { useState } from "react";
 
 const { Text } = Typography;
 
@@ -32,6 +28,8 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginForm() {
     const navigate = useNavigate();
+    const { setToken } = useAuth();
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const {
         control,
         handleSubmit,
@@ -46,9 +44,24 @@ export default function LoginForm() {
     });
 
     const onSubmit = async (values: LoginFormValues) => {
-        console.log("Login:", values);
-        navigate("/");
+        setErrorMessage(null); // Xóa lỗi cũ trước khi gọi API mới
+        try {
+            const response = await login({
+                email: values.email,
+                password: values.password,
+            });
+            // 1️⃣ Lưu token vào Context (cùng lúc đã có trong localStorage)
+            if (response.accessToken) {
+                setToken(response.accessToken);
+            }
+            // 2️⃣ Chuyển hướng
+            // Bạn có thể điều chỉnh đường dẫn tùy theo flow của dự án
+            navigate("/dashboard");   // hoặc navigate("/") nếu muốn về trang chủ
+        } catch (err) {
+            setErrorMessage(err instanceof Error ? err.message : 'Đăng nhập thất bại');
+        }
     };
+
 
     return (
         <form
@@ -56,6 +69,8 @@ export default function LoginForm() {
             onSubmit={handleSubmit(onSubmit)}
             noValidate
         >
+            {errorMessage && <p className="error-msg">{errorMessage}</p>}
+
             <Form layout="vertical" component={false}>
                 <Form.Item
                     label="Email"
@@ -71,6 +86,10 @@ export default function LoginForm() {
                                 placeholder="Nhập email"
                                 size="large"
                                 autoComplete="email"
+                                onChange={(e) => {
+                                    field.onChange(e);
+                                    setErrorMessage(null);
+                                }}
                             />
                         )}
                     />
@@ -90,6 +109,10 @@ export default function LoginForm() {
                                 placeholder="Nhập mật khẩu"
                                 size="large"
                                 autoComplete="current-password"
+                                onChange={(e) => {
+                                    field.onChange(e);
+                                    setErrorMessage(null);
+                                }}
                             />
                         )}
                     />
