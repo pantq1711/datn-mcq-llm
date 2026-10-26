@@ -48,20 +48,20 @@ public class DedupService {
         if (subject.questionType() == QuestionType.SA) {
             // V4: chỉ so với câu cùng dạng; câu sa so theo thân câu và khóa chuẩn của đáp số.
             for (Object[] row : repository.findShortAnswerDedupCandidateRows(
-                    subject.questionId(), scope.runId(), scope.comparableRunIds())) {
+                    subject.questionId(), scope.runId(), scope.comparableRunIds(), scope.creatorUserId())) {
                 candidates.add(DedupCandidate.shortAnswer(
                         ((Number) row[0]).intValue(), (String) row[1], (String) row[2]));
             }
         } else if (subject.questionType() == QuestionType.TF) {
             // GĐ3: đề dẫn và 4 ý (không gồm nhãn).
             for (Object[] row : repository.findTrueFalseDedupCandidateRows(
-                    subject.questionId(), scope.runId(), scope.comparableRunIds())) {
+                    subject.questionId(), scope.runId(), scope.comparableRunIds(), scope.creatorUserId())) {
                 candidates.add(DedupCandidate.trueFalse(((Number) row[0]).intValue(), (String) row[1],
                         java.util.Arrays.asList((String) row[2], (String) row[3], (String) row[4], (String) row[5])));
             }
         } else if (subject.questionType() == QuestionType.MCQ) {
             for (Object[] row : repository.findDedupCandidateRows(
-                    subject.questionId(), scope.runId(), scope.comparableRunIds())) {
+                    subject.questionId(), scope.runId(), scope.comparableRunIds(), scope.creatorUserId())) {
                 candidates.add(new DedupCandidate(
                         ((Number) row[0]).intValue(),
                         (String) row[1], (String) row[2], (String) row[3], (String) row[4], (String) row[5]));

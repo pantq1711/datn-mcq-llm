@@ -323,6 +323,7 @@ GET /api/bank-items/88
 
 - `provenance.versions` đi từ câu LLM gốc đến bản được đưa vào ngân hàng; `bank_item.source_question_id` là phiên bản cuối.
   `editedBy` chỉ có khi có nhật ký thao tác Sửa trong đề. Không có `raw_llm_output`.
+  **Quyền riêng tư (W2-4a):** trong `versions[].editedBy` và `review.reviewer`, họ tên và id của giáo viên khác được ẩn danh thành `{"id": null, "name": "Giáo viên khác"}`; chỉ chính giáo viên đó hoặc Quản trị viên (Admin) mới thấy id và họ tên thật.
 - `usage.myExams` chỉ gồm đề của chính người gọi (tối đa 50, mới nhất trước); đề của giáo viên khác chỉ được tính vào
   `usageCount`, không lộ mã đề. Admin luôn nhận danh sách rỗng.
 
@@ -916,9 +917,7 @@ không có hoặc của giáo viên khác, hoặc chỗ không thuộc đề: 40
   `editDistance`. `questionId` là câu bị thao tác (Đổi: câu bị đổi ra khỏi chỗ).
 - Không có `raw_llm_output`, prompt, `prompt_note`, token, độ trễ hay chi phí. Dữ liệu cũ (trước V14) có
   `solverReasoning = null`.
-- **Hạn chế đã biết (W2-3, chưa sửa):** bước dedup so với câu của mọi giáo viên cùng môn, nên `qc.dedup.comparedTo.questionId`
-  có thể trỏ tới câu sinh từ tài liệu riêng tư của giáo viên khác (câu đó không hiện trong ngân hàng của người xem). Chỉ lộ id
-  câu và độ tương đồng, không lộ nội dung.
+- **Quyền riêng tư dedup (W2-4a):** phạm vi ứng viên dedup được giới hạn theo người tạo đề (`creatorUserId`): chỉ gồm câu ngân hàng dùng chung, câu riêng tư của chính giáo viên, và các câu trong cùng đề. Do đó `qc.dedup.comparedTo` không bao giờ trỏ tới câu riêng tư của giáo viên khác.
 
 ### 7.7a. QC "bám tài liệu" (W2-3)
 
@@ -1174,8 +1173,8 @@ Mã lỗi (body `{"error", "code"}`):
 - **Bộ nhớ của pandoc:** mỗi lần đọc docx bị giới hạn heap `MATERIAL_PANDOC_HEAP_MB` (768 MB) và 30 giây. `mem_limit` của
   `app` là 1 GB và heap JVM chiếm 55%, nên trần này là giới hạn trên, chưa đo với tài liệu lớn: nếu container bị `OOMKilled`
   khi tải docx lớn, hạ `MATERIAL_PANDOC_HEAP_MB` hoặc tăng `mem_limit`.
-- **qc-trace và câu riêng tư:** `qc.dedup.comparedTo.questionId` có thể trỏ tới câu riêng tư của giáo viên khác (chỉ lộ id và độ
-  tương đồng); xem mục 7.7. Chưa sửa.
+- **qc-trace và câu riêng tư:** đã khắc phục ở W2-4a (xem mục 7.7 và 8).
+- **Tính bất biến của ngữ cảnh đề:** `exam_generation_context` chỉ được tạo lúc sinh đề, không có API nào cho phép sửa hay gỡ sau khi tạo (chỉ xóa cascade theo đề). Do đó `ExamActionService.keep` dùng ngữ cảnh tài liệu của đề để gắn `bank_item.visible_to_user_id` là hoàn toàn đúng và an toàn.
 - Tài liệu ảnh hưởng tới câu được SINH và được dùng để chấm "bám tài liệu" (mục 7.7a); bản giáo viên sửa chưa được chấm lại.
 - Cấu hình giới hạn: `app.materials.*` (biến `MATERIAL_MAX_FILE_BYTES`, `MATERIAL_MAX_CHARS`, `MATERIAL_MAX_PAGES`,
   `MATERIAL_MAX_PER_OWNER`, `MATERIAL_MAX_UPLOADS_PER_HOUR`, `MATERIAL_MAX_CONCURRENT`, `MATERIAL_EXTRACT_TIMEOUT`,

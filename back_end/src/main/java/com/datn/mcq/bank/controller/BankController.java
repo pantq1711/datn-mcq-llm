@@ -79,6 +79,6 @@ public class BankController {
      */
     @GetMapping("/{id}")
     public BankItemDetailDto detail(CurrentUser user, @PathVariable Integer id) {
-        return bankService.detail(id, user.id());
+        return bankService.detail(id, user.id(), user.isAdmin());
     }
 }

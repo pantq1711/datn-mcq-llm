@@ -694,6 +694,23 @@ Theo mức độ: Cao 10, Trung bình 23, Thấp 14.
   với model thật vì LLM giả không lộ lỗi kiểu này.
 - Trạng thái: Đã sửa. Hai câu của đề đo vẫn ghi UNKNOWN trong DB (không chạy lại); đo đề mới để kiểm.
 
+### L-48 Phạm vi dedup so nhầm câu riêng tư và câu nháp của giáo viên khác (bổ sung 26/10, W2-4a)
+- Nhóm: QC
+- Triệu chứng: kiểm tra trùng (DedupChecker) khi giáo viên B sinh câu có thể so sánh và bắt trùng với câu riêng tư (`bank_item.visible_to_user_id`) hoặc câu nháp chưa vào ngân hàng của giáo viên A. Vết QC `qc.dedup.comparedTo.questionId` trỏ tới câu riêng tư của giáo viên khác.
+- Nguyên nhân gốc: truy vấn ứng viên `QualityCheckResultRepository.findDedupCandidateRows` (và cho sa, tf) trước W2-4a chỉ lọc theo môn, loại câu và `comparableRunIds`, không lọc theo quyền sở hữu `visible_to_user_id` hay người tạo đề `created_by`.
+- Cách sửa:
+  - Bổ sung điều kiện trong `findDedupCandidateRows`, `findShortAnswerDedupCandidateRows`, `findTrueFalseDedupCandidateRows`: ứng viên chỉ gồm:
+    1. Câu ngân hàng dùng chung (`bi.visible_to_user_id IS NULL`).
+    2. Câu ngân hàng riêng tư của chính người tạo đề (`bi.visible_to_user_id = :creatorUserId`).
+    3. Câu chưa vào ngân hàng (`bi.id IS NULL`) nhưng thuộc các đề của chính người tạo đề (`exam.created_by = :creatorUserId`).
+    4. Nếu không xác định được `creatorUserId` (thí nghiệm ngoài đề), chỉ so với câu ngân hàng dùng chung.
+  - Các câu cùng đề được truyền qua `DedupScope.extraCandidates` vẫn được bắt trùng bình thường.
+  - `DedupScopeResolver` và `QuestionEditService` truyền `creatorUserId` vào `DedupScope`.
+  - **Lưu ý số liệu thực nghiệm:** Việc thu hẹp phạm vi ứng viên dedup khiến tỷ lệ dedup trước và sau W2-4a không thể so sánh trực tiếp (trước đây số câu ứng viên rộng hơn do gộp cả câu riêng tư của người khác).
+- Chống tái phát: `HardeningW24aItem2Test` (`dedup_trungTrongCungDeVanBiBat`, `dedup_giaoVienBKhongBiChanBoiCauRiengTuCuaGiaoVienA`, `dedup_giaoVienABiChanBoiChinhCauRiengTuCuaMinh`).
+- Bài học: Khi bổ sung tính năng câu riêng tư (W2-3), mọi câu truy vấn ứng viên dùng chung trong toàn hệ thống (dedup, search, recommend) phải được rà soát và siết chặt theo ngữ cảnh người dùng.
+- Trạng thái: Đã sửa.
+
 ## Hàng đợi/đồng thời
 
 ### L-33 Đổi câu ở chỗ TF vi phạm `chk_es_ready`

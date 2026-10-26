@@ -110,6 +110,12 @@ public class QuestionEditService {
     @Transactional
     public EditOutcome createVersion(Integer baseQuestionId, QuestionEditInput input,
                                      List<DedupCandidate> sameExamCandidates) {
+        return createVersion(baseQuestionId, input, sameExamCandidates, null);
+    }
+
+    @Transactional
+    public EditOutcome createVersion(Integer baseQuestionId, QuestionEditInput input,
+                                     List<DedupCandidate> sameExamCandidates, Integer creatorUserId) {
         GeneratedQuestion base = questionRepository.findById(baseQuestionId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu hỏi id=" + baseQuestionId));
         QuestionType type = base.getQuestionType() != null ? base.getQuestionType() : QuestionType.MCQ;
@@ -137,7 +143,7 @@ public class QuestionEditService {
 
         DedupScope scope = dedupScopeResolver.resolve(version.getRunId());
         if (scope != null) {
-            scope = scope.excluding(chainIds(base)).withExtraCandidates(sameExamCandidates);
+            scope = scope.excluding(chainIds(base)).withExtraCandidates(sameExamCandidates).withCreatorUserId(creatorUserId);
         }
         QcPipelineReport report = qcOrchestrator.evaluateAndSave(
                 edited.qcInput(version.getId(), validateLatex, repairs), scope);

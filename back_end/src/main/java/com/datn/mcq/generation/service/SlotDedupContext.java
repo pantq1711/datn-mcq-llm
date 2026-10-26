@@ -17,4 +17,11 @@ public interface SlotDedupContext {
      * của chỗ đang sinh. Chỉ đọc; không có thì rỗng.
      */
     List<DedupCandidate> candidatesForSlot(Integer examSlotId);
+
+    /**
+     * W2-4a: ID người tạo đề chứa chỗ {@code examSlotId}, dùng để lọc ứng viên ngân hàng riêng tư. Null khi không tìm thấy.
+     */
+    default Integer creatorUserIdForSlot(Integer examSlotId) {
+        return null;
+    }
 }
