@@ -77,6 +77,12 @@ nhà cung cấp, cho mở cổng 80 và 443 (Let's Encrypt cần cả hai), tên
    frontend; **phải thống nhất với người làm frontend** cách họ viết đường dẫn gọi API (backend phục vụ ở `/api/...`). Nếu
    khác, build lại image với `--build-arg VITE_API_BASE_URL=...` (xem mục 8).
 
+### Dữ liệu và khóa Gemini
+
+- **Dùng Project / API key riêng:** Khuyến nghị tạo Google Cloud Project và API key riêng dành cho hệ thống này trên môi trường thật (không dùng chung key với các dự án khác vì sẽ bị dùng chung hạn mức gọi API).
+- **Cân nhắc gói trả phí:** Với gói miễn phí của Gemini API, Google có thể sử dụng dữ liệu gửi lên để cải thiện sản phẩm (theo điều khoản của Google tại thời điểm 10/2026); khi triển khai hệ thống cho giáo viên dùng thật nên cân nhắc chuyển sang gói trả phí và thiết lập cảnh báo ngân sách.
+- **Dẫn chiếu chính sách dữ liệu:** Xem chi tiết về dữ liệu gửi tới dịch vụ AI, trách nhiệm của giáo viên và ô xác nhận ở frontend tại [`docs/api/README.md` mục 9.5](../api/README.md#95-dữ-liệu-gửi-tới-dịch-vụ-ai).
+
 ## 4. Dựng máy chủ từ đầu
 
 ```bash

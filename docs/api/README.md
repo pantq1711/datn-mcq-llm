@@ -1179,3 +1179,14 @@ Mã lỗi (body `{"error", "code"}`):
 - Cấu hình giới hạn: `app.materials.*` (biến `MATERIAL_MAX_FILE_BYTES`, `MATERIAL_MAX_CHARS`, `MATERIAL_MAX_PAGES`,
   `MATERIAL_MAX_PER_OWNER`, `MATERIAL_MAX_UPLOADS_PER_HOUR`, `MATERIAL_MAX_CONCURRENT`, `MATERIAL_EXTRACT_TIMEOUT`,
   `MATERIAL_PANDOC_HEAP_MB`). Caddy cho phép body tới 12 MB; Tomcat đọc bỏ tối đa 25 MB phần thừa để trả được 413.
+
+### 9.5. Dữ liệu gửi tới dịch vụ AI
+
+- **Dữ liệu gửi đi:** Văn bản trích từ tài liệu bài học (các đoạn được chọn bởi `PassageSelector`), đề bài, "yêu cầu thêm cho AI" và các câu hỏi được sinh ra sẽ được gửi tới Google Gemini API để thực hiện sinh câu hỏi, giải thẩm định (Solver) và kiểm tra bám tài liệu (grounding check).
+- **Lưu trữ phía server:** Hệ thống chỉ lưu văn bản đã trích và mã băm sha256 của file gốc, tuyệt đối không lưu file gốc (đã nêu ở mục 9; người dùng không thể tải lại file gốc đã tải lên).
+- **Chính sách dữ liệu của Google Gemini API:** Với gói miễn phí của Gemini API, Google có thể dùng dữ liệu gửi lên để cải thiện sản phẩm (có thể bao gồm huấn luyện mô hình) (theo điều khoản của Google tại thời điểm viết: 10/2026, cần kiểm tra lại khi triển khai); khi triển khai hệ thống cho người dùng thật nên dùng gói trả phí của Google.
+- **Trách nhiệm của giáo viên:** Giáo viên **không** tải lên tài liệu chứa thông tin cá nhân của học sinh (như họ tên, điểm số, số điện thoại, địa chỉ...) hoặc tài liệu mật/nội bộ của nhà trường. Giáo viên chịu hoàn toàn trách nhiệm về bản quyền và quyền sử dụng đối với tài liệu tải lên hệ thống.
+- **Ghi chú cho frontend:** Trước nút bấm tải tài liệu lên, frontend cần hiển thị một ô xác nhận (checkbox) bắt buộc với nội dung:
+  > *"Tài liệu sẽ được gửi tới dịch vụ AI bên thứ ba để sinh câu hỏi. Tôi xác nhận tài liệu không chứa thông tin cá nhân của học sinh và tôi có quyền sử dụng tài liệu này."*
+
+  Nút "Tải lên" chỉ được kích hoạt (enable) khi người dùng đã tích chọn ô xác nhận này.
