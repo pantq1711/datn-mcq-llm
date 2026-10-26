@@ -43,6 +43,10 @@ public class GroundingService {
         g.setMaterialRefs(refsJson);
         g.setGeneratedWithMaterial(generatedWithMaterial);
         g.setSourceJobId(sourceJobId);
+        if (result.usage() != null) {
+            g.setTokenCount(result.usage().tokenCount());
+            g.setLatencyMs(result.usage().latencyMs());
+        }
         // Postgres lưu tới micro giây: cắt trước để giá trị đọc lại giống giá trị vừa ghi.
         g.setCheckedAt(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS));
         return repository.saveAndFlush(g);

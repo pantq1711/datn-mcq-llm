@@ -321,6 +321,16 @@ class GroundingCheckerTest {
     }
 
     @Test
+    void checkMangSoLieuLuotGoiLlmCuaChinNoCoParseThuanThiKhong() {
+        FakeLlm llm = new FakeLlm();
+        llm.reply = reply("UNKNOWN", "", "Không đủ.");
+        GroundingResult r = new GroundingChecker(llm, MODEL).check(mcq(), CONTEXT);
+        assertEquals(10, r.usage().tokenCount());
+        assertEquals(1.0, r.usage().latencyMs());
+        assertNull(GroundingChecker.parse(llm.reply, CONTEXT, MODEL).usage(), "phân tích thuần không có lượt gọi LLM nào");
+    }
+
+    @Test
     void modelTrongThiDungMacDinhVaCanRunOnlinePhanAnhCauHinhKhoa() {
         FakeLlm llm = new FakeLlm();
         assertTrue(new GroundingChecker(llm, " ").canRunOnline());

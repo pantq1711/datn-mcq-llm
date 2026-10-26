@@ -8,6 +8,7 @@ import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
+import com.datn.mcq.llm.dto.LlmUsage;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.checker.GroundingChecker;
@@ -262,19 +263,19 @@ public class QcOrchestrator {
             AnswerSolverChecker.TfSolverOutcome tf = answerSolverChecker.checkTrueFalse(
                     input.questionText(), input.statements(), input.statementLabels());
             return new SolverVerdict(QuestionType.TF, tf.passed(), tf.judgeModel(), tf.reasoning(), null, null, null,
-                    tf.judgeLabels());
+                    tf.judgeLabels(), tf.usage());
         }
         if (input.questionType() == QuestionType.SA) {
             AnswerSolverChecker.SaSolverOutcome sa = answerSolverChecker.checkShortAnswer(
                     input.questionText(), input.saAnswer());
             return new SolverVerdict(QuestionType.SA, sa.passed(), sa.judgeModel(), sa.reasoning(), null,
-                    sa.judgeKind(), sa.judgeAnswer(), null);
+                    sa.judgeKind(), sa.judgeAnswer(), null, sa.usage());
         }
         AnswerSolverChecker.SolverCheckOutcome mcq = answerSolverChecker.check(
                 input.questionText(), input.optionA(), input.optionB(), input.optionC(), input.optionD(),
                 input.correctOption());
         return new SolverVerdict(QuestionType.MCQ, mcq.passed(), mcq.judgeModel(), mcq.reasoning(), mcq.judgeAnswer(),
-                null, null, null);
+                null, null, null, mcq.usage());
     }
 
     /**
@@ -298,6 +299,19 @@ public class QcOrchestrator {
             case MCQ -> upsertCheckResult(questionId, QuestionType.MCQ, CheckType.ANSWER_CHECK, verdict.passed(),
                     verdict.judgeAnswer(), verdict.judgeModel(), null, null, null, null, verdict.reasoning());
         }
+        recordSolverUsage(questionId, verdict.usage());
+    }
+
+    /**
+     * Đo chi phí (V21): ghi token và độ trễ của lượt Solver vào chính dòng answer_check vừa ghi. Kết quả được chép từ bản
+     * trước ({@code usage} null) để NULL, nên không bị tính chi phí hai lần.
+     */
+    private void recordSolverUsage(Integer questionId, LlmUsage usage) {
+        qualityCheckResultRepository.findByQuestionIdAndCheckType(questionId, CheckType.ANSWER_CHECK).ifPresent(row -> {
+            row.setTokenCount(usage == null ? null : usage.tokenCount());
+            row.setLatencyMs(usage == null ? null : usage.latencyMs());
+            qualityCheckResultRepository.save(row);
+        });
     }
 
     /** V14 (W1-3): giới hạn độ dài lời giải thích của Solver khi lưu (khớp CHECK chk_qcr_solver_reasoning). */

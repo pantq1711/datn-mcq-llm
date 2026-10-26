@@ -2,8 +2,8 @@
 
 Chỉ là **truy vấn đọc** (PostgreSQL) cho chương thử nghiệm trong báo cáo; chưa có trang thống kê. Mỗi file `.sql` là một
 câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên database của hệ thống đã triển khai. Test
-`StatisticsSqlTest` chạy bốn file đầu trên `datn_mcq_test` với dữ liệu mẫu để bảo đảm cú pháp và số đếm đúng; file 05 (W2-3) được
-`GroundingPipelineTest` kiểm số đếm, và `StatisticsSqlTest` kiểm cả năm file chỉ là một câu lệnh đọc.
+`StatisticsSqlTest` chạy bốn file đầu trên `datn_mcq_test` với dữ liệu mẫu để bảo đảm cú pháp và số đếm đúng; file 05 và 06 (W2-3) được
+`GroundingPipelineTest` kiểm số đếm, và `StatisticsSqlTest` kiểm cả sáu file chỉ là một câu lệnh đọc.
 
 | File | Trả lời câu hỏi |
 |---|---|
@@ -12,6 +12,7 @@ câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên databa
 | [`03-truong-giao-vien-hay-sua.sql`](03-truong-giao-vien-hay-sua.sql) | Giáo viên hay sửa trường nào (đề, phương án, đáp án, lời giải...), theo dạng câu |
 | [`04-solver-lech-giao-vien-xu-ly.sql`](04-solver-lech-giao-vien-xu-ly.sql) | Với câu Solver báo lệch, giáo viên Giữ nguyên, sửa hay Đổi |
 | [`05-grounding.sql`](05-grounding.sql) | Câu sinh có tài liệu bài học: tỉ lệ SUPPORTED / NOT_SUPPORTED / UNKNOWN, chưa chấm, lỗi; trích dẫn kiểm chứng được; câu bị hạ vì trích dẫn không có thật (theo dạng câu, có/không tài liệu) |
+| [`06-chi-phi.sql`](06-chi-phi.sql) | Chi phí trung bình mỗi câu LLM (token và thời gian gọi LLM) = sinh + Solver + grounding, theo dạng câu và có/không tài liệu; số câu thiếu số đo (V21) |
 
 ## Bộ lọc chung (đã cài trong từng file)
 
@@ -42,3 +43,6 @@ Các giới hạn khác:
 - Tài khoản và đề thử của nhóm (kể cả bước chạy thử trước khi mời giáo viên) phải được loại bằng `dev_users`.
 - File 05: kết quả "bám tài liệu" là cảnh báo của một LLM judge cùng họ với bộ sinh câu, chưa đối chiếu với nhãn của người; nhóm
   "không tài liệu" chưa có đường chấm riêng nên chỉ hiện dòng `khong_cham`. Không dùng file này làm độ đúng của câu.
+- File 06: số đo là token và thời gian gọi LLM (không phải thời gian chờ của người dùng, không có đơn giá). Chỉ tính lượt gọi
+  thành công cho ra kết quả; dữ liệu trước V21 không có số của Solver và grounding (đếm ở `so_cau_thieu_so_do`). Các lần sinh bị
+  loại rồi sinh lại và lượt Đổi câu là những câu LLM gốc khác, không gộp vào câu cuối của chỗ.

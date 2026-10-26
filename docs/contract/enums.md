@@ -322,6 +322,12 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     vào prompt không (NULL khi không có trích dẫn). `supported` BẮT BUỘC có trích dẫn và `evidence_found = TRUE` (`judge` nói bám tài
     liệu mà không chỉ ra được chỗ nào thì bị hạ xuống `unknown`). `material_refs` chép từ job. `generated_with_material` (mặc định
     TRUE) để so nhóm có/không tài liệu khi đo. KHÔNG đổi `generated_question.status` (Q-2, M-10): chỉ là cảnh báo.
+  - Đo chi phí (V21, W2-3): `quality_check_result.token_count` (INT) và `latency_ms` (DOUBLE PRECISION, mili giây) là số liệu của
+    lượt gọi Solver cho ra dòng `answer_check` (cả khi Solver chạy trong job sinh câu hay ở job `answer_check` riêng);
+    `question_grounding.token_count`/`latency_ms` là của lượt gọi judge. Cùng quy tắc: ≥ 0 hoặc NULL; NULL với dòng cũ (trước
+    V21) và với kết quả Solver CHÉP từ bản trước (không có lượt gọi nào, nên không bị đếm hai lần). Dòng khác `answer_check` luôn
+    NULL (`chk_qcr_usage_answer_check`). Chỉ lưu lượt gọi thành công cho ra kết quả; lượt thử lại thất bại không được tính.
+    Không có cột tiền: `LlmClient` không tính giá (`cost_usd` luôn 0). Tổng hợp: `docs/thong-ke/06-chi-phi.sql`. Không đưa ra API.
   - Lý do "cần xem kỹ" thêm (W2-3): `grounding_not_supported`, `grounding_unknown` (từ kết quả), `grounding_pending`, `grounding_failed`
     (từ trạng thái job).
   - `lesson_material.extracted_text`: văn bản thường (docx đã làm sạch markdown, giữ `$...$`); xem `docs/api/README.md` mục 9.3.

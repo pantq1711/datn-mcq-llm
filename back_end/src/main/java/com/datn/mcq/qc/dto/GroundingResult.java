@@ -1,5 +1,7 @@
 package com.datn.mcq.qc.dto;
 
+import com.datn.mcq.llm.dto.LlmUsage;
+
 /**
  * Kết quả một lần chấm "bám tài liệu".
  *
@@ -9,6 +11,17 @@ package com.datn.mcq.qc.dto;
  * @param evidenceFound true nếu trích dẫn có thật trong đoạn tài liệu đã đưa vào prompt, false nếu không; null khi judge
  *                      không đưa trích dẫn
  * @param judgeModel    model đã chấm
+ * @param usage         token và độ trễ của lượt gọi judge; null khi kết quả được dựng không qua lượt gọi nào
  */
 public record GroundingResult(GroundingVerdict verdict, String reason, String evidenceQuote, Boolean evidenceFound,
-                              String judgeModel) {}
+                              String judgeModel, LlmUsage usage) {
+
+    public GroundingResult(GroundingVerdict verdict, String reason, String evidenceQuote, Boolean evidenceFound,
+                           String judgeModel) {
+        this(verdict, reason, evidenceQuote, evidenceFound, judgeModel, null);
+    }
+
+    public GroundingResult withUsage(LlmUsage newUsage) {
+        return new GroundingResult(verdict, reason, evidenceQuote, evidenceFound, judgeModel, newUsage);
+    }
+}

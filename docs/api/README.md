@@ -955,6 +955,8 @@ ngoài transaction DB, thử lại có giới hạn như mọi job, thiếu API 
   hoặc bị 400 thì không xếp job.
 - Chưa làm: đường chấm nhóm "không tài liệu" cho thí nghiệm (cột `generated_with_material` đã có sẵn). Thống kê:
   `docs/thong-ke/05-grounding.sql`.
+- Đo chi phí (V21): token và độ trễ của lượt gọi judge được lưu ở `question_grounding` (và của Solver ở `quality_check_result`);
+  không đưa ra API, chỉ để thống kê (`docs/thong-ke/06-chi-phi.sql`).
 - Giới hạn: judge là LLM cùng họ với model sinh câu nên có thể thiên vị; kết quả chưa được đối chiếu với nhãn của người. Câu chỉ cần
   kiến thức phổ thông sẽ ra `UNKNOWN` (không phải lỗi). Mỗi câu có tài liệu tốn thêm 1 lượt gọi LLM.
 

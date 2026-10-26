@@ -5,6 +5,7 @@ import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.StatementKey;
 import com.datn.mcq.enums.TruthChoice;
+import com.datn.mcq.llm.dto.LlmUsage;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +18,8 @@ import java.util.List;
  * @param saJudgeKind  sa: loại đáp số Solver trả; null với dạng khác
  * @param saJudgeAnswer sa: chuỗi gốc Solver trả (null khi ambiguous)
  * @param tfLabels     tf: nhãn Solver cho 4 ý theo thứ tự a-d; null với dạng khác
+ * @param usage        token và độ trễ của lượt gọi Solver cho ra kết quả này; null khi kết quả được CHÉP từ bản trước
+ *                     (không có lượt gọi nào, nên không được tính chi phí lần nữa)
  */
 public record SolverVerdict(
         QuestionType questionType,
@@ -26,10 +29,17 @@ public record SolverVerdict(
         AnswerChoice judgeAnswer,
         SaJudgeKind saJudgeKind,
         String saJudgeAnswer,
-        List<TruthChoice> tfLabels
+        List<TruthChoice> tfLabels,
+        LlmUsage usage
 ) {
     public SolverVerdict {
         tfLabels = tfLabels == null ? null : List.copyOf(tfLabels);
+    }
+
+    public SolverVerdict(QuestionType questionType, boolean passed, String judgeModel, String reasoning,
+                         AnswerChoice judgeAnswer, SaJudgeKind saJudgeKind, String saJudgeAnswer,
+                         List<TruthChoice> tfLabels) {
+        this(questionType, passed, judgeModel, reasoning, judgeAnswer, saJudgeKind, saJudgeAnswer, tfLabels, null);
     }
 
     public AnswerCheckStatus status() {

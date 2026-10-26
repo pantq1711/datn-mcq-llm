@@ -121,4 +121,13 @@ class SaSolverCheckerTest {
         assertTrue(client.lastPrompt.contains("Nghiệm của $4x + 3 = 0$?"));
         assertFalse(client.lastPrompt.contains(LLM_ANSWER), "Solver không được thấy đáp số người soạn");
     }
+
+    @Test
+    void checkShortAnswerMangSoLieuLuotGoiLlmCuaChinNoCoParseThuanThiKhong() {
+        client.response = judge("-0,75");
+        AnswerSolverChecker.SaSolverOutcome out = checker.checkShortAnswer("Nghiệm của $4x + 3 = 0$?", LLM_ANSWER);
+        assertEquals(1, out.usage().tokenCount());
+        assertEquals(1.0, out.usage().latencyMs());
+        assertNull(compare(judge("-0,75")).usage(), "phân tích thuần không có lượt gọi LLM nào");
+    }
 }

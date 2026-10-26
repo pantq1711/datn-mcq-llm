@@ -476,6 +476,106 @@ class GroundingPipelineTest extends ExamFlowTestBase {
         assertEquals(origin.get("material_context"), jobs.get(0).get("material_context"));
     }
 
+    // ---------- đo chi phí: token và độ trễ ghi ở dòng kết quả (V21) ----------
+
+    private Map<String, Object> answerCheckRow(int questionId) {
+        return jdbc.queryForMap("SELECT * FROM quality_check_result WHERE question_id = ? AND check_type = 'answer_check'",
+                questionId);
+    }
+
+    @Test
+    void soLieuLuotGoiLlmGhiODongKetQuaCuaSolverTrongJobSinhCauVaCuaGrounding() throws Exception {
+        int examId = lesson(true);
+        settle(examId);
+        int question = questionOf(examId);
+        Map<String, Object> solver = answerCheckRow(question);
+        assertEquals(10, solver.get("token_count"), "Solver chạy trong job sinh câu: số liệu của chính lượt Solver");
+        assertEquals(1.0, solver.get("latency_ms"));
+        Map<String, Object> grounding = groundingRow(question);
+        assertEquals(5, grounding.get("token_count"));
+        assertEquals(1.0, grounding.get("latency_ms"));
+        assertEquals(0, count("SELECT count(*) FROM quality_check_result WHERE check_type <> 'answer_check'"
+                + " AND (token_count IS NOT NULL OR latency_ms IS NOT NULL)"), "chỉ dòng answer_check mang số liệu");
+    }
+
+    @Test
+    void banSuaDoiNoiDungCoSoLieuSolverODongMoiConBanChiDoiLoiGiaiChepKetQuaNenKhongTinhHaiLan() throws Exception {
+        int examId = lesson(true);
+        settle(examId);
+        int stemEdit = edit(examId, GroundingPipelineTest::changeStem);
+        processAll();
+        Map<String, Object> rerun = answerCheckRow(stemEdit);
+        assertEquals(10, rerun.get("token_count"), "Solver chạy lại ở job answer_check riêng");
+        assertEquals(1.0, rerun.get("latency_ms"));
+        assertEquals(5, groundingRow(stemEdit).get("token_count"));
+
+        int explanationEdit = edit(examId, n -> n.put("explanation", n.get("explanation").asText() + " Giải thích thêm."));
+        processAll();
+        Map<String, Object> copied = answerCheckRow(explanationEdit);
+        assertEquals(null, copied.get("token_count"), "kết quả Solver được chép, không có lượt gọi LLM nào mới");
+        assertEquals(null, copied.get("latency_ms"));
+        assertEquals(5, groundingRow(explanationEdit).get("token_count"), "judge thấy lời giải mới nên vẫn tốn một lượt");
+    }
+
+    // ---------- chi phí trung bình mỗi câu (docs/thong-ke/06-chi-phi.sql) ----------
+
+    private List<Map<String, Object>> cost() throws IOException {
+        return jdbc.queryForList(Files.readString(Path.of("..", "docs", "thong-ke", "06-chi-phi.sql"),
+                StandardCharsets.UTF_8));
+    }
+
+    private static Map<String, Object> costRow(List<Map<String, Object>> rows, boolean withMaterial) {
+        return rows.stream().filter(r -> "mcq".equals(r.get("question_type"))
+                        && Boolean.valueOf(withMaterial).equals(r.get("co_tai_lieu"))).findFirst()
+                .orElseThrow(() -> new AssertionError("Không có dòng co_tai_lieu = " + withMaterial + " trong " + rows));
+    }
+
+    private static double dbl(Map<String, Object> row, String column) {
+        return ((Number) row.get(column)).doubleValue();
+    }
+
+    @Test
+    void thongKe06TinhChiPhiMoiCauLaSinhCongSolverCongGroundingTheoCaChuoiBanSuaVaKhongTinhHaiLanKetQuaChep()
+            throws Exception {
+        int withMaterial = lesson(true);
+        settle(withMaterial);
+        settle(lesson(false));
+
+        Map<String, Object> a = costRow(cost(), true);
+        assertEquals(1, ((Number) a.get("so_cau_llm")).intValue());
+        assertEquals(10.0, dbl(a, "tb_token_sinh"), 0.01);
+        assertEquals(10.0, dbl(a, "tb_token_solver"), 0.01);
+        assertEquals(5.0, dbl(a, "tb_token_grounding"), 0.01);
+        assertEquals(25.0, dbl(a, "tb_token_moi_cau"), 0.01, "10 sinh + 10 Solver + 5 grounding");
+        assertEquals(3.0, dbl(a, "tb_latency_ms_moi_cau"), 0.01);
+        assertEquals(0, ((Number) a.get("so_cau_thieu_so_do")).intValue());
+        Map<String, Object> noMaterial = costRow(cost(), false);
+        assertEquals(20.0, dbl(noMaterial, "tb_token_moi_cau"), 0.01, "không tài liệu: không có phần grounding");
+        assertEquals(0, ((Number) noMaterial.get("so_cau_thieu_so_do")).intValue(), "không tài liệu thì không cần số grounding");
+
+        edit(withMaterial, GroundingPipelineTest::changeStem);
+        processAll();
+        assertEquals(40.0, dbl(costRow(cost(), true), "tb_token_moi_cau"), 0.01,
+                "tính cả Solver và grounding của bản sửa: 25 + 10 + 5");
+        assertEquals(5.0, dbl(costRow(cost(), true), "tb_latency_ms_moi_cau"), 0.01);
+
+        edit(withMaterial, n -> n.put("explanation", n.get("explanation").asText() + " Giải thích thêm."));
+        processAll();
+        assertEquals(45.0, dbl(costRow(cost(), true), "tb_token_moi_cau"), 0.01,
+                "bản chỉ đổi lời giải chép kết quả Solver nên chỉ thêm 5 token grounding");
+    }
+
+    @Test
+    void thongKe06DemCauThieuSoDoVaKhongLamSaiTrungBinh() throws Exception {
+        int examId = lesson(true);
+        settle(examId);
+        jdbc.update("UPDATE question_grounding SET token_count = NULL, latency_ms = NULL");
+        Map<String, Object> row = costRow(cost(), true);
+        assertEquals(1, ((Number) row.get("so_cau_thieu_so_do")).intValue(), "câu có tài liệu mà thiếu số grounding");
+        assertEquals(null, row.get("tb_token_grounding"), "không có số nào để lấy trung bình");
+        assertEquals(20.0, dbl(row, "tb_token_moi_cau"), 0.01, "tổng chỉ cộng phần có số");
+    }
+
     // ---------- thống kê (docs/thong-ke/05-grounding.sql) ----------
 
     private List<Map<String, Object>> stats() throws IOException {

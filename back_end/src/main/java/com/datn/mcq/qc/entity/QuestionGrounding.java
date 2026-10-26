@@ -55,6 +55,14 @@ public class QuestionGrounding {
     @Column(name = "source_job_id")
     private Integer sourceJobId;
 
+    /** V21 (đo chi phí): token của lượt gọi judge cho ra kết quả này; NULL với dòng cũ. */
+    @Column(name = "token_count")
+    private Integer tokenCount;
+
+    /** V21: độ trễ (mili giây) của lượt gọi judge đó; NULL với dòng cũ. */
+    @Column(name = "latency_ms")
+    private Double latencyMs;
+
     @Column(name = "checked_at", nullable = false)
     private LocalDateTime checkedAt = LocalDateTime.now();
 
@@ -134,6 +142,22 @@ public class QuestionGrounding {
 
     public void setSourceJobId(Integer sourceJobId) {
         this.sourceJobId = sourceJobId;
+    }
+
+    public Integer getTokenCount() {
+        return tokenCount;
+    }
+
+    public void setTokenCount(Integer tokenCount) {
+        this.tokenCount = tokenCount;
+    }
+
+    public Double getLatencyMs() {
+        return latencyMs;
+    }
+
+    public void setLatencyMs(Double latencyMs) {
+        this.latencyMs = latencyMs;
     }
 
     public LocalDateTime getCheckedAt() {

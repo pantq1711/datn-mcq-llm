@@ -5,6 +5,7 @@ import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.common.util.TextClip;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
+import com.datn.mcq.llm.dto.LlmUsage;
 import com.datn.mcq.qc.dto.GroundingResult;
 import com.datn.mcq.qc.dto.GroundingVerdict;
 import com.datn.mcq.qc.dto.QuestionQcInput;
@@ -97,7 +98,7 @@ public class GroundingChecker {
         LlmCallResult result = llmClient.callJsonModeWithSchema(buildPrompt(input, context), model, 0.0,
                 RESPONSE_SCHEMA_JSON);
         String used = result.modelName() != null && !result.modelName().isBlank() ? result.modelName() : model;
-        return parse(result.rawText(), context, used);
+        return parse(result.rawText(), context, used).withUsage(LlmUsage.of(result));
     }
 
     // ---------- prompt ----------

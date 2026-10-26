@@ -229,6 +229,8 @@ class TrueFalseFlowTest {
         assertNull(answerCheck.get("judge_answer"));
         assertEquals(List.of("T", "T", "F", "F"), jdbc.queryForList("SELECT judge_label FROM answer_check_statement"
                 + " WHERE qc_result_id = ? ORDER BY position", String.class, answerCheck.get("id")));
+        assertEquals(10, answerCheck.get("token_count"), "V21: số liệu lượt Solver tf ghi ở dòng answer_check");
+        assertEquals(1.0, answerCheck.get("latency_ms"));
 
         // Chưa có thao tác của giáo viên nên chưa có review hay ngân hàng (Giữ vào ngân hàng: ExamBuildTest).
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM teacher_review", Integer.class));

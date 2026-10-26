@@ -216,6 +216,8 @@ class ShortAnswerFlowTest {
         assertEquals("-0,75", answerCheck.get("judge_sa_answer"));
         assertNull(answerCheck.get("judge_answer"));
         assertEquals(Boolean.TRUE, answerCheck.get("passed"));
+        assertEquals(10, answerCheck.get("token_count"), "V21: số liệu lượt Solver sa ghi ở dòng answer_check");
+        assertEquals(1.0, answerCheck.get("latency_ms"));
 
         // Chưa có thao tác của giáo viên nên chưa có review hay ngân hàng (Giữ vào ngân hàng: ExamBuildTest).
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM teacher_review", Integer.class));
