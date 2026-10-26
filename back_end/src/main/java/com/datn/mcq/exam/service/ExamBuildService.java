@@ -27,6 +27,8 @@ import com.datn.mcq.matrix.dto.MatrixDtos.CreateLessonRequest;
 import com.datn.mcq.matrix.entity.ExamMatrix;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
+import com.datn.mcq.material.passage.PassageSelector;
+import com.datn.mcq.material.service.MaterialPassageService;
 import com.datn.mcq.qc.service.QcSummaryService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -72,11 +75,12 @@ public class ExamBuildService {
     private final CatalogService catalogService;
     private final QcSummaryService qcSummaryService;
     private final ExamContextService contextService;
+    private final MaterialPassageService passageService;
 
     public ExamBuildService(ExamRepository examRepository, ExamSlotRepository slotRepository,
                             MatrixService matrixService, GenerationService generationService,
                             CatalogService catalogService, QcSummaryService qcSummaryService,
-                            ExamContextService contextService) {
+                            ExamContextService contextService, MaterialPassageService passageService) {
         this.examRepository = examRepository;
         this.slotRepository = slotRepository;
         this.matrixService = matrixService;
@@ -84,6 +88,7 @@ public class ExamBuildService {
         this.catalogService = catalogService;
         this.qcSummaryService = qcSummaryService;
         this.contextService = contextService;
+        this.passageService = passageService;
     }
 
     /**
@@ -174,6 +179,8 @@ public class ExamBuildService {
             if (!missing.isEmpty()) {
                 MatrixCellSpec spec = spec(cell, matrix, subject, cellInstruction);
                 ExperimentRun run = generationService.createMatrixRun(subject.getId(), spec, missing.size());
+                MaterialPassageService.Loaded materials = passageService.load(context.materialsFor(cell.getId()));
+                String details = selectionDetails(spec);
                 for (ExamSlot slot : missing) {
                     slot.setRunId(run.getId());
                     slot.setAttempts(1);
@@ -185,7 +192,8 @@ public class ExamBuildService {
                         note.add(TfLabelPattern.promptLine(lastTfPattern));
                     }
                     generationService.enqueueMatrixJob(run.getId(), cell.getTemplateId(), spec, slot.getId(),
-                            start.plusSeconds(JOB_SPACING_SECONDS * jobs), joinNote(note));
+                            start.plusSeconds(JOB_SPACING_SECONDS * jobs), joinNote(note),
+                            snapshotOf(materials, cell.getTopic(), details, slot.getSlotNo() - 1, 0));
                     jobs++;
                 }
             }
@@ -364,9 +372,36 @@ public class ExamBuildService {
         if (slot.getRunId() == null) {
             slot.setRunId(generationService.createMatrixRun(subject.getId(), spec, 1).getId());
         }
+        // W2-3: sinh lại hoặc Đổi câu chọn lại đoạn tài liệu; số job đã có của chỗ làm cửa sổ dịch đi, nên câu mới phủ
+        // phần khác của tài liệu.
+        Set<Integer> materialIds = contextService.materialsFor(slot.getExamId(), cell.getId());
+        GenerationService.MaterialSnapshot snapshot = materialIds.isEmpty() ? null
+                : snapshotOf(passageService.load(materialIds), cell.getTopic(), selectionDetails(spec),
+                        slot.getSlotNo() - 1, generationService.generateJobsForSlot(slot.getId()).size());
         generationService.enqueueMatrixJob(slot.getRunId(), cell.getTemplateId(), spec, slot.getId(),
-                LocalDateTime.now(), promptNote(slot, cell, instruction));
+                LocalDateTime.now(), promptNote(slot, cell, instruction), snapshot);
         slot.setAttempts(slot.getAttempts() + 1);
+    }
+
+    /** Ảnh chụp đoạn tài liệu cho một job (null khi ô không có tài liệu hoặc tài liệu không có chữ). */
+    private GenerationService.MaterialSnapshot snapshotOf(MaterialPassageService.Loaded materials, String topic,
+                                                          String details, int slotIndex, int attempt) {
+        if (materials.isEmpty()) {
+            return null;
+        }
+        PassageSelector.Selection selection = passageService.select(materials, topic, details, slotIndex, attempt);
+        return selection.isEmpty() ? null
+                : new GenerationService.MaterialSnapshot(selection.context(), selection.refsJson());
+    }
+
+    /** Nội dung và yêu cầu cần đạt của ô, để khớp đoạn tài liệu (cùng với tên bài/chủ đề của ô). */
+    static String selectionDetails(MatrixCellSpec spec) {
+        List<String> parts = new ArrayList<>();
+        if (spec.content() != null) {
+            parts.add(spec.content());
+        }
+        parts.addAll(spec.learningOutcomes().values());
+        return String.join(" ", parts);
     }
 
     /**

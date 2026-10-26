@@ -127,11 +127,15 @@ public class DocxTextExtractor {
         return Files.readString(out, StandardCharsets.UTF_8);
     }
 
-    /** Bỏ tham chiếu ảnh (kèm thuộc tính kích thước) và dòng chú thích rỗng pandoc chèn giữa các danh sách. */
+    /**
+     * Bỏ tham chiếu ảnh (kèm thuộc tính kích thước) và dòng chú thích rỗng pandoc chèn giữa các danh sách, rồi làm sạch
+     * định dạng markdown thành văn bản thường (giữ nguyên công thức $...$), xem {@link MarkdownCleaner}. Văn bản lưu trong
+     * DB là kết quả này.
+     */
     static String cleanMarkdown(String markdown) {
         String s = IMAGE.matcher(markdown).replaceAll("");
         s = EMPTY_COMMENT_LINE.matcher(s).replaceAll("");
-        return s.replaceAll("[ \\t]+\\n", "\n").replaceAll("\\n{3,}", "\n\n").strip();
+        return MarkdownCleaner.clean(s);
     }
 
     private List<ExtractionWarning> warnings(FormulaStats stats) {

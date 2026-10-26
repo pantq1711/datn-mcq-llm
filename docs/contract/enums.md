@@ -306,8 +306,12 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     thêm cho AI", 1–1000 ký tự, hoặc NULL. Xóa đề xóa dây chuyền. `exam_context_material(context_id, material_id)`: tài liệu của
     phạm vi; khóa ngoại tới `lesson_material` KHÔNG xóa dây chuyền (xóa tài liệu đang dùng bị chặn, 409 `MATERIAL_IN_USE`).
     Tài liệu hiệu lực của ô = hợp tài liệu cả đề và của ô; yêu cầu thêm hiệu lực = của ô, không có thì của cả đề.
-  - `generation_job.material_context` / `material_refs` (V19): ảnh chụp đoạn tài liệu đã đưa vào prompt của job và danh sách
-    đoạn (mảng JSON); cùng NULL hoặc cùng có; `material_context` tối đa 12000 ký tự. Chưa có code ghi (bước chọn đoạn).
+  - `generation_job.material_context` / `material_refs` (V19, ghi từ W2-3 bước 5): ảnh chụp đoạn tài liệu đã đưa vào prompt của
+    job (đã bỏ mọi `<<<`, `>>>`; mỗi đoạn có dòng đầu `[Tài liệu n, đoạn k]`, không có tên file) và danh sách đoạn (mảng JSON
+    `{materialId, sha256, from, to, rank, score, selection}`, `selection` là `whole`, `ranked` hoặc `fallback`, thứ tự theo
+    tài liệu); cùng NULL hoặc cùng có; `material_context` tối đa 12000 ký tự. `[from, to)` là khoảng của
+    `lesson_material.extracted_text`. NULL với mọi job không có tài liệu và job cũ. Không đưa ra API.
+  - `lesson_material.extracted_text`: văn bản thường (docx đã làm sạch markdown, giữ `$...$`); xem `docs/api/README.md` mục 9.3.
   - `bank_item.visible_to_user_id` (V19): NULL là câu dùng chung (mọi câu cũ); khác NULL thì chỉ người dùng đó thấy và dùng
     lại. Đặt khi Giữ câu sinh từ đề có tài liệu đính kèm. Không xóa dây chuyền theo `users`.
   - Cờ "cần xem kỹ" bỏ qua cảnh báo `json: đã sửa ... escape LaTeX` (vẫn lưu ở `warnings`); cảnh báo `<trường>: đã tự đóng $` và các cảnh báo khác vẫn bật cờ.

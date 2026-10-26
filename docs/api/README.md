@@ -545,8 +545,22 @@ POST /api/exams/build
     trắng), đặt sau mọi quy tắc và yêu cầu đầu ra, kèm lời dặn không được đổi dạng câu, mức độ, số lượng, số ý, mẫu nhãn,
     định dạng JSON hay tắt kiểm tra chất lượng. Các thông số đó và QC do hệ thống quyết định, không do prompt. Lần sinh lại
     và Đổi câu của ô giữ yêu cầu này (yêu cầu riêng của lượt Đổi câu đặt sau cùng).
-  - Chưa làm (bước sau của task): đưa các đoạn tài liệu vào prompt và bước QC "bám tài liệu". Hiện tài liệu mới được gắn,
-    kiểm tra quyền và dùng để bỏ qua ngân hàng; nội dung tài liệu chưa vào prompt.
+  - **Đoạn tài liệu vào prompt (W2-3 bước 5).** Không nhồi cả tài liệu: mỗi job chỉ nhận tối đa 6000 ký tự trong tối đa 4
+    đoạn (mỗi đoạn ≤ 1500 ký tự). Tài liệu nhỏ (tổng ≤ 6000 ký tự) được đưa cả. Tài liệu dài: chia đoạn theo dòng trống, xếp
+    hạng bằng từ khóa (BM25 trên âm tiết và cặp âm tiết, bỏ dấu tiếng Việt, đoạn có tiêu đề khớp tên bài được cộng điểm) giữa
+    đoạn và tên bài + nội dung + yêu cầu cần đạt của ô; không đoạn nào trùng từ thì lấy các đoạn rải đều. Chỗ thứ k của ô lấy
+    cửa sổ hạng bắt đầu từ `(k × 2 + số job đã có của chỗ) mod 8`, nên các câu cùng ô phủ phần khác nhau của tài liệu và lần
+    sinh lại, Đổi câu dịch sang đoạn khác. Không dùng embedding (không tốn lượt gọi).
+  - Đoạn đã chọn được chụp vào `generation_job.material_context` (đúng văn bản đưa vào prompt, đã bỏ mọi `<<<`, `>>>`) và
+    `material_refs` (mảng `{materialId, sha256, from, to, rank, score, selection}`, `selection` là `whole`, `ranked` hoặc
+    `fallback`). `[from, to)` là khoảng của `lesson_material.extracted_text`, nên dựng lại được model đã thấy gì từ
+    văn bản đã lưu. Hai cột này không đưa ra API.
+  - Trong prompt, đoạn nằm trong khối DỮ LIỆU `<<<TÀI_LIỆU ... HẾT_TÀI_LIỆU>>>`, sau thông số của ô và TRƯỚC các quy tắc và yêu
+    cầu đầu ra (nên yêu cầu đầu ra của hệ thống luôn ở cuối); lời dặn nói rõ mọi câu lệnh trong tài liệu chỉ là nội dung, không
+    làm theo, và tài liệu không đổi được dạng câu, mức độ, số lượng, số ý, mẫu nhãn, JSON. Tên file không đưa vào prompt.
+  - Chưa làm (bước sau của task): bước QC "bám tài liệu" (grounding).
+  - Đổi câu bằng câu ngân hàng (`source = "bank"`) ở ô có tài liệu vẫn được phép: câu lấy từ ngân hàng không theo tài liệu
+    của đề (quyết định của chủ dự án).
   - Lỗi (không tạo đề, không để lại gì): 400 `TOO_MANY_MATERIALS`, `INSTRUCTION_TOO_LONG`, `INVALID_REQUEST` (ô không thuộc
     ma trận, ô lặp, id rỗng); 404 nếu có tài liệu không phải của người gọi hoặc không tồn tại.
 - Ngân hàng câu dùng chung cho mọi giáo viên (H1): câu ngân hàng khớp ô được lấy bất kể ai đã đưa vào. Ngoại lệ (W2-3,
@@ -891,6 +905,9 @@ không có hoặc của giáo viên khác, hoặc chỗ không thuộc đề: 40
   `editDistance`. `questionId` là câu bị thao tác (Đổi: câu bị đổi ra khỏi chỗ).
 - Không có `raw_llm_output`, prompt, `prompt_note`, token, độ trễ hay chi phí. Dữ liệu cũ (trước V14) có
   `solverReasoning = null`.
+- **Hạn chế đã biết (W2-3, chưa sửa):** bước dedup so với câu của mọi giáo viên cùng môn, nên `qc.dedup.comparedTo.questionId`
+  có thể trỏ tới câu sinh từ tài liệu riêng tư của giáo viên khác (câu đó không hiện trong ngân hàng của người xem). Chỉ lộ id
+  câu và độ tương đồng, không lộ nội dung.
 
 ## 8. Đăng nhập và phân quyền (W1-1)
 
@@ -1083,6 +1100,10 @@ Mã lỗi (body `{"error", "code"}`):
   `tools/bank-import`).
 - pdf đọc bằng PDFBox, không OCR. Công thức trong PDF thường bị méo khi trích.
 - Văn bản chuẩn hóa Unicode NFC, bỏ ký tự điều khiển và ký tự ẩn (bidi, độ rộng bằng không).
+- **docx được làm sạch markdown ngay khi trích (W2-3 bước 5)**: `extracted_text` lưu trong DB là văn bản thường, không còn `**`,
+  `_`, dấu `\` thoát ký tự, `#` của tiêu đề, `>` của trích dẫn, dòng kẻ bảng; liên kết chỉ còn chữ hiển thị; danh sách `- `.
+  Công thức `$...$` và `$$...$$` giữ nguyên từng ký tự. Offset `[from, to)` của đoạn trích tính trên đúng văn bản này.
+  (Tài liệu docx tải lên trước thay đổi này, nếu có, vẫn còn markdown; không chuyển đổi vì chưa có dữ liệu thật.)
 
 ### 9.4. Hạn chế đã biết
 
@@ -1094,6 +1115,9 @@ Mã lỗi (body `{"error", "code"}`):
 - **Bộ nhớ của pandoc:** mỗi lần đọc docx bị giới hạn heap `MATERIAL_PANDOC_HEAP_MB` (768 MB) và 30 giây. `mem_limit` của
   `app` là 1 GB và heap JVM chiếm 55%, nên trần này là giới hạn trên, chưa đo với tài liệu lớn: nếu container bị `OOMKilled`
   khi tải docx lớn, hạ `MATERIAL_PANDOC_HEAP_MB` hoặc tăng `mem_limit`.
+- **qc-trace và câu riêng tư:** `qc.dedup.comparedTo.questionId` có thể trỏ tới câu riêng tư của giáo viên khác (chỉ lộ id và độ
+  tương đồng); xem mục 7.7. Chưa sửa.
+- Tài liệu chỉ ảnh hưởng tới câu được SINH; chưa có bước kiểm tra câu có bám tài liệu hay không (QC grounding, bước sau).
 - Cấu hình giới hạn: `app.materials.*` (biến `MATERIAL_MAX_FILE_BYTES`, `MATERIAL_MAX_CHARS`, `MATERIAL_MAX_PAGES`,
   `MATERIAL_MAX_PER_OWNER`, `MATERIAL_MAX_UPLOADS_PER_HOUR`, `MATERIAL_MAX_CONCURRENT`, `MATERIAL_EXTRACT_TIMEOUT`,
   `MATERIAL_PANDOC_HEAP_MB`). Caddy cho phép body tới 12 MB; Tomcat đọc bỏ tối đa 25 MB phần thừa để trả được 413.

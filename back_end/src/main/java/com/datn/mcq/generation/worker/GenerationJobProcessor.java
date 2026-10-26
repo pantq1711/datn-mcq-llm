@@ -171,7 +171,8 @@ public class GenerationJobProcessor {
         boolean matrix = MatrixPromptDraftV0.isMatrixVersion(run.getPromptVersion()) && run.getHyperparams() != null;
         String prompt = matrix
                 ? MatrixPromptDraftV0.buildGenerationPrompt(MatrixCellSpec.fromJson(run.getHyperparams()),
-                        previousQuestionLookup.recentForMatrix(tpl.getId(), questionType), job.getPromptNote())
+                        previousQuestionLookup.recentForMatrix(tpl.getId(), questionType), job.getPromptNote(),
+                        job.getMaterialContext())
                 : questionType == QuestionType.TF
                 ? TfPromptDraftV0.buildGenerationPrompt(
                         subject.getName(),
