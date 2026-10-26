@@ -20,7 +20,6 @@ export default function ExamListPage() {
     const [page, setPage] = useState<number>(1);
     const [pageSize, setPageSize] = useState<number>(10);
     const [total, setTotal] = useState<number>(0);
-    const [selectedKind, setSelectedKind] = useState<string>(""); // Tùy chọn lọc theo loại đề
 
     // 2. Hàm gọi API lấy danh sách đề thi
     const fetchExams = async (currentPage: number, currentPageSize: number) => {
