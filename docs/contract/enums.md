@@ -312,7 +312,9 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     tài liệu); cùng NULL hoặc cùng có; `material_context` tối đa 12000 ký tự. `[from, to)` là khoảng của
     `lesson_material.extracted_text`. NULL với mọi job không có tài liệu và job cũ. Không đưa ra API.
   - `generation_job.job_type = 'grounding_check'` (V20, W2-3): chấm "bám tài liệu" một câu; có `question_id` và `material_context`
-    (bắt buộc), không gắn chỗ (`exam_slot_id` NULL), xếp cùng transaction với lúc job sinh câu xong. Mỗi câu tối đa một job loại
+    (bắt buộc), không gắn chỗ (`exam_slot_id` NULL), xếp cùng transaction với lúc job sinh câu xong, hoặc (bước 8) khi giáo viên
+    sửa câu: bản sửa mới nhận một job riêng chép nguyên `material_context`/`material_refs` của chuỗi bản sửa (job grounding
+    gần nhất, nếu không có thì job sinh câu). Mỗi câu (mỗi phiên bản) tối đa một job loại
     này (chỉ mục duy nhất một phần `uq_gj_grounding_question`). `chk_gj_question_job`: mọi job khác `generate` bắt buộc có
     `question_id` và không gắn chỗ (tổng quát hóa `chk_gj_answer_check`).
   - `question_grounding` (V20): kết quả chấm của một câu (mỗi câu một dòng). `verdict`: `supported`, `not_supported`, `unknown`;

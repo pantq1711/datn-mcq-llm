@@ -5,16 +5,23 @@ import com.datn.mcq.generation.worker.GenerationJobProcessor;
 import com.datn.mcq.generation.worker.StaleJobRecovery;
 import com.datn.mcq.qc.checker.GroundingChecker;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -306,6 +314,221 @@ class GroundingPipelineTest extends ExamFlowTestBase {
         JsonNode v = trace(examId);
         assertEquals("not_supported", v.get("qc").get("grounding").get("state").asText());
         assertTrue(reasons(v).contains("grounding_not_supported"));
+    }
+
+    // ---------- bản giáo viên sửa (bước 8) ----------
+
+    private static void changeStem(ObjectNode body) {
+        body.put("questionText", body.get("questionText").asText() + " (đã sửa)");
+    }
+
+    private ObjectNode editBody(int base, Consumer<ObjectNode> change) {
+        Map<String, Object> q = jdbc.queryForMap("SELECT * FROM generated_question WHERE id = ?", base);
+        ObjectNode n = objectMapper.createObjectNode();
+        n.put("baseQuestionId", base);
+        n.put("questionText", (String) q.get("question_text"));
+        n.put("optionA", (String) q.get("option_a"));
+        n.put("optionB", (String) q.get("option_b"));
+        n.put("optionC", (String) q.get("option_c"));
+        n.put("optionD", (String) q.get("option_d"));
+        n.put("correctOption", (String) q.get("correct_option"));
+        n.put("explanation", (String) q.get("explanation"));
+        change.accept(n);
+        return n;
+    }
+
+    private ResultActions putEdit(int examId, Consumer<ObjectNode> change) throws Exception {
+        int cell = count("SELECT cell_id FROM exam_slot WHERE exam_id = ? LIMIT 1", examId);
+        int slot = slotId(examId, cell, 1);
+        return perform(put("/api/exams/" + examId + "/slots/" + slot + "/question").contentType(MediaType.APPLICATION_JSON)
+                .content(editBody(questionOf(examId), change).toString()));
+    }
+
+    /** Giáo viên sửa câu hiện tại của chỗ; trả id bản mới. */
+    private int edit(int examId, Consumer<ObjectNode> change) throws Exception {
+        return json(putEdit(examId, change).andExpect(status().isOk())).get("questionId").asInt();
+    }
+
+    private JsonNode version(int examId, int index) throws Exception {
+        int cell = count("SELECT cell_id FROM exam_slot WHERE exam_id = ? LIMIT 1", examId);
+        int slot = slotId(examId, cell, 1);
+        return json(perform(get("/api/exams/" + examId + "/slots/" + slot + "/qc-trace")).andExpect(status().isOk()))
+                .get("lineages").get(0).get("versions").get(index);
+    }
+
+    @Test
+    void suaCauCoTaiLieuXepJobGroundingMoiChoBanSuaVoiCungAnhChupTaiLieu() throws Exception {
+        int examId = lesson(true);
+        settle(examId);
+        Map<String, Object> first = groundingJobs().get(0);
+        assertEquals(1, GROUNDING.calls);
+
+        int edited = edit(examId, GroundingPipelineTest::changeStem);
+
+        List<Map<String, Object>> jobs = groundingJobs();
+        assertEquals(2, jobs.size(), "bản sửa nội dung cần chấm lại: judge thấy chính nội dung đã sửa");
+        Map<String, Object> g = jobs.get(1);
+        assertEquals(edited, g.get("question_id"));
+        assertEquals("pending", g.get("status"));
+        assertEquals(null, g.get("exam_slot_id"));
+        assertEquals(first.get("run_id"), g.get("run_id"));
+        assertEquals(first.get("template_id"), g.get("template_id"));
+        assertEquals(first.get("material_context"), g.get("material_context"),
+                "chấm theo đúng đoạn tài liệu model sinh câu đã thấy, không chọn lại");
+        assertEquals(1, count("SELECT count(*) FROM generation_job a, generation_job b WHERE a.id = ? AND b.id = ?"
+                + " AND a.material_refs = b.material_refs", g.get("id"), first.get("id")));
+        assertEquals(1, GROUNDING.calls, "request sửa câu không gọi LLM; việc đó thuộc worker");
+        assertEquals(edited, questionOf(examId));
+        assertTrue(reasons(item(examId)).contains("grounding_pending"), reasons(item(examId)).toString());
+    }
+
+    @Test
+    void banSuaDuocChamKhiWorkerChayKetQuaBanGocGiuNguyenVaVetQcCoCaHaiPhienBan() throws Exception {
+        int examId = lesson(true);
+        settle(examId);
+        int original = questionOf(examId);
+        int edited = edit(examId, GroundingPipelineTest::changeStem);
+        processAll();
+
+        assertEquals(2, GROUNDING.calls);
+        Map<String, Object> row = groundingRow(edited);
+        assertEquals("supported", row.get("verdict"));
+        assertEquals(Boolean.TRUE, row.get("generated_with_material"));
+        assertEquals(groundingJobs().get(1).get("id"), row.get("source_job_id"));
+        assertEquals(1, count("SELECT count(*) FROM question_grounding WHERE question_id = ?", original),
+                "kết quả của bản gốc không bị ghi đè");
+        assertTrue(GROUNDING.prompts.get(1).contains("(đã sửa)"), "judge thấy nội dung bản sửa");
+
+        JsonNode first = version(examId, 0).get("qc").get("grounding");
+        JsonNode second = version(examId, 1).get("qc").get("grounding");
+        assertEquals("supported", first.get("state").asText());
+        assertEquals("supported", second.get("state").asText());
+        assertEquals(first.get("materialRefs"), second.get("materialRefs"));
+        assertFalse(reasons(item(examId)).stream().anyMatch(r -> r.startsWith("grounding_")), reasons(item(examId)).toString());
+    }
+
+    @Test
+    void chiSuaLoiGiaiCungChamLaiViJudgeThayLoiGiai() throws Exception {
+        int examId = lesson(true);
+        settle(examId);
+        edit(examId, n -> n.put("explanation", n.get("explanation").asText() + " Giải thích thêm."));
+        assertEquals(2, groundingJobs().size());
+        processAll();
+        assertEquals(2, GROUNDING.calls);
+        assertTrue(GROUNDING.prompts.get(1).contains("Giải thích thêm."));
+    }
+
+    @Test
+    void suaCauKhongCoTaiLieuKhongXepJobGrounding() throws Exception {
+        int examId = lesson(false);
+        settle(examId);
+        edit(examId, GroundingPipelineTest::changeStem);
+        processAll();
+        assertEquals(0, groundingJobs().size());
+        assertEquals(0, GROUNDING.calls);
+    }
+
+    @Test
+    void suaKhongDoiGiHoacSaiHinhDangKhongXepJobGrounding() throws Exception {
+        int examId = lesson(true);
+        settle(examId);
+        int question = questionOf(examId);
+        assertEquals(question, edit(examId, n -> { }), "không đổi gì: không tạo bản mới");
+        putEdit(examId, n -> n.put("correctOption", "E")).andExpect(status().isBadRequest());
+        assertEquals(1, groundingJobs().size());
+        assertEquals(question, questionOf(examId));
+    }
+
+    @Test
+    void suaHaiLanMoiBanMangAnhChupGocBanTruocBiThayThiJobCuaNoBiBoQua() throws Exception {
+        int examId = lesson(true);
+        settle(examId);
+        Map<String, Object> first = groundingJobs().get(0);
+        int second = edit(examId, GroundingPipelineTest::changeStem);
+        int third = edit(examId, n -> n.put("questionText", n.get("questionText").asText() + " (lần 2)"));
+
+        List<Map<String, Object>> jobs = groundingJobs();
+        assertEquals(3, jobs.size());
+        assertEquals(third, jobs.get(2).get("question_id"));
+        assertEquals(first.get("material_context"), jobs.get(2).get("material_context"),
+                "bản sửa lần 2 lấy ảnh chụp từ bản trước, cũng là ảnh chụp gốc");
+        processAll();
+
+        assertEquals("skipped: superseded", jdbc.queryForObject("SELECT last_error FROM generation_job WHERE id = ?",
+                String.class, jobs.get(1).get("id")), "bản trung gian bị thay trước khi chấm: không gọi LLM");
+        assertEquals(2, GROUNDING.calls, "chỉ bản gốc và bản cuối được chấm");
+        assertEquals(0, count("SELECT count(*) FROM question_grounding WHERE question_id = ?", second));
+        assertEquals(1, count("SELECT count(*) FROM question_grounding WHERE question_id = ?", third));
+    }
+
+    @Test
+    void khongCoJobGroundingTruocDoThiLayAnhChupTuJobSinhCauCuaChuoiBanSua() throws Exception {
+        int examId = lesson(true);
+        settle(examId);
+        jdbc.update("DELETE FROM question_grounding");
+        jdbc.update("DELETE FROM generation_job WHERE job_type = 'grounding_check'");
+        Map<String, Object> origin = jdbc.queryForMap("SELECT * FROM generation_job WHERE job_type = 'generate'");
+
+        edit(examId, GroundingPipelineTest::changeStem);
+
+        List<Map<String, Object>> jobs = groundingJobs();
+        assertEquals(1, jobs.size());
+        assertEquals(origin.get("material_context"), jobs.get(0).get("material_context"));
+    }
+
+    // ---------- thống kê (docs/thong-ke/05-grounding.sql) ----------
+
+    private List<Map<String, Object>> stats() throws IOException {
+        return jdbc.queryForList(Files.readString(Path.of("..", "docs", "thong-ke", "05-grounding.sql"),
+                StandardCharsets.UTF_8));
+    }
+
+    private static Map<String, Object> statRow(List<Map<String, Object>> rows, boolean withMaterial, String state) {
+        return rows.stream().filter(r -> "mcq".equals(r.get("question_type"))
+                        && Boolean.valueOf(withMaterial).equals(r.get("co_tai_lieu")) && state.equals(r.get("trang_thai")))
+                .findFirst().orElseThrow(() -> new AssertionError("Không có dòng " + withMaterial + "/" + state + " trong "
+                        + rows));
+    }
+
+    private static int num(Map<String, Object> row, String column) {
+        return ((Number) row.get(column)).intValue();
+    }
+
+    @Test
+    void thongKe05DemTheoKetQuaChamChiTinhCauLlmGocVaTachCoKhongTaiLieu() throws Exception {
+        // A: bám tài liệu (kèm một bản sửa: không tính vì không phải đầu ra LLM).
+        int a = lesson(true);
+        settle(a);
+        edit(a, GroundingPipelineTest::changeStem);
+        processAll();
+        // B: judge không trích dẫn. C: judge trích dẫn bịa nên SUPPORTED bị hạ.
+        GROUNDING.verdict = "UNKNOWN";
+        GROUNDING.quote = GroundingFake.Quote.NONE;
+        settle(lesson(true));
+        GROUNDING.verdict = "SUPPORTED";
+        GROUNDING.quote = GroundingFake.Quote.FAKE;
+        settle(lesson(true));
+        // D: thiếu khóa judge nên job grounding lỗi ngay.
+        GROUNDING.quote = GroundingFake.Quote.REAL;
+        GROUNDING.configured = false;
+        settle(lesson(true));
+        // E: không tài liệu. F: có tài liệu nhưng job grounding còn chờ.
+        GROUNDING.configured = true;
+        settle(lesson(false));
+        processOnlyGenerate(lesson(true));
+
+        List<Map<String, Object>> rows = stats();
+        Map<String, Object> supported = statRow(rows, true, "supported");
+        assertEquals(1, num(supported, "so_cau_llm"), rows.toString());
+        assertEquals(1, num(supported, "trich_dan_kiem_chung_duoc"));
+        assertEquals(20.0, ((Number) supported.get("ti_le_phan_tram")).doubleValue(), 0.05, "1 trên 5 câu có tài liệu");
+        Map<String, Object> unknown = statRow(rows, true, "unknown");
+        assertEquals(2, num(unknown, "so_cau_llm"));
+        assertEquals(1, num(unknown, "ha_vi_thieu_trich_dan"), "chỉ câu C bị hạ vì trích dẫn không có thật");
+        assertEquals(1, num(statRow(rows, true, "loi"), "so_cau_llm"));
+        assertEquals(1, num(statRow(rows, true, "dang_cho"), "so_cau_llm"));
+        assertEquals(1, num(statRow(rows, false, "khong_cham"), "so_cau_llm"));
+        assertEquals(6, rows.stream().mapToInt(r -> num(r, "so_cau_llm")).sum(), "6 câu LLM gốc, bản sửa không tính");
     }
 
     // ---------- hàng đợi ----------

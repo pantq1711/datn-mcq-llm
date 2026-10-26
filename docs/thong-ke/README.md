@@ -2,7 +2,8 @@
 
 Chỉ là **truy vấn đọc** (PostgreSQL) cho chương thử nghiệm trong báo cáo; chưa có trang thống kê. Mỗi file `.sql` là một
 câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên database của hệ thống đã triển khai. Test
-`StatisticsSqlTest` chạy cả bốn file trên `datn_mcq_test` với dữ liệu mẫu để bảo đảm cú pháp và số đếm đúng.
+`StatisticsSqlTest` chạy bốn file đầu trên `datn_mcq_test` với dữ liệu mẫu để bảo đảm cú pháp và số đếm đúng; file 05 (W2-3) được
+`GroundingPipelineTest` kiểm số đếm, và `StatisticsSqlTest` kiểm cả năm file chỉ là một câu lệnh đọc.
 
 | File | Trả lời câu hỏi |
 |---|---|
@@ -10,6 +11,7 @@ câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên databa
 | [`02-buoc-qc-bat-loi.sql`](02-buoc-qc-bat-loi.sql) | Bước QC nào bắt lỗi nhiều nhất (format, trùng, Solver lệch, Solver lỗi / chưa chạy), theo dạng câu |
 | [`03-truong-giao-vien-hay-sua.sql`](03-truong-giao-vien-hay-sua.sql) | Giáo viên hay sửa trường nào (đề, phương án, đáp án, lời giải...), theo dạng câu |
 | [`04-solver-lech-giao-vien-xu-ly.sql`](04-solver-lech-giao-vien-xu-ly.sql) | Với câu Solver báo lệch, giáo viên Giữ nguyên, sửa hay Đổi |
+| [`05-grounding.sql`](05-grounding.sql) | Câu sinh có tài liệu bài học: tỉ lệ SUPPORTED / NOT_SUPPORTED / UNKNOWN, chưa chấm, lỗi; trích dẫn kiểm chứng được; câu bị hạ vì trích dẫn không có thật (theo dạng câu, có/không tài liệu) |
 
 ## Bộ lọc chung (đã cài trong từng file)
 
@@ -38,3 +40,5 @@ Các giới hạn khác:
   có thể do chính Solver sai. Không dùng làm độ chính xác của Solver; phần đó thuộc thử nghiệm "Solver bắt lỗi".
 - Số liệu theo **chỗ** và theo **câu LLM**: một chỗ bị Đổi nhiều lần sinh nhiều câu LLM, mỗi câu tính một kết cục.
 - Tài khoản và đề thử của nhóm (kể cả bước chạy thử trước khi mời giáo viên) phải được loại bằng `dev_users`.
+- File 05: kết quả "bám tài liệu" là cảnh báo của một LLM judge cùng họ với bộ sinh câu, chưa đối chiếu với nhãn của người; nhóm
+  "không tài liệu" chưa có đường chấm riêng nên chỉ hiện dòng `khong_cham`. Không dùng file này làm độ đúng của câu.

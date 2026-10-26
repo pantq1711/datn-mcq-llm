@@ -947,8 +947,14 @@ ngoài transaction DB, thử lại có giới hạn như mọi job, thiếu API 
   `state`: `supported`, `not_supported`, `unknown` (đã có kết quả), `pending` (job đang chờ hoặc chạy), `error` (job lỗi, không có
   kết quả; `error` là lý do) hoặc `not_run` (job đã bỏ qua, ví dụ câu đã bị bản giáo viên sửa thay). `materialRefs` là các đoạn tài
   liệu (khoảng `[from, to)` của văn bản đã trích) judge đã thấy.
-- Chưa làm (bước sau của task): chấm lại bản giáo viên sửa; đường chấm nhóm "không tài liệu" cho thí nghiệm (cột
-  `generated_with_material` đã có sẵn).
+- **Bản giáo viên sửa (`PUT /api/exams/{examId}/slots/{slotId}/question`):** khi bản sửa thật sự đổi nội dung và còn dùng được
+  (qua QC, hoặc đang chờ Solver), hệ thống xếp thêm MỘT job `grounding_check` cho bản mới, vì judge thấy cả đề, phương án, đáp
+  án và lời giải (đổi lời giải cũng chấm lại). Job dùng lại NGUYÊN các đoạn tài liệu của chuỗi bản sửa (không chọn lại), nên
+  `materialRefs` của các bản giống nhau. Request không gọi LLM; worker chấm sau. Bản trước mà job còn chờ thì bị bỏ qua
+  (`state = not_run`, đã có bản sửa thay), kết quả đã có của bản trước giữ nguyên. Câu không dùng tài liệu, sửa không đổi gì
+  hoặc bị 400 thì không xếp job.
+- Chưa làm: đường chấm nhóm "không tài liệu" cho thí nghiệm (cột `generated_with_material` đã có sẵn). Thống kê:
+  `docs/thong-ke/05-grounding.sql`.
 - Giới hạn: judge là LLM cùng họ với model sinh câu nên có thể thiên vị; kết quả chưa được đối chiếu với nhãn của người. Câu chỉ cần
   kiến thức phổ thông sẽ ra `UNKNOWN` (không phải lỗi). Mỗi câu có tài liệu tốn thêm 1 lượt gọi LLM.
 
