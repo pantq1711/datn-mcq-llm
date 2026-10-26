@@ -24,7 +24,31 @@ class MarkdownCleanerTest {
         assertEquals("Spike: công thức MathType", clean("**Spike: công thức MathType**"));
         assertEquals("một từ nghiêng và từ khác", clean("một từ _nghiêng_ và từ *khác*"));
         assertEquals("gạch ngang bỏ", clean("gạch ngang ~~bỏ~~"));
-        assertEquals("H2O và x2", clean("H~2~O và x^2^"));
+    }
+
+    @Test
+    void chiSoTrenVaDuoiGiuKyHieuBoCapBao() {
+        assertEquals("a^2 + b^2 = c^2", clean("a^2^ + b^2^ = c^2^"));
+        assertEquals("x_1 + x_2", clean("x~1~ + x~2~"));
+        assertEquals("H_2O và x^2", clean("H~2~O và x^2^"));
+        assertEquals("10^-3 m^2", clean("10^-3^ m^2^"));
+    }
+
+    @Test
+    void gachNgangVanBoDauKhongNhamVoiChiSoDuoi() {
+        assertEquals("gạch ngang rồi H_2O", clean("~~gạch ngang~~ rồi H~2~O"));
+    }
+
+    @Test
+    void dauCaretVaTildeLeKhongCoCapGiuNhuChuThuong() {
+        assertEquals("x ~ y, a^b, H~2O", clean("x \\~ y, a\\^b, H~2O"));
+        assertEquals("còn lại ~ và ^ lẻ", clean("còn lại ~ và ^ lẻ"));
+    }
+
+    @Test
+    void chiSoTrenDuoiTrongCongThucKhongDoi() {
+        String in = "Cho $a^2^ + x~1~ \\le b^{2}$ và H~2~O, $$y^2^ = z~i~$$";
+        assertEquals("Cho $a^2^ + x~1~ \\le b^{2}$ và H_2O, $$y^2^ = z~i~$$", clean(in));
     }
 
     @Test
@@ -99,5 +123,17 @@ class MarkdownCleanerTest {
         assertTrue(t.contains("giá 5 $ và a_b."), t);
         assertFalse(t.contains("**") || t.contains("#") || t.contains("\\"), "không còn ký hiệu markdown: " + t);
         assertTrue(t.contains("- Mục một") && t.contains("- Mục hai"), t);
+    }
+
+    @Test
+    void docxThatGiuNghiaChiSoTrenDuoiDinhDangCuaWord() {
+        String pandoc = PandocTestSupport.find().orElse(null);
+        assumeTrue(pandoc != null, "máy không có pandoc: bỏ qua");
+        byte[] docx = new PandocRunner(pandoc).markdownToDocx("Nước là H~2~O, diện tích a^2^ + b^2^ = c^2^, và công thức "
+                + "$y^2$ ~~sai~~ đúng.\n");
+        MaterialProperties props = new MaterialProperties();
+        String t = new DocxTextExtractor(props, pandoc, new ZipSafetyScanner(props), new DocxFormulaCounter())
+                .extract(docx).text();
+        assertTrue(t.contains("Nước là H_2O, diện tích a^2 + b^2 = c^2, và công thức $y^{2}$ sai đúng."), t);
     }
 }

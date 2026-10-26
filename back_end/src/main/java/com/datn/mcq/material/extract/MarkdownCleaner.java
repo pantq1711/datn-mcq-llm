@@ -8,7 +8,8 @@ import java.util.regex.Pattern;
 /**
  * Làm sạch markdown của pandoc thành văn bản thường, ở khâu trích (W2-3 bước 5): bỏ dấu in đậm, in nghiêng, gạch, chỉ số
  * trên/dưới; bỏ dấu {@code \} thoát ký tự (trả lại đúng ký tự); bỏ {@code #} của tiêu đề, {@code >} của trích dẫn, các
- * dòng kẻ bảng/đường ngang; liên kết chỉ giữ chữ hiển thị; danh sách gọn. Nhờ vậy {@code extracted_text} lưu trong DB đã
+ * dòng kẻ bảng/đường ngang; liên kết chỉ giữ chữ hiển thị; danh sách gọn. Chỉ số trên/dưới của Word (pandoc: {@code x^2^},
+ * {@code H~2~O}) giữ nghĩa bằng ký hiệu {@code x^2}, {@code H_2O} (bỏ dấu đóng của cặp); {@code ~~gạch~~} chỉ bỏ dấu. Nhờ vậy {@code extracted_text} lưu trong DB đã
  * sạch và các offset (from, to) của đoạn trích khớp đúng văn bản đã lưu.
  *
  * <p>Công thức {@code $...$} và {@code $$...$$} được GIỮ NGUYÊN từng ký tự (kể cả {@code *}, {@code _}, {@code \}
@@ -141,6 +142,25 @@ final class MarkdownCleaner {
 
     // ---------- trong dòng ----------
 
+    /**
+     * Vị trí dấu đóng của chỉ số trên/dưới bắt đầu ở {@code open} (pandoc: {@code ^2^}, {@code ~2~}): nội dung không rỗng,
+     * không có khoảng trắng, dấu đóng không bị thoát. -1 khi không có cặp.
+     */
+    private static int scriptEnd(String s, int open, char marker) {
+        for (int j = open + 1; j < s.length(); j++) {
+            char c = s.charAt(j);
+            if (Character.isWhitespace(c)) {
+                return -1;
+            }
+            if (c == '\\') {
+                j++;
+            } else if (c == marker) {
+                return j > open + 1 ? j : -1;
+            }
+        }
+        return -1;
+    }
+
     private static String inline(String s) {
         StringBuilder out = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {
@@ -157,9 +177,22 @@ final class MarkdownCleaner {
                     continue;
                 }
                 out.append(c);
-            } else if (c == '*' || c == '~' || c == '^') {
-                // dấu in đậm/nghiêng/gạch/chỉ số: chữ thật đã được pandoc thoát nên dấu không thoát là dấu định dạng
+            } else if (c == '*') {
+                // dấu in đậm/nghiêng: chữ thật đã được pandoc thoát nên dấu không thoát là dấu định dạng
                 continue;
+            } else if (c == '~' && i + 1 < s.length() && s.charAt(i + 1) == '~') {
+                // ~~gạch ngang~~: bỏ cả hai dấu của mỗi cặp, giữ chữ
+                i++;
+            } else if (c == '~' || c == '^') {
+                // x^2^ (chỉ số trên) và H~2~O (chỉ số dưới): giữ nghĩa bằng ký hiệu x^2 và H_2O, bỏ dấu đóng của cặp.
+                // Dấu lẻ không có cặp (không khoảng trắng bên trong) là chữ thường.
+                int close = scriptEnd(s, i, c);
+                if (close < 0) {
+                    out.append(c);
+                } else {
+                    out.append(c == '^' ? '^' : '_').append(inline(s.substring(i + 1, close)));
+                    i = close;
+                }
             } else if (c == '_') {
                 boolean inWord = i > 0 && i + 1 < s.length() && Character.isLetterOrDigit(s.charAt(i - 1))
                         && Character.isLetterOrDigit(s.charAt(i + 1));
