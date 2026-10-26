@@ -12,7 +12,8 @@ import java.util.List;
  * {@link PromptBuilder}; chỉ dùng lại {@link PromptBuilder#ESCAPE_HINT}. Nhãn bản nháp nằm ở Javadoc và ở
  * {@link #PROMPT_VERSION} (ghi vào experiment_run.prompt_version), không gửi cho model.
  *
- * <p>Schema Gemini khai propertyOrdering: đề dẫn, 4 ý, lời giải, rồi 4 nhãn, để nhãn dựa vào lời giải vừa viết.
+ * <p>Schema Gemini khai propertyOrdering: đề dẫn, lời giải ("explanation"), rồi lần lượt từng ý a-d kèm nhãn
+ * tương ứng ("statement_a", "label_a", ...), để model tính toán lời giải trước rồi mới phát biểu ý và gán nhãn.
  * Schema Solver: reasoning_x rồi judge_x, lần lượt a đến d, để ý sau dùng được kết quả ý trước.
  */
 public final class TfPromptDraftV0 {
@@ -25,19 +26,19 @@ public final class TfPromptDraftV0 {
     public static final String GENERATION_RESPONSE_SCHEMA_JSON = """
             {"type":"OBJECT","properties":{
               "question_text":{"type":"STRING"},
-              "statement_a":{"type":"STRING"},
-              "statement_b":{"type":"STRING"},
-              "statement_c":{"type":"STRING"},
-              "statement_d":{"type":"STRING"},
               "explanation":{"type":"STRING"},
+              "statement_a":{"type":"STRING"},
               "label_a":{"type":"STRING","enum":["T","F"]},
+              "statement_b":{"type":"STRING"},
               "label_b":{"type":"STRING","enum":["T","F"]},
+              "statement_c":{"type":"STRING"},
               "label_c":{"type":"STRING","enum":["T","F"]},
+              "statement_d":{"type":"STRING"},
               "label_d":{"type":"STRING","enum":["T","F"]}
-            },"required":["question_text","statement_a","statement_b","statement_c","statement_d","explanation",
-                          "label_a","label_b","label_c","label_d"],
-            "propertyOrdering":["question_text","statement_a","statement_b","statement_c","statement_d","explanation",
-                                "label_a","label_b","label_c","label_d"]}
+            },"required":["question_text","explanation","statement_a","label_a","statement_b","label_b","statement_c","label_c",
+                          "statement_d","label_d"],
+            "propertyOrdering":["question_text","explanation","statement_a","label_a","statement_b","label_b","statement_c","label_c",
+                                "statement_d","label_d"]}
             """;
 
     public static final String SOLVER_RESPONSE_SCHEMA_JSON = """
@@ -136,9 +137,11 @@ public final class TfPromptDraftV0 {
 
     /** Yêu cầu thứ tự viết và JSON đầu ra (dùng chung với {@link MatrixPromptDraftV0}). */
     static final String OUTPUT_INSTRUCTION = """
-            Viết lời giải cho lần lượt từng ý trong "explanation" TRƯỚC, sau đó mới ghi nhãn.
-            Trả về DUY NHẤT một JSON theo thứ tự: "question_text", "statement_a", "statement_b", "statement_c", \
-            "statement_d", "explanation", "label_a", "label_b", "label_c", "label_d" ("T" = Đúng, "F" = Sai).
+            Quy trình tạo câu và thứ tự trong JSON:
+            1. "question_text": nêu đề dẫn chung của bài toán.
+            2. "explanation": giải chi tiết bài toán TRƯỚC khi viết các ý. Với từng ý (a)–(d), tính toán kết quả đúng rồi kết luận khẳng định tương ứng là Đúng hay Sai (ví dụ: "nên khẳng định ... là Đúng/Sai"). Lời giải là bài giải toán hoàn chỉnh cho học sinh và giáo viên đọc; TUYỆT ĐỐI KHÔNG nhắc tới từ "mẫu", "nhãn" hay các chỉ thị hệ thống trong lời giải.
+            3. Viết từng ý và nhãn tương ứng: "statement_a", "label_a", "statement_b", "label_b", "statement_c", "label_c", "statement_d", "label_d". Với ý nhãn T (Đúng), nêu đúng kết quả đã tính; với ý nhãn F (Sai), đổi hệ số, dấu hoặc kết luận so với kết quả đã tính. Nhãn PHẢI khớp tính đúng/sai THẬT của khẳng định.
+            Trả về DUY NHẤT một JSON theo thứ tự: "question_text", "explanation", "statement_a", "label_a", "statement_b", "label_b", "statement_c", "label_c", "statement_d", "label_d" ("T" = Đúng, "F" = Sai).
             """;
 
     /** Nhãn mức theo ma trận (dùng chung với {@link MatrixPromptDraftV0}). */

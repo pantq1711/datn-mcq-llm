@@ -25,8 +25,8 @@ public final class TfLabelPattern {
     public static final List<String> ALL = allPatterns();
 
     private static final List<String> KEYS = List.of("a", "b", "c", "d");
-    private static final String LINE_PREFIX = "Mẫu nhãn mục tiêu (";
-    /** Nhận cả tiền tố cũ "bắt buộc": job đã xếp hàng và dữ liệu trước khi đổi chữ vẫn đọc được mẫu. */
+    private static final String LINE_PREFIX = "Mẫu nhãn bắt buộc (";
+    /** Nhận cả tiền tố cũ "mục tiêu": job đã xếp hàng và dữ liệu trước khi đổi chữ vẫn đọc được mẫu. */
     private static final Pattern IN_NOTE = Pattern.compile(
             "Mẫu nhãn (?:mục tiêu|bắt buộc) \\(([TF]),([TF]),([TF]),([TF])\\)");
 
@@ -55,8 +55,9 @@ public final class TfLabelPattern {
     }
 
     /**
-     * Dòng ghi chú đưa vào prompt, ví dụ "Mẫu nhãn mục tiêu (T,F,F,T): cố gắng viết ý a Đúng, ý b Sai, ...". Mẫu chỉ là mục
-     * tiêu: nhãn phải khớp đúng/sai thật, muốn ý Sai thì viết khẳng định sai, được lệch mẫu khi không viết được ý hợp lý.
+     * Dòng ghi chú đưa vào prompt, ví dụ "Mẫu nhãn bắt buộc (T,F,F,T): cố gắng viết ý a Đúng, ý b Sai, ...".
+     * Mẫu là bắt buộc: trong explanation tính kết quả đúng cho từng ý rồi đối chiếu với mẫu để viết khẳng định;
+     * nhãn phải khớp đúng/sai thật, được lệch mẫu khi không viết được ý hợp lý (chỉ cảnh báo).
      */
     public static String promptLine(String pattern) {
         StringBuilder sb = new StringBuilder(LINE_PREFIX).append(String.join(",", pattern.split(""))).append("): ")
@@ -65,11 +66,11 @@ public final class TfLabelPattern {
             sb.append(i > 0 ? ", " : "").append("ý ").append(KEYS.get(i)).append(' ')
                     .append(pattern.charAt(i) == 'T' ? "Đúng" : "Sai");
         }
-        return sb.append(". Nhãn phải khớp tính đúng/sai THẬT của khẳng định: muốn một ý Sai thì viết khẳng định sai (đổi hệ số, "
-                        + "dấu hoặc kết luận so với kết quả đúng), muốn một ý Đúng thì chỉ nêu giá trị đã tính đúng. "
-                        + "Nếu không viết được một ý theo đúng nhãn mục tiêu một cách hợp lý, hãy ưu tiên tính đúng và gán "
-                        + "nhãn thật cho ý đó (được lệch mẫu). Không gán nhãn trái với lời giải; lời giải không được nhắc tới "
-                        + "mẫu nhãn hay việc gán nhãn theo yêu cầu.")
+        return sb.append(". Trong explanation tính kết quả đúng cho từng ý rồi đối chiếu với mẫu: ý cần Đúng thì giữ nguyên kết quả đúng, "
+                        + "ý cần Sai thì đổi hệ số, dấu hoặc kết luận so với kết quả đã tính. Nhãn PHẢI khớp tính đúng/sai THẬT của khẳng định. "
+                        + "Nếu không viết được một ý theo đúng nhãn bắt buộc một cách hợp lý, hãy ưu tiên tính đúng và gán "
+                        + "nhãn thật cho ý đó (được lệch mẫu). Không gán nhãn trái với lời giải; lời giải chỉ giải toán và kết luận, "
+                        + "TUYỆT ĐỐI KHÔNG nhắc tới mẫu nhãn hay việc gán nhãn.")
                 .toString();
     }
 
@@ -85,9 +86,9 @@ public final class TfLabelPattern {
         return m.find() ? m.group(1) + m.group(2) + m.group(3) + m.group(4) : null;
     }
 
-    private static final String DEVIATION_PREFIX = "label: khác mẫu mục tiêu ";
-    /** Tiền tố trước 26/10, còn trong dữ liệu cũ. */
-    private static final String OLD_DEVIATION_PREFIX = "label: khác mẫu bắt buộc ";
+    private static final String DEVIATION_PREFIX = "label: khác mẫu bắt buộc ";
+    /** Tiền tố khi mẫu là mục tiêu (26/10), còn trong dữ liệu cũ. */
+    private static final String OLD_DEVIATION_PREFIX = "label: khác mẫu mục tiêu ";
 
     /**
      * Cảnh báo là "nhãn khác mẫu mục tiêu" (kể cả dòng cũ ghi "bắt buộc"). Lệch mẫu vì tính đúng là hợp lệ nên cảnh báo này chỉ

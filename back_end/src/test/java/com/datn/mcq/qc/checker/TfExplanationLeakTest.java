@@ -93,6 +93,17 @@ class TfExplanationLeakTest {
         assertTrue(TfExplanationLeak.errors(null).isEmpty());
     }
 
+    /** W2-5: Lời giải mẫu theo dạng mới (tính toán trước từng ý rồi kết luận khẳng định là Đúng/Sai) không bị chặn. */
+    @Test
+    void loiGiaiMauDangMoiKhongBiChan() {
+        String newStyleExplanation = "a) Ta có $(2x - 3)^2 = 4x^2 - 12x + 9$. Hệ số của $x$ là $-12$, do đó khẳng định ý a là Đúng.\\n"
+                + "b) Khi $x = 1$, ta có $P = 4(1)^2 - 12(1) + 9 = 1 \\\\neq 0$, nên khẳng định ý b là Sai.\\n"
+                + "c) Biểu thức $P = (2x - 3)^2 \\\\ge 0$ với mọi $x$, do đó khẳng định giá trị nhỏ nhất của $P$ bằng $0$ là Đúng.\\n"
+                + "d) Giá trị nhỏ nhất đạt được khi $2x - 3 = 0 \\\\Leftrightarrow x = \\\\frac{3}{2} \\\\neq 3$, nên khẳng định đạt tại $x = 3$ là Sai.";
+        assertEquals(kinds(), TfExplanationLeak.detect(newStyleExplanation));
+        assertTrue(TfExplanationLeak.errors(newStyleExplanation).isEmpty());
+    }
+
     // ---------- thông báo lỗi ----------
 
     @Test

@@ -358,7 +358,7 @@ class ExamBuildTest {
                 + " AND bank_item_id IS NOT NULL", Integer.class, examId));
         List<Map<String, Object>> runs = jdbc.queryForList("SELECT * FROM experiment_run WHERE prompt_version LIKE"
                 + " 'matrix-%' ORDER BY id");
-        assertEquals(List.of("matrix-mcq-v1-draft", "matrix-tf-v3-draft", "matrix-sa-v1-draft"),
+        assertEquals(List.of("matrix-mcq-v1-draft", "matrix-tf-v4-draft", "matrix-sa-v1-draft"),
                 runs.stream().map(r -> r.get("prompt_version")).toList());
         for (Map<String, Object> run : runs) {
             assertEquals("production", run.get("purpose"));
@@ -847,9 +847,9 @@ class ExamBuildTest {
         progress(examId);
         assertEquals(4, generator.prompts.size());
         for (String prompt : generator.prompts) {
-            assertTrue(prompt.contains("Mẫu nhãn mục tiêu (") && prompt.contains("cố gắng viết ý a "), prompt);
-            assertTrue(prompt.contains("Nhãn phải khớp tính đúng/sai THẬT của khẳng định"), prompt);
-            assertFalse(prompt.contains("Mẫu nhãn bắt buộc"), prompt);
+            assertTrue(prompt.contains("Mẫu nhãn bắt buộc (") && prompt.contains("cố gắng viết ý a "), prompt);
+            assertTrue(prompt.contains("Nhãn PHẢI khớp tính đúng/sai THẬT của khẳng định"), prompt);
+            assertFalse(prompt.contains("Mẫu nhãn mục tiêu"), prompt);
             assertFalse(prompt.contains("Không bắt buộc số ý Đúng hay số ý Sai"), prompt);
             assertTrue(prompt.contains("ý d (Vận dụng) phải cần suy luận thêm"), prompt);
         }
@@ -883,7 +883,7 @@ class ExamBuildTest {
         assertEquals("qc_passed", jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
                 String.class, tf.get("questionId").asInt()));
 
-        String warning = "label: khác mẫu mục tiêu " + comma(required) + " (nhận " + comma(other) + ")";
+        String warning = "label: khác mẫu bắt buộc " + comma(required) + " (nhận " + comma(other) + ")";
         assertEquals("[\"" + warning + "\"]", jdbc.queryForObject("SELECT warnings::text FROM quality_check_result"
                 + " WHERE question_id = ? AND check_type = 'format'", String.class, tf.get("questionId").asInt()),
                 "cảnh báo vẫn được lưu");

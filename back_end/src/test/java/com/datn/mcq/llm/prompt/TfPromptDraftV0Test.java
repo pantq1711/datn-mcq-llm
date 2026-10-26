@@ -12,13 +12,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Prompt nháp TF v0: schema Gemini có propertyOrdering (đề dẫn, 4 ý, lời giải, 4 nhãn); schema Solver theo
+ * Prompt nháp TF: schema Gemini có propertyOrdering (đề dẫn, lời giải, statement_a, label_a, ...); schema Solver theo
  * reasoning_x rồi judge_x từ a đến d; prompt nêu mức mục tiêu từng ý; Solver không thấy nhãn người soạn.
  */
 class TfPromptDraftV0Test {
 
-    private static final List<String> GENERATION_ORDER = List.of("question_text", "statement_a", "statement_b",
-            "statement_c", "statement_d", "explanation", "label_a", "label_b", "label_c", "label_d");
+    private static final List<String> GENERATION_ORDER = List.of("question_text", "explanation", "statement_a",
+            "label_a", "statement_b", "label_b", "statement_c", "label_c", "statement_d", "label_d");
     private static final List<String> SOLVER_ORDER = List.of("reasoning_a", "judge_a", "reasoning_b", "judge_b",
             "reasoning_c", "judge_c", "reasoning_d", "judge_d");
 

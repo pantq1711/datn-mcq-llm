@@ -37,10 +37,11 @@ public final class MatrixPromptDraftV0 {
      * prompt_version của run, ví dụ "matrix-mcq-v1-draft". v1 (ngày 23/10): ghi chú câu thứ k/n và lý do lần sinh trước
      * bị loại, quy tắc phương án nhiễu (mcq), quy tắc ý bám đề dẫn và đóng "$" (tf). tf v2 (ngày 23/10, đợt 2): mẫu nhãn
      * bắt buộc ({@link TfLabelPattern}) và quy tắc ý d Vận dụng. tf v3 (ngày 26/10, sau đo 20 chỗ tf): mẫu nhãn là mục tiêu,
-     * nhãn phải theo đúng/sai thật, được lệch mẫu, lời giải không nhắc tới mẫu. Run cũ là v0 (tf: v0, v1, v2).
+     * nhãn phải theo đúng/sai thật, được lệch mẫu, lời giải không nhắc tới mẫu. tf v4 (ngày 27/10, W2-5): giải trước (explanation),
+     * rồi từng ý và nhãn; mẫu là bắt buộc. Run cũ là v0 (tf: v0, v1, v2, v3).
      */
     public static String promptVersion(QuestionType type) {
-        return VERSION_PREFIX + type.getDbValue() + (type == QuestionType.TF ? "-v3-draft" : "-v1-draft");
+        return VERSION_PREFIX + type.getDbValue() + (type == QuestionType.TF ? "-v4-draft" : "-v1-draft");
     }
 
     public static boolean isMatrixVersion(String promptVersion) {

@@ -81,7 +81,7 @@ class MatrixPromptDraftV0Test {
     @Test
     void phienBanVaThongSoOLuuDuoc() {
         assertEquals("matrix-mcq-v1-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
-        assertEquals("matrix-tf-v3-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-tf-v4-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion("sa-v1-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion(null));
