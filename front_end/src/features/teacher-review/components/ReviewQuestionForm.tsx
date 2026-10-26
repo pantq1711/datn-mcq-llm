@@ -1,11 +1,4 @@
-import {
-    Card,
-    Descriptions,
-    Radio,
-    Space,
-    Tag,
-    Typography,
-} from "antd";
+import { Card, Descriptions, Radio, Space, Tag, Typography, } from "antd";
 import './ReviewQuestionForm.css';
 
 import CorrectAnswerSelector from "./CorrectAnswerSelector";
@@ -43,10 +36,10 @@ interface ReviewQuestionFormProps {
     onOtherReasonChange: (value: string) => void;
 }
 
-const difficultyOptions = [
-    { value: "EASY", label: "Dễ" },
-    { value: "MEDIUM", label: "Trung bình" },
-    { value: "HARD", label: "Khó" },
+const difficultyOptions: { label: string; value: Difficulty }[] = [
+    { label: "Dễ", value: "easy" },
+    { label: "Trung bình", value: "medium" },
+    { label: "Khó", value: "hard" },
 ];
 
 export default function ReviewQuestionForm({
@@ -152,11 +145,11 @@ export default function ReviewQuestionForm({
                     onChange={onFormatStatusChange}
                     options={[
                         {
-                            value: "PASS",
+                            value: "qc_passed",
                             label: "Đạt chuẩn",
                         },
                         {
-                            value: "FAIL",
+                            value: "format_failed",
                             label: "Không đạt chuẩn",
                         },
                     ]}
@@ -190,7 +183,7 @@ export default function ReviewQuestionForm({
             />
 
             {/* 5. Edit */}
-            {decision === "EDIT" && !forceReject && (
+            {decision === "approved_with_edit" && !forceReject && (
                 <QuestionEditor
                     value={question}
                     onChange={onQuestionChange}
@@ -198,7 +191,7 @@ export default function ReviewQuestionForm({
             )}
 
             {/* 6. Rejection */}
-            {(decision === "REJECT" || forceReject) && (
+            {(decision === "rejected" || forceReject) && (
                 <RejectionReasonSelector
                     selectedReasons={selectedReasons}
                     otherReason={otherReason}

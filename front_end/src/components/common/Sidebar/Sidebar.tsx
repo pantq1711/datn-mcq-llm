@@ -1,69 +1,62 @@
 import { Menu } from "antd";
-import {
-    ExperimentOutlined,
-    FileTextOutlined,
-    FormOutlined,
-    HomeOutlined,
-    ReadOutlined,
-    SafetyCertificateOutlined,
-} from "@ant-design/icons";
+import { FileTextOutlined, HomeOutlined, ReadOutlined, TableOutlined, TeamOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
+import { useAuth } from "../../../context/AuthContext";
 import "./Sidebar.css";
 
 type MenuItem = Required<MenuProps>["items"][number];
 
-const menuItems: MenuItem[] = [
-    {
-        key: "/teacher/dashboard",
-        icon: <HomeOutlined />,
-        label: "Tổng quan",
-    },
-    {
-        key: "/teacher/generate",
-        icon: <FormOutlined />,
-        label: "Sinh câu hỏi",
-    },
-    {
-        key: "/teacher/review",
-        icon: <SafetyCertificateOutlined />,
-        label: "Duyệt câu hỏi",
-    },
-    {
-        key: "/teacher/question-bank",
-        icon: <ReadOutlined />,
-        label: "Ngân hàng câu hỏi",
-    },
-    {
-        key: "/teacher/exams",
-        icon: <FileTextOutlined />,
-        label: "Đề thi",
-    },
-    {
-        key: "/teacher/experiments",
-        icon: <ExperimentOutlined />,
-        label: "Thực nghiệm",
-    },
-];
-
 export default function Sidebar() {
     const navigate = useNavigate();
     const location = useLocation();
+    const { user } = useAuth();
+
+    const isAdmin = user?.role === "admin" || user?.role === "AD";
+
+    const menuItems: MenuItem[] = [
+        {
+            key: "/",
+            icon: <HomeOutlined />,
+            label: "Tổng quan",
+        },
+        {
+            key: "/question-bank",
+            icon: <ReadOutlined />,
+            label: "Ngân hàng câu hỏi",
+        },
+        {
+            key: "/exam-matrices",
+            icon: <TableOutlined />,
+            label: "Quản lý ma trận",
+        },
+        {
+            key: "/exams",
+            icon: <FileTextOutlined />,
+            label: "Đề thi",
+        },
+        ...(isAdmin
+            ? [
+                {
+                    key: "/admin/users",
+                    icon: <TeamOutlined />,
+                    label: "Quản trị tài khoản",
+                },
+            ]
+            : []),
+    ];
 
     const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
         navigate(key);
     };
 
-    const selectedKey =
-        menuItems
-            .filter((item) => item && "key" in item)
-            .map((item) => ("key" in item ? item.key : undefined))
-            .find(
-                (key) =>
-                    typeof key === "string" &&
-                    (location.pathname === key ||
-                        location.pathname.startsWith(`${key}/`)),
-            ) ?? "/teacher/dashboard";
+    const selectedKey = menuItems
+        .filter((item): item is NonNullable<MenuItem> => item !== null && typeof item === "object" && "key" in item)
+        .map((item) => item.key)
+        .find((key) => {
+            if (typeof key !== "string") return false;
+            return location.pathname === key || location.pathname.startsWith(`${key}/`);
+        }) ?? "/";
 
     return (
         <aside className="app-sidebar">

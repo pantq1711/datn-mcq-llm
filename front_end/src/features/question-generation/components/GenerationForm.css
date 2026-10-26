@@ -1,0 +1,40 @@
+.generation-form {
+    width: 100%;
+}
+
+.generation-form-header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    margin-bottom: 16px;
+}
+
+.generation-form-info {
+    margin-bottom: 20px;
+}
+
+.generation-form .ant-form-item {
+    margin-bottom: 20px;
+}
+
+.generation-form-number-input {
+    width: 100%;
+}
+
+.generation-form-actions {
+    display: flex;
+    justify-content: flex-end;
+
+    padding-top: 4px;
+}
+
+@media (max-width: 576px) {
+    .generation-form-actions {
+        width: 100%;
+    }
+
+    .generation-form-actions .ant-btn {
+        width: 100%;
+    }
+}
