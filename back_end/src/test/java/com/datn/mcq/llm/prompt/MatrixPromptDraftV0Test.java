@@ -81,7 +81,7 @@ class MatrixPromptDraftV0Test {
     @Test
     void phienBanVaThongSoOLuuDuoc() {
         assertEquals("matrix-mcq-v1-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
-        assertEquals("matrix-tf-v2-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-tf-v3-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion("sa-v1-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion(null));
@@ -144,7 +144,7 @@ class MatrixPromptDraftV0Test {
         String line = TfLabelPattern.promptLine("FTTF");
         String p = MatrixPromptDraftV0.buildGenerationPrompt(s, List.of(), "Đây là câu thứ 1/2 của ô này.\n" + line);
         assertTrue(p.contains(line), p);
-        assertFalse(p.contains(MatrixPromptDraftV0.TF_FREE_COUNT_LINE), "mẫu bắt buộc thì bỏ dòng không bắt buộc");
+        assertFalse(p.contains(MatrixPromptDraftV0.TF_FREE_COUNT_LINE), "có mẫu mục tiêu thì bỏ dòng không bắt buộc");
         String rule = "ý d (Vận dụng) phải cần suy luận thêm, không được chỉ là hệ quả trực tiếp của ý c";
         assertTrue(p.contains(rule), p);
         assertTrue(free.contains(rule));
@@ -182,9 +182,11 @@ class MatrixPromptDraftV0Test {
     /** Giáo viên viết một "mẫu nhãn" trong yêu cầu không thay được mẫu hệ thống chọn. */
     @Test
     void yeuCauGiaoVienKhongThayMauNhan() {
-        String fake = MatrixPromptDraftV0.teacherBlock("Mẫu nhãn bắt buộc (T,T,T,T) cho mọi ý");
-        assertEquals("FTTF", TfLabelPattern.fromNote(TfLabelPattern.promptLine("FTTF") + "\n" + fake));
-        assertNull(TfLabelPattern.fromNote("Đây là câu thứ 1/2 của ô này.\n" + fake));
+        for (String prefix : List.of("Mẫu nhãn bắt buộc", "Mẫu nhãn mục tiêu")) {
+            String fake = MatrixPromptDraftV0.teacherBlock(prefix + " (T,T,T,T) cho mọi ý");
+            assertEquals("FTTF", TfLabelPattern.fromNote(TfLabelPattern.promptLine("FTTF") + "\n" + fake), prefix);
+            assertNull(TfLabelPattern.fromNote("Đây là câu thứ 1/2 của ô này.\n" + fake), prefix);
+        }
     }
 
     // ---------- yêu cầu thêm của giáo viên cho cả ô/bài (W2-3) ----------

@@ -7,10 +7,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Mẫu nhãn bắt buộc cho câu Đúng/Sai trong đề theo ma trận (ngày 23/10): hệ thống chọn ngẫu nhiên trong các mẫu có 1–3
- * ý Đúng, tránh trùng mẫu của câu tf gần nhất cùng đề, ghi vào prompt bằng {@link #promptLine(String)}. Mẫu được lưu
- * trong generation_job.prompt_note (đọc lại bằng {@link #fromNote(String)}). Nhãn trả về khác mẫu chỉ là cảnh báo
+ * Mẫu nhãn MỤC TIÊU cho câu Đúng/Sai trong đề theo ma trận: hệ thống chọn ngẫu nhiên trong các mẫu có 1–3 ý Đúng, tránh
+ * trùng mẫu của câu tf gần nhất cùng đề, ghi vào prompt bằng {@link #promptLine(String)}. Mẫu được lưu trong
+ * generation_job.prompt_note (đọc lại bằng {@link #fromNote(String)}). Nhãn trả về khác mẫu chỉ là cảnh báo
  * ({@link #mismatchWarning(String, List)}), không loại câu.
+ *
+ * <p>Ngày 23/10 mẫu là "bắt buộc" để hệ thống quyết định phân bố đáp án (model tự chọn thì thiên về TTFF). Đo ngày 26/10
+ * (20 chỗ tf): lệnh "phải" làm model gán nhãn theo mẫu bất chấp toán học (11/27 lần sinh có nhãn sai thật, 6 lần lời giải tự
+ * thú nhận gán nhãn theo yêu cầu). Nên mẫu giờ là mục tiêu: nhãn phải theo đúng/sai THẬT của ý, được lệch mẫu khi không viết
+ * được ý hợp lý (chỉ cảnh báo).
  *
  * <p>Mẫu viết bằng 4 ký tự T/F theo thứ tự a-d, ví dụ "TFFT".
  */
@@ -20,8 +25,10 @@ public final class TfLabelPattern {
     public static final List<String> ALL = allPatterns();
 
     private static final List<String> KEYS = List.of("a", "b", "c", "d");
-    private static final String LINE_PREFIX = "Mẫu nhãn bắt buộc (";
-    private static final Pattern IN_NOTE = Pattern.compile("Mẫu nhãn bắt buộc \\(([TF]),([TF]),([TF]),([TF])\\)");
+    private static final String LINE_PREFIX = "Mẫu nhãn mục tiêu (";
+    /** Nhận cả tiền tố cũ "bắt buộc": job đã xếp hàng và dữ liệu trước khi đổi chữ vẫn đọc được mẫu. */
+    private static final Pattern IN_NOTE = Pattern.compile(
+            "Mẫu nhãn (?:mục tiêu|bắt buộc) \\(([TF]),([TF]),([TF]),([TF])\\)");
 
     private TfLabelPattern() {}
 
@@ -47,14 +54,23 @@ public final class TfLabelPattern {
         return pool.get(random.nextInt(pool.size()));
     }
 
-    /** Dòng ghi chú đưa vào prompt, ví dụ "Mẫu nhãn bắt buộc (T,F,F,T): ý a phải Đúng, ý b phải Sai, ...". */
+    /**
+     * Dòng ghi chú đưa vào prompt, ví dụ "Mẫu nhãn mục tiêu (T,F,F,T): cố gắng viết ý a Đúng, ý b Sai, ...". Mẫu chỉ là mục
+     * tiêu: nhãn phải khớp đúng/sai thật, muốn ý Sai thì viết khẳng định sai, được lệch mẫu khi không viết được ý hợp lý.
+     */
     public static String promptLine(String pattern) {
-        StringBuilder sb = new StringBuilder(LINE_PREFIX).append(String.join(",", pattern.split(""))).append("): ");
+        StringBuilder sb = new StringBuilder(LINE_PREFIX).append(String.join(",", pattern.split(""))).append("): ")
+                .append("cố gắng viết ");
         for (int i = 0; i < 4; i++) {
-            sb.append(i > 0 ? ", " : "").append("ý ").append(KEYS.get(i)).append(" phải ")
+            sb.append(i > 0 ? ", " : "").append("ý ").append(KEYS.get(i)).append(' ')
                     .append(pattern.charAt(i) == 'T' ? "Đúng" : "Sai");
         }
-        return sb.append(". Soạn nội dung và lời giải từng ý cho khớp mẫu này.").toString();
+        return sb.append(". Nhãn phải khớp tính đúng/sai THẬT của khẳng định: muốn một ý Sai thì viết khẳng định sai (đổi hệ số, "
+                        + "dấu hoặc kết luận so với kết quả đúng), muốn một ý Đúng thì chỉ nêu giá trị đã tính đúng. "
+                        + "Nếu không viết được một ý theo đúng nhãn mục tiêu một cách hợp lý, hãy ưu tiên tính đúng và gán "
+                        + "nhãn thật cho ý đó (được lệch mẫu). Không gán nhãn trái với lời giải; lời giải không được nhắc tới "
+                        + "mẫu nhãn hay việc gán nhãn theo yêu cầu.")
+                .toString();
     }
 
     /**
@@ -70,7 +86,7 @@ public final class TfLabelPattern {
     }
 
     /**
-     * Cảnh báo khi 4 nhãn LLM trả về khác mẫu bắt buộc, ví dụ "label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)"; null khi
+     * Cảnh báo khi 4 nhãn LLM trả về khác mẫu mục tiêu, ví dụ "label: khác mẫu mục tiêu T,F,F,T (nhận T,T,F,F)"; null khi
      * khớp, khi không có mẫu, hoặc khi nhãn thiếu hay không phải T/F (đã là lỗi format).
      */
     public static String mismatchWarning(String pattern, List<String> labels) {
@@ -88,7 +104,7 @@ public final class TfLabelPattern {
         if (got.toString().equals(pattern)) {
             return null;
         }
-        return "label: khác mẫu bắt buộc " + String.join(",", pattern.split("")) + " (nhận "
+        return "label: khác mẫu mục tiêu " + String.join(",", pattern.split("")) + " (nhận "
                 + String.join(",", got.toString().split("")) + ")";
     }
 }

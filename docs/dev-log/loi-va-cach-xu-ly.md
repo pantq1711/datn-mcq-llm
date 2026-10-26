@@ -60,21 +60,22 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-44 | Khóa ghi hàng ma trận không chờ tạo đề đang dở (bổ sung 25/10, W1-4) | Hàng đợi/đồng thời | Trung bình | Đã sửa |
 | L-45 | Trích dẫn đúng chữ của judge "bám tài liệu" bị coi là không tìm thấy vì bỏ cặp `$` (bổ sung 26/10, W2-3) | QC | Trung bình | Đã sửa |
 | L-46 | Script đo trên Git Bash: `curl` mã 26 và thông báo lỗi gộp (bổ sung 26/10, W2-3) | Môi trường | Thấp | Đã sửa |
+| L-47 | Câu Đúng/Sai bị gán nhãn theo mẫu bắt buộc bất chấp toán học, lời giải tự thú nhận (bổ sung 26/10) | LLM & parse | Cao | Đang sửa |
 
-**Thống kê theo nhóm** (46 mục):
+**Thống kê theo nhóm** (47 mục):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
 | Môi trường | 11 | 11 | 0 | 0 |
 | Dữ liệu/DB | 5 | 5 | 0 | 0 |
 | Quy trình git | 2 | 2 | 0 | 0 |
-| LLM & parse | 11 | 10 | 0 | 1 |
+| LLM & parse | 12 | 10 | 1 | 1 |
 | QC | 9 | 8 | 0 | 1 |
 | Hàng đợi/đồng thời | 7 | 6 | 0 | 1 |
 | Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **46** | **43** | **0** | **3** |
+| **Tổng** | **47** | **43** | **1** | **3** |
 
-Theo mức độ: Cao 9, Trung bình 23, Thấp 14.
+Theo mức độ: Cao 10, Trung bình 23, Thấp 14.
 
 ---
 
@@ -488,6 +489,35 @@ Theo mức độ: Cao 9, Trung bình 23, Thấp 14.
 - Bài học: chưa rút ra.
 - Trạng thái: Chưa sửa. Kế hoạch (nguồn: ghi chép của nhóm): thêm quy tắc phát hiện đáp án lộ trong đề, và kiểm đáp án
   bằng tính toán ký hiệu.
+
+### L-47 Câu Đúng/Sai bị gán nhãn theo mẫu bắt buộc bất chấp toán học, lời giải tự thú nhận (bổ sung 26/10)
+- Nhóm: LLM & parse
+- Triệu chứng: đo baseline 26/10 (2 đề × 10 câu tf, có tài liệu, prompt `matrix-tf-v2-draft`; 27 lần sinh cho 20 chỗ):
+  - 11 trên 27 lần sinh (41%) có ít nhất một nhãn sai thật so với toán học (đọc tay từng lời giải), tổng 15 ý trên 108: 11 ý
+    sai nhưng gán T và 4 ý đúng nhưng gán F.
+  - Solver lệch 10 trên 26 lần có kết quả (38,5%); 10 trong 11 lần sinh sai nhãn thật bị Solver bắt (lần còn lại là câu trùng nên
+    chưa chạy Solver).
+  - 6 lần sinh (22%) có lời giải tự thú nhận, ví dụ "đúng nhưng theo mẫu yêu cầu gán nhãn F", "theo mẫu nhãn yêu cầu c phải Sai",
+    "Xin lỗi, ta làm lại biểu thức"; regex chỉ bắt được 3 trong số đó. 5 lần sinh khác sai nhãn một cách lặng lẽ (lời giải tính
+    ra ý sai rồi kết luận "Đúng").
+  - 6 trên 20 chỗ phải sinh lại; 4 chỗ kết thúc ở câu lệch Solver (kèm cờ "cần xem kỹ"); 5 trong 7 lần sinh lại cũng sai.
+- Nguyên nhân gốc: prompt v2 ghi "Mẫu nhãn bắt buộc (T,F,F,T): ý c phải Sai…" (lệnh đặt trên nhãn) mà không nói cách đạt mẫu
+  bằng cách viết ý sai, cũng không cấm gán nhãn trái lời giải. JSON ra ý trước lời giải trước nhãn, nên ý "Đúng" có số liệu cụ
+  thể (giá trị biểu thức, giá trị nhỏ nhất) được viết trước khi tính; không viết được ý đúng, model làm theo lệnh gán nhãn.
+  Code chỉ so nhãn với mẫu (đo mức tuân thủ, nên hai câu đã gán đúng mẫu không bị cảnh báo), không so nhãn với lời giải; chỉ
+  Solver bắt được. Sai tập trung ở ý gán T (Solver khác 11/51 = 21,6%, so với 4/53 = 7,5% ở ý gán F) và ở đề có biểu thức ba hạng
+  tử (8/15 lần sinh sai, so với 3/12 ở đề hai hạng tử).
+- Cách phát hiện: đo thật 26/10 bằng `measure_tf.sql` (ngoài repo) và đọc tay từng lần sinh.
+- Cách sửa: (a) prompt `matrix-tf-v3-draft`: mẫu là MỤC TIÊU ("Mẫu nhãn mục tiêu"), nhãn phải theo đúng/sai thật, muốn ý Sai thì
+  đổi hệ số, dấu hoặc kết luận, được lệch mẫu khi không viết được ý hợp lý, cấm gán nhãn trái lời giải và nhắc tới mẫu trong
+  lời giải; `fromNote` nhận cả tiền tố cũ, cảnh báo đổi thành `label: khác mẫu mục tiêu`. (b) chờ làm: kiểm tra định dạng không
+  tốn LLM bắt lời giải tự thú nhận (→ `format_failed`, sinh lại).
+- Chống tái phát: `TfLabelPatternTest` (`dongPromptNoiMauLaMucTieuVaNhanPhaiTheoDungSaiThat`, `docLaiMauTuGhiChuMoiVaCu`),
+  `MatrixPromptDraftV0Test.phienBanVaThongSoOLuuDuoc`, `ExamBuildTest`. Hiệu quả thật chỉ đo được bằng lần đo sau (cùng cỡ mẫu).
+- Bài học: một ràng buộc ép trên đầu ra (nhãn) phải đi kèm cách thỏa nó mà vẫn đúng, và phải có lối thoát khi không thỏa được;
+  kiểm tra "tuân thủ mẫu" không thay được kiểm tra "đúng sự thật". Đo đọc tay phát hiện nhiều hơn regex (3 so với 6).
+- Trạng thái: Đang sửa ((a) đã làm; (b) và đo lại chưa). Chưa xử lý: ý "Đúng" có số liệu cụ thể vẫn được viết trước khi tính
+  (thứ tự JSON); chỉ xem xét nếu số đo sau vẫn tệ.
 
 ## QC
 

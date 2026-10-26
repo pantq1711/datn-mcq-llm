@@ -36,10 +36,11 @@ public final class MatrixPromptDraftV0 {
     /**
      * prompt_version của run, ví dụ "matrix-mcq-v1-draft". v1 (ngày 23/10): ghi chú câu thứ k/n và lý do lần sinh trước
      * bị loại, quy tắc phương án nhiễu (mcq), quy tắc ý bám đề dẫn và đóng "$" (tf). tf v2 (ngày 23/10, đợt 2): mẫu nhãn
-     * bắt buộc ({@link TfLabelPattern}) và quy tắc ý d Vận dụng. Run cũ là v0 (tf: v0, v1).
+     * bắt buộc ({@link TfLabelPattern}) và quy tắc ý d Vận dụng. tf v3 (ngày 26/10, sau đo 20 chỗ tf): mẫu nhãn là mục tiêu,
+     * nhãn phải theo đúng/sai thật, được lệch mẫu, lời giải không nhắc tới mẫu. Run cũ là v0 (tf: v0, v1, v2).
      */
     public static String promptVersion(QuestionType type) {
-        return VERSION_PREFIX + type.getDbValue() + (type == QuestionType.TF ? "-v2-draft" : "-v1-draft");
+        return VERSION_PREFIX + type.getDbValue() + (type == QuestionType.TF ? "-v3-draft" : "-v1-draft");
     }
 
     public static boolean isMatrixVersion(String promptVersion) {
@@ -56,7 +57,7 @@ public final class MatrixPromptDraftV0 {
             + "tương đương với đáp án đúng (ví dụ với phân tích nhân tử, không dùng dạng phân tích chưa triệt để như "
             + "$3(x^2 - 4x)$ khi đáp án là $3x(x - 4)$).";
 
-    /** Dòng của {@link TfPromptDraftV0#STATEMENT_RULES} bị bỏ khi ghi chú của job có mẫu nhãn bắt buộc. */
+    /** Dòng của {@link TfPromptDraftV0#STATEMENT_RULES} bị bỏ khi ghi chú của job có mẫu nhãn mục tiêu. */
     static final String TF_FREE_COUNT_LINE = "- Không bắt buộc số ý Đúng hay số ý Sai.";
 
     /** Thêm khi ý d ở mức Vận dụng (ngày 23/10, đợt 2). */
