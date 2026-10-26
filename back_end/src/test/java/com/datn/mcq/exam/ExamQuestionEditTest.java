@@ -385,6 +385,19 @@ class ExamQuestionEditTest {
         assertNull(job.get("exam_slot_id"), "job Solver không gắn chỗ (đối soát không nhầm là job sinh câu)");
     }
 
+    /** Chữ của giáo viên là thẩm quyền: quy tắc loại lời giải tự thú nhận chỉ áp cho đầu ra của LLM. */
+    @Test
+    void suaTfCoCumGiongTuThuNhanVanLuuDuocVaKhongBiChanFormat() throws Exception {
+        int examId = readyExam();
+        int tfSlot = slotId(examId, "tf", 1);
+        ObjectNode tf = tfBody(questionOf(tfSlot));
+        String note = "Ghi chú: theo mẫu nhãn yêu cầu của tổ, ý b là Sai. Xin lỗi vì lần trước nhầm.";
+        tf.put("explanation", note);
+        int version = json(putQuestion(examId, tfSlot, tf).andExpect(status().isOk())).get("questionId").asInt();
+        assertEquals(note, jdbc.queryForObject("SELECT explanation FROM generated_question WHERE id = ?", String.class,
+                version));
+    }
+
     @Test
     void suaTfVaSaHopLe() throws Exception {
         int examId = readyExam();

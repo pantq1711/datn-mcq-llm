@@ -408,7 +408,7 @@ Backend kiểm tra cú pháp bề mặt, không bảo đảm KaTeX render đư�
 
 | Mức | Trường hợp | Hệ quả |
 |---|---|---|
-| Lỗi | Ký tự điều khiển, số dấu `$` lẻ, ngoặc `{}` không cân bằng, lệnh nằm ngoài `$...$`, thiếu đối số `\frac`/`\sqrt`, `\left`/`\right` hoặc `\begin`/`\end` không khớp, ở đề, 4 phương án (`mcq`), 4 ý (`tf`) hoặc đáp số (`sa`) | Câu sinh ra thành `format_failed`; bản sửa của giáo viên bị từ chối (400) |
+| Lỗi | Ký tự điều khiển, số dấu `$` lẻ, ngoặc `{}` không cân bằng, lệnh nằm ngoài `$...$`, thiếu đối số `\frac`/`\sqrt`, `\left`/`\right` hoặc `\begin`/`\end` không khớp, ở đề, 4 phương án (`mcq`), 4 ý (`tf`) hoặc đáp số (`sa`) | Câu sinh ra thành `format_failed`; bản sửa của giáo viên bị từ chối (400). Riêng câu `tf` do LLM sinh còn bị `format_failed` khi `explanation` tự thú nhận gán nhãn theo mẫu/yêu cầu hoặc tự sửa đề giữa lời giải (lý do `explanation: ...` vào ghi chú lần sinh lại); quy tắc này KHÔNG áp cho chữ giáo viên viết hay sửa |
 | Cảnh báo | Lệnh nằm ngoài danh sách cho phép, ví dụ `\widehat`, `\alpha`; môi trường ngoài danh sách (ví dụ `array`) khi cấu trúc cân bằng; mọi lỗi định dạng trong `explanation` | Không ảnh hưởng trạng thái, không trả về API. Lời giải luôn được giữ nguyên khi vào ngân hàng, kể cả khi còn lỗi LaTeX (quyết định 23/10) |
 
 Trước khi kiểm tra, backend đổi chuỗi `\n` theo nghĩa đen (dấu `\` rồi chữ `n`, do model viết `\\n` trong JSON)

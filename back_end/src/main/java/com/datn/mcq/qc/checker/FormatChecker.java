@@ -151,6 +151,10 @@ public class FormatChecker {
             checkNonBlank("statement_" + TF_KEYS.get(i), statement, errors);
         }
         checkNonBlank("explanation", input.explanation(), errors);
+        if (input.llmOutput()) {
+            // Đo 26/10: lời giải tự thú nhận gán nhãn theo mẫu hoặc tự sửa đề; chỉ áp cho đầu ra LLM, không áp chữ giáo viên.
+            errors.addAll(TfExplanationLeak.errors(input.explanation()));
+        }
         for (int i = 0; i < TF_KEYS.size(); i++) {
             String raw = i < input.statementLabels().size() ? input.statementLabels().get(i) : null;
             String field = "label_" + TF_KEYS.get(i);

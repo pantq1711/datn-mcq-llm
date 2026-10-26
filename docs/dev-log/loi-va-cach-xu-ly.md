@@ -510,14 +510,21 @@ Theo mức độ: Cao 10, Trung bình 23, Thấp 14.
 - Cách phát hiện: đo thật 26/10 bằng `measure_tf.sql` (ngoài repo) và đọc tay từng lần sinh.
 - Cách sửa: (a) prompt `matrix-tf-v3-draft`: mẫu là MỤC TIÊU ("Mẫu nhãn mục tiêu"), nhãn phải theo đúng/sai thật, muốn ý Sai thì
   đổi hệ số, dấu hoặc kết luận, được lệch mẫu khi không viết được ý hợp lý, cấm gán nhãn trái lời giải và nhắc tới mẫu trong
-  lời giải; `fromNote` nhận cả tiền tố cũ, cảnh báo đổi thành `label: khác mẫu mục tiêu`. (b) chờ làm: kiểm tra định dạng không
-  tốn LLM bắt lời giải tự thú nhận (→ `format_failed`, sinh lại).
+  lời giải; `fromNote` nhận cả tiền tố cũ, cảnh báo đổi thành `label: khác mẫu mục tiêu`. (b) kiểm tra định dạng không tốn LLM
+  (`TfExplanationLeak`): lời giải tf của LLM nhắc tới mẫu nhãn, yêu cầu gán nhãn hoặc tự sửa đề ("xin lỗi", "ta làm lại"…) thì
+  câu thành `format_failed` (dừng trước Solver), sinh lại với lý do trong ghi chú; so không phân biệt dấu, các cụm lấy từ 6 ca
+  thật; chỉ áp cho đầu ra LLM (cờ `QuestionQcInput.llmOutput`), không áp cho chữ giáo viên sửa.
 - Chống tái phát: `TfLabelPatternTest` (`dongPromptNoiMauLaMucTieuVaNhanPhaiTheoDungSaiThat`, `docLaiMauTuGhiChuMoiVaCu`),
-  `MatrixPromptDraftV0Test.phienBanVaThongSoOLuuDuoc`, `ExamBuildTest`. Hiệu quả thật chỉ đo được bằng lần đo sau (cùng cỡ mẫu).
+  `MatrixPromptDraftV0Test.phienBanVaThongSoOLuuDuoc`, `ExamBuildTest` (gồm `loiGiaiTfTuThuNhanBiLoaiFormatFailedVaSinhLaiVoiLyDo`),
+  `TfExplanationLeakTest` (6 đoạn thú nhận thật và các câu bình thường như "mẫu số"), `FormatCheckerTfLeakTest`,
+  `ExamQuestionEditTest.suaTfCoCumGiongTuThuNhanVanLuuDuocVaKhongBiChanFormat`. Hiệu quả thật chỉ đo được bằng lần đo sau (cùng
+  cỡ mẫu). Ngưỡng đã chốt: Solver lệch ≤ 15% trên ≥ 26 lần sinh có kết quả (baseline 38,5%), nhãn sai thật (đọc tay) ≤ 15%
+  (baseline 40,7%), 0 lời giải tự thú nhận; 15–25% thì chạy thêm một đề.
 - Bài học: một ràng buộc ép trên đầu ra (nhãn) phải đi kèm cách thỏa nó mà vẫn đúng, và phải có lối thoát khi không thỏa được;
   kiểm tra "tuân thủ mẫu" không thay được kiểm tra "đúng sự thật". Đo đọc tay phát hiện nhiều hơn regex (3 so với 6).
-- Trạng thái: Đang sửa ((a) đã làm; (b) và đo lại chưa). Chưa xử lý: ý "Đúng" có số liệu cụ thể vẫn được viết trước khi tính
-  (thứ tự JSON); chỉ xem xét nếu số đo sau vẫn tệ.
+- Trạng thái: Đang sửa ((a) và (b) đã làm; chưa đo lại). Chưa xử lý: ý "Đúng" có số liệu cụ thể vẫn được viết trước khi tính
+  (thứ tự JSON); nếu (a)+(b) chưa đạt ngưỡng thì thử đổi thứ tự JSON tf thành lời giải trước, phát biểu và nhãn sau, và đo riêng
+  như một nhánh thứ ba. Ca sai nhãn lặng lẽ (lời giải không nhắc mẫu) vẫn chỉ Solver bắt được.
 
 ## QC
 

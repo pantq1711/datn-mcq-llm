@@ -404,7 +404,7 @@ Thứ tự: `question_text`, `statement_a`, `statement_b`, `statement_c`, `state
 |---|---|---|
 | `question_text` | chuỗi | Đề dẫn. Không trống; lỗi LaTeX là lỗi chặn |
 | `statement_a` .. `statement_d` | chuỗi | Không trống; lỗi LaTeX là lỗi chặn; 4 ý phải khác nhau sau chuẩn hóa (trùng thì `format_failed`) |
-| `explanation` | chuỗi | Lời giải cho từng ý. Không trống; lỗi LaTeX chỉ là cảnh báo |
+| `explanation` | chuỗi | Lời giải cho từng ý. Không trống; lỗi LaTeX chỉ là cảnh báo. Với câu do LLM sinh (không áp cho câu giáo viên viết hay sửa): lời giải nhắc tới mẫu nhãn, yêu cầu gán nhãn ("theo mẫu yêu cầu", "gán nhãn"…) hoặc tự sửa đề giữa lời giải ("xin lỗi", "ta làm lại", "ta chỉnh lại"…) là lỗi chặn, câu thành `format_failed` (so không phân biệt dấu và hoa thường; xem `TfExplanationLeak`) |
 | `label_a` .. `label_d` | chuỗi `T` hoặc `F` | Sau khi trim, không phân biệt hoa thường; giá trị khác là lỗi chặn. Không bắt buộc số ý Đúng hay số ý Sai: 4 nhãn giống nhau chỉ cảnh báo `label: 4 ý cùng nhãn T` (hoặc `F`) trong `answerWarnings` |
 
 - Ý không ghi nhãn ở đầu. Nếu ý mở đầu bằng `a)`, `a.`, `(a)` hoặc `a:` (không phân biệt hoa thường, cho phép khoảng trắng) và chữ cái khớp đúng vị trí của ý, backend bỏ tiền tố đó một lần trước khi lưu và ghi cảnh báo, ví dụ `statement_a: đã bỏ tiền tố "a)" ở đầu ý`, vào `answerWarnings`. Chữ cái không khớp vị trí (ví dụ `statement_b` mở đầu bằng `a)`) thì giữ nguyên. Dạng `a.` chỉ bị bỏ khi ký tự ngay sau dấu chấm không phải chữ cái: `a.b = 0` giữ nguyên, `a. Điều kiện` và `d.  $x = 2$` bị bỏ. `raw_llm_output` vẫn giữ bản gốc.

@@ -434,7 +434,7 @@ public class GenerationService {
                 runAnswerCheck,
                 parsed.parseError(),
                 parsed.parseWarnings()
-        );
+        ).withLlmOutput(true);
     }
 
     /** 4 ý của một câu tf theo thứ tự a-d (rỗng với mcq/sa hoặc khi giải mã lỗi). */
