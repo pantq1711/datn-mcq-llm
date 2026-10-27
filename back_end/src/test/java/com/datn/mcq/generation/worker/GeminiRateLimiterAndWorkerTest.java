@@ -1,5 +1,6 @@
 package com.datn.mcq.generation.worker;
 
+import com.datn.mcq.common.exception.ApiExceptionHandler;
 import com.datn.mcq.common.exception.UpstreamServiceException;
 import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
@@ -11,6 +12,7 @@ import com.datn.mcq.exam.service.ExamBuildService;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.DedupScopeResolver;
 import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.llm.client.GeminiDailyUsageLookup;
 import com.datn.mcq.llm.client.GeminiRateLimiter;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.client.QuotaExhaustedException;
@@ -444,12 +446,12 @@ class GeminiRateLimiterAndWorkerTest {
         GenerationJobPoller fastPoller = new GenerationJobPoller(jobProcessor, fastClient, fastQc,
                 dedupScopeResolver, 3, fastLimiter);
 
-        GenerationJobWorkerLifecycle workerLifecycle = new GenerationJobWorkerLifecycle(fastPoller, 2, 5000L, 2000L);
+        GenerationJobWorkerLifecycle workerLifecycle = new GenerationJobWorkerLifecycle(fastPoller, 2, 20000L, 2000L);
         long startWall = System.currentTimeMillis();
         workerLifecycle.start();
         try {
             assertTrue(workerLifecycle.isRunning());
-            long deadline = System.currentTimeMillis() + 3000L;
+            long deadline = System.currentTimeMillis() + 10000L;
             while (System.currentTimeMillis() < deadline) {
                 int done = jdbc.queryForObject(
                         "SELECT count(*) FROM generation_job WHERE status = 'done'", Integer.class);
@@ -462,7 +464,7 @@ class GeminiRateLimiterAndWorkerTest {
             assertEquals(3, jdbc.queryForObject(
                     "SELECT count(*) FROM generation_job WHERE status = 'done'", Integer.class),
                     "worker liên tục phải xử lý hết cả 3 job");
-            assertTrue(elapsed < 3000L, "worker xử lý liên tiếp không chờ idleDelayMs=5000ms: tốn " + elapsed + "ms");
+            assertTrue(elapsed < 10000L, "worker xử lý liên tiếp không chờ idleDelayMs=20000ms: tốn " + elapsed + "ms");
         } finally {
             workerLifecycle.stop();
         }
@@ -474,6 +476,120 @@ class GeminiRateLimiterAndWorkerTest {
                 + " option_c, option_d, correct_option, raw_llm_output, parse_success, status, created_at,"
                 + " edited_from_question_id) VALUES (?, ?, 'Câu hỏi $x$', '$1$', '$2$', '$3$', '$4$', 'B', '{}',"
                 + " TRUE, 'qc_passed', ?, ?)", template, run, Timestamp.valueOf(createdAt), editedFromId);
+    }
+
+    @Test
+    void usageLookupLoiLanDauKhongLamKetDailyUsedVeKhongVaThuNapLaiLanSau() {
+        AtomicInteger lookupCalls = new AtomicInteger();
+        GeminiDailyUsageLookup flakyLookup = since -> {
+            if (lookupCalls.incrementAndGet() == 1) {
+                throw new RuntimeException("DB timeout tạm thời");
+            }
+            return 400;
+        };
+        MutableClock clock = new MutableClock(Instant.parse("2026-10-27T18:00:00Z"), ZoneId.of("Asia/Ho_Chi_Minh"));
+        GeminiRateLimiter limiter = new GeminiRateLimiter(0L, 480, 60_000L, clock, clock::advance, flakyLookup);
+
+        // Lần 1: lookup ném lỗi -> acquire() vẫn thành công (không ném), không bị chết cứng
+        limiter.acquire();
+        assertEquals(1, lookupCalls.get());
+
+        // Lần 2: nạp lại từ DB trả về 400 -> dailyUsed phản ánh 400 từ DB
+        assertEquals(400, limiter.getDailyUsed(), "lần 2 thành công nạp 400 từ DB");
+        assertEquals(2, lookupCalls.get(), "lần 2 phải thử nạp lại từ DB");
+
+        // Lần 3: acquire() tăng lên 401 mà không gọi DB lần nữa vì đã chốt ngày
+        limiter.acquire();
+        assertEquals(2, lookupCalls.get(), "không gọi lookup lại vì đã chốt ngày");
+        assertEquals(401, limiter.getDailyUsed());
+    }
+
+    @Test
+    void retryDelayKhongGiayKhongBiPhatSauMuoiGiay() {
+        java.util.Optional<Duration> zero = LlmClient.parseRetryDelay("{\"error\":{\"code\":429,\"details\":[{\"retryDelay\":\"0s\"}]}}");
+        assertTrue(zero.isPresent(), "retryDelay 0s phải đọc được");
+        assertEquals(Duration.ZERO, zero.get());
+
+        MutableClock clock = new MutableClock(Instant.parse("2026-10-27T18:00:00Z"), ZoneId.of("Asia/Ho_Chi_Minh"));
+        GeminiRateLimiter limiter = new GeminiRateLimiter(4200L, 480, 60_000L, clock, clock::advance, s -> 0);
+        limiter.onRateLimited(Duration.ZERO);
+        limiter.acquire();
+        assertTrue(clock.sleepsMs.isEmpty() || clock.sleepsMs.get(0) <= 4200L,
+                "retryDelay 0s không được phạt 60 giây: " + clock.sleepsMs);
+    }
+
+    @Test
+    void workerGapErrorTrongVongLapKhongChetLuongVaXuLyJobTiepTheo() throws Exception {
+        AtomicInteger callCount = new AtomicInteger();
+        GenerationJobPoller failingPoller = new GenerationJobPoller(jobProcessor, null, null, null, 3, null) {
+            @Override
+            public ProcessedJobSummary processNextJob(boolean runAnswerCheck) {
+                int c = callCount.incrementAndGet();
+                if (c == 1) {
+                    throw new AssertionError("Giả lập AssertionError trong worker");
+                }
+                return new ProcessedJobSummary(true, 123, 456, "done", "qc_passed", null);
+            }
+        };
+        GenerationJobWorkerLifecycle lifecycle = new GenerationJobWorkerLifecycle(failingPoller, 1, 50L, 2000L);
+        lifecycle.start();
+        try {
+            assertTrue(lifecycle.isRunning());
+            long deadline = System.currentTimeMillis() + 3000L;
+            while (System.currentTimeMillis() < deadline) {
+                if (callCount.get() >= 2) {
+                    break;
+                }
+                Thread.sleep(25);
+            }
+            assertTrue(callCount.get() >= 2, "cùng luồng worker phải sống sau AssertionError và xử lý tiếp job sau: callCount=" + callCount.get());
+        } finally {
+            lifecycle.stop();
+        }
+    }
+
+    @Test
+    void jobAnswerCheckVaGroundingChamQuotaExhaustedTraVePendingToiResetAtKhongGhiLoi() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-10-27T18:00:00Z"), ZoneId.of("Asia/Ho_Chi_Minh"));
+        GeminiRateLimiter limiter = new GeminiRateLimiter(0L, 500, 60_000L, clock, clock::advance, s -> 0);
+        LlmClient client = new LlmClient("fake-key", "fake-model", fakeBaseUrl(), limiter) {
+            @Override
+            public com.datn.mcq.llm.dto.LlmCallResult callJsonModeWithSchema(
+                    String prompt, String modelOverride, Double temperatureOverride, String schemaJson) {
+                throw new QuotaExhaustedException(500, LocalDateTime.now().plusHours(5));
+            }
+        };
+        QcOrchestrator qc = new QcOrchestrator(formatChecker,
+                new AnswerSolverChecker(client, promptBuilder, "fake-model"),
+                qualityCheckResultRepository, dedupService, answerCheckRecorder);
+        GenerationJobPoller poller = new GenerationJobPoller(jobProcessor, client, qc, dedupScopeResolver, 3, limiter);
+
+        int qId = insert("INSERT INTO generated_question (template_id, run_id, question_text, option_a, option_b,"
+                + " option_c, option_d, correct_option, raw_llm_output, parse_success, status, created_at,"
+                + " edited_from_question_id) VALUES (?, ?, 'Câu hỏi $x$', '$1$', '$2$', '$3$', '$4$', 'B', '{}',"
+                + " TRUE, 'generated', now(), NULL)", template, run);
+        int acJob = insert("INSERT INTO generation_job (run_id, template_id, question_id, job_type, status, attempt,"
+                + " next_run_at) VALUES (?, ?, ?, 'answer_check', 'pending', 0, now() - interval '1 minute')", run, template, qId);
+
+        GenerationJobPoller.ProcessedJobSummary summary = poller.processNextJob(true);
+        assertTrue(summary.processed());
+        assertEquals("pending", summary.jobStatus(), "job answer_check chạm quota phải trả về pending");
+        Map<String, Object> row = jdbc.queryForMap("SELECT * FROM generation_job WHERE id = ?", acJob);
+        assertEquals("pending", row.get("status"));
+        assertEquals(0, row.get("attempt"), "attempt phải được hoàn lại");
+        assertNull(jdbc.queryForObject("SELECT solver_error FROM generated_question WHERE id = ?", String.class, qId),
+                "không được ghi solver_error khi chỉ chạm quota ngày");
+    }
+
+    @Test
+    void quotaExhaustedDuocXuLyBoiApiExceptionHandlerTra429VaRetryAfter() {
+        ApiExceptionHandler handler = new ApiExceptionHandler();
+        LocalDateTime resetAt = LocalDateTime.now().plusSeconds(120);
+        var resp = handler.handleQuotaExhausted(new QuotaExhaustedException(480, resetAt));
+        assertEquals(429, resp.getStatusCode().value());
+        assertEquals("LLM_DAILY_QUOTA_EXHAUSTED", resp.getBody().get("code"));
+        assertNotNull(resp.getHeaders().getFirst(org.springframework.http.HttpHeaders.RETRY_AFTER));
+        assertTrue(Long.parseLong(resp.getHeaders().getFirst(org.springframework.http.HttpHeaders.RETRY_AFTER)) > 0);
     }
 }
 

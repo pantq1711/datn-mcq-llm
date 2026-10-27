@@ -232,16 +232,16 @@ public class LlmClient {
         try {
             if (s.endsWith("ms")) {
                 long ms = Math.round(Double.parseDouble(s.substring(0, s.length() - 2).trim()));
-                return ms > 0 ? Optional.of(Duration.ofMillis(ms)) : Optional.empty();
+                return ms >= 0 ? Optional.of(Duration.ofMillis(ms)) : Optional.empty();
             }
             if (s.endsWith("s")) {
                 double seconds = Double.parseDouble(s.substring(0, s.length() - 1).trim());
                 long ms = (long) Math.ceil(seconds * 1000.0);
-                return ms > 0 ? Optional.of(Duration.ofMillis(ms)) : Optional.empty();
+                return ms >= 0 ? Optional.of(Duration.ofMillis(ms)) : Optional.empty();
             }
             double seconds = Double.parseDouble(s);
             long ms = (long) Math.ceil(seconds * 1000.0);
-            return ms > 0 ? Optional.of(Duration.ofMillis(ms)) : Optional.empty();
+            return ms >= 0 ? Optional.of(Duration.ofMillis(ms)) : Optional.empty();
         } catch (NumberFormatException e) {
             return Optional.empty();
         }

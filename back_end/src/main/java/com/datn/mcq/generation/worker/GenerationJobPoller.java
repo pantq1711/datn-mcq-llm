@@ -22,6 +22,7 @@ import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.client.QuotaExhaustedException;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.qc.checker.GroundingChecker;
+import com.datn.mcq.qc.dto.DedupScope;
 import com.datn.mcq.qc.dto.GroundingResult;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
@@ -201,6 +202,12 @@ public class GenerationJobPoller {
         SolverVerdict verdict;
         try {
             verdict = qcOrchestrator.callSolver(input.get());
+        } catch (QuotaExhaustedException ex) {
+            LOG.warn("Job {}: chạm hạn mức ngày của Gemini khi chạy answer_check, trả về pending tới {}: {}",
+                    ctx.jobId(), ex.getResetAt(), ex.getMessage());
+            var deferredJob = processor.deferJobOnQuotaExhausted(ctx, ex.getResetAt(), ex.getMessage());
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(),
+                    deferredJob.getStatus().getDbValue(), null, ex.getMessage());
         } catch (RuntimeException ex) {
             String error = "Không hoàn tất answer_check: " + ex.getMessage();
             var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
@@ -250,6 +257,12 @@ public class GenerationJobPoller {
         GroundingResult result;
         try {
             result = qcOrchestrator.callGrounding(input.get().question(), input.get().context());
+        } catch (QuotaExhaustedException ex) {
+            LOG.warn("Job {}: chạm hạn mức ngày của Gemini khi chạy grounding_check, trả về pending tới {}: {}",
+                    ctx.jobId(), ex.getResetAt(), ex.getMessage());
+            var deferredJob = processor.deferJobOnQuotaExhausted(ctx, ex.getResetAt(), ex.getMessage());
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(),
+                    deferredJob.getStatus().getDbValue(), null, ex.getMessage());
         } catch (RuntimeException ex) {
             String error = "Không hoàn tất grounding_check: " + ex.getMessage();
             var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
@@ -326,8 +339,20 @@ public class GenerationJobPoller {
 
         QcPipelineReport qcReport;
         try {
-            qcReport = qcOrchestrator.evaluateAndSave(
-                    qcInput, dedupScopeResolver.resolveForSlot(ctx.runId(), ctx.examSlotId()));
+            DedupScope scope = dedupScopeResolver.resolveForSlot(ctx.runId(), ctx.examSlotId());
+            qcReport = runAnswerCheck
+                    ? qcOrchestrator.evaluateAndSave(
+                            qcInput,
+                            scope,
+                            () -> {
+                                if (!processor.renewClaim(ctx)) {
+                                    processor.discardStaleQuestion(ctx, savedQuestion.getId());
+                                    throw new StaleJobClaimException(ctx.jobId(), ctx.claimSeq());
+                                }
+                            })
+                    : qcOrchestrator.evaluateAndSave(qcInput, scope);
+        } catch (StaleJobClaimException ex) {
+            throw ex;
         } catch (RuntimeException ex) {
             String error = "Lỗi sau lời gọi LLM: " + ex.getMessage();
             LOG.warn("Job {}: {}", ctx.jobId(), error, ex);

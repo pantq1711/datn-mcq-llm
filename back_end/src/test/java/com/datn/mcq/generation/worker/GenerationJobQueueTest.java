@@ -115,7 +115,7 @@ class GenerationJobQueueTest {
 
     private Map<String, Object> row(int id) {
         return jdbc.queryForMap("SELECT status, attempt, last_error, started_at, abs(extract(epoch FROM"
-                + " (next_run_at - now()))) AS due_in FROM generation_job WHERE id = ?", id);
+                + " (next_run_at - updated_at))) AS due_in FROM generation_job WHERE id = ?", id);
     }
 
     // ---------- 1. job kẹt RUNNING ----------

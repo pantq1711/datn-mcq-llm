@@ -308,6 +308,8 @@ public class GenerationJobProcessor implements GeminiDailyUsageLookup {
      * Câu đã lưu của một claim đã bị loại (job bị trả về và nhận lại trong lúc worker cũ chạy QC) bị xóa cùng các dòng con
      * (dòng QC, các ý tf) trong CÙNG transaction. Câu đã được nơi khác dùng (chỗ trong đề, ngân hàng, đánh giá, ...) thì
      * KHÔNG xóa, chỉ log WARN. Chỉ gọi khi {@link #renewClaim} trả false.
+     * (Hạn chế đã biết: nếu giữa lúc kiểm tra tham chiếu và lệnh xóa có transaction khác chèn tham chiếu FK tới câu,
+     * lệnh xóa sẽ lỗi FK, transaction rollback và câu được giữ lại, dữ liệu không hỏng).
      */
     @Transactional
     public void discardStaleQuestion(ClaimedJobContext ctx, Integer questionId) {

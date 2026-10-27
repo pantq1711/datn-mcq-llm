@@ -140,9 +140,14 @@ public class GeminiRateLimiter {
      * {@code defaultCooldownMs} khi {@code retryDelay} null/không dương).
      */
     public synchronized void onRateLimited(Duration retryDelay) {
-        long delayMs = (retryDelay != null && !retryDelay.isNegative() && !retryDelay.isZero())
-                ? retryDelay.toMillis()
-                : defaultCooldownMs;
+        long delayMs;
+        if (retryDelay == null || retryDelay.isNegative()) {
+            delayMs = defaultCooldownMs;
+        } else if (retryDelay.isZero()) {
+            delayMs = minSpacingMs;
+        } else {
+            delayMs = retryDelay.toMillis();
+        }
         if (delayMs <= 0) {
             return;
         }
@@ -186,10 +191,20 @@ public class GeminiRateLimiter {
     private void refreshDayLocked(Instant now) {
         LocalDate pacificToday = now.atZone(PACIFIC_ZONE).toLocalDate();
         if (currentPacificDay == null) {
-            currentPacificDay = pacificToday;
-            quotaExhaustedWarnedForDay = null;
             LocalDateTime startLocal = startOfPacificDayLocal(pacificToday);
-            dailyUsed = usageLookup != null ? Math.max(0, usageLookup.countCallsSince(startLocal)) : 0;
+            if (usageLookup != null) {
+                try {
+                    dailyUsed = Math.max(0, usageLookup.countCallsSince(startLocal));
+                    currentPacificDay = pacificToday;
+                    quotaExhaustedWarnedForDay = null;
+                } catch (RuntimeException ex) {
+                    LOG.warn("Không thể nạp số lượt gọi Gemini từ DB cho ngày {}: {}", pacificToday, ex.getMessage());
+                }
+            } else {
+                dailyUsed = 0;
+                currentPacificDay = pacificToday;
+                quotaExhaustedWarnedForDay = null;
+            }
         } else if (!pacificToday.equals(currentPacificDay)) {
             currentPacificDay = pacificToday;
             quotaExhaustedWarnedForDay = null;

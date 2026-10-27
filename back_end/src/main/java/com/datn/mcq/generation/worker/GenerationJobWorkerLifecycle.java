@@ -70,29 +70,33 @@ public class GenerationJobWorkerLifecycle implements SmartLifecycle {
 
     private void runWorkerLoop(int workerIdx) {
         while (running.get() && !Thread.currentThread().isInterrupted()) {
+            boolean shouldIdle = true;
             try {
                 GenerationJobPoller.ProcessedJobSummary summary = poller.processNextJob(true);
                 if (summary.processed()) {
-                    continue;
+                    shouldIdle = false;
                 }
-            } catch (RuntimeException ex) {
-                if (!running.get() || Thread.currentThread().isInterrupted()) {
+            } catch (Throwable t) {
+                if (t instanceof InterruptedException || Thread.currentThread().isInterrupted()) {
+                    Thread.currentThread().interrupt();
                     break;
                 }
-                LOG.error("Worker {} gặp lỗi không mong đợi trong vòng lặp: {}", workerIdx, ex.getMessage(), ex);
+                LOG.error("Worker {} gặp lỗi không mong đợi trong vòng lặp: {}", workerIdx, t.getMessage(), t);
             }
             if (!running.get() || Thread.currentThread().isInterrupted()) {
                 break;
             }
-            synchronized (idleMonitor) {
-                if (!running.get()) {
-                    break;
-                }
-                try {
-                    idleMonitor.wait(idleDelayMs);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
+            if (shouldIdle) {
+                synchronized (idleMonitor) {
+                    if (!running.get()) {
+                        break;
+                    }
+                    try {
+                        idleMonitor.wait(idleDelayMs);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
                 }
             }
         }

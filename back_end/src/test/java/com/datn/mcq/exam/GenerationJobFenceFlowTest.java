@@ -1,10 +1,12 @@
 package com.datn.mcq.exam;
 
 import com.datn.mcq.config.TestSafetyConfiguration;
+import com.datn.mcq.generation.service.DedupScopeResolver;
 import com.datn.mcq.generation.worker.GenerationJobPoller;
 import com.datn.mcq.generation.worker.StaleJobRecovery;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
+import com.datn.mcq.qc.dto.DedupScope;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -158,6 +160,34 @@ class GenerationJobFenceFlowTest extends ExamFlowTestBase {
         assertEquals("generated", jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
                 String.class, orphan[0]), "job bị loại nên trạng thái QC cuối không được ghi");
         assertEquals(orphan[0], count("SELECT generated_question_id FROM exam_slot WHERE id = ?", slot));
+    }
+
+    @Test
+    void workerCuHetHanTruocSolverInlineThiBoQuaSolverVaXoaCauMoCoi() {
+        SOLVER.calls = 0;
+        DedupScopeResolver staleBeforeSolverResolver = new DedupScopeResolver(null, null) {
+            @Override
+            public DedupScope resolveForSlot(Integer runId, Integer examSlotId) {
+                staleReset();
+                // worker 2 nhận lại job với claim_seq = 2
+                assertTrue(jobProcessor.claimNextPendingJob().isPresent());
+                return dedupScopeResolver.resolveForSlot(runId, examSlotId);
+            }
+        };
+
+        GenerationJobPoller w1 = new GenerationJobPoller(
+                jobProcessor,
+                worker1Llm(() -> {}, false),
+                qcOrchestrator,
+                staleBeforeSolverResolver,
+                3
+        );
+
+        GenerationJobPoller.ProcessedJobSummary summary = w1.processNextJob(true);
+
+        assertEquals("stale", summary.jobStatus(), "worker cũ bị phát hiện stale trước bước Solver");
+        assertEquals(0, SOLVER.calls, "Solver của worker cũ không được gọi");
+        assertEquals(0, count("SELECT count(*) FROM generated_question"), "câu mồ côi bị xóa ngay trước bước Solver");
     }
 }
 
