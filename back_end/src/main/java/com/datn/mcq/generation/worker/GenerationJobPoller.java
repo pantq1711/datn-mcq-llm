@@ -98,6 +98,9 @@ public class GenerationJobPoller {
         boolean trueFalse = ctx.questionType() == QuestionType.TF;
         // Chế độ sửa đầu ra (escape LaTeX, tự đóng $) chỉ cho run production; run experiment giữ giải mã chặt.
         boolean production = ctx.purpose() != Purpose.EXPERIMENT;
+        if (!processor.renewClaim(ctx)) {
+            return staleSummary(ctx.jobId());
+        }
         LlmCallResult llmResult;
         try {
             llmResult = shortAnswer
@@ -115,7 +118,7 @@ public class GenerationJobPoller {
                             ctx.prompt(), ctx.modelName(), ctx.temperature(),
                             McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON);
         } catch (RuntimeException ex) {
-            var failedJob = processor.recordJobFailure(ctx.jobId(), ex.getMessage(), maxAttempts);
+            var failedJob = processor.recordJobFailure(ctx, ex.getMessage(), maxAttempts);
             return new ProcessedJobSummary(
                     true,
                     ctx.jobId(),
@@ -126,16 +129,22 @@ public class GenerationJobPoller {
             );
         }
 
-        // Đợt A (ngày 23/10): lỗi ở phần sau lời gọi LLM (giải mã, lưu câu, QC) đi cùng đường thử lại/failed như lỗi
-        // gọi LLM, không để job kẹt ở running.
+        // Đợt A (ngày 23/10) + W2-4b (A): lỗi khi giải mã/lưu câu (chưa tạo câu) vẫn đi đường thử lại/failed; lỗi sau khi câu
+        // đã lưu trong saveAndCheck kết thúc job done và giữ câu generated để không sinh câu mồ côi.
         try {
             return saveAndCheck(ctx, llmResult, runAnswerCheck, production);
+        } catch (StaleJobClaimException ex) {
+            return staleSummary(ctx.jobId());
         } catch (RuntimeException ex) {
             String error = "Lỗi sau lời gọi LLM: " + ex.getMessage();
             LOG.warn("Job {}: {}", ctx.jobId(), error, ex);
-            var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
+            var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
             return new ProcessedJobSummary(true, ctx.jobId(), null, failedJob.getStatus().getDbValue(), null, error);
         }
+    }
+
+    private static ProcessedJobSummary staleSummary(Integer jobId) {
+        return new ProcessedJobSummary(true, jobId, null, "stale", null, "stale finish");
     }
 
     /**
@@ -148,8 +157,10 @@ public class GenerationJobPoller {
         Optional<QuestionQcInput> input;
         try {
             input = processor.prepareAnswerCheck(ctx);
+        } catch (StaleJobClaimException ex) {
+            return staleSummary(ctx.jobId());
         } catch (RuntimeException ex) {
-            var failedJob = processor.recordJobFailure(ctx.jobId(), "Lỗi trước lời gọi Solver: " + ex.getMessage(),
+            var failedJob = processor.recordJobFailure(ctx, "Lỗi trước lời gọi Solver: " + ex.getMessage(),
                     maxAttempts);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(),
                     null, ex.getMessage());
@@ -158,7 +169,7 @@ public class GenerationJobPoller {
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "done", null, "skipped");
         }
         if (!qcOrchestrator.solverAvailable()) {
-            processor.failJobNow(ctx.jobId(), QcOrchestrator.SOLVER_NOT_CONFIGURED);
+            processor.failJobNow(ctx, QcOrchestrator.SOLVER_NOT_CONFIGURED);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "failed", null,
                     QcOrchestrator.SOLVER_NOT_CONFIGURED);
         }
@@ -167,17 +178,19 @@ public class GenerationJobPoller {
             verdict = qcOrchestrator.callSolver(input.get());
         } catch (RuntimeException ex) {
             String error = "Không hoàn tất answer_check: " + ex.getMessage();
-            var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
+            var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(),
                     null, error);
         }
         try {
             QuestionStatus status = processor.completeAnswerCheck(ctx, verdict);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "done", status.getDbValue(), null);
+        } catch (StaleJobClaimException ex) {
+            return staleSummary(ctx.jobId());
         } catch (RuntimeException ex) {
             String error = "Lỗi sau lời gọi LLM: " + ex.getMessage();
             LOG.warn("Job {}: {}", ctx.jobId(), error, ex);
-            var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
+            var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(),
                     null, error);
         }
@@ -193,8 +206,10 @@ public class GenerationJobPoller {
         Optional<GenerationJobProcessor.GroundingJobInput> input;
         try {
             input = processor.prepareGrounding(ctx);
+        } catch (StaleJobClaimException ex) {
+            return staleSummary(ctx.jobId());
         } catch (RuntimeException ex) {
-            var failedJob = processor.recordJobFailure(ctx.jobId(), "Lỗi trước lời gọi judge: " + ex.getMessage(),
+            var failedJob = processor.recordJobFailure(ctx, "Lỗi trước lời gọi judge: " + ex.getMessage(),
                     maxAttempts);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(), null,
                     ex.getMessage());
@@ -203,7 +218,7 @@ public class GenerationJobPoller {
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "done", null, "skipped");
         }
         if (!qcOrchestrator.groundingAvailable()) {
-            processor.failJobNow(ctx.jobId(), GroundingChecker.NOT_CONFIGURED);
+            processor.failJobNow(ctx, GroundingChecker.NOT_CONFIGURED);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "failed", null,
                     GroundingChecker.NOT_CONFIGURED);
         }
@@ -212,17 +227,19 @@ public class GenerationJobPoller {
             result = qcOrchestrator.callGrounding(input.get().question(), input.get().context());
         } catch (RuntimeException ex) {
             String error = "Không hoàn tất grounding_check: " + ex.getMessage();
-            var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
+            var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(), null,
                     error);
         }
         try {
             processor.completeGrounding(ctx, result, input.get().refsJson());
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), "done", null, null);
+        } catch (StaleJobClaimException ex) {
+            return staleSummary(ctx.jobId());
         } catch (RuntimeException ex) {
             String error = "Lỗi sau lời gọi judge: " + ex.getMessage();
             LOG.warn("Job {}: {}", ctx.jobId(), error, ex);
-            var failedJob = processor.recordJobFailure(ctx.jobId(), error, maxAttempts);
+            var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(), null,
                     error);
         }
@@ -241,6 +258,9 @@ public class GenerationJobPoller {
                                              boolean runAnswerCheck, boolean production) {
         boolean shortAnswer = ctx.questionType() == QuestionType.SA;
         boolean trueFalse = ctx.questionType() == QuestionType.TF;
+        GeneratedQuestion savedQuestion;
+        QuestionQcInput qcInput;
+        String parseError;
         if (trueFalse) {
             ParsedTfDto parsedTf = TfJsonParser.parse(llmResult.rawText(), production);
             // Ngày 23/10: job tf theo ma trận có mẫu nhãn bắt buộc; nhãn khác mẫu chỉ cảnh báo (bật "cần xem kỹ").
@@ -249,44 +269,54 @@ public class GenerationJobPoller {
             if (mismatch != null) {
                 parsedTf = parsedTf.withParseWarning(mismatch);
             }
-            GeneratedQuestion savedTf = processor.saveTrueFalseFromJob(ctx, llmResult, parsedTf);
-            QcPipelineReport tfReport = qcOrchestrator.evaluateAndSave(
-                    GenerationService.trueFalseQcInput(savedTf.getId(), parsedTf, ctx.validateLatex(), runAnswerCheck),
-                    dedupScopeResolver.resolveForSlot(ctx.runId(), ctx.examSlotId()));
-            processor.finishGeneratedJob(ctx.jobId(), savedTf.getId(), tfReport.resultingStatus(), solverError(tfReport));
-            return new ProcessedJobSummary(true, ctx.jobId(), savedTf.getId(), "done",
-                    tfReport.resultingStatus().getDbValue(), parsedTf.parseError());
-        }
-
-        if (shortAnswer) {
+            savedQuestion = processor.saveTrueFalseFromJob(ctx, llmResult, parsedTf);
+            qcInput = GenerationService.trueFalseQcInput(
+                    savedQuestion.getId(), parsedTf, ctx.validateLatex(), runAnswerCheck);
+            parseError = parsedTf.parseError();
+        } else if (shortAnswer) {
             ParsedSaDto parsedSa = SaJsonParser.parse(llmResult.rawText(), production);
-            GeneratedQuestion savedSa = processor.saveShortAnswerFromJob(ctx, llmResult, parsedSa);
-            QcPipelineReport saReport = qcOrchestrator.evaluateAndSave(
-                    GenerationService.shortAnswerQcInput(savedSa.getId(), parsedSa, ctx.validateLatex(), runAnswerCheck),
-                    dedupScopeResolver.resolveForSlot(ctx.runId(), ctx.examSlotId()));
-            processor.finishGeneratedJob(ctx.jobId(), savedSa.getId(), saReport.resultingStatus(), solverError(saReport));
-            return new ProcessedJobSummary(true, ctx.jobId(), savedSa.getId(), "done",
-                    saReport.resultingStatus().getDbValue(), parsedSa.parseError());
+            savedQuestion = processor.saveShortAnswerFromJob(ctx, llmResult, parsedSa);
+            qcInput = GenerationService.shortAnswerQcInput(
+                    savedQuestion.getId(), parsedSa, ctx.validateLatex(), runAnswerCheck);
+            parseError = parsedSa.parseError();
+        } else {
+            ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText(), production);
+            savedQuestion = processor.saveGeneratedQuestionFromJob(ctx, llmResult, parsed);
+            qcInput = new QuestionQcInput(
+                    savedQuestion.getId(),
+                    parsed.parseSuccess(),
+                    parsed.questionText(),
+                    parsed.optionA(),
+                    parsed.optionB(),
+                    parsed.optionC(),
+                    parsed.optionD(),
+                    parsed.correctOption(),
+                    parsed.explanation(),
+                    ctx.validateLatex(),
+                    runAnswerCheck,
+                    parsed.parseError()
+            ).withParseWarnings(parsed.parseWarnings());
+            parseError = parsed.parseError();
         }
 
-        ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText(), production);
-        GeneratedQuestion savedQuestion = processor.saveGeneratedQuestionFromJob(ctx, llmResult, parsed);
+        QcPipelineReport qcReport;
+        try {
+            qcReport = qcOrchestrator.evaluateAndSave(
+                    qcInput, dedupScopeResolver.resolveForSlot(ctx.runId(), ctx.examSlotId()));
+        } catch (RuntimeException ex) {
+            String error = "Lỗi sau lời gọi LLM: " + ex.getMessage();
+            LOG.warn("Job {}: {}", ctx.jobId(), error, ex);
+            if (!processor.finishGeneratedJob(ctx, savedQuestion.getId(), QuestionStatus.GENERATED, error, error)) {
+                return staleSummary(ctx.jobId());
+            }
+            return new ProcessedJobSummary(
+                    true, ctx.jobId(), savedQuestion.getId(), "done", QuestionStatus.GENERATED.getDbValue(), error);
+        }
 
-        QcPipelineReport qcReport = qcOrchestrator.evaluateAndSave(new QuestionQcInput(
-                savedQuestion.getId(),
-                parsed.parseSuccess(),
-                parsed.questionText(),
-                parsed.optionA(),
-                parsed.optionB(),
-                parsed.optionC(),
-                parsed.optionD(),
-                parsed.correctOption(),
-                parsed.explanation(),
-                ctx.validateLatex(),
-                runAnswerCheck,
-                parsed.parseError()
-        ).withParseWarnings(parsed.parseWarnings()), dedupScopeResolver.resolveForSlot(ctx.runId(), ctx.examSlotId()));
-        processor.finishGeneratedJob(ctx.jobId(), savedQuestion.getId(), qcReport.resultingStatus(), solverError(qcReport));
+        if (!processor.finishGeneratedJob(
+                ctx, savedQuestion.getId(), qcReport.resultingStatus(), solverError(qcReport), null)) {
+            return staleSummary(ctx.jobId());
+        }
 
         return new ProcessedJobSummary(
                 true,
@@ -294,8 +324,7 @@ public class GenerationJobPoller {
                 savedQuestion.getId(),
                 "done",
                 qcReport.resultingStatus().getDbValue(),
-                parsed.parseError()
+                parseError
         );
     }
 }
-

@@ -514,6 +514,17 @@ public class QcOrchestrator {
                 questionId, List.of(CheckType.DEDUP, CheckType.ANSWER_CHECK));
     }
 
+    /**
+     * W2-4b (A): xóa MỌI dòng QC của một câu (format, dedup, answer_check; nhãn từng ý của Solver xóa theo dòng
+     * answer_check nhờ ON DELETE CASCADE) khi câu mồ côi của một claim đã bị loại được xóa. Chạy trong transaction của nơi
+     * gọi (cùng transaction với việc xóa câu).
+     */
+    @Transactional
+    public int deleteAllResults(Integer questionId) {
+        return qualityCheckResultRepository.deleteByQuestionIdAndCheckTypes(
+                questionId, List.of(CheckType.values()));
+    }
+
     @Transactional(readOnly = true)
     public List<QualityCheckResult> getResultsForQuestion(Integer questionId) {
         return qualityCheckResultRepository.findByQuestionIdOrderByIdAsc(questionId);
