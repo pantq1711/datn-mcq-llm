@@ -62,11 +62,32 @@ class MatrixPromptDraftV0Test {
     void promptSaHinhHocDanKhongCanHinhVe() {
         String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.SA, "Tứ giác", "Tứ giác, hình thang cân"));
         for (String part : List.of("TRẢ LỜI NGẮN", "Mức độ nhận thức mục tiêu: Hiểu", MatrixPromptDraftV0.NO_FIGURE_RULE,
-                SaPromptDraftV0.ANSWER_RULES.strip(), SaPromptDraftV0.OUTPUT_INSTRUCTION.strip())) {
+                SaPromptDraftV0.OUTPUT_INSTRUCTION.strip())) {
             assertTrue(p.contains(part), "Prompt thiếu: " + part);
         }
         assertTrue(MatrixPromptDraftV0.isGeometry(spec(QuestionType.MCQ, "TỨ GIÁC", null)), "không phân biệt hoa thường");
         assertFalse(MatrixPromptDraftV0.isGeometry(spec(QuestionType.MCQ, "Hằng đẳng thức", "Phân tích đa thức")));
+    }
+
+    /**
+     * Ngày 27/10: đáp án sa theo phiếu trả lời Bộ GD&ĐT 2025, Phần III (số nguyên/thập phân, tối đa 4 ký tự). Prompt ma
+     * trận dùng quy tắc riêng; prompt sinh lẻ của công cụ thí nghiệm ({@link SaPromptDraftV0#ANSWER_RULES}) giữ nguyên.
+     */
+    @Test
+    void promptSaDanDapAnSoNguyenHoacThapPhanToiDa4KyTu() {
+        String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.SA, "Chuyển động", null));
+        for (String part : List.of("tối đa 4 ký tự", "\"2,75\"", "\"-12\"", "\"0,5\"", "dấu phẩy",
+                "Không phân số, hỗn số, căn, đơn vị", "làm tròn đến hàng phần mười",
+                // 27/10: kết quả lớn hơn 4 ký tự thì đề phải đổi đơn vị (tiền, dân số, khối lượng)
+                "số lớn hơn 4 ký tự", "đề bài phải đổi đơn vị", "\"tính theo nghìn đồng\"",
+                "\"đơn vị: triệu người\"", "\"đơn vị: tấn\"",
+                "10000 đồng thì đề hỏi theo nghìn đồng và đáp án \"10\"")) {
+            assertTrue(p.contains(part), "Prompt thiếu: " + part);
+        }
+        assertFalse(p.contains(SaPromptDraftV0.ANSWER_RULES.strip()), "không dùng quy tắc cũ (cho phép phân số, căn)");
+        assertFalse(p.contains("phân số $\\frac{a}{b}$; hoặc"), p);
+        String lone = SaPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, "Giải $2x - 6 = 0$.", Difficulty.EASY);
+        assertTrue(lone.contains(SaPromptDraftV0.ANSWER_RULES.strip()), "prompt sinh lẻ giữ nguyên");
     }
 
     @Test
@@ -80,14 +101,44 @@ class MatrixPromptDraftV0Test {
 
     @Test
     void phienBanVaThongSoOLuuDuoc() {
-        assertEquals("matrix-mcq-v1-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
-        assertEquals("matrix-tf-v3-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-mcq-v2-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
+        assertEquals("matrix-tf-v4-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-sa-v3-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion("sa-v1-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion(null));
         for (QuestionType type : QuestionType.values()) {
             MatrixCellSpec s = spec(type, "Tứ giác \"có ngoặc\"", "Nội dung\ncó xuống dòng");
             assertEquals(s, MatrixCellSpec.fromJson(s.toJson()), type.name());
+        }
+    }
+
+    /** Ngày 27/10: đơn vị đo là chữ thường ngoài $...$ (exam 10 ô 25: 18/18 lượt sinh viết "\text{km/h}" ngoài $). */
+    @Test
+    void quyTacDinhDangDayDonViDoNgoaiDola() {
+        for (QuestionType type : QuestionType.values()) {
+            String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Chuyển động", null));
+            assertTrue(p.contains("\"$40$ km/h\""), type + ": " + p);
+            assertTrue(p.contains("\"$2{,}5$ giờ\""), type + ": " + p);
+            assertTrue(p.contains("Không dùng \\text{...} ngoài cặp $...$"), type + ": " + p);
+            assertTrue(p.contains(PromptBuilder.ESCAPE_HINT.strip()), type + ": ESCAPE_HINT giữ nguyên trong prompt ma trận");
+        }
+    }
+
+    /** Câu dặn đơn vị là hằng riêng của prompt ma trận: ESCAPE_HINT, prompt Solver và prompt sinh lẻ không đổi. */
+    @Test
+    void cauDanDonViChiNamTrongPromptMaTranKhongNamTrongSolver() {
+        String unit = "\"$40$ km/h\"";
+        assertFalse(PromptBuilder.ESCAPE_HINT.contains("km/h"), "ESCAPE_HINT phải giống hệt main");
+        assertFalse(PromptBuilder.ESCAPE_HINT.contains("\\text{...}"));
+        assertFalse(new PromptBuilder().buildSolverPrompt("Tính $1 + 1$.", "$1$", "$2$", "$3$", "$4$").contains(unit));
+        assertFalse(SaPromptDraftV0.buildSolverPrompt("Tính $1 + 1$.").contains(unit));
+        assertFalse(TfPromptDraftV0.buildSolverPrompt("Cho $x = 1$.", List.of("a", "b", "c", "d")).contains(unit));
+        assertFalse(SaPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, "Giải $2x - 6 = 0$.",
+                Difficulty.EASY).contains(unit), "prompt sinh lẻ của công cụ thí nghiệm không đổi");
+        assertEquals("solver-v2-delimited", PromptBuilder.SOLVER_PROMPT_VERSION);
+        for (QuestionType type : QuestionType.values()) {
+            assertTrue(MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Chuyển động", null)).contains(unit), type.name());
         }
     }
 

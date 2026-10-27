@@ -26,9 +26,10 @@ import java.util.List;
  * sqrt   := '\sqrt{' DIGITS '}' | '√{' DIGITS '}' | '√' DIGITS   (1 &lt;= số dưới căn &lt;= 10^12)
  * </pre>
  *
- * <p>STRICT (đáp số LLM sinh, bước format) chặn thêm: chữ số 0 thừa ở đầu (05, \frac{05}{2}) và
- * dấu "-" trước một giá trị bằng 0 (-0, -0,0, -\frac{0}{3}). LENIENT (đáp số Solver, so khớp khi dedup)
- * chỉ cần phân tích được. Phân số mà tử và mẫu viết ra có ước chung (2/4, \frac{6}{8}) vẫn hợp lệ, kèm cảnh báo.
+ * <p>STRICT (đáp án của câu sa: bước format và bản giáo viên sửa) từ 27/10 chỉ nhận số nguyên hoặc thập phân dài tối đa
+ * {@value #SA_ANSWER_MAX_LENGTH} ký tự, xem {@link #strictAnswer}; ngữ pháp trên không áp dụng cho STRICT. LENIENT
+ * (đáp số Solver, so khớp khi dedup) chỉ cần phân tích được theo ngữ pháp trên nên vẫn đọc phân số và căn để so giá trị.
+ * Phân số mà tử và mẫu viết ra có ước chung (2/4, \frac{6}{8}) vẫn hợp lệ, kèm cảnh báo.
  */
 public final class ShortAnswerValue {
 
@@ -42,6 +43,11 @@ public final class ShortAnswerValue {
     public static final String MSG_LEADING_ZERO = "có chữ số 0 thừa ở đầu";
     public static final String MSG_NEGATIVE_ZERO = "số 0 mang dấu âm";
     public static final String MSG_TOO_LONG = "chuỗi dài quá 100 ký tự";
+
+    /** Phiếu trả lời trắc nghiệm Bộ GD&ĐT 2025, Phần III: đáp án tối đa 4 ký tự (gồm dấu "-" đầu và dấu ","). */
+    public static final int SA_ANSWER_MAX_LENGTH = 4;
+    public static final String MSG_SA_ANSWER_FORMAT = "đáp án phải là số nguyên hoặc thập phân tối đa 4 ký tự "
+            + "(gồm dấu - và dấu phẩy), không dùng phân số/căn; nếu kết quả lẻ thì đề phải ghi rõ làm tròn đến hàng nào";
     public static final String MSG_RADICAND_TOO_LARGE = "số dưới dấu căn lớn hơn 10^12";
     public static final String MSG_ZERO_DENOMINATOR = "mẫu số bằng 0";
     public static final String WARN_UNREDUCED_FRACTION = "phân số chưa tối giản";
@@ -103,12 +109,67 @@ public final class ShortAnswerValue {
             return failure(MSG_TOO_LONG);
         }
         try {
-            Parser parser = new Parser(preprocess(trimmed), mode == Mode.STRICT);
+            String source = mode == Mode.STRICT ? strictAnswer(trimmed) : trimmed;
+            Parser parser = new Parser(preprocess(source), mode == Mode.STRICT);
             ShortAnswerValue value = parser.parseAll();
             return new ParseResult(value, null, parser.warnings);
         } catch (ParseFailure ex) {
             return failure(ex.getMessage());
         }
+    }
+
+    /**
+     * Dạng lưu của đáp án câu sa (27/10): chuỗi đã chuẩn hóa như {@link #strictAnswer} (bỏ $...$ bao ngoài, "." thành ",",
+     * "−" thành "-", "{,}" thành ",") khi đáp án đạt STRICT; null khi không đạt (nơi gọi giữ nguyên văn để báo lỗi).
+     */
+    public static String normalizedStrictAnswer(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.strip();
+        if (trimmed.isEmpty() || trimmed.length() > MAX_LENGTH) {
+            return null;
+        }
+        try {
+            return strictAnswer(trimmed);
+        } catch (ParseFailure ex) {
+            return null;
+        }
+    }
+
+    private static final java.util.regex.Pattern SA_ANSWER_SHAPE = java.util.regex.Pattern.compile("-?[0-9]+(,[0-9]+)?");
+
+    /**
+     * Cổng của chế độ STRICT (đáp án câu sa, quyết định 27/10 theo phiếu trả lời Bộ GD&ĐT 2025, Phần III): bỏ cặp $...$
+     * hoặc $$...$$ bao cả chuỗi, trim, đổi "−" (U+2212) thành "-", "{,}" thành ",", dấu "." thập phân thành ",", rồi chỉ
+     * nhận {@code -?[0-9]+(,[0-9]+)?} dài tối đa {@value #SA_ANSWER_MAX_LENGTH} ký tự (tính cả "-" và ","). Phân số, hỗn số,
+     * căn, đơn vị, dấu phẩy cuối, khoảng trắng giữa chuỗi và quá dài đều là {@link #MSG_SA_ANSWER_FORMAT}. Thứ tự báo lỗi:
+     * dạng, chữ số 0 thừa ở đầu ({@code 05}), số 0 mang dấu âm ({@code -0}), độ dài. Trả về chuỗi đã chuẩn hóa.
+     */
+    private static String strictAnswer(String trimmed) {
+        String s = trimmed;
+        if (s.length() >= 4 && s.startsWith("$$") && s.endsWith("$$")) {
+            s = s.substring(2, s.length() - 2);
+        } else if (s.length() >= 2 && s.startsWith("$") && s.endsWith("$")) {
+            s = s.substring(1, s.length() - 1);
+        }
+        s = s.strip().replace('−', '-').replace("{,}", ",").replace('.', ',');
+        if (!SA_ANSWER_SHAPE.matcher(s).matches()) {
+            throw new ParseFailure(MSG_SA_ANSWER_FORMAT);
+        }
+        String unsigned = s.startsWith("-") ? s.substring(1) : s;
+        int comma = unsigned.indexOf(',');
+        String integerPart = comma < 0 ? unsigned : unsigned.substring(0, comma);
+        if (integerPart.length() > 1 && integerPart.charAt(0) == '0') {
+            throw new ParseFailure(MSG_LEADING_ZERO);
+        }
+        if (s.startsWith("-") && unsigned.chars().noneMatch(c -> c >= '1' && c <= '9')) {
+            throw new ParseFailure(MSG_NEGATIVE_ZERO);
+        }
+        if (s.length() > SA_ANSWER_MAX_LENGTH) {
+            throw new ParseFailure(MSG_SA_ANSWER_FORMAT);
+        }
+        return s;
     }
 
     private static final java.util.regex.Pattern LEADING_ZEROS =

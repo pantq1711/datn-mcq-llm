@@ -4,6 +4,7 @@ import com.datn.mcq.catalog.entity.QuestionTemplate;
 import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.repository.QuestionTemplateRepository;
 import com.datn.mcq.catalog.repository.SubjectRepository;
+import com.datn.mcq.common.util.ShortAnswerValue;
 import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
@@ -57,8 +58,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestSafetyConfiguration.class)
 class ShortAnswerFlowTest {
 
-    private static final String STEM = "Nghiệm của phương trình $4x + 3 = 0$ là bao nhiêu?";
-    private static final String SECRET_EXPLANATION = "LỜI GIẢI BÍ MẬT: $4x = -3$ nên $x = -\\frac{3}{4}$.";
+    // 27/10: đáp án sa chỉ là số nguyên/thập phân tối đa 4 ký tự (phiếu trả lời Bộ GD&ĐT 2025, Phần III).
+    private static final String STEM = "Nghiệm của phương trình $5x + 3 = 0$ là bao nhiêu?";
+    private static final String SECRET_EXPLANATION = "LỜI GIẢI BÍ MẬT: $5x = -3$ nên $x = -0,6$.";
 
     /** Solver giả: chỉ trả lời qua callJsonModeWithSchema, ghi lại prompt và schema. */
     static final class FakeSolverClient extends LlmClient {
@@ -131,7 +133,7 @@ class ShortAnswerFlowTest {
         SOLVER.calls = 0;
         SOLVER.prompts.clear();
         SOLVER.schemas.clear();
-        SOLVER.response = solverSays("-0,75");
+        SOLVER.response = solverSays("-0,6");
         subject = subjectRepository.save(new Subject("Toán Trả lời ngắn"));
         QuestionTemplate tpl = new QuestionTemplate();
         tpl.setSubjectId(subject.getId());
@@ -178,7 +180,7 @@ class ShortAnswerFlowTest {
 
     @Test
     void saDiQuaQc() throws Exception {
-        JsonNode resp = generateSa(saJson(STEM, "$-\\frac{3}{4}$"), true);
+        JsonNode resp = generateSa(saJson(STEM, "$-0,6$"), true);
         JsonNode question = resp.get("question");
         JsonNode qc = resp.get("qcReport");
         assertEquals("sa", question.get("questionType").asText());
@@ -186,7 +188,7 @@ class ShortAnswerFlowTest {
         assertEquals("CONSISTENT", qc.get("answerCheckStatus").asText());
         assertEquals("NO_DUPLICATE", qc.get("dedupStatus").asText());
         assertEquals("number", qc.get("saJudgeKind").asText());
-        assertEquals("-0,75", qc.get("saJudgeAnswer").asText());
+        assertEquals("-0,6", qc.get("saJudgeAnswer").asText());
         assertTrue(qc.get("judgeAnswer").isNull(), "judge_answer MCQ để trống với câu sa");
         int questionId = question.get("id").asInt();
 
@@ -198,7 +200,7 @@ class ShortAnswerFlowTest {
 
         Map<String, Object> gq = jdbc.queryForMap("SELECT * FROM generated_question WHERE id = ?", questionId);
         assertEquals("sa", gq.get("question_type"));
-        assertEquals("$-\\frac{3}{4}$", gq.get("sa_answer"));
+        assertEquals("-0,6", gq.get("sa_answer"), "27/10: lưu dạng chuẩn hóa (bỏ $...$ bao ngoài)");
         assertNull(gq.get("option_a"));
         assertNull(gq.get("correct_option"));
         assertEquals("medium", gq.get("llm_difficulty"));
@@ -213,7 +215,7 @@ class ShortAnswerFlowTest {
         Map<String, Object> answerCheck = jdbc.queryForMap("SELECT * FROM quality_check_result"
                 + " WHERE question_id = ? AND check_type = 'answer_check'", questionId);
         assertEquals("number", answerCheck.get("judge_sa_kind"));
-        assertEquals("-0,75", answerCheck.get("judge_sa_answer"));
+        assertEquals("-0,6", answerCheck.get("judge_sa_answer"));
         assertNull(answerCheck.get("judge_answer"));
         assertEquals(Boolean.TRUE, answerCheck.get("passed"));
         assertEquals(10, answerCheck.get("token_count"), "V21: số liệu lượt Solver sa ghi ở dòng answer_check");
@@ -227,7 +229,7 @@ class ShortAnswerFlowTest {
     /** Hồi quy SA (GĐ3): bộ key của API câu sa giữ như cuối GĐ2, không có trường TF. */
     @Test
     void snapshotKeyApiSa() throws Exception {
-        JsonNode resp = generateSa(saJson(STEM, "-0,75"), true);
+        JsonNode resp = generateSa(saJson(STEM, "-0,6"), true);
         assertEquals(Set.of("id", "templateId", "runId", "questionText", "optionA", "optionB", "optionC", "optionD",
                 "parseSuccess", "status", "tokenCount", "latencyMs", "createdAt", "questionType"),
                 fieldNames(resp.get("question")));
@@ -247,7 +249,7 @@ class ShortAnswerFlowTest {
     @Test
     void solverBaoMoHoLaInconsistentGiuGenerated() throws Exception {
         SOLVER.response = solverSays("ambiguous");
-        JsonNode resp = generateSa(saJson(STEM, "-0,75"), true);
+        JsonNode resp = generateSa(saJson(STEM, "-0,6"), true);
         assertEquals("generated", resp.get("question").get("status").asText());
         assertEquals("INCONSISTENT", resp.get("qcReport").get("answerCheckStatus").asText());
         assertEquals("ambiguous", resp.get("qcReport").get("saJudgeKind").asText());
@@ -261,7 +263,7 @@ class ShortAnswerFlowTest {
     @Test
     void solverTraChuoiKhongSoDuocLaInconsistent() throws Exception {
         SOLVER.response = solverSays("2 hoặc 3");
-        JsonNode resp = generateSa(saJson(STEM, "-0,75"), true);
+        JsonNode resp = generateSa(saJson(STEM, "-0,6"), true);
         assertEquals("INCONSISTENT", resp.get("qcReport").get("answerCheckStatus").asText());
         assertEquals("unparseable", resp.get("qcReport").get("saJudgeKind").asText());
         assertEquals("2 hoặc 3", resp.get("qcReport").get("saJudgeAnswer").asText());
@@ -271,7 +273,7 @@ class ShortAnswerFlowTest {
     @Test
     void solverKhacGiaTriVaSolverKhoaTrung() throws Exception {
         SOLVER.response = solverSays("0,33");
-        JsonNode differ = generateSa(saJson("Tính $1 : 3$ (làm tròn đến hàng phần trăm).", "$\\frac{1}{3}$"), true);
+        JsonNode differ = generateSa(saJson("Tính $1 : 3$ (làm tròn đến hàng phần mười).", "0,3"), true);
         assertEquals("INCONSISTENT", differ.get("qcReport").get("answerCheckStatus").asText());
 
         SOLVER.response = "{\"reasoning\": \"r\", \"judge_answer\": \"1\", \"judge_answer\": \"2\"}";
@@ -292,19 +294,31 @@ class ShortAnswerFlowTest {
         assertEquals(0, SOLVER.calls);
     }
 
+    /** 27/10: phân số không còn là đáp án hợp lệ; câu bị loại ở bước format với thông điệp nói rõ cách sửa, không gọi Solver. */
     @Test
-    void phanSoChuaToiGianChiCanhBao() throws Exception {
+    void phanSoBiLoaiFormatFailedKhongGoiSolver() throws Exception {
         SOLVER.response = solverSays("0,5");
-        JsonNode resp = generateSa(saJson("Tính $1 : 2$.", "2/4"), true);
-        assertEquals("qc_passed", resp.get("question").get("status").asText());
-        assertEquals("[\"answer: phân số chưa tối giản\"]", resp.get("qcReport").get("answerWarnings").toString());
-        // V5 (Q8): cảnh báo được lưu ở dòng format; các dòng khác để NULL.
+        JsonNode resp = generateSa(saJson("Tính $1 : 2$.", "$\\frac{1}{2}$"), true);
+        assertEquals("format_failed", resp.get("question").get("status").asText());
+        assertEquals("[\"answer: " + ShortAnswerValue.MSG_SA_ANSWER_FORMAT + "\"]",
+                resp.get("qcReport").get("formatErrors").toString());
+        assertEquals(0, SOLVER.calls);
         int id = resp.get("question").get("id").asInt();
-        assertEquals(objectMapper.readTree("[\"answer: phân số chưa tối giản\"]"), objectMapper.readTree(
-                jdbc.queryForObject("SELECT warnings::text FROM quality_check_result WHERE question_id = ?"
-                        + " AND check_type = 'format'", String.class, id)));
-        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM quality_check_result WHERE question_id = ?"
-                + " AND check_type <> 'format' AND warnings IS NOT NULL", Integer.class, id));
+        assertEquals("$\\frac{1}{2}$", jdbc.queryForObject("SELECT sa_answer FROM generated_question WHERE id = ?",
+                String.class, id), "đáp án không đạt STRICT thì giữ nguyên văn");
+        assertEquals(objectMapper.readTree("[\"answer: " + ShortAnswerValue.MSG_SA_ANSWER_FORMAT + "\"]"),
+                objectMapper.readTree(jdbc.queryForObject("SELECT errors::text FROM quality_check_result"
+                        + " WHERE question_id = ? AND check_type = 'format'", String.class, id)));
+    }
+
+    /** 27/10: đáp án đạt STRICT được lưu ở dạng chuẩn hóa ("." thành ",", bỏ $...$ bao ngoài). */
+    @Test
+    void dapAnSaLuuDangChuanHoa() throws Exception {
+        SOLVER.response = solverSays("2,75");
+        JsonNode resp = generateSa(saJson("Tính $11 : 4$.", "2.75"), true);
+        assertEquals("qc_passed", resp.get("question").get("status").asText());
+        assertEquals("2,75", jdbc.queryForObject("SELECT sa_answer FROM generated_question WHERE id = ?",
+                String.class, resp.get("question").get("id").asInt()));
     }
 
     // ---------- dedup ----------
@@ -323,7 +337,7 @@ class ShortAnswerFlowTest {
                 longStem);
 
         SOLVER.response = solverSays("0,25");
-        JsonNode first = generateSa(saJson(longStem, "$\\frac{1}{4}$"), true);
+        JsonNode first = generateSa(saJson(longStem, "$0,25$"), true);
         assertEquals("NO_DUPLICATE", first.get("qcReport").get("dedupStatus").asText());
         assertEquals("qc_passed", first.get("question").get("status").asText());
 
@@ -367,7 +381,7 @@ class ShortAnswerFlowTest {
         @Override
         public LlmCallResult callJsonModeWithSchema(String prompt, String modelName, Double temperature, String schema) {
             lastSchema = schema;
-            return new LlmCallResult(saJson(STEM, "-0,75"), 20, 2.0, 0.0, modelName);
+            return new LlmCallResult(saJson(STEM, "-0,6"), 20, 2.0, 0.0, modelName);
         }
     }
 
@@ -395,7 +409,7 @@ class ShortAnswerFlowTest {
         assertEquals(SaPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON, generator.lastSchema);
         Map<String, Object> gq = jdbc.queryForMap("SELECT * FROM generated_question WHERE id = ?", summary.questionId());
         assertEquals("sa", gq.get("question_type"));
-        assertEquals("-0,75", gq.get("sa_answer"));
+        assertEquals("-0,6", gq.get("sa_answer"));
         assertEquals("hard", gq.get("llm_difficulty"));
         assertEquals(List.of("sa", "sa"), jdbc.queryForList("SELECT question_type FROM quality_check_result"
                 + " WHERE question_id = ? ORDER BY check_type", String.class, summary.questionId()));

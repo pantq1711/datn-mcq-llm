@@ -82,9 +82,10 @@ public class FormatChecker {
 
     /**
      * Câu Trả lời ngắn (V4, bản sửa 1 mục 5): question_text, explanation, answer không trống; answer là chuỗi JSON
-     * và phân tích được ở chế độ STRICT (lỗi là fatal). Với môn Toán, LaTeX ở question_text và answer là lỗi chặn
-     * (quyết định B), ở explanation chỉ là cảnh báo. Phân số chưa tối giản chỉ vào answerWarnings.
-     * Không còn quy tắc "đáp số không nguyên phải có yêu cầu làm tròn".
+     * và đạt chế độ STRICT (lỗi là fatal): từ 27/10 là số nguyên hoặc thập phân tối đa 4 ký tự theo phiếu trả lời Bộ
+     * GD&ĐT 2025, Phần III. Với môn Toán, LaTeX ở question_text và answer là lỗi chặn (quyết định B), ở explanation chỉ
+     * là cảnh báo; đáp án đã sai dạng thì chỉ báo lỗi dạng. Không còn quy tắc "đáp số không nguyên phải có yêu cầu làm
+     * tròn" (nay là việc của đề bài, xem prompt sa ma trận).
      */
     private FormatCheckOutcome checkShortAnswer(QuestionQcInput input) {
         List<String> errors = new ArrayList<>();
@@ -100,6 +101,7 @@ public class FormatChecker {
         checkNonBlank("question_text", input.questionText(), errors);
         checkNonBlank("explanation", input.explanation(), errors);
         String answer = input.saAnswer();
+        boolean answerRejected = false;
         if (answer == null || answer.isBlank()) {
             errors.add("answer: nội dung trống");
         } else if (!input.saAnswerIsString()) {
@@ -108,6 +110,7 @@ public class FormatChecker {
             ShortAnswerValue.ParseResult parsed = ShortAnswerValue.parse(answer, ShortAnswerValue.Mode.STRICT);
             if (!parsed.ok()) {
                 errors.add("answer: " + parsed.error());
+                answerRejected = true;
             }
             for (String w : parsed.warnings()) {
                 answerWarnings.add("answer: " + w);
@@ -115,7 +118,8 @@ public class FormatChecker {
         }
         if (input.validateLatex()) {
             validateFieldLatex("question_text", input.questionText(), errors, warnings);
-            if (input.saAnswerIsString()) {
+            // Đáp án đã bị loại vì sai dạng thì không báo thêm "LaTeX ngoài $": ghi chú sinh lại chỉ nói đúng cách sửa.
+            if (input.saAnswerIsString() && !answerRejected) {
                 validateFieldLatex("answer", answer, errors, warnings);
             }
             validateFieldLatex("explanation", input.explanation(), warnings, warnings);
