@@ -18,6 +18,7 @@ import com.datn.mcq.exam.repository.ExamRepository;
 import com.datn.mcq.exam.repository.ExamSlotRepository;
 import com.datn.mcq.experiment.entity.ExperimentRun;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
+import com.datn.mcq.generation.entity.GeneratedQuestionStatement;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
@@ -428,8 +429,54 @@ public class ExamBuildService {
         return joinNote(lines);
     }
 
-    /** Mẫu nhãn bắt buộc của job tf mới nhất thuộc các chỗ khác cùng đề; null khi chưa có. */
-    private String latestTfPattern(ExamSlot slot) {
+    /**
+     * Mẫu nhãn thật (4 ý a-d) của một câu hỏi đã sinh trong generated_question_statement; null khi câu chưa có đủ 4 ý hoặc nhãn.
+     */
+    public String actualTfPattern(Integer questionId) {
+        if (questionId == null) {
+            return null;
+        }
+        List<GeneratedQuestionStatement> statements = generationService.getStatements(questionId);
+        if (statements == null || statements.size() != 4) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (GeneratedQuestionStatement s : statements) {
+            if (s.getLlmLabel() == null) {
+                return null;
+            }
+            sb.append(s.getLlmLabel().getDbValue());
+        }
+        String pattern = sb.toString();
+        return pattern.length() == 4 ? pattern : null;
+    }
+
+    private Integer resolveQuestionId(ExamSlot s, GenerationJob job) {
+        if (s.getGeneratedQuestionId() != null) {
+            return s.getGeneratedQuestionId();
+        }
+        if (s.getFallbackQuestionId() != null) {
+            return s.getFallbackQuestionId();
+        }
+        return job != null ? job.getQuestionId() : null;
+    }
+
+    /**
+     * Mẫu nhãn TF cần tránh để chống lặp: đọc nhãn THẬT từ generated_question_statement (thay vì mẫu mục tiêu).
+     * - Nếu chỗ đang Đổi/sinh lại đã có câu hiện tại: dùng nhãn thật của câu đó để câu mới không lặp câu vừa bị thay.
+     * - Ngược lại: dùng nhãn thật của câu TF gần nhất thuộc các chỗ khác cùng đề (nếu chưa sinh câu thì dùng mẫu dự kiến).
+     * - Chưa có câu nào: trả về null để hệ thống chọn ngẫu nhiên.
+     */
+    public String latestTfPattern(ExamSlot slot) {
+        // 1. Chỗ bị Đổi hoặc sinh lại: ưu tiên dùng nhãn thật của câu hiện tại ở chỗ này
+        Optional<GenerationJob> ownJob = generationService.latestJobForSlot(slot.getId());
+        Integer ownQuestionId = resolveQuestionId(slot, ownJob.orElse(null));
+        String ownPattern = actualTfPattern(ownQuestionId);
+        if (ownPattern != null) {
+            return ownPattern;
+        }
+
+        // 2. Chỗ mới (hoặc chỗ chưa có câu): tìm câu TF gần nhất thuộc các chỗ khác cùng đề
         GenerationJob latest = null;
         String pattern = null;
         for (ExamSlot other : slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(slot.getExamId())) {
@@ -437,10 +484,21 @@ public class ExamBuildService {
                 continue;
             }
             Optional<GenerationJob> job = generationService.latestJobForSlot(other.getId());
-            String p = job.map(j -> TfLabelPattern.fromNote(j.getPromptNote())).orElse(null);
-            if (p != null && (latest == null || job.get().getId() > latest.getId())) {
-                latest = job.get();
-                pattern = p;
+            if (job.isEmpty()) {
+                continue;
+            }
+            int jobId = job.get().getId();
+            int latestJobId = latest != null ? latest.getId() : -1;
+            if (latest == null || jobId > latestJobId) {
+                Integer qId = resolveQuestionId(other, job.get());
+                String p = actualTfPattern(qId);
+                if (p == null) {
+                    p = TfLabelPattern.fromNote(job.get().getPromptNote());
+                }
+                if (p != null) {
+                    latest = job.get();
+                    pattern = p;
+                }
             }
         }
         return pattern;

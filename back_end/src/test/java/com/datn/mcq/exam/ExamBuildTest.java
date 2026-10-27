@@ -6,6 +6,9 @@ import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
 import com.datn.mcq.exam.export.PandocRunner;
 import com.datn.mcq.exam.export.PandocTestSupport;
+import com.datn.mcq.exam.entity.ExamSlot;
+import com.datn.mcq.exam.repository.ExamSlotRepository;
+import com.datn.mcq.exam.service.ExamBuildService;
 import com.datn.mcq.generation.service.DedupScopeResolver;
 import com.datn.mcq.generation.worker.GenerationJobPoller;
 import com.datn.mcq.generation.worker.GenerationJobProcessor;
@@ -217,6 +220,11 @@ class ExamBuildTest {
     private QcOrchestrator qcOrchestrator;
     @Autowired
     private DedupScopeResolver dedupScopeResolver;
+
+    @Autowired
+    private ExamBuildService buildService;
+    @Autowired
+    private ExamSlotRepository slotRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private MockMvc mockMvc;
@@ -1102,5 +1110,69 @@ class ExamBuildTest {
             }
         }
         assertEquals(2, checked, "mỗi loại cảnh báo một câu");
+    }
+
+    /**
+     * W2-5: latestTfPattern đọc nhãn THẬT từ generated_question_statement:
+     * - Chưa có câu nào: trả về null để chọn ngẫu nhiên.
+     * - Câu tf trước lệch mẫu mục tiêu (mục tiêu target, nhãn thật TFTF): câu sau tránh nhãn thật TFTF.
+     * - Chỗ bị Đổi/sinh lại: tránh nhãn thật của chính câu hiện tại ở chỗ đó.
+     */
+    @Test
+    void latestTfPatternDocNhanThatTuGeneratedQuestionStatement() throws Exception {
+        // 1. Chưa có câu nào: slot của đề chưa có job hay câu hỏi thì trả về null
+        ExamSlot emptySlot = new ExamSlot();
+        emptySlot.setExamId(-999);
+        assertNull(buildService.latestTfPattern(emptySlot), "chưa có câu nào thì trả về null để chọn ngẫu nhiên");
+        assertNull(buildService.actualTfPattern(null));
+
+        // Ma trận 2 câu TF
+        String tfCell = "{\"part\": \"II\", \"questionType\": \"tf\", \"statementDifficulties\": [\"easy\", \"easy\","
+                + " \"medium\", \"hard\"], \"questionCount\": 2, \"topic\": \"Hằng đẳng thức\","
+                + " \"learningOutcomes\": {\"easy\": \"Nhận biết.\", \"medium\": \"Khai triển.\", \"hard\": \"Vận dụng.\"}}";
+        int tfMatrix = json(postJson("/api/exam-matrices", "{\"name\": \"Ma trận TF 2 câu\", \"subjectId\": " + subject
+                + ", \"gradeLevel\": 8, \"cells\": [" + tfCell + "]}").andExpect(status().isOk())).get("id").asInt();
+        int examId = build("{\"matrixId\": " + tfMatrix + "}").get("examId").asInt();
+
+        List<ExamSlot> slots = slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(examId);
+        assertEquals(2, slots.size());
+        ExamSlot slot1 = slots.get(0);
+        ExamSlot slot2 = slots.get(1);
+
+        String job1Note = latestNote(slot1.getId());
+        String target1 = TfLabelPattern.fromNote(job1Note);
+        assertNotNull(target1, "job 1 có mẫu mục tiêu");
+
+        // Giả lập LLM sinh câu cho slot 1 có nhãn THẬT khác target1
+        String actual1 = "TFTF".equals(target1) ? "FTFT" : "TFTF";
+        generator.tfLabels = actual1.split("");
+        jdbc.update("UPDATE generation_job SET next_run_at = now() - interval '1 minute' WHERE status = 'pending'");
+        new GenerationJobPoller(jobProcessor, generator, qcOrchestrator, dedupScopeResolver, 3).processNextJob(true);
+        for (int _skip = 0; _skip < 0; _skip++)
+        processAll();
+        progress(examId);
+
+        slot1 = slotRepository.findById(slot1.getId()).orElseThrow();
+        assertNotNull(slot1.getGeneratedQuestionId());
+        assertEquals(actual1, buildService.actualTfPattern(slot1.getGeneratedQuestionId()),
+                "nhãn thật của câu 1 đọc đúng từ generated_question_statement");
+
+        // 2. Câu tf sau (slot 2) đọc nhãn thật của câu 1 để tránh actual1 (thay vì target1)
+        assertEquals(actual1, buildService.latestTfPattern(slot2),
+                "câu sau đọc nhãn thật của câu tf trước, không đọc mẫu mục tiêu");
+        jdbc.update("UPDATE generation_job SET next_run_at = now() - interval '1 minute' WHERE status = 'pending'");
+        new GenerationJobPoller(jobProcessor, generator, qcOrchestrator, dedupScopeResolver, 3).processNextJob(true);
+        progress(examId);
+
+        // 3. Chỗ bị Đổi (slot 1): dùng nhãn thật của chính câu hiện tại ở chỗ đó
+        assertEquals(actual1, buildService.latestTfPattern(slot1),
+                "chỗ bị Đổi đọc nhãn thật của câu hiện tại của chính chỗ đó");
+
+        // Khi bấm Đổi slot 1: job mới sinh ra có mẫu nhãn tránh actual1
+        json(action(examId, slot1.getId(), "replace").andExpect(status().isOk()));
+        String replaceNote = latestNote(slot1.getId());
+        String replacePattern = TfLabelPattern.fromNote(replaceNote);
+        assertNotNull(replacePattern);
+        assertNotEquals(actual1, replacePattern, "mẫu của câu mới phải tránh nhãn thật của câu vừa bị đổi");
     }
 }
