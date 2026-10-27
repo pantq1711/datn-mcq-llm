@@ -45,6 +45,9 @@ public final class MatrixPromptDraftV0 {
             - Nếu kết quả tính ra không gọn trong 4 ký tự (số vô tỉ, phân số không viết gọn được bằng số thập phân hữu \
             hạn, số quá dài) thì đề bài phải yêu cầu làm tròn rõ ràng (ví dụ "làm tròn đến hàng phần mười") và đáp án \
             là giá trị đã làm tròn đúng yêu cầu đó.
+            - Nếu kết quả là số lớn hơn 4 ký tự (ví dụ tiền, dân số, khối lượng) thì đề bài phải đổi đơn vị cho đáp án \
+            gọn trong 4 ký tự (ví dụ "tính theo nghìn đồng", "đơn vị: triệu người", "đơn vị: tấn"). Ví dụ: \
+            10000 đồng thì đề hỏi theo nghìn đồng và đáp án "10".
             - Không viết chữ số 0 thừa ở đầu (viết 5, không viết 05); không viết -0.
             - Đề chỉ có một cách hiểu và một đáp án duy nhất.
             """;
