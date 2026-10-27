@@ -519,6 +519,11 @@ public class QcOrchestrator {
      * answer_check nhờ ON DELETE CASCADE) khi câu mồ côi của một claim đã bị loại được xóa. Chạy trong transaction của nơi
      * gọi (cùng transaction với việc xóa câu).
      */
+    @Transactional(readOnly = true)
+    public int countSolverCallsSince(LocalDateTime since) {
+        return qualityCheckResultRepository.countSolverCallsSince(since);
+    }
+
     @Transactional
     public int deleteAllResults(Integer questionId) {
         return qualityCheckResultRepository.deleteByQuestionIdAndCheckTypes(

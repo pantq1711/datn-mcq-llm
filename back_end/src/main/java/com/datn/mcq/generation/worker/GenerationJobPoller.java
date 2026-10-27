@@ -17,7 +17,9 @@ import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.parser.McqJsonParser;
 import com.datn.mcq.generation.service.DedupScopeResolver;
+import com.datn.mcq.llm.client.GeminiRateLimiter;
 import com.datn.mcq.llm.client.LlmClient;
+import com.datn.mcq.llm.client.QuotaExhaustedException;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.qc.checker.GroundingChecker;
 import com.datn.mcq.qc.dto.GroundingResult;
@@ -26,8 +28,8 @@ import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -60,29 +62,40 @@ public class GenerationJobPoller {
     private final QcOrchestrator qcOrchestrator;
     private final DedupScopeResolver dedupScopeResolver;
     private final int maxAttempts;
+    private final GeminiRateLimiter rateLimiter;
 
     public GenerationJobPoller(
             GenerationJobProcessor processor,
             LlmClient llmClient,
             QcOrchestrator qcOrchestrator,
             DedupScopeResolver dedupScopeResolver,
-            @Value("${app.worker.max-attempts:3}") int maxAttempts) {
+            int maxAttempts) {
+        this(processor, llmClient, qcOrchestrator, dedupScopeResolver, maxAttempts, null);
+    }
+
+    @Autowired
+    public GenerationJobPoller(
+            GenerationJobProcessor processor,
+            LlmClient llmClient,
+            QcOrchestrator qcOrchestrator,
+            DedupScopeResolver dedupScopeResolver,
+            @Value("${app.worker.max-attempts:3}") int maxAttempts,
+            @Autowired(required = false) GeminiRateLimiter rateLimiter) {
         this.processor = processor;
         this.llmClient = llmClient;
         this.qcOrchestrator = qcOrchestrator;
         this.dedupScopeResolver = dedupScopeResolver;
         this.maxAttempts = Math.max(1, maxAttempts);
-    }
-
-    @Scheduled(fixedDelayString = "${app.worker.poll-delay-ms:15000}")
-    public void pollOnSchedule() {
-        processNextJob(true);
+        this.rateLimiter = rateLimiter;
     }
 
     /**
      * @param runAnswerCheck false: không gọi Solver; job answer_check (W1-2) khi đó không được nhận
      */
     public ProcessedJobSummary processNextJob(boolean runAnswerCheck) {
+        if (rateLimiter != null && !rateLimiter.hasDailyQuota()) {
+            return new ProcessedJobSummary(false, null, null, "quota_exhausted", null, null);
+        }
         Optional<GenerationJobProcessor.ClaimedJobContext> claimedOpt = processor.claimNextPendingJob(runAnswerCheck);
         if (claimedOpt.isEmpty()) {
             return new ProcessedJobSummary(false, null, null, "idle", null, null);
@@ -117,6 +130,18 @@ public class GenerationJobPoller {
                     : llmClient.callJsonModeWithSchema(
                             ctx.prompt(), ctx.modelName(), ctx.temperature(),
                             McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON);
+        } catch (QuotaExhaustedException ex) {
+            LOG.warn("Job {}: chạm hạn mức ngày của Gemini khi sinh câu, trả về pending tới {}: {}",
+                    ctx.jobId(), ex.getResetAt(), ex.getMessage());
+            var deferredJob = processor.deferJobOnQuotaExhausted(ctx, ex.getResetAt(), ex.getMessage());
+            return new ProcessedJobSummary(
+                    true,
+                    ctx.jobId(),
+                    null,
+                    deferredJob.getStatus().getDbValue(),
+                    null,
+                    ex.getMessage()
+            );
         } catch (RuntimeException ex) {
             var failedJob = processor.recordJobFailure(ctx, ex.getMessage(), maxAttempts);
             return new ProcessedJobSummary(

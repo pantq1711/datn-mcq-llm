@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface GeneratedQuestionRepository extends JpaRepository<GeneratedQuestion, Integer> {
@@ -58,4 +59,14 @@ public interface GeneratedQuestionRepository extends JpaRepository<GeneratedQues
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = "DELETE FROM generated_question WHERE id = :questionId", nativeQuery = true)
     int deleteOrphan(@Param("questionId") Integer questionId);
+
+    /**
+     * W2-4b (C): đếm số câu do LLM sinh ({@code edited_from_question_id IS NULL}) từ mốc {@code since} trở đi để khởi tạo
+     * bộ đếm hạn mức ngày của Gemini khi ứng dụng khởi động.
+     */
+    @Query(value = """
+            SELECT count(*) FROM generated_question
+            WHERE edited_from_question_id IS NULL AND created_at >= :since
+            """, nativeQuery = true)
+    int countLlmGeneratedSince(@Param("since") LocalDateTime since);
 }

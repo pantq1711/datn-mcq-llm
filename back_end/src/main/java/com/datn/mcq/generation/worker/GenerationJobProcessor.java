@@ -30,6 +30,7 @@ import com.datn.mcq.generation.repository.GeneratedQuestionRepository;
 import com.datn.mcq.generation.repository.GeneratedQuestionStatementRepository;
 import com.datn.mcq.generation.repository.GenerationJobRepository;
 import com.datn.mcq.generation.service.StoredQcInput;
+import com.datn.mcq.llm.client.GeminiDailyUsageLookup;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.llm.prompt.PromptBuilder;
 import com.datn.mcq.qc.dto.GroundingResult;
@@ -60,9 +61,23 @@ import java.util.Optional;
  * về hay nhận lại giữa chừng.
  */
 @Service
-public class GenerationJobProcessor {
+public class GenerationJobProcessor implements GeminiDailyUsageLookup {
 
     private static final Logger LOG = LoggerFactory.getLogger(GenerationJobProcessor.class);
+
+    /**
+     * W2-4b (C): đếm tổng số lượt gọi Gemini đã lưu kết quả trong DB kể từ mốc {@code since} (00:00 giờ Thái Bình Dương
+     * đã đổi sang giờ địa phương của JVM): câu LLM sinh ({@code edited_from_question_id IS NULL}) + kết quả Solver có
+     * {@code token_count} + kết quả judge "bám tài liệu" có {@code token_count}.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public int countCallsSince(LocalDateTime since) {
+        int questions = generatedQuestionRepository.countLlmGeneratedSince(since);
+        int solver = qcOrchestrator.countSolverCallsSince(since);
+        int grounding = groundingService != null ? groundingService.countCallsSince(since) : 0;
+        return questions + solver + grounding;
+    }
 
     /** V14: giới hạn độ dài generated_question.solver_error (khớp CHECK chk_gq_solver_error). */
     public static final int MAX_SOLVER_ERROR = 1000;
@@ -687,6 +702,31 @@ public class GenerationJobProcessor {
         } else {
             job.setStatus(JobStatus.FAILED);
         }
+        return generationJobRepository.save(job);
+    }
+
+    /**
+     * W2-4b (C): job sinh câu chạm hạn mức ngày của Gemini ngay lúc gọi LLM: trả về {@code pending}, hẹn chạy lại vào mốc
+     * đặt lại hạn mức ({@code resetAt}, 00:00 giờ Thái Bình Dương), xóa {@code started_at} và hoàn lại lượt
+     * {@code attempt} đã tăng lúc nhận job (không tính vào số lần thử). Rào bằng {@link #holdsClaim}.
+     */
+    @Transactional
+    public GenerationJob deferJobOnQuotaExhausted(ClaimedJobContext ctx, LocalDateTime resetAt, String reason) {
+        boolean owned = holdsClaim(ctx);
+        GenerationJob job = generationJobRepository.findById(ctx.jobId())
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generation_job id=" + ctx.jobId()));
+        if (!owned) {
+            LOG.warn("stale finish: job {} (claim_seq {}) không còn running với claim_seq này, bỏ hoãn quota của worker cũ",
+                    ctx.jobId(), ctx.claimSeq());
+            return job;
+        }
+        int currentAttempt = job.getAttempt() != null ? job.getAttempt() : 1;
+        job.setStatus(JobStatus.PENDING);
+        job.setAttempt(Math.max(0, currentAttempt - 1));
+        job.setNextRunAt(resetAt);
+        job.setStartedAt(null);
+        job.setLastError(TextClip.clip("quota: " + reason, MAX_SOLVER_ERROR));
+        job.setUpdatedAt(LocalDateTime.now());
         return generationJobRepository.save(job);
     }
 

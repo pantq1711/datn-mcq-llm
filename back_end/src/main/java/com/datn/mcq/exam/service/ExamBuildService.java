@@ -64,8 +64,8 @@ public class ExamBuildService {
 
     static final int MAX_ATTEMPTS = 3;
     static final int MAX_SOLVER_RETRIES = 1;
-    /** Giãn cách các job lúc tạo đề, như enqueue thường (trần 5 lượt/phút của Free Tier). */
-    static final long JOB_SPACING_SECONDS = 13;
+    /** W2-4b (C): không giãn cách next_run_at lúc tạo đề; bộ điều tiết Gemini dùng chung lo khoảng cách giữa các lượt gọi. */
+
 
     private static final DateTimeFormatter CODE_TIME = DateTimeFormatter.ofPattern("yyMMddHHmmss");
 
@@ -193,7 +193,7 @@ public class ExamBuildService {
                         note.add(TfLabelPattern.promptLine(lastTfPattern));
                     }
                     generationService.enqueueMatrixJob(run.getId(), cell.getTemplateId(), spec, slot.getId(),
-                            start.plusSeconds(JOB_SPACING_SECONDS * jobs), joinNote(note),
+                            start, joinNote(note),
                             snapshotOf(materials, cell.getTopic(), details, slot.getSlotNo() - 1, 0));
                     jobs++;
                 }

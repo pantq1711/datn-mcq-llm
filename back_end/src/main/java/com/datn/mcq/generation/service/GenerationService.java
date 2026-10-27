@@ -714,8 +714,8 @@ public class GenerationService {
             job.setTargetStatementDifficulties(trueFalse ? joinLevels(targetStatementDifficulties) : null);
             job.setStatus(JobStatus.PENDING);
             job.setAttempt(0);
-            // Giãn cách mỗi job 13 giây để tránh đụng trần 5 RPM trên Free Tier
-            job.setNextRunAt(now.plusSeconds(13L * i));
+            // W2-4b (C): bộ điều tiết Gemini dùng chung lo giãn cách giữa các lượt gọi; job xếp hàng chạy ngay.
+            job.setNextRunAt(now);
             job.setCreatedAt(now);
             job.setUpdatedAt(now);
             created.add(generationJobRepository.save(job));

@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +16,16 @@ import java.util.Optional;
 public interface QualityCheckResultRepository extends JpaRepository<QualityCheckResult, Integer> {
     List<QualityCheckResult> findByQuestionIdOrderByIdAsc(Integer questionId);
     Optional<QualityCheckResult> findByQuestionIdAndCheckType(Integer questionId, CheckType checkType);
+
+    /**
+     * W2-4b (C): đếm số lượt gọi Solver thành công (V21: {@code check_type = 'answer_check'} và có {@code token_count};
+     * dòng chép từ bản trước có {@code token_count IS NULL} nên không tính) từ mốc {@code since}.
+     */
+    @Query(value = """
+            SELECT count(*) FROM quality_check_result
+            WHERE check_type = 'answer_check' AND token_count IS NOT NULL AND checked_at >= :since
+            """, nativeQuery = true)
+    int countSolverCallsSince(@Param("since") LocalDateTime since);
 
     /** Xóa các dòng QC của một câu theo loại kiểm tra, trong transaction riêng (dùng khi chạy lại QC). */
     @Modifying

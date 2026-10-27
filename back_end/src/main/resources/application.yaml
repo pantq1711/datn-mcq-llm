@@ -53,6 +53,10 @@ app:
     solver-model: ${LLM_SOLVER_MODEL:gemini-3.5-flash-lite}
     # Chỉ đặt khi kiểm chứng bằng Gemini giả (W1-5); để trống thì gọi https://generativelanguage.googleapis.com/v1beta/models/
     base-url: ${LLM_BASE_URL:}
+    # W2-4b (C): bộ điều tiết lượt gọi Gemini dùng chung (15 RPM / 500 RPD free tier, có biên an toàn).
+    min-spacing-ms: ${LLM_MIN_SPACING_MS:4200}
+    daily-quota: ${LLM_DAILY_QUOTA:480}
+    rate-limit-cooldown-ms: ${LLM_RATE_LIMIT_COOLDOWN_MS:60000}
   embedding:
     model: ${EMBEDDING_MODEL:}
   # Công cụ thí nghiệm (quyết định 25/10): /api/generation/* và /api/catalog/templates chỉ tồn tại khi bật. Mặc định tắt;
@@ -62,6 +66,8 @@ app:
   worker:
     enabled: ${WORKER_ENABLED:false}
     poll-delay-ms: ${WORKER_POLL_DELAY_MS:15000}
+    concurrency: ${WORKER_CONCURRENCY:2}
+    idle-delay-ms: ${WORKER_IDLE_DELAY_MS:2000}
     max-attempts: ${WORKER_MAX_ATTEMPTS:3}
     # Job running quá ngưỡng này (giây) được trả về pending khi khởi động và mỗi stale-check-ms (chỉ khi worker bật).
     stale-after-seconds: ${WORKER_STALE_AFTER_SECONDS:300}
