@@ -67,7 +67,11 @@ export function ExamMatrixTemplateModal({
 
     useEffect(() => {
         const missingIds = Array.from(
-            new Set(templates.map(t => t.subjectId).filter(Boolean))
+            new Set(
+                templates
+                    .map(t => t.subjectId)
+                    .filter((id): id is number => id !== undefined && id !== null)
+            )
         ).filter(id => !(id in subjectMap));
 
         if (missingIds.length === 0) return;
@@ -80,7 +84,7 @@ export function ExamMatrixTemplateModal({
                 setSubjectMap(prev => {
                     const next = { ...prev };
                     results.forEach(sub => {
-                        if (sub?.id && sub?.name) {
+                        if (sub?.id != null && sub?.name) {
                             next[sub.id] = sub.name;
                         }
                     });
@@ -93,10 +97,14 @@ export function ExamMatrixTemplateModal({
     }, [templates, subjectMap]);
 
     const templatesWithName = useMemo(() => {
-        return templates.map(t => ({
-            ...t,
-            subjectName: t.subjectName || subjectMap[t.subjectId] || String(t.subjectId),
-        }));
+        return templates.map(t => {
+            const subId = t.subjectId;
+            const resolvedSubjectName = subId != null ? subjectMap[subId] : undefined;
+            return {
+                ...t,
+                subjectName: t.subjectName || resolvedSubjectName || String(subId ?? ''),
+            };
+        });
     }, [templates, subjectMap]);
 
     const subjectOptions = useMemo(() => {
@@ -199,13 +207,16 @@ export function ExamMatrixTemplateModal({
                                     >
                                         Sử dụng mẫu này
                                     </Button>,
-                                    <Button
-                                        type="link"
-                                        onClick={() => onCreateFromSample?.(item.id)}   // id === key
-                                    >
-                                        Tạo từ mẫu
-                                    </Button>,
-                                ]}
+                                    onCreateFromSample ? (
+                                        <Button
+                                            key="sample"
+                                            type="link"
+                                            onClick={() => onCreateFromSample(item.id)}
+                                        >
+                                            Tạo từ mẫu
+                                        </Button>
+                                    ) : null,
+                                ].filter(Boolean)}
                             >
                                 <List.Item.Meta
                                     title={item.name}

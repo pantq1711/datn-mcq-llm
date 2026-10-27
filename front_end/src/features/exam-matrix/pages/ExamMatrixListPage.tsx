@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 
 import { ExamMatrixTable } from '../components/ExamMatrixTable';
 import { ExamMatrixTemplateModal } from '../components/ExamMatrixTemplateModal';
-import { MOCK_EXAM_MATRICES, MOCK_EXAM_MATRIX_TEMPLATES } from '../components/examMatrix.mock.ts';
 import type { ExamMatrix } from '../types/examMatrix.types.ts';
 import { listExamMatrices, deleteExamMatrix, duplicateExamMatrix, createExamMatrixFromSample } from "../services/examMatrixService";
 import './ExamMatrixListPage.css';
