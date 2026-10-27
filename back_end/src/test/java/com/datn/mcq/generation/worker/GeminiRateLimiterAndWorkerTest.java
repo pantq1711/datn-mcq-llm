@@ -119,6 +119,8 @@ class GeminiRateLimiterAndWorkerTest {
     @Autowired
     private GenerationJobProcessor jobProcessor;
     @Autowired
+    private GeminiDailyUsageLookup usageLookup;
+    @Autowired
     private GenerationService generationService;
     @Autowired
     private ExamBuildService examBuildService;
@@ -262,11 +264,11 @@ class GeminiRateLimiterAndWorkerTest {
                 + " token_count, latency_ms, checked_at) VALUES (?, 'unknown', 'r', 'm', '[]'::jsonb, 20, 150.0, ?)",
                 q2, Timestamp.valueOf(startLocal.plusHours(2)));
 
-        assertEquals(4, jobProcessor.countCallsSince(startLocal),
+        assertEquals(4, usageLookup.countCallsSince(startLocal),
                 "DB có 2 câu LLM + 1 Solver có token + 1 grounding có token = 4 lượt gọi trong ngày");
 
         MutableClock clock = new MutableClock(pacificLateNight.toInstant(), vnZone);
-        GeminiRateLimiter limiter = new GeminiRateLimiter(4200L, 6, 60_000L, clock, clock::advance, jobProcessor);
+        GeminiRateLimiter limiter = new GeminiRateLimiter(4200L, 6, 60_000L, clock, clock::advance, usageLookup);
         LlmClient client = new LlmClient("fake-key", "gemini-3.5-flash-lite", fakeBaseUrl(), limiter);
 
         assertTrue(limiter.hasDailyQuota());
