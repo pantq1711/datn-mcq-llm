@@ -112,7 +112,7 @@ public class ExamQcTraceService {
                 slot.getQuestionType(), slot.getState(), ctx.currentQuestionId == null ? null
                         : slot.getGeneratedQuestionId() != null ? "generated" : "bank",
                 ctx.currentQuestionId, slot.getBankItemId(), slot.getAttempts(), slot.getSolverRetries(), lineages,
-                actions.stream().map(a -> actionDto(a, ctx)).toList());
+                actions.stream().map(a -> actionDto(a, ctx)).toList(), slot.getFailureReason());
     }
 
     // ---------- phiên bản ----------
@@ -206,11 +206,12 @@ public class ExamQcTraceService {
     private List<String> reviewReasons(GeneratedQuestion q, Optional<GenerationJob> check) {
         List<String> reasons = new ArrayList<>(qcSummaryService.summarize(q.getId()).reviewReasons());
         int i = reasons.indexOf(QcSummaryService.SOLVER_NOT_RUN);
-        if (i >= 0 && check.isPresent()) {
-            JobStatus s = check.get().getStatus();
-            if (s == JobStatus.PENDING || s == JobStatus.RUNNING) {
+        if (i >= 0) {
+            if (check.isPresent() && (check.get().getStatus() == JobStatus.PENDING
+                    || check.get().getStatus() == JobStatus.RUNNING)) {
                 reasons.set(i, ExamViewService.SOLVER_PENDING);
-            } else if (s == JobStatus.FAILED) {
+            } else if ((check.isPresent() && check.get().getStatus() == JobStatus.FAILED)
+                    || q.getSolverError() != null) {
                 reasons.set(i, ExamViewService.SOLVER_FAILED);
             }
         }

@@ -97,6 +97,13 @@ public class QcOrchestrator {
      *              câu giữ generated và Solver không được gọi
      */
     public QcPipelineReport evaluateAndSave(QuestionQcInput input, DedupScope scope) {
+        return evaluateAndSave(input, scope, null);
+    }
+
+    /**
+     * W2-4b (A): nạp chồng cho phép chạy móc kiểm tra claim trước lượt gọi Solver inline ngoài transaction.
+     */
+    public QcPipelineReport evaluateAndSave(QuestionQcInput input, DedupScope scope, Runnable beforeSolver) {
         FormatChecker.FormatCheckOutcome formatOutcome = formatChecker.check(input);
         QualityCheckResult formatRow = upsertCheckResult(
                 input.questionId(),
@@ -174,6 +181,9 @@ public class QcOrchestrator {
             answerCheckStatus = AnswerCheckStatus.NOT_RUN;
             solverReasoning = "answer_check không chạy: chưa cấu hình API key cho Solver";
         } else {
+            if (beforeSolver != null) {
+                beforeSolver.run();
+            }
             // W1-2: gọi Solver (callSolver) rồi ghi kết quả (recordSolver), như trước khi tách. Lỗi mạng/HTTP, JSON
             // hỏng, thiếu hoặc sai judge_*, hoặc lỗi khi lưu kết quả: không có kết quả hợp lệ -> ERROR, không lưu dòng
             // answer_check (chk_qcr_judge_only_answer_check bắt buộc kết quả Solver).
@@ -291,7 +301,7 @@ public class QcOrchestrator {
                     throw new IllegalStateException("Chưa có bộ ghi kết quả Solver câu đúng/sai");
                 }
                 answerCheckRecorder.recordTrueFalse(questionId, verdict.passed(), verdict.judgeModel(),
-                        verdict.tfLabels(), TextClip.clip(verdict.reasoning(), MAX_SOLVER_REASONING));
+                    verdict.tfLabels(), TextClip.clip(verdict.reasoning(), MAX_SOLVER_REASONING));
             }
             case SA -> upsertCheckResult(questionId, QuestionType.SA, CheckType.ANSWER_CHECK, verdict.passed(), null,
                     verdict.judgeModel(), verdict.saJudgeKind(), verdict.saJudgeAnswer(), null, null,
@@ -514,9 +524,24 @@ public class QcOrchestrator {
                 questionId, List.of(CheckType.DEDUP, CheckType.ANSWER_CHECK));
     }
 
+    /**
+     * W2-4b (A): xóa MỌI dòng QC của một câu (format, dedup, answer_check; nhãn từng ý của Solver xóa theo dòng
+     * answer_check nhờ ON DELETE CASCADE) khi câu mồ côi của một claim đã bị loại được xóa. Chạy trong transaction của nơi
+     * gọi (cùng transaction với việc xóa câu).
+     */
+    @Transactional(readOnly = true)
+    public int countSolverCallsSince(LocalDateTime since) {
+        return qualityCheckResultRepository.countSolverCallsSince(since);
+    }
+
+    @Transactional
+    public int deleteAllResults(Integer questionId) {
+        return qualityCheckResultRepository.deleteByQuestionIdAndCheckTypes(
+                questionId, List.of(CheckType.values()));
+    }
+
     @Transactional(readOnly = true)
     public List<QualityCheckResult> getResultsForQuestion(Integer questionId) {
         return qualityCheckResultRepository.findByQuestionIdOrderByIdAsc(questionId);
     }
 }
-

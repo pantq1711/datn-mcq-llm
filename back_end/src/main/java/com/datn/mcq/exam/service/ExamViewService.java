@@ -235,16 +235,17 @@ public class ExamViewService {
                             .toList();
             Difficulty difficulty = q.getFinalDifficulty() != null ? q.getFinalDifficulty() : q.getLlmDifficulty();
             List<String> reasons = reviewReasonsOf(q.getId());
-            // W1-2: bản giáo viên sửa chờ Solver kiểm lại (job answer_check) thì "đang kiểm", job thất bại thì nói rõ;
+            // W1-2 / W2-4b: câu chờ Solver kiểm (job answer_check) thì "đang kiểm", job thất bại hoặc Solver lỗi thì nói rõ;
             // cả hai không bao giờ là đạt.
             String qcState = null;
             Optional<GenerationJob> check = generationService.latestAnswerCheckJob(q.getId());
-            if (check.isPresent() && reasons.contains(QcSummaryService.SOLVER_NOT_RUN)) {
-                JobStatus js = check.get().getStatus();
-                if (js == JobStatus.PENDING || js == JobStatus.RUNNING) {
+            if (reasons.contains(QcSummaryService.SOLVER_NOT_RUN)) {
+                if (check.isPresent() && (check.get().getStatus() == JobStatus.PENDING
+                        || check.get().getStatus() == JobStatus.RUNNING)) {
                     reasons.set(reasons.indexOf(QcSummaryService.SOLVER_NOT_RUN), SOLVER_PENDING);
                     qcState = ExamItemDto.QC_CHECKING;
-                } else if (js == JobStatus.FAILED) {
+                } else if ((check.isPresent() && check.get().getStatus() == JobStatus.FAILED)
+                        || q.getSolverError() != null) {
                     reasons.set(reasons.indexOf(QcSummaryService.SOLVER_NOT_RUN), SOLVER_FAILED);
                 }
             }
@@ -260,6 +261,6 @@ public class ExamViewService {
         }
         return new ExamItemDto(slot.getId(), slot.getCellId(), slot.getSlotNo(), cell.getPart(), cell.getTopic(),
                 slot.getQuestionType(), slot.getState(), null, null, null, null, null, null, null, null, null, null,
-                null, null, null, false, List.of());
+                null, null, null, false, List.of(), null, false, null, slot.getFailureReason());
     }
 }

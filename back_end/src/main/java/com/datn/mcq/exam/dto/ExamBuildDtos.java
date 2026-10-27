@@ -70,6 +70,12 @@ public final class ExamBuildDtos {
             @JsonInclude(JsonInclude.Include.NON_NULL) String source,
             @JsonInclude(JsonInclude.Include.NON_NULL) Integer bankItemId,
             @JsonInclude(JsonInclude.Include.NON_NULL) Integer questionId,
-            int attempts
-    ) {}
+            int attempts,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String failureReason
+    ) {
+        public SlotDto(Integer slotId, Integer cellId, Integer slotNo, QuestionType questionType, String state,
+                       String source, Integer bankItemId, Integer questionId, int attempts) {
+            this(slotId, cellId, slotNo, questionType, state, source, bankItemId, questionId, attempts, null);
+        }
+    }
 }

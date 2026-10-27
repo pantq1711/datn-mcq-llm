@@ -158,6 +158,7 @@ public class ExamActionService {
         slot.setBankItemId(newBankItemId);
         slot.setGeneratedQuestionId(null);
         slot.setFallbackQuestionId(null);
+        slot.setFailureReason(null);
         slot.setAttempts(0);
         slot.setSolverRetries(0);
         if (newBankItemId != null) {

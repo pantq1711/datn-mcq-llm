@@ -7,6 +7,7 @@ import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.StatementKey;
 import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.enums.TruthValue;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -103,5 +104,14 @@ public final class ExamQcTraceDtos {
     public record QcTraceDto(Integer examId, Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
                              QuestionType questionType, String state, String source, Integer currentQuestionId,
                              Integer bankItemId, Integer attempts, Integer solverRetries, List<LineageDto> lineages,
-                             List<ActionDto> actions) {}
+                             List<ActionDto> actions,
+                             @JsonInclude(JsonInclude.Include.NON_NULL) String failureReason) {
+        public QcTraceDto(Integer examId, Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
+                          QuestionType questionType, String state, String source, Integer currentQuestionId,
+                          Integer bankItemId, Integer attempts, Integer solverRetries, List<LineageDto> lineages,
+                          List<ActionDto> actions) {
+            this(examId, slotId, cellId, slotNo, part, topic, questionType, state, source, currentQuestionId,
+                    bankItemId, attempts, solverRetries, lineages, actions, null);
+        }
+    }
 }

@@ -61,11 +61,24 @@ public final class ExamViewDtos {
             List<String> reviewReasons,
             @JsonInclude(JsonInclude.Include.NON_NULL) String qcState,
             boolean edited,
-            @JsonInclude(JsonInclude.Include.NON_NULL) Integer originalQuestionId
+            @JsonInclude(JsonInclude.Include.NON_NULL) Integer originalQuestionId,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String failureReason
     ) {
         public static final String QC_CHECKING = "checking";
         public static final String QC_PASSED = "passed";
         public static final String QC_NEEDS_REVIEW = "needs_review";
+
+        /** Chữ ký trước W2-4b (chỗ đã có câu, không có failureReason). */
+        public ExamItemDto(Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
+                           QuestionType questionType, String state, String source, Integer bankItemId,
+                           Integer questionId, String questionText, String optionA, String optionB, String optionC,
+                           String optionD, Option correctOption, String saAnswer, List<ItemStatementDto> statements,
+                           String explanation, Difficulty difficulty, boolean needsReview, List<String> reviewReasons,
+                           String qcState, boolean edited, Integer originalQuestionId) {
+            this(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId, questionText,
+                    optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation, difficulty,
+                    needsReview, reviewReasons, qcState, edited, originalQuestionId, null);
+        }
 
         /** Chữ ký trước W1-2 (câu chưa sửa, không có trạng thái QC). */
         public ExamItemDto(Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
@@ -75,7 +88,7 @@ public final class ExamViewDtos {
                            String explanation, Difficulty difficulty, boolean needsReview, List<String> reviewReasons) {
             this(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId, questionText,
                     optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation, difficulty,
-                    needsReview, reviewReasons, null, false, null);
+                    needsReview, reviewReasons, null, false, null, null);
         }
     }
 

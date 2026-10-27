@@ -34,7 +34,7 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 | 403 | Sai vai trò (`FORBIDDEN`), ví dụ giáo viên gọi API quản trị, admin gọi API của giáo viên |
 | 404 | Không tìm thấy bản ghi, ví dụ `subjectId` hoặc `templateId` không tồn tại. Ma trận, đề của giáo viên khác cũng trả 404 (giống id không tồn tại) |
 | 409 | Xung đột trạng thái, ví dụ nộp đánh giá cho câu `duplicate` hoặc nộp lại câu experiment. Có mã máy đọc được ở một số luồng: `MATRIX_IN_USE`, `BANK_EXHAUSTED`, `SLOT_*`, `VERSION_CONFLICT`, `QC_CHECKING`. W1-4 (K-5): hai thao tác đồng thời làm vi phạm khóa ngoại hoặc khóa duy nhất trả 409 `FOREIGN_KEY_CONFLICT` / `UNIQUE_CONFLICT` ("hãy tải lại rồi thử lại"), không lộ tên ràng buộc |
-| 429 | Gemini đang giới hạn tần suất gọi; chờ khoảng một phút rồi thử lại. Hoặc đăng nhập sai quá nhiều lần (`TOO_MANY_ATTEMPTS`, header `Retry-After`, mục 8.2) |
+| 429 | Gemini đang giới hạn tần suất gọi; chờ khoảng một phút rồi thử lại. Hoặc đăng nhập sai quá nhiều lần (`TOO_MANY_ATTEMPTS`, header `Retry-After`, mục 8.2). Hoặc chạm hạn mức ngày của Gemini (`LLM_DAILY_QUOTA_EXHAUSTED`, header `Retry-After`) |
 | 503 | Gemini tạm thời quá tải hoặc bảo trì |
 | 500 | Lỗi khác chưa được phân loại, body theo định dạng mặc định của Spring. Lỗi toàn vẹn dữ liệu khác (CHECK, NOT NULL: lỗi của chương trình) có `{"code": "DATA_INTEGRITY"}` |
 
