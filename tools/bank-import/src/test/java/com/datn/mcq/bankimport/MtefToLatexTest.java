@@ -175,12 +175,59 @@ class MtefToLatexTest {
 
     @Test
     void kieuNguoiDungNghiengDamVaFontDongRong() {
-        assertOk("\\textit{ab}", MtefConverter.fromMtef(mtefWithDefs(line(fontStyleDef(1, 2), ch(-1, 'a'), ch(-1, 'b')),
+        assertOk("ab", MtefConverter.fromMtef(mtefWithDefs(line(fontStyleDef(1, 2), ch(-1, 'a'), ch(-1, 'b')),
                 fontDef("Times New Roman"))));
         assertOk("\\textbf{ab}", MtefConverter.fromMtef(mtefWithDefs(line(fontStyleDef(1, 1), ch(-1, 'a'), ch(-1, 'b')),
                 fontDef("Times New Roman"))));
         assertOk("5\\texttt{cm}", MtefConverter.fromMtef(mtefWithDefs(line(num("5"), ch(9, 'c'), ch(9, 'm')),
                 fontDef("Courier New"), eqnPrefsWithUser1(1))));
+    }
+
+    @Test
+    void kieuNguoiDungNghiengDeTranChoChuSoToanTuNgoacVaBienMotChuCai() {
+        // Nhóm A: chữ số, toán tử, ngoặc, biến 1 chữ cái -> để trần trong chế độ toán
+        assertOk("x", MtefConverter.fromMtef(mtefWithDefs(line(fontStyleDef(1, 2), ch(-1, 'x')),
+                fontDef("Times New Roman"))));
+        assertOk("1", MtefConverter.fromMtef(mtefWithDefs(line(fontStyleDef(1, 2), ch(-1, '1')),
+                fontDef("Times New Roman"))));
+        assertOk("=", MtefConverter.fromMtef(mtefWithDefs(line(fontStyleDef(1, 2), ch(-1, '=')),
+                fontDef("Times New Roman"))));
+        assertOk("(", MtefConverter.fromMtef(mtefWithDefs(line(fontStyleDef(1, 2), ch(-1, '(')),
+                fontDef("Times New Roman"))));
+    }
+
+    @Test
+    void kieuNguoiDungNghiengChuCaiLatinKhongDauDeTran() {
+        // Nhóm A: chuỗi chỉ gồm chữ cái Latin không dấu (vd MN, ABC, NP) -> để trần trong chế độ toán
+        assertOk("MN", MtefConverter.fromMtef(mtefWithDefs(line(fontStyleDef(1, 2), ch(-1, 'M'), ch(-1, 'N')),
+                fontDef("Times New Roman"))));
+        assertOk("ABC", MtefConverter.fromMtef(mtefWithDefs(line(fontStyleDef(1, 2), ch(-1, 'A'), ch(-1, 'B'), ch(-1, 'C')),
+                fontDef("Times New Roman"))));
+        // k8c3b1-mcq-004-f3: MN^2=MP^2-\ NP^2
+        assertOk("MN^{2}=MP^{2}-\\ NP^{2}", MtefConverter.fromMtef(mtefWithDefs(line(
+                fontStyleDef(1, 2),
+                ch(-1, 'M'), ch(-1, 'N'),
+                sup(ch(-1, '2')),
+                ch(-1, '='), ch(-1, 'M'), ch(-1, 'P'),
+                sup(ch(-1, '2')),
+                ch(-1, '-'), ch(-1, ' '), ch(-1, 'N'), ch(-1, 'P'),
+                sup(ch(-1, '2'))),
+                fontDef("Times New Roman"))));
+    }
+
+    @Test
+    void kieuNguoiDungNghiengChiDungTextKhiCoDauTiengVietHoacKhoangTrangGiuaCacTu() {
+        // Có khoảng trắng giữa các từ -> \text{...}
+        assertOk("\\text{a b}", MtefConverter.fromMtef(mtefWithDefs(line(fontStyleDef(1, 2),
+                ch(-1, 'a'), ch(-1, ' '), ch(-1, 'b')),
+                fontDef("Times New Roman"))));
+    }
+
+    @Test
+    void congThucCoKhoangTrangCuoiVaDauXuongDong() {
+        // Nhóm A: khoảng trắng ở cuối công thức không sinh dấu \ đứng lẻ
+        assertOk("60^{\\circ}", convert(num("60"), sup(ch(SYM, 0xB0)), ch(SPACE, 0xEF02)));
+        assertOk("220^{\\circ}", convert(num("220"), sup(ch(SYM, 0xB0)), str(TEXT, " ")));
     }
 
     @Test

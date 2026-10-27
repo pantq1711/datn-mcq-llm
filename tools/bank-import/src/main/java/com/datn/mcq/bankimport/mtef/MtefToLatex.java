@@ -184,6 +184,9 @@ final class MtefToLatex {
         while (i < items.size() && items.get(i) instanceof Chr c && c.unresolved() == null && isTextFace(c.face())
                 && normalizeTextFace(c.face()) == face) {
             if (c.code() == 0xB0) {
+                while (text.length() > 0 && text.charAt(text.length() - 1) == ' ') {
+                    text.setLength(text.length() - 1);
+                }
                 flushText(text, sb, face);
                 sb.append(scriptDepth > 0 ? "\\circ " : "^{\\circ}");
             } else {
@@ -214,6 +217,11 @@ final class MtefToLatex {
             text.setLength(0);
             return;
         }
+        if (face == 101) {
+            formatItalic(body, sb);
+            text.setLength(0);
+            return;
+        }
         sb.append(switch (face) {
             case 101 -> "\\textit{" + body + "}";
             case 102 -> "\\textbf{" + body + "}";
@@ -222,6 +230,45 @@ final class MtefToLatex {
             default -> "\\text{" + body + "}";
         });
         text.setLength(0);
+    }
+
+    private static void formatItalic(String body, StringBuilder sb) {
+        if (containsNonAscii(body) || hasSpaceBetweenWords(body)) {
+            sb.append("\\text{").append(body).append("}");
+            return;
+        }
+        for (int i = 0; i < body.length(); i++) {
+            char c = body.charAt(i);
+            if (c == ' ') {
+                sb.append("\\ ");
+            } else {
+                sb.append(c);
+            }
+        }
+    }
+
+    private static boolean hasSpaceBetweenWords(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (Character.isLetter(s.charAt(i))) {
+                int j = i + 1;
+                while (j < s.length() && Character.isWhitespace(s.charAt(j))) {
+                    j++;
+                }
+                if (j > i + 1 && j < s.length() && Character.isLetter(s.charAt(j))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsNonAscii(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) > 127) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String escapeText(int code) {
@@ -496,11 +543,53 @@ final class MtefToLatex {
     private static final Pattern SPACE_AFTER_WORD = Pattern.compile("(\\\\[A-Za-z]+) +(?![A-Za-z0-9])");
     private static final Pattern MULTI_SPACE = Pattern.compile(" {2,}");
 
+
     /** Bỏ khoảng trắng thừa sau lệnh khi ký tự kế tiếp không phải chữ/số. */
     static String clean(String s) {
         String out = SPACE_AFTER_WORD.matcher(s).replaceAll("$1");
         out = MULTI_SPACE.matcher(out).replaceAll(" ");
-        return out.strip();
+        out = stripTrailingMathWhitespace(out);
+        return out;
+    }
+
+    static String stripTrailingMathWhitespace(String s) {
+        String out = s;
+        while (true) {
+            String prev = out;
+            int end = out.length();
+            while (end > 0 && Character.isWhitespace(out.charAt(end - 1))) {
+                end--;
+            }
+            out = out.substring(0, end);
+
+            String[] spaceCmds = {"\\qquad", "\\quad", "\\,", "\\;", "\\:", "\\!"};
+            for (String cmd : spaceCmds) {
+                if (out.endsWith(cmd)) {
+                    int cmdStart = out.length() - cmd.length();
+                    int bs = 0;
+                    while (cmdStart - 1 - bs >= 0 && out.charAt(cmdStart - 1 - bs) == '\\') {
+                        bs++;
+                    }
+                    if (bs % 2 == 0) {
+                        out = out.substring(0, cmdStart);
+                        break;
+                    }
+                }
+            }
+
+            int trailingBs = 0;
+            while (trailingBs < out.length() && out.charAt(out.length() - 1 - trailingBs) == '\\') {
+                trailingBs++;
+            }
+            if (trailingBs % 2 != 0) {
+                out = out.substring(0, out.length() - 1);
+            }
+
+            if (out.equals(prev)) {
+                break;
+            }
+        }
+        return out;
     }
 
     private static boolean balanced(String s) {

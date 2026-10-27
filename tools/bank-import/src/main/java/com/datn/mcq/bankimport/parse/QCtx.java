@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Ngữ cảnh kết xuất của một câu: đổi {@link RichText} thành chuỗi có {@code $latex$}, token {@code ⟦fN⟧} / {@code ⟦imgN⟧}
@@ -47,7 +48,12 @@ final class QCtx {
             }
             char ch = rt.s.charAt(i);
             if (rt.objIdx[i] >= 0) {
-                sb.append(token(rt.objs.get(rt.objIdx[i]), role));
+                Obj o = rt.objs.get(rt.objIdx[i]);
+                String tok = token(o, role);
+                sb.append(tok);
+                if (o.equation() && tok.startsWith("$") && tok.endsWith("$") && followedByLetterOrDigit(rt, i + 1, omitFrom, omitTo)) {
+                    sb.append(' ');
+                }
                 i++;
             } else if (rt.script[i] != 0) {
                 byte kind = rt.script[i];
@@ -66,6 +72,16 @@ final class QCtx {
             }
         }
         return tidy(sb.toString());
+    }
+
+    private static boolean followedByLetterOrDigit(RichText rt, int next, int omitFrom, int omitTo) {
+        while (next < rt.length() && next >= omitFrom && next < omitTo) {
+            next++;
+        }
+        if (next < rt.length() && rt.objIdx[next] < 0 && rt.script[next] == 0) {
+            return Character.isLetterOrDigit(rt.s.codePointAt(next));
+        }
+        return false;
     }
 
     /** Chỉ đăng ký ảnh (không cần chuỗi), dùng cho ảnh nằm ngoài phương án, ví dụ ô ảnh của bảng bố cục. */

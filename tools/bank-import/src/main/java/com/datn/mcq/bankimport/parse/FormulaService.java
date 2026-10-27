@@ -10,7 +10,7 @@ import java.util.Map;
 final class FormulaService {
 
     private final Map<String, byte[]> binaries;
-    private final Map<String, FormulaResult> cache = new HashMap<>();
+    final Map<String, FormulaResult> cache = new HashMap<>();
     private final boolean validate;
 
     FormulaService(Map<String, byte[]> binaries, boolean validate) {
