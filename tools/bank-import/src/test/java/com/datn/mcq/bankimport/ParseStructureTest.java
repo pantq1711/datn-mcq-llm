@@ -99,7 +99,7 @@ class ParseStructureTest {
         Question x = q("mcq", 3);
         assertEquals("VD", x.levelRaw);
         assertEquals("hard", x.level);
-        assertEquals("Câu ba với bảng bố cục.", x.stem);
+        assertEquals("Câu ba với bảng bố cục.\n⟦img1⟧", x.stem);
         assertEquals("D", x.answer.value);
         assertEquals("bốn", optionText(x, "D"), "ảnh ở ô bên cạnh không lọt vào phương án D");
         assertTrue(x.hasImage);

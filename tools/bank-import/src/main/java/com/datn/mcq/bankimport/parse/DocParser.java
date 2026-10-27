@@ -158,6 +158,7 @@ public final class DocParser {
             out.add(sa(qb, ++n));
         }
         for (Question q : out) {
+            attachMissingImageTags(q);
             q.hasImage = !q.images.isEmpty();
             q.contentHash = hash(q);
             for (String f : q.flags) {
@@ -167,6 +168,70 @@ public final class DocParser {
             }
         }
         return new ParsedDoc(ln.source(), ln.teacher(), out, problems, pkg.binaries());
+    }
+
+    /**
+     * Bổ sung thẻ ⟦imgN⟧ vào trường tương ứng nếu ảnh chưa có thẻ trong bất kỳ trường văn bản nào của câu.
+     */
+    static void attachMissingImageTags(Question q) {
+        if (q.images == null || q.images.isEmpty()) {
+            return;
+        }
+        for (Question.ImageRef im : q.images) {
+            String tag = "⟦" + im.id + "⟧";
+            if (!containsImageTag(q, tag)) {
+                if ("stem".equals(im.role)) {
+                    q.stem = appendImageTag(q.stem, tag);
+                } else if ("solution".equals(im.role)) {
+                    q.solution = appendImageTag(q.solution, tag);
+                }
+            }
+        }
+    }
+
+    private static boolean containsImageTag(Question q, String tag) {
+        if (q.stem != null && q.stem.contains(tag)) {
+            return true;
+        }
+        if (q.options != null) {
+            for (Question.Option o : q.options) {
+                if (o.text != null && o.text.contains(tag)) {
+                    return true;
+                }
+            }
+        }
+        if (q.statements != null) {
+            for (Question.Statement s : q.statements) {
+                if (s.text != null && s.text.contains(tag)) {
+                    return true;
+                }
+            }
+        }
+        if (q.solution != null && q.solution.contains(tag)) {
+            return true;
+        }
+        if (q.tables != null) {
+            for (List<List<String>> tbl : q.tables) {
+                for (List<String> row : tbl) {
+                    for (String cell : row) {
+                        if (cell != null && cell.contains(tag)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        if (q.answer != null && q.answer.text != null && q.answer.text.contains(tag)) {
+            return true;
+        }
+        return false;
+    }
+
+    private static String appendImageTag(String text, String tag) {
+        if (text == null || text.isEmpty()) {
+            return tag;
+        }
+        return text + "\n" + tag;
     }
 
     /** Cờ cho biết cấu trúc câu chưa đủ tin cậy (khác với cờ thông tin như formula_partial). */
