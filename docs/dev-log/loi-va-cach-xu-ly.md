@@ -63,21 +63,22 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-47 | Câu Đúng/Sai bị gán nhãn theo mẫu bắt buộc bất chấp toán học, lời giải tự thú nhận (bổ sung 26/10) | LLM & parse | Cao | Đã sửa |
 | L-48 | Phạm vi dedup so nhầm câu riêng tư và câu nháp của giáo viên khác (bổ sung 26/10, W2-4a) | QC | Cao | Đã sửa |
 | L-49 | Bọc đề cho Solver chống chỉ thị nhúng (W2-4a mục 5) (bổ sung 26/10) | QC | Trung bình | Đã sửa |
+| L-50 | Thiên lệch vị trí nhãn câu Đúng/Sai: giải trước, rồi từng cặp ý và nhãn (W2-5) | LLM & parse | Trung bình | Đang sửa |
 
-**Thống kê theo nhóm** (49 mục):
+**Thống kê theo nhóm** (50 mục):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
 | Môi trường | 11 | 11 | 0 | 0 |
 | Dữ liệu/DB | 5 | 5 | 0 | 0 |
 | Quy trình git | 2 | 2 | 0 | 0 |
-| LLM & parse | 12 | 11 | 0 | 1 |
+| LLM & parse | 13 | 11 | 1 | 1 |
 | QC | 11 | 10 | 0 | 1 |
 | Hàng đợi/đồng thời | 7 | 6 | 0 | 1 |
 | Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **49** | **46** | **0** | **3** |
+| **Tổng** | **50** | **46** | **1** | **3** |
 
-Theo mức độ: Cao 11, Trung bình 24, Thấp 14.
+Theo mức độ: Cao 11, Trung bình 25, Thấp 14.
 
 ---
 
@@ -551,7 +552,40 @@ Theo mức độ: Cao 11, Trung bình 24, Thấp 14.
   sai nhãn lặng lẽ vẫn chỉ Solver bắt được (trong lần đo này không xảy ra); đề mơ hồ như q115 không ai bắt. (c) Cảnh báo "4 ý
   cùng nhãn" vẫn bật "cần xem kỹ" (q111 gán TTTT hợp lệ). (d) Chỉ 2 đề mỗi nhánh, nội dung biểu thức do model chọn nên hai nhánh
   không giống hệt nhau. Nhánh thứ ba (đổi thứ tự JSON tf: lời giải trước, phát biểu và nhãn sau) không làm vì đã đạt; chỉ xem
-  lại nếu sau này sai nhãn quay lại.
+  lại nếu sau này sai nhãn quay lại. (Đã thực hiện ở L-50 bên dưới do nảy sinh thiên lệch vị trí nhãn).
+
+### L-50 Thiên lệch vị trí nhãn câu Đúng/Sai: giải trước, rồi từng cặp ý và nhãn (W2-5)
+- Nhóm: LLM & parse
+- Triệu chứng: đo baseline 26/10 sau L-47 (`matrix-tf-v3-draft`): nhãn sai thật giảm xuống 4,5% (1/22), Solver lệch 4,8% (1/21),
+  nhưng nảy sinh thiên lệch vị trí nghiêm trọng:
+  - Mẫu nhãn mục tiêu gần như bị model bỏ qua (chỉ 2/22 lần sinh theo mẫu, 20/22 lần lệch).
+  - Thiên lệch nhãn theo vị trí rất nặng: ý a thường là T (76%, 16/21 ý), trong khi ý d thường là F (81%, 17/21 ý; chỉ 19% là T). Đề thi trở nên dễ đoán.
+- Nguyên nhân gốc:
+  - Schema JSON ban đầu (`propertyOrdering` / `required`) đặt các ý `statement_a..d` trước `explanation`. Model viết phát biểu các ý trước khi tính toán lời giải, dẫn đến việc các ý đầu (dễ) thường được phát biểu đúng (T), còn ý cuối (vận dụng khó hơn) thường phát biểu sai (F) để tránh phải tính toán phức tạp.
+  - Thêm vào đó, `ExamBuildService.latestTfPattern` trước đây đọc mẫu mục tiêu từ `prompt_note` thay vì nhãn thật của câu trước trong `generated_question_statement`. Khi model sinh lệch mẫu mục tiêu (ví dụ mẫu mục tiêu FFTT nhưng sinh ra TFTF), câu tiếp theo không biết nhãn thật đã sinh nên không thực sự chống lặp được.
+- Cách phát hiện: số liệu đo thực nghiệm 26/10 ở L-47 và phản biện độc lập trong thiết kế W2-5.
+- Cách sửa (Task W2-5, commit `8d688ca` và `cf7d5fb`):
+  - Đổi cấu trúc schema JSON (`TfPromptDraftV0`):
+    - `propertyOrdering` và `required`: `["question_text", "explanation", "statement_a", "label_a", "statement_b", "label_b", "statement_c", "label_c", "statement_d", "label_d"]`.
+    - Model buộc phải sinh lời giải (`explanation`) trước, tính toán kết quả đúng cho từng ý (a)–(d), rồi mới viết lần lượt từng cặp phát biểu và nhãn tương ứng.
+  - Prompt `TfPromptDraftV0`:
+    - Trong `explanation`: tính trước kết quả đúng cho từng ý (a)–(d), kết luận "nên khẳng định ... là Đúng/Sai". Không được nhắc tới mẫu nhãn hay yêu cầu (tránh bị `TfExplanationLeak` chặn).
+    - Phần hướng dẫn: mẫu nhãn là bắt buộc (`Mẫu nhãn bắt buộc (T,F,T,F)`), nhãn T nêu đúng kết quả đã tính, nhãn F đổi hệ số/dấu/kết luận so với kết quả đã tính. Nếu không thể viết ý hợp lý theo mẫu thì vẫn ưu tiên tính đúng toán học (lệch mẫu chỉ là cảnh báo `label: khác mẫu bắt buộc`, không gắn cờ).
+  - Nâng phiên bản prompt TF: `matrix-tf-v4-draft` trong `MatrixPromptDraftV0`.
+  - `ExamBuildService.latestTfPattern`:
+    - Đọc nhãn THẬT từ `generated_question_statement` (`actualTfPattern`) thay vì đọc mẫu mục tiêu từ `prompt_note`.
+    - Chỗ bị Đổi/sinh lại: ưu tiên dùng nhãn thật của chính câu hiện tại ở chỗ đó (`ownPattern`) để câu mới không lặp câu vừa bị thay.
+    - Chỗ câu sau: dùng nhãn thật của câu TF gần nhất thuộc các chỗ khác cùng đề (nếu chưa sinh xong câu thì fallback sang mẫu dự kiến).
+    - Chưa có câu nào: trả về `null` để chọn ngẫu nhiên trong 14 mẫu.
+- Chống tái phát:
+  - `TfExplanationLeakTest.loiGiaiMauDangMoiKhongBiChan` (lời giải mẫu dạng mới không bị chặn).
+  - `MatrixPromptDraftV0Test` (phiên bản prompt TF là `matrix-tf-v4-draft`).
+  - `TfPromptDraftV0Test` (kiểm tra thứ tự schema và prompt hướng dẫn giải trước).
+  - `ExamBuildTest.latestTfPatternDocNhanThatTuGeneratedQuestionStatement` (kiểm tra đầy đủ 3 trường hợp: chưa có câu trả về null; câu trước lệch mẫu thì câu sau tránh nhãn thật; chỗ bị đổi tránh nhãn của chính câu hiện tại; thử đột biến chứng minh bắt được lỗi).
+- Bài học:
+  - Thứ tự các trường trong JSON schema quyết định trình tự suy luận (Chain-of-Thought) của LLM: muốn LLM phát biểu chính xác theo nhãn định trước thì phải cho nó tính toán lời giải trước rồi mới viết phát biểu và gán nhãn theo từng cặp.
+  - Chống lặp phải dựa trên kết quả sinh thực tế đã lưu trong CSDL (`generated_question_statement`), không dựa trên chỉ thị mục tiêu ban đầu.
+- Trạng thái: Đang sửa — đã thay đổi code và test (v4), CHƯA đo hiệu quả; chờ thực nghiệm v3-mốc và v4 theo tiêu chí đã chốt.
 
 ## QC
 
