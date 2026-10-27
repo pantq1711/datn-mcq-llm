@@ -82,8 +82,9 @@ class ShortAnswerValueTest {
 
     @ParameterizedTest(name = "dòng {0}: {1} = {2}")
     @MethodSource("equalPairs")
-    void bangNhauTheoGiaTriOCaHaiCheDo(String row, String a, String b, String expectedKey) {
-        for (Mode mode : Mode.values()) {
+    void bangNhauTheoGiaTriOCheDoRong(String row, String a, String b, String expectedKey) {
+        // Từ 27/10 STRICT chỉ nhận số nguyên/thập phân ngắn (xem strictChiNhanSoNguyenHoacThapPhanToiDa4KyTu).
+        for (Mode mode : List.of(Mode.LENIENT)) {
             assertEquals(expectedKey, key(a, mode), "dòng " + row + ", " + mode + ", A");
             assertEquals(expectedKey, key(b, mode), "dòng " + row + ", " + mode + ", B");
             ShortAnswerValue va = parse(a, mode).value();
@@ -107,7 +108,7 @@ class ShortAnswerValueTest {
     @ParameterizedTest(name = "dòng {0}: {1} ≠ {2}")
     @MethodSource("differentPairs")
     void khacGiaTri(String row, String a, String b) {
-        for (Mode mode : Mode.values()) {
+        for (Mode mode : List.of(Mode.LENIENT)) {
             ShortAnswerValue va = parse(a, mode).value();
             ShortAnswerValue vb = parse(b, mode).value();
             assertFalse(va.sameValue(vb), "dòng " + row + ", " + mode);
@@ -122,12 +123,13 @@ class ShortAnswerValueTest {
                 Arguments.of("15", "05", "5", ShortAnswerValue.MSG_LEADING_ZERO),
                 Arguments.of("15b", "-05", "-5", ShortAnswerValue.MSG_LEADING_ZERO),
                 Arguments.of("15c", "007,5", "15/2", ShortAnswerValue.MSG_LEADING_ZERO),
-                Arguments.of("15d", "\\frac{05}{2}", "5/2", ShortAnswerValue.MSG_LEADING_ZERO),
-                Arguments.of("15e", "\\sqrt{012}", "2·√3", ShortAnswerValue.MSG_LEADING_ZERO),
+                // phân số/căn: STRICT từ chối vì dạng, không còn vì chữ số 0 (27/10)
+                Arguments.of("15d", "\\frac{05}{2}", "5/2", ShortAnswerValue.MSG_SA_ANSWER_FORMAT),
+                Arguments.of("15e", "\\sqrt{012}", "2·√3", ShortAnswerValue.MSG_SA_ANSWER_FORMAT),
                 Arguments.of("16", "-0", "0", ShortAnswerValue.MSG_NEGATIVE_ZERO),
                 Arguments.of("16b", "-0,0", "0", ShortAnswerValue.MSG_NEGATIVE_ZERO),
-                Arguments.of("16c", "-\\frac{0}{3}", "0", ShortAnswerValue.MSG_NEGATIVE_ZERO),
-                Arguments.of("16d", "\\frac{-0}{3}", "0", ShortAnswerValue.MSG_NEGATIVE_ZERO));
+                Arguments.of("16c", "-\\frac{0}{3}", "0", ShortAnswerValue.MSG_SA_ANSWER_FORMAT),
+                Arguments.of("16d", "\\frac{-0}{3}", "0", ShortAnswerValue.MSG_SA_ANSWER_FORMAT));
     }
 
     @ParameterizedTest(name = "dòng {0}: {1}")
@@ -193,9 +195,12 @@ class ShortAnswerValueTest {
     @ParameterizedTest(name = "dòng {0}: ''{1}''")
     @MethodSource("unparseable")
     void khongPhanTichDuocOCaHaiCheDo(String row, String raw, String expectedError) {
-        for (Mode mode : Mode.values()) {
-            assertUnparseable(raw, mode, expectedError);
-        }
+        assertUnparseable(raw, Mode.LENIENT, expectedError);
+        // STRICT: cùng không nhận, thông báo theo quy tắc đáp án (27/10): rỗng, quá 100 ký tự, còn lại là sai dạng.
+        String strictError = raw.isBlank() ? ShortAnswerValue.MSG_UNPARSEABLE
+                : raw.strip().length() > ShortAnswerValue.MAX_LENGTH ? ShortAnswerValue.MSG_TOO_LONG
+                : ShortAnswerValue.MSG_SA_ANSWER_FORMAT;
+        assertUnparseable(raw, Mode.STRICT, strictError);
     }
 
     @ParameterizedTest
@@ -208,7 +213,7 @@ class ShortAnswerValueTest {
     void dungMot100KyTuVanDuoc() {
         String hundred = "1" + "0".repeat(99);
         assertEquals(100, hundred.length());
-        assertEquals(hundred, key(hundred, Mode.STRICT));
+        assertEquals(hundred, key(hundred, Mode.LENIENT));
     }
 
     // ---------- phân số chưa tối giản: hợp lệ, chỉ cảnh báo ----------
@@ -230,7 +235,7 @@ class ShortAnswerValueTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("unreducedFractions")
     void phanSoChuaToiGianChiCanhBao(String raw, String expectedKey, boolean warn) {
-        for (Mode mode : Mode.values()) {
+        for (Mode mode : List.of(Mode.LENIENT)) {
             ParseResult r = parse(raw, mode);
             assertTrue(r.ok(), raw + " phải hợp lệ ở " + mode);
             assertEquals(expectedKey, r.value().canonicalKey());
@@ -250,8 +255,79 @@ class ShortAnswerValueTest {
         assertEquals("2\\sqrt{12}", ShortAnswerValue.withoutLeadingZeros("2\\sqrt{012}"));
         assertEquals("100", ShortAnswerValue.withoutLeadingZeros("100"));
         for (String raw : new String[] {"05", "-05", "007,5", "\\frac{05}{2}", "2\\sqrt{012}"}) {
-            assertTrue(parse(ShortAnswerValue.withoutLeadingZeros(raw), Mode.STRICT).ok(), raw);
+            assertTrue(parse(ShortAnswerValue.withoutLeadingZeros(raw), Mode.LENIENT).ok(), raw);
         }
+        assertTrue(parse(ShortAnswerValue.withoutLeadingZeros("007,5"), Mode.STRICT).ok(), "007,5 sau khi bỏ số 0 thừa");
+    }
+
+    // ---------- 27/10: đáp án sa theo phiếu trả lời Bộ GD&ĐT 2025, Phần III (tối đa 4 ký tự) ----------
+
+    @Test
+    void strictChiNhanSoNguyenHoacThapPhanToiDa4KyTu() {
+        assertEquals("5", key("5", Mode.STRICT));
+        assertEquals("-12", key("-12", Mode.STRICT));
+        assertEquals("11/4", key("2,75", Mode.STRICT));
+        assertEquals("11/4", key("2.75", Mode.STRICT), "dấu chấm thập phân được đổi thành dấu phẩy");
+        assertEquals("3/2", key("$1,5$", Mode.STRICT));
+        assertEquals("1/2", key("0,5", Mode.STRICT));
+        assertEquals("-1/2", key("-0,5", Mode.STRICT));
+        assertEquals("1234", key("1234", Mode.STRICT));
+        assertEquals("1/20", key("0,05", Mode.STRICT));
+    }
+
+    static Stream<Arguments> strictRejected() {
+        String f = ShortAnswerValue.MSG_SA_ANSWER_FORMAT;
+        return Stream.of(
+                Arguments.of("\\frac{11}{4}", f),
+                Arguments.of("$3\\frac{1}{4}$", f),
+                Arguments.of("4\\frac{1}{3}", f),
+                Arguments.of("11/4", f),
+                Arguments.of("2\\sqrt{3}", f),
+                Arguments.of("12,345", f),
+                Arguments.of("-1234", f),
+                Arguments.of("05", ShortAnswerValue.MSG_LEADING_ZERO),
+                Arguments.of("-0", ShortAnswerValue.MSG_NEGATIVE_ZERO),
+                Arguments.of("3,", f),
+                Arguments.of("6 km", f));
+    }
+
+    @ParameterizedTest(name = "STRICT từ chối ''{0}''")
+    @MethodSource("strictRejected")
+    void strictTuChoiDangKhac(String raw, String expectedError) {
+        assertUnparseable(raw, Mode.STRICT, expectedError);
+    }
+
+    /** Dạng lưu của đáp án sa: chỉ chuẩn hóa khi đạt STRICT, còn lại trả null để nơi gọi giữ nguyên văn. */
+    @Test
+    void chuanHoaDapAnSaChiKhiDatStrict() {
+        assertEquals("2,75", ShortAnswerValue.normalizedStrictAnswer("2.75"));
+        assertEquals("1,5", ShortAnswerValue.normalizedStrictAnswer("$1,5$"));
+        assertEquals("1,5", ShortAnswerValue.normalizedStrictAnswer("$$1,5$$"));
+        assertEquals("-12", ShortAnswerValue.normalizedStrictAnswer(" −12 "));
+        assertEquals("2,5", ShortAnswerValue.normalizedStrictAnswer("$2{,}5$"));
+        assertEquals("0,5", ShortAnswerValue.normalizedStrictAnswer("0.5"));
+        assertEquals("1234", ShortAnswerValue.normalizedStrictAnswer("1234"));
+        for (String bad : new String[] {"\\frac{11}{4}", "$3\\frac{1}{4}$", "05", "-0", "12,345", "3,", "6 km", "", "  "}) {
+            assertNull(ShortAnswerValue.normalizedStrictAnswer(bad), bad);
+        }
+        assertNull(ShortAnswerValue.normalizedStrictAnswer(null));
+    }
+
+    @Test
+    void thongBaoDapAnNoiRoCachSua() {
+        assertTrue(ShortAnswerValue.MSG_SA_ANSWER_FORMAT.contains("tối đa 4 ký tự"));
+        assertTrue(ShortAnswerValue.MSG_SA_ANSWER_FORMAT.contains("phân số/căn"));
+        assertTrue(ShortAnswerValue.MSG_SA_ANSWER_FORMAT.contains("làm tròn"));
+    }
+
+    /** Đáp án Solver đọc ở LENIENT: vẫn đọc phân số/căn để so giá trị với đáp án câu (thập phân). */
+    @Test
+    void lenientVanDocPhanSoCuaSolver() {
+        ShortAnswerValue solver = parse("11/4", Mode.LENIENT).value();
+        ShortAnswerValue question = parse("2,75", Mode.STRICT).value();
+        assertTrue(solver.sameValue(question));
+        assertEquals("11/4", solver.canonicalKey());
+        assertTrue(parse("\\frac{11}{4}", Mode.LENIENT).value().sameValue(question));
     }
 
     @Test

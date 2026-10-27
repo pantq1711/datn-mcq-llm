@@ -142,7 +142,7 @@ Công cụ thí nghiệm: chỉ có khi `app.experiment.enabled=true` (xem mục
   là `null` với `sa` và `tf`.
 - `qcReport`: `resultingStatus, formatPassed, formatErrors, answerCheckPassed, judgeAnswer, judgeModel, solverReasoning,
   answerCheckStatus, dedupStatus, dedup`, cộng các trường chỉ có khi khác rỗng:
-  - `answerWarnings` (`sa`, `tf`): cảnh báo không chặn, ví dụ `answer: phân số chưa tối giản`, `label: 4 ý cùng nhãn T`,
+  - `answerWarnings` (`sa`, `tf`): cảnh báo không chặn, ví dụ `label: 4 ý cùng nhãn T`,
     `statement_a: đã bỏ tiền tố "a)" ở đầu ý` (quy tắc bỏ tiền tố ở mục 4.3 của `enums.md`; dạng `a.` chỉ bỏ khi ký tự
     ngay sau dấu chấm không phải chữ cái, nên `a.b = 0` giữ nguyên còn `a. Điều kiện` thì bỏ). Từ V5 cảnh báo được
     lưu ở `quality_check_result.warnings` (dòng `format`), cả luồng job, và `answerWarnings` đọc lại từ cột đó;
@@ -370,12 +370,14 @@ thì nhập `1500` hoặc `1 500`; muốn viết 1,125 thì nhập `1,125`. Dấ
 
 **Hai chế độ:**
 
-| Chế độ | Áp dụng cho | Chặn thêm |
+| Chế độ | Áp dụng cho | Nhận |
 |---|---|---|
-| Chặt (STRICT) | `answer` do LLM sinh (bước format) | Chữ số 0 thừa ở đầu (`05`, `-007,5`, `\frac{05}{2}`, `\sqrt{012}`) và số 0 mang dấu âm (`-0`, `-0,0`, `-\frac{0}{3}`) |
-| Rộng (LENIENT) | `judge_answer` của Solver; so khớp đáp số khi dedup | Chỉ cần phân tích được |
+| Chặt (STRICT) | `answer` của câu `sa` (bước format, kể cả bản giáo viên sửa) | Từ 27/10 chỉ số nguyên hoặc thập phân dùng dấu phẩy, tối đa 4 ký tự tính cả `-` và `,` (`5`, `-12`, `2,75`, `0,5`, `1234`); `2.75` được đổi thành `2,75`. Từ chối phân số, hỗn số, căn, đơn vị, quá 4 ký tự, `05`, `-0`, `3,`. Xem quy tắc đáp án `sa` ở `docs/contract/enums.md` mục 4.2 (nguồn: phiếu trả lời Bộ GD&ĐT 2025, Phần III, tối đa 4 cột) |
+| Rộng (LENIENT) | `judge_answer` của Solver; so khớp đáp số khi dedup | Chỉ cần phân tích được theo ngữ pháp ở trên (vẫn nhận phân số và căn) |
 
-- Đáp số LLM sinh có chữ số 0 thừa hoặc không phân tích được là lỗi format: câu thành `format_failed`.
+Các bảng ví dụ ở trên (phân số, căn, dấu chấm hàng nghìn...) mô tả chế độ rộng LENIENT.
+
+- Đáp số LLM sinh sai dạng ở chế độ chặt là lỗi format: câu thành `format_failed`; giáo viên sửa tay sai dạng thì 400 `FORMAT_INVALID`.
 - `reviewerSaAnswer`, `finalSaAnswer` và so khớp `answerCorrect` thuộc form chấm mù đã gỡ (25/10).
 
 ## 5. Form chấm mù (đã gỡ)

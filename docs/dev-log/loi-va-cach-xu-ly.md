@@ -63,21 +63,23 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-47 | Câu Đúng/Sai bị gán nhãn theo mẫu bắt buộc bất chấp toán học, lời giải tự thú nhận (bổ sung 26/10) | LLM & parse | Cao | Đã sửa |
 | L-48 | Phạm vi dedup so nhầm câu riêng tư và câu nháp của giáo viên khác (bổ sung 26/10, W2-4a) | QC | Cao | Đã sửa |
 | L-49 | Bọc đề cho Solver chống chỉ thị nhúng (W2-4a mục 5) (bổ sung 26/10) | QC | Trung bình | Đã sửa |
+| L-50 | Đáp án câu Trả lời ngắn là phân số, hỗn số, vượt quy ước phiếu trả lời Bộ GD&ĐT (bổ sung 27/10) | LLM & parse | Trung bình | Đã sửa |
+| L-51 | Model viết đơn vị đo `\text{km/h}` ngoài `$...$`, cả ô mcq mức vừa bị loại 18/18 lượt sinh (bổ sung 27/10) | LLM & parse | Cao | Đã sửa |
 
-**Thống kê theo nhóm** (49 mục):
+**Thống kê theo nhóm** (51 mục):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
 | Môi trường | 11 | 11 | 0 | 0 |
 | Dữ liệu/DB | 5 | 5 | 0 | 0 |
 | Quy trình git | 2 | 2 | 0 | 0 |
-| LLM & parse | 12 | 11 | 0 | 1 |
+| LLM & parse | 14 | 13 | 0 | 1 |
 | QC | 11 | 10 | 0 | 1 |
 | Hàng đợi/đồng thời | 7 | 6 | 0 | 1 |
 | Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **49** | **46** | **0** | **3** |
+| **Tổng** | **51** | **48** | **0** | **3** |
 
-Theo mức độ: Cao 11, Trung bình 24, Thấp 14.
+Theo mức độ: Cao 12, Trung bình 25, Thấp 14.
 
 ---
 
@@ -552,6 +554,72 @@ Theo mức độ: Cao 11, Trung bình 24, Thấp 14.
   cùng nhãn" vẫn bật "cần xem kỹ" (q111 gán TTTT hợp lệ). (d) Chỉ 2 đề mỗi nhánh, nội dung biểu thức do model chọn nên hai nhánh
   không giống hệt nhau. Nhánh thứ ba (đổi thứ tự JSON tf: lời giải trước, phát biểu và nhãn sau) không làm vì đã đạt; chỉ xem
   lại nếu sau này sai nhãn quay lại.
+
+### L-50 Đáp án câu Trả lời ngắn là phân số, hỗn số, vượt quy ước phiếu trả lời Bộ GD&ĐT (bổ sung 27/10)
+- Nhóm: LLM & parse
+- Triệu chứng: đo đề 9 (27/10), ô 23 (sa): chỗ 2 hết 3 lần sinh và thành `failed` (`qc_exhausted`). Ba câu bị loại ở bước format có
+  `answer` là `\frac{11}{4}` (câu 145, lỗi "LaTeX ngoài $"), `$3\frac{1}{4}$` (147) và `4\frac{1}{3}` (148), hai câu sau với lỗi
+  "không phân tích được thành một số". Nội dung `answer` do chủ dự án cung cấp ngày 27/10; chưa đối chiếu lại với DB.
+- Nguyên nhân gốc: quy tắc đáp số cũ (`SaPromptDraftV0.ANSWER_RULES`) cho phép đáp số là phân số `$\frac{a}{b}$` và `k\sqrt{n}`,
+  còn ngữ pháp `ShortAnswerValue` không nhận hỗn số; hai bên không khớp nhau, và cả hai đều không theo hình thức thi thật. Phiếu trả lời
+  trắc nghiệm của Bộ GD&ĐT 2025, Phần III (trả lời ngắn) chỉ có tối đa 4 cột, nên đáp án chỉ có thể là số nguyên hoặc thập phân ngắn.
+- Quyết định nghiệp vụ (chủ dự án chốt 27/10): đáp án `sa` chỉ là số nguyên hoặc số thập phân, tối đa 4 ký tự tính cả dấu `-` (chỉ ở
+  đầu) và dấu `,`; không phân số, hỗn số, căn, đơn vị; kết quả lẻ thì đề phải ghi rõ làm tròn đến hàng nào. Hệ thống không tự đổi phân
+  số sang thập phân.
+- Cách sửa:
+  - `ShortAnswerValue.parse` chế độ STRICT: bỏ cặp `$`, trim, đổi `.` thành `,`, chỉ nhận `-?[0-9]+(,[0-9]+)?` dài tối đa 4 ký tự, giữ
+    chặn `05` và `-0`; thông báo `MSG_SA_ANSWER_FORMAT` nói rõ cách sửa. Chế độ LENIENT không đổi: Solver và dedup vẫn đọc được phân số
+    và căn để so giá trị.
+  - `FormatChecker`: đáp án đã sai dạng thì không báo thêm "LaTeX ngoài $", để ghi chú sinh lại chỉ nói đúng cách sửa.
+  - Prompt ma trận `matrix-sa-v3-draft`: hằng riêng `MatrixPromptDraftV0.SA_ANSWER_RULES` (không đụng `ESCAPE_HINT`, prompt Solver và
+    `ANSWER_RULES` của prompt sinh lẻ).
+  - Bản giáo viên sửa tay đã đi qua `FormatChecker`, nên nhập phân số trả 400 `FORMAT_INVALID` với cùng thông báo.
+- Chống tái phát: `ShortAnswerValueTest` (`strictChiNhanSoNguyenHoacThapPhanToiDa4KyTu`, `strictTuChoiDangKhac`,
+  `lenientVanDocPhanSoCuaSolver`), `FormatCheckerShortAnswerTest.phanSoVaHonSoBiLoaiVoiThongDiepDapAnUuTienHonLoiLatex`,
+  `MatrixPromptDraftV0Test.promptSaDanDapAnSoNguyenHoacThapPhanToiDa4KyTu`,
+  `ExamQuestionEditTest.loiSchemaDapAnVaLatexTra400KhongGhiGi`.
+- Lưu ý số liệu thực nghiệm: đáp án sa trước và sau 27/10 theo hai quy tắc khác nhau; prompt `matrix-sa-v3-draft` đổi phân bố đáp án nên
+  số liệu sa trước đó không so trực tiếp được. Dữ liệu cũ (`generated_question`, `bank_item`) không bị sửa; chạy lại bước format cho câu
+  cũ có phân số hoặc căn sẽ cho `format_failed`. Đáp số Solver so với đáp án câu bằng `sameValue` (đúng giá trị, không dung sai làm
+  tròn), nên câu có đáp án đã làm tròn mà Solver trả giá trị chính xác sẽ lệch.
+- Cập nhật cùng ngày: đáp án đạt STRICT được lưu ở dạng chuẩn hóa (`ShortAnswerValue.normalizedStrictAnswer`: bỏ `$...$` bao ngoài, `.`
+  thành `,`, `−` thành `-`, `{,}` thành `,`) ở cả đường sinh câu (`SaJsonParser`, chế độ sửa) và đường giáo viên sửa
+  (`QuestionEditService`); đáp án không đạt giữ nguyên văn để báo lỗi. Test: `ShortAnswerFlowTest.dapAnSaLuuDangChuanHoa`,
+  `ExamQuestionEditTest.suaDapAnSaLuuDangChuanHoa`.
+- Trạng thái: Đã sửa trong code và test; chưa đo lại bằng đề thật.
+
+### L-51 Model viết đơn vị đo `\text{km/h}` ngoài `$...$`, cả ô mcq mức vừa bị loại 18/18 lượt sinh (bổ sung 27/10)
+- Nhóm: LLM & parse
+- Triệu chứng: đo đề 10 (27/10, 18 câu, ngân hàng chưa có câu nào): 3 phút 58 giây, chỉ 12/18 câu xong (`partial`). Cả 6 chỗ của ô 25
+  (mcq mức vừa) hết 3 lần sinh và thành `failed` (`qc_exhausted`): 18/18 lượt sinh đều không qua bước format với cùng một lỗi "Có lệnh
+  LaTeX nằm ngoài cặp $...$ (thiếu dấu $ bao quanh công thức)". Mọi job đều `done`, không có `last_error`, nên không phải lỗi hạ tầng
+  hay Gemini. Đoạn gây lỗi (trích từ `raw_llm_output`): `vận tốc trung bình là $40$ \text{km/h}`, phương án `$100$ \text{km}`, lời
+  giải `(\text{km})`. Ô mcq mức dễ, tf và sa của cùng đề không lỗi vì lý do này; 6 stem mẫu của ô mức dễ (đổi giờ, phân số) không có
+  đơn vị đo, nhưng vì sao chỉ ô mức vừa lỗi thì chưa xác nhận (chưa đủ mẫu).
+- Nguyên nhân gốc: model viết số trong `$...$` nhưng đơn vị bằng `\text{...}` đặt ngay sau dấu `$` đóng, tức nằm ngoài công thức.
+  `LatexValidationRules.collect` (dòng 107-113) coi "`\` theo sau là chữ cái, nằm ngoài `$...$`" là lỗi chặn, đúng quy tắc, không
+  bắt nhầm. Lời nhắc sinh lại ("Lần sinh trước bị loại vì: ... thiếu dấu $ ... Tránh lặp lại lỗi này.") chỉ nêu lý do chung, không
+  chỉ đoạn sai hay cách sửa, và `ESCAPE_HINT` chỉ có ví dụ phân số, căn, ký hiệu, không có đơn vị đo; 12/12 lượt sinh lại vẫn lặp lỗi.
+- Cách phát hiện: truy vết đề 10, ô 25: `exam_slot` → `generation_job` → `generated_question` + `quality_check_result` (`check_type =
+  'format'`), đọc từng đoạn text gây lỗi.
+- Cách sửa:
+  - `LlmOutputRepair.stripTextOutsideMath`: gỡ vỏ `\text{X}` nằm ngoài `$...$` thành X (trim, đúng một dấu cách sau ký tự đứng trước
+    nếu cần); chỉ đúng lệnh `\text{`, không đụng `\textbf`, `\textit`; để nguyên khi ngoặc không cân hoặc X chứa `\` hoặc `$`. Gọi ở
+    `textField` (mọi trường của mcq, sa, tf) ngay trước bước tự đóng `$`, chỉ ở chế độ sửa; cảnh báo `json: đã sửa N \text{} ngoài $
+    (đã gỡ vỏ) ở <trường>` cùng tiền tố với cảnh báo sửa escape nên không bật "cần xem kỹ".
+  - `QuestionEditService.text`: bản giáo viên sửa tay cũng được gỡ vỏ trước bước tự đóng `$` (trước đó bản sửa có `\text{}` ngoài `$`
+    bị chặn 400 `FORMAT_INVALID`).
+  - Prompt ma trận (mcq `v2`, tf `v4`, sa `v3`): hằng riêng `MatrixPromptDraftV0.UNIT_RULE` ("Đơn vị đo viết bằng chữ thường NGOÀI
+    cặp $...$: `"$40$ km/h"`, `"$2{,}5$ giờ"`; không dùng `\text{...}` ngoài cặp"), đặt sau `ESCAPE_HINT`. `PromptBuilder.ESCAPE_HINT` và
+    các prompt Solver không đổi, `SOLVER_PROMPT_VERSION` giữ `solver-v2-delimited`.
+- Chống tái phát: `LlmOutputRepairTest` (`goVoTextNgoaiDolaVaGiuMotDauCach`, `textTrongDolaHoacKhongPhaiLenhTextHoacHongThiGiuNguyen`,
+  `cauMcqDonViNgoaiDolaQuaFormatSauKhiGo`, `goVoTextOMoiTruongCuaSaVaTf`),
+  `ExamQuestionEditTest.banSuaCoTextNgoaiDolaDuocGoVoVaQuaFormat`,
+  `MatrixPromptDraftV0Test` (`quyTacDinhDangDayDonViDoNgoaiDola`, `cauDanDonViChiNamTrongPromptMaTranKhongNamTrongSolver`).
+- Bài học: một lỗi định dạng mà model lặp lại ở mọi lượt sinh lại thì lời nhắc chung chung không đủ; cần ví dụ đúng trong prompt và một
+  bước sửa tự động cho dạng sai đã biết, giống escape LaTeX (L-20) và `$` quên đóng (L-21). Số liệu thời gian tạo đề trước và sau sửa
+  không so trực tiếp được vì lần đo này có 6 chỗ dùng hết 3 lần thử.
+- Trạng thái: Đã sửa trong code và test; chưa đo lại bằng đề thật.
 
 ## QC
 

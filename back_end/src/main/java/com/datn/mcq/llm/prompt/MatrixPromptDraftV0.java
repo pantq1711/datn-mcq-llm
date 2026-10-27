@@ -31,16 +31,54 @@ public final class MatrixPromptDraftV0 {
     static final String NEW_PROBLEM_RULE = "Tự đặt một bài toán MỚI với số liệu, biểu thức hoặc ngữ cảnh riêng; không "
             + "chép nguyên văn bài tập quen thuộc trong sách giáo khoa.";
 
+    /**
+     * Quy tắc đáp án câu sa của prompt ma trận (27/10): theo phiếu trả lời trắc nghiệm Bộ GD&ĐT 2025, Phần III (tối đa 4
+     * cột). Riêng cho prompt ma trận; {@link SaPromptDraftV0#ANSWER_RULES} (prompt sinh lẻ và Solver) giữ nguyên. Mở đầu
+     * bằng một dòng trống như {@code ANSWER_RULES}.
+     */
+    static final String SA_ANSWER_RULES = """
+
+            Quy tắc đáp án (theo phiếu trả lời trắc nghiệm của Bộ GD&ĐT, Phần III):
+            - Đáp án là MỘT số nguyên hoặc MỘT số thập phân viết bằng dấu phẩy, tối đa 4 ký tự tính cả dấu "-" (chỉ ở \
+            đầu) và dấu phẩy, ví dụ "2,75", "-12", "0,5". Viết trần, không bọc trong $...$.
+            - Không phân số, hỗn số, căn, đơn vị; không viết "x =".
+            - Nếu kết quả tính ra không gọn trong 4 ký tự (số vô tỉ, phân số không viết gọn được bằng số thập phân hữu \
+            hạn, số quá dài) thì đề bài phải yêu cầu làm tròn rõ ràng (ví dụ "làm tròn đến hàng phần mười") và đáp án \
+            là giá trị đã làm tròn đúng yêu cầu đó.
+            - Nếu kết quả là số lớn hơn 4 ký tự (ví dụ tiền, dân số, khối lượng) thì đề bài phải đổi đơn vị cho đáp án \
+            gọn trong 4 ký tự (ví dụ "tính theo nghìn đồng", "đơn vị: triệu người", "đơn vị: tấn"). Ví dụ: \
+            10000 đồng thì đề hỏi theo nghìn đồng và đáp án "10".
+            - Không viết chữ số 0 thừa ở đầu (viết 5, không viết 05); không viết -0.
+            - Đề chỉ có một cách hiểu và một đáp án duy nhất.
+            """;
+
+    /**
+     * Câu dặn đơn vị đo của prompt ma trận (27/10, sau đo exam 10: 18/18 lượt sinh ô mcq mức vừa viết "\text{km/h}" ngoài
+     * $). Hằng riêng, đặt ngay sau {@link PromptBuilder#ESCAPE_HINT} trong prompt mcq, sa, tf; {@code ESCAPE_HINT} và các
+     * prompt Solver (cùng dùng {@code ESCAPE_HINT}) không đổi.
+     */
+    static final String UNIT_RULE = "- Đơn vị đo (km, km/h, cm, giờ, phút...) viết bằng chữ thường NGOÀI cặp $...$, chỉ "
+            + "phần số nằm trong cặp: \"$40$ km/h\", \"$2{,}5$ giờ\". Không dùng \\text{...} ngoài cặp $...$.";
+
     private MatrixPromptDraftV0() {}
 
     /**
      * prompt_version của run, ví dụ "matrix-mcq-v1-draft". v1 (ngày 23/10): ghi chú câu thứ k/n và lý do lần sinh trước
      * bị loại, quy tắc phương án nhiễu (mcq), quy tắc ý bám đề dẫn và đóng "$" (tf). tf v2 (ngày 23/10, đợt 2): mẫu nhãn
      * bắt buộc ({@link TfLabelPattern}) và quy tắc ý d Vận dụng. tf v3 (ngày 26/10, sau đo 20 chỗ tf): mẫu nhãn là mục tiêu,
-     * nhãn phải theo đúng/sai thật, được lệch mẫu, lời giải không nhắc tới mẫu. Run cũ là v0 (tf: v0, v1, v2).
+     * nhãn phải theo đúng/sai thật, được lệch mẫu, lời giải không nhắc tới mẫu. mcq/sa v2 và tf v4 (ngày 27/10, sau đo exam
+     * 10: 18/18 lượt sinh ô mcq mức vừa bị loại vì viết "\text{km/h}" ngoài $): thêm {@link #UNIT_RULE} (ví dụ đơn vị đo
+     * viết ngoài $; {@code ESCAPE_HINT} không đổi). sa v3 (ngày 27/10, sau đo exam 9 ô 23: câu 145, 147, 148 bị loại vì đáp án "\frac{11}{4}",
+     * "$3\frac{1}{4}$", "4\frac{1}{3}"): {@link #SA_ANSWER_RULES} thay quy tắc đáp số chung, đáp án chỉ là số nguyên hoặc
+     * thập phân tối đa 4 ký tự (phiếu trả lời Bộ GD&ĐT 2025, Phần III). Run cũ là v0 (tf: v0, v1, v2, v3; mcq: v1; sa: v1, v2).
      */
     public static String promptVersion(QuestionType type) {
-        return VERSION_PREFIX + type.getDbValue() + (type == QuestionType.TF ? "-v3-draft" : "-v1-draft");
+        String version = switch (type) {
+            case TF -> "-v4-draft";
+            case SA -> "-v3-draft";
+            case MCQ -> "-v2-draft";
+        };
+        return VERSION_PREFIX + type.getDbValue() + version;
     }
 
     public static boolean isMatrixVersion(String promptVersion) {
@@ -264,7 +302,7 @@ public final class MatrixPromptDraftV0 {
                         - Viết lời giải ngắn trong "explanation" và kiểm tra "correct_option" khớp với lời giải.
                         """);
                 sb.append(MCQ_DISTRACTOR_RULE).append("\n");
-                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append("\n");
+                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append("""
                         Trả về DUY NHẤT một đối tượng JSON có đủ 7 trường:
                         "question_text", "option_a", "option_b", "option_c", "option_d", "correct_option" (A/B/C/D), \
@@ -281,12 +319,12 @@ public final class MatrixPromptDraftV0 {
                 if (levels != null && levels.size() == 4 && levels.get(3) == Difficulty.HARD) {
                     sb.append(TF_D_RULE).append("\n");
                 }
-                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append("\n");
+                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(TfPromptDraftV0.OUTPUT_INSTRUCTION);
             }
             case SA -> {
-                sb.append(SaPromptDraftV0.ANSWER_RULES);
-                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append("\n");
+                sb.append(SA_ANSWER_RULES);
+                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(SaPromptDraftV0.OUTPUT_INSTRUCTION);
             }
         }

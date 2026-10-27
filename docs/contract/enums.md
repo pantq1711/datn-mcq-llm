@@ -391,15 +391,28 @@ Thứ tự: `question_text`, `explanation`, `answer`. Lời giải đứng trư�
 |---|---|---|
 | `question_text` | chuỗi | Không trống. Với môn Toán, lỗi LaTeX là lỗi chặn (`format_failed`) |
 | `explanation` | chuỗi | Không trống. Lỗi LaTeX chỉ là cảnh báo |
-| `answer` | **chuỗi** | Không trống; phải là chuỗi JSON (`"5"`, không phải `5`); phân tích được ở chế độ chặt (STRICT), xem bảng đáp số ở `docs/api/README.md`. Lỗi LaTeX là lỗi chặn. Phân số chưa tối giản (`2/4`) vẫn hợp lệ, kèm cảnh báo `answer: phân số chưa tối giản` trong `answerWarnings` |
+| `answer` | **chuỗi** | Không trống; phải là chuỗi JSON (`"5"`, không phải `5`); đạt quy tắc đáp án bên dưới (chế độ chặt STRICT). Đáp án sai dạng thì chỉ báo lỗi dạng, không báo thêm lỗi LaTeX ngoài `$` |
+
+**Quy tắc đáp án `sa` (quyết định 27/10/2026).** Nguồn: phiếu trả lời trắc nghiệm của Bộ GD&ĐT 2025, Phần III (trả lời ngắn):
+đáp án điền vào tối đa 4 cột. Vì vậy `generated_question.sa_answer`, `bank_item.sa_answer` và bản giáo viên sửa của câu `sa` chỉ là
+SỐ NGUYÊN hoặc SỐ THẬP PHÂN, tối đa 4 ký tự tính cả dấu `-` (chỉ ở đầu) và dấu `,` (phân cách thập phân):
+
+- Trước khi kiểm: trim, bỏ cặp `$...$` (hoặc `$$...$$`) bao cả chuỗi, đổi `−` (U+2212) thành `-`, `{,}` thành `,`, dấu `.` thành `,`.
+- Nhận: `^-?[0-9]+(,[0-9]+)?$`, dài tối đa 4 ký tự sau khi chuẩn hóa. Ví dụ `5`, `-12`, `2,75`, `2.75` (thành `2,75`), `$1,5$`, `0,5`, `1234`.
+- Từ chối: phân số (`\frac{11}{4}`, `11/4`), hỗn số (`$3\frac{1}{4}$`), căn (`2\sqrt{3}`), đơn vị (`6 km`), quá 4 ký tự (`12,345`, `-1234`),
+  dấu phẩy cuối (`3,`), chữ số 0 thừa ở đầu (`05`), số 0 mang dấu âm (`-0`). Thông báo (`format_failed`, ghi chú sinh lại): `đáp án phải là số nguyên hoặc thập phân tối đa 4 ký tự (gồm dấu - và dấu phẩy), không dùng phân số/căn; nếu kết quả lẻ thì đề phải ghi rõ làm tròn đến hàng nào`.
+- Lưu trữ: đáp án đạt STRICT được lưu ở dạng đã chuẩn hóa (`2.75` và `$2,75$` đều lưu `2,75`) ở cả đường sinh câu và đường giáo viên sửa; đáp án không đạt giữ nguyên văn để báo lỗi.
+- Kết quả không gọn trong 4 ký tự thì đề phải yêu cầu làm tròn rõ ràng (ví dụ "làm tròn đến hàng phần mười"); hệ thống không tự đổi phân số sang thập phân.
+- Không đổi: đáp số Solver (`judge_sa_answer`) và so khớp khi dedup đọc ở chế độ rộng LENIENT, vẫn nhận phân số và căn để so giá trị với đáp án câu.
+- Dữ liệu cũ (trước 27/10) không bị sửa; chạy lại bước format cho câu cũ có phân số hoặc căn sẽ cho `format_failed`.
 
 Mức mục tiêu (`targetDifficulty`, bỏ trống là `easy`) đi trong prompt, không nằm trong JSON; backend lưu nó ở `generated_question.llm_difficulty`.
 
 ```json
 {
-  "question_text": "Cho tam giác $ABC$ vuông cân tại $A$ có $AB = AC = 3$. Tính độ dài cạnh $BC$.",
-  "explanation": "Theo định lí Pythagore, $BC^2 = AB^2 + AC^2 = 9 + 9 = 18$, nên $BC = \\sqrt{18} = 3\\sqrt{2}$.",
-  "answer": "$3\\sqrt{2}$"
+  "question_text": "Cho tam giác $ABC$ vuông cân tại $A$ có $AB = AC = 3$. Tính độ dài cạnh $BC$, làm tròn đến hàng phần mười.",
+  "explanation": "Theo định lí Pythagore, $BC^2 = AB^2 + AC^2 = 9 + 9 = 18$, nên $BC = \\sqrt{18}$; làm tròn đến hàng phần mười được $4,2$.",
+  "answer": "4,2"
 }
 ```
 

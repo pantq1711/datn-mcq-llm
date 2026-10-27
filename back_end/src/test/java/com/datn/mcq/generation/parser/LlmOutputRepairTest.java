@@ -9,6 +9,7 @@ import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -190,5 +191,98 @@ class LlmOutputRepairTest {
         assertTrue(p.parseSuccess(), p.parseError());
         assertEquals("$3\\sqrt{2}$", p.answer());
         assertEquals(List.of("json: đã sửa 1 escape LaTeX (\\sqrt)", "answer: đã tự đóng $"), p.parseWarnings());
+    }
+
+    // ---------- gỡ \text{...} ngoài $ (27/10: đơn vị đo viết ngoài công thức, exam 10 ô 25) ----------
+
+    private static String fixText(String in, List<String> warnings) {
+        return LlmOutputRepair.textField("f", in, true, false, warnings);
+    }
+
+    private static String textWarning(int n) {
+        return "json: đã sửa " + n + " \\text{} ngoài $ (đã gỡ vỏ) ở f";
+    }
+
+    @Test
+    void goVoTextNgoaiDolaVaGiuMotDauCach() {
+        Object[][] cases = {
+                {"$40$ \\text{km/h}", "$40$ km/h", 1},
+                {"$6$ \\text{ km}", "$6$ km", 1},
+                {"$6$\\text{km}", "$6$ km", 1},
+                {"$s = 40 \\cdot 2,5 = 100$ (\\text{km})", "$s = 40 \\cdot 2,5 = 100$ (km)", 1},
+                {"$45$ \\text{ phút} = $\\frac{45}{60}$ \\text{ giờ}", "$45$ phút = $\\frac{45}{60}$ giờ", 2},
+                {"Giá \\$5 \\text{km}", "Giá \\$5 km", 1},
+        };
+        for (Object[] c : cases) {
+            List<String> warnings = new ArrayList<>();
+            assertEquals(c[1], fixText((String) c[0], warnings), (String) c[0]);
+            assertEquals(List.of(textWarning((Integer) c[2])), warnings, (String) c[0]);
+        }
+    }
+
+    @Test
+    void textTrongDolaHoacKhongPhaiLenhTextHoacHongThiGiuNguyen() {
+        for (String keep : List.of(
+                "$40\\text{ km/h}$",
+                "\\textbf{A}",
+                "\\textit{km}",
+                "\\text{a \\frac{1}{2}}",
+                "\\text{km",
+                "Đã đủ $x$ và $y$.")) {
+            List<String> warnings = new ArrayList<>();
+            assertEquals(keep, fixText(keep, warnings), keep);
+            assertEquals(List.of(), warnings, keep);
+        }
+    }
+
+    @Test
+    void cauMcqDonViNgoaiDolaQuaFormatSauKhiGo() {
+        String raw = "{\"question_text\": \"Vận tốc là $40$ \\\\text{km/h}. Tính quãng đường trong $2,5$ \\\\text{giờ}.\","
+                + " \"option_a\": \"$100$ \\\\text{km}\", \"option_b\": \"$110$ \\\\text{km}\","
+                + " \"option_c\": \"$90$ \\\\text{km}\", \"option_d\": \"$120$ \\\\text{km}\","
+                + " \"correct_option\": \"A\","
+                + " \"explanation\": \"Ta có $s = 40 \\\\cdot 2,5 = 100$ (\\\\text{km}).\"}";
+        FormatChecker checker = new FormatChecker();
+        ParsedMcqDto strict = McqJsonParser.parse(raw);
+        assertTrue(strict.questionText().contains("$40$ \\text{km/h}"), "giải mã chặt không đổi");
+        assertFalse(checker.check(new QuestionQcInput(1, true, strict.questionText(), strict.optionA(),
+                strict.optionB(), strict.optionC(), strict.optionD(), strict.correctOption(), strict.explanation(),
+                true, false, null)).passed());
+
+        ParsedMcqDto p = McqJsonParser.parse(raw, true);
+        assertTrue(p.parseSuccess(), p.parseError());
+        assertEquals("Vận tốc là $40$ km/h. Tính quãng đường trong $2,5$ giờ.", p.questionText());
+        assertEquals("$100$ km", p.optionA());
+        assertEquals("$120$ km", p.optionD());
+        assertEquals("Ta có $s = 40 \\cdot 2,5 = 100$ (km).", p.explanation());
+        FormatChecker.FormatCheckOutcome out = checker.check(new QuestionQcInput(1, true, p.questionText(),
+                p.optionA(), p.optionB(), p.optionC(), p.optionD(), p.correctOption(), p.explanation(), true, false,
+                null).withParseWarnings(p.parseWarnings()));
+        assertTrue(out.passed(), out.errors().toString());
+        assertTrue(p.parseWarnings().contains("json: đã sửa 2 \\text{} ngoài $ (đã gỡ vỏ) ở question_text"),
+                p.parseWarnings().toString());
+        assertTrue(p.parseWarnings().contains("json: đã sửa 1 \\text{} ngoài $ (đã gỡ vỏ) ở option_b"),
+                p.parseWarnings().toString());
+    }
+
+    @Test
+    void goVoTextOMoiTruongCuaSaVaTf() {
+        ParsedSaDto sa = SaJsonParser.parse("{\"question_text\": \"Tính quãng đường.\","
+                + " \"explanation\": \"Đi $2$ \\\\text{giờ}.\", \"answer\": \"$6$ \\\\text{ km}\"}", true);
+        assertTrue(sa.parseSuccess(), sa.parseError());
+        assertEquals("$6$ km", sa.answer());
+        assertEquals("Đi $2$ giờ.", sa.explanation());
+        assertTrue(sa.parseWarnings().contains("json: đã sửa 1 \\text{} ngoài $ (đã gỡ vỏ) ở answer"),
+                sa.parseWarnings().toString());
+
+        ParsedTfDto tf = TfJsonParser.parse("{\"question_text\": \"Cho $v = 40$ \\\\text{km/h}.\","
+                + " \"statement_a\": \"Đi $2$ \\\\text{giờ} được $80$ \\\\text{km}.\","
+                + " \"statement_b\": \"Đúng.\", \"statement_c\": \"Sai.\", \"statement_d\": \"Đúng.\","
+                + " \"explanation\": \"a) $v \\\\cdot t$ (\\\\text{km}).\","
+                + " \"label_a\": \"T\", \"label_b\": \"T\", \"label_c\": \"F\", \"label_d\": \"T\"}", true);
+        assertTrue(tf.parseSuccess(), tf.parseError());
+        assertEquals("Cho $v = 40$ km/h.", tf.questionText());
+        assertEquals("Đi $2$ giờ được $80$ km.", tf.statements().get(0));
+        assertEquals("a) $v \\cdot t$ (km).", tf.explanation());
     }
 }
