@@ -1,0 +1,65 @@
+import axiosInstance from "../../../services/apiClient";
+import type { CreateExamMatrixPayload, ExamMatrix, ExamMatrixDetail, ExamMatrixTemplate, DeleteResponse } from "../types/examMatrix.types";
+
+/* ---------- CREATE ---------- */
+export async function createExamMatrix(payload: CreateExamMatrixPayload) {
+    const { data } = await axiosInstance.post<ExamMatrix>("/api/exam-matrices", payload);
+    return data;
+}
+
+/* ---------- LIST ---------- */
+export async function listExamMatrices(): Promise<ExamMatrix[]> {
+    const { data } = await axiosInstance.get<ExamMatrix[]>("/api/exam-matrices");
+    return data;
+}
+
+/* ---------- DETAIL ---------- */
+export async function getExamMatrix(id: string): Promise<ExamMatrixDetail> {
+    const { data } = await axiosInstance.get<ExamMatrixDetail>(`/api/exam-matrices/${id}`);
+    return data;
+}
+
+/* ---------- UPDATE ---------- */
+export async function updateExamMatrix(
+    id: string,
+    payload: CreateExamMatrixPayload
+): Promise<ExamMatrixDetail> {
+    const { data } = await axiosInstance.put<ExamMatrixDetail>(`/api/exam-matrices/${id}`, payload);
+    return data;
+}
+
+/* ---------- DELETE ---------- */
+export async function deleteExamMatrix(id: string): Promise<DeleteResponse> {
+    const { data } = await axiosInstance.delete<DeleteResponse>(`/api/exam-matrices/${id}`);
+    return data;
+}
+
+/* ---------- TEMPLATE DETAIL (nếu cần) ---------- */
+export async function getExamMatrixTemplate(
+    templateId: string
+): Promise<ExamMatrixTemplate> {
+    const { data } = await axiosInstance.get<ExamMatrixTemplate>(`/api/exam-matrix-templates/${templateId}`);
+    return data;
+}
+
+// Nhân bản ma trận hiện có -> trả về ExamMatrixDetail mới
+export const duplicateExamMatrix = async (id: string) => {
+    const { data } = await axiosInstance.post<ExamMatrixDetail>(`/api/exam-matrices/${id}/duplicate`);
+    return data;
+};
+
+// Lấy danh sách mẫu ma trận có sẵn (samples)
+export const listExamMatrixSamples = async () => {
+    const { data } = await axiosInstance.get<ExamMatrixTemplate[]>(
+        '/api/exam-matrices/samples'
+    );
+    return data;   // mảng ExamMatrixTemplate (có id, name, cells, …)
+};
+
+// Tạo ma trận mới dựa trên mẫu có sẵn (key = id hoặc key của mẫu)
+export const createExamMatrixFromSample = async (key: string) => {
+    const { data } = await axiosInstance.post<ExamMatrixDetail>(
+        `/api/exam-matrices/samples/${encodeURIComponent(key)}`
+    );
+    return data;   // trả về chi tiết ma trận mới được tạo
+};

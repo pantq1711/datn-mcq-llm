@@ -1,3 +1,6 @@
+/* -----------------------------------------------------------------
+   Card glassmorphism & bố cục gốc của trang form
+   ----------------------------------------------------------------- */
 .exam-matrix-form-page {
     padding: 24px 24px 48px;
     display: flex;
@@ -5,6 +8,22 @@
     gap: 24px;
     width: 100%;
     min-width: 0;
+
+    /* Hiệu ứng glassmorphism tích hợp */
+    background: var(--glass-bg, rgba(255, 255, 255, 0.85));
+    backdrop-filter: var(--glass-blur, blur(12px));
+    -webkit-backdrop-filter: var(--glass-blur, blur(12px));
+    border-radius: 16px;
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.3));
+    box-shadow: var(--glass-shadow, 0 8px 32px 0 rgba(0, 0, 0, 0.08));
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Nội dung Ant Design Card con bên trong */
+.exam-matrix-form-page .ant-card {
+    background: transparent;
+    /* Để nhìn rõ hiệu ứng glass */
 }
 
 .exam-matrix-form-page__breadcrumb-link:hover {
@@ -41,6 +60,49 @@
     flex-shrink: 0;
 }
 
+/* -----------------------------------------------------------------
+   Nút “Lưu” – animation khi loading
+   ----------------------------------------------------------------- */
+.save-button {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Khi đang lưu (saving === true) */
+.save-button.loading {
+    color: var(--primary);
+    pointer-events: none;
+    /* Tránh click liên tục */
+}
+
+/* Spin animation (keyframes) */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Áp dụng spin cho icon bên trong nút */
+.save-button.loading .anticon {
+    animation: spin 1s linear infinite;
+}
+
+/* Nếu dùng Ant Design `loading` prop – ẩn spinner mặc định, dùng icon custom */
+.save-button.ant-btn-loading .anticon {
+    display: none;
+}
+
+/* Tùy chỉnh màu nền khi hover */
+.save-button:hover {
+    background-color: var(--primary-hover);
+}
+
+/* -----------------------------------------------------------------
+   Bố cục lưới (Grid) & Card nội dung
+   ----------------------------------------------------------------- */
 .exam-matrix-form-page__content {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
@@ -79,6 +141,13 @@
     min-width: 0;
 }
 
+.exam-matrix-form-page .ant-form-item {
+    margin-bottom: 20px;
+}
+
+/* -----------------------------------------------------------------
+   Responsive Queries
+   ----------------------------------------------------------------- */
 @media (max-width: 900px) {
     .exam-matrix-form-page__content {
         grid-template-columns: minmax(0, 1fr);
@@ -94,6 +163,7 @@
 @media (max-width: 640px) {
     .exam-matrix-form-page {
         gap: 16px;
+        padding: 20px 16px;
     }
 
     .exam-matrix-form-page__header {

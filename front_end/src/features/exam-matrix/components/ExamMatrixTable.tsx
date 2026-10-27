@@ -1,27 +1,13 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { getSubjectById } from '../services/subjectService';
 import { Button, Empty, Popconfirm, Space, Table, Tooltip, Typography } from 'antd';
 import type { TableColumnsType } from 'antd';
-import {
-    DeleteOutlined,
-    EditOutlined,
-} from '@ant-design/icons';
+import { CopyOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 
 import './ExamMatrixTable.css';
+import type { ExamMatrix } from "../types/examMatrix.types";
 
 const { Text } = Typography;
-
-/** Dữ liệu tối thiểu để hiển thị một ma trận trong bảng. */
-export interface ExamMatrix {
-    id: string;
-    name: string;
-    subjectName: string;
-    /** Ví dụ: 8 hoặc "Lớp 8". */
-    grade?: string | number;
-    /** Tổng số câu được tính từ các dòng phân bổ của ma trận. */
-    questionCount: number;
-    /** Ngày cập nhật dạng ISO hoặc chuỗi ngày có thể parse bởi Date. */
-    updatedAt?: string | null;
-}
 
 export interface ExamMatrixTableProps {
     /** Danh sách được lấy từ API hoặc component cha. */
@@ -34,6 +20,8 @@ export interface ExamMatrixTableProps {
     onEditMatrix: (matrixId: string) => void;
     /** Xóa ma trận sau khi người dùng xác nhận. Nếu bỏ qua, nút xóa không hiển thị. */
     onDeleteMatrix?: (matrixId: string) => void;
+    /** Nhân bản ma trận. */
+    onDuplicateMatrix?: (matrixId: string) => void;
 }
 
 /** Bỏ dấu tiếng Việt để tìm kiếm linh hoạt hơn (ví dụ: "ma tran" tìm được "Ma trận"). */
@@ -70,21 +58,63 @@ export function ExamMatrixTable({
     loading = false,
     onEditMatrix,
     onDeleteMatrix,
+    onDuplicateMatrix,
 }: ExamMatrixTableProps) {
+    const [subjectMap, setSubjectMap] = useState<Record<string | number, string>>({});
+
+    useEffect(() => {
+        const missingIds = Array.from(
+            new Set(matrices.map(m => m.subjectId))
+        ).filter(id => !(id in subjectMap));
+
+        if (missingIds.length === 0) return;
+
+        (async () => {
+            try {
+                const results = await Promise.all(
+                    missingIds.map(id => getSubjectById(id))
+                );
+                // Cập nhật cache
+                setSubjectMap(prev => {
+                    const next = { ...prev };
+                    results.forEach(sub => {
+                        next[sub.id] = sub.name;
+                    });
+                    return next;
+                });
+            } catch (err: any) {
+                // Không làm gián đoạn UI; chỉ log lỗi và bỏ qua
+                console.error('Failed to load subject names:', err);
+            }
+        })();
+    }, [matrices, subjectMap]);
+
+    // Bổ sung tạm thời trường subjectName cho mỗi matrix
+    const matricesWithName = useMemo(() => {
+        return matrices.map(m => ({
+            ...m,
+            // Nếu cache đã có tên thì dùng, còn không thì fallback là raw id
+            subjectName: subjectMap[m.subjectId] ?? String(m.subjectId),
+        }));
+    }, [matrices, subjectMap]);
+
     const filteredMatrices = useMemo(() => {
         const keyword = normalizeSearchValue(searchText);
-        if (!keyword) return matrices;
+        if (!keyword) return matricesWithName;
 
-        return matrices.filter((matrix) => {
+        return matricesWithName.filter(matrix => {
             const searchableText = normalizeSearchValue(
-                [matrix.name, matrix.subjectName, matrix.grade == null ? '' : String(matrix.grade)]
-                    .join(' '),
+                [
+                    matrix.name,
+                    matrix.subjectName,
+                    matrix.gradeLevel == null ? '' : String(matrix.gradeLevel),
+                ].join(' ')
             );
             return searchableText.includes(keyword);
         });
-    }, [matrices, searchText]);
+    }, [matricesWithName, searchText]);
 
-    const columns: TableColumnsType<ExamMatrix> = [
+    const columns: TableColumnsType<any> = [
         {
             title: 'Tên ma trận',
             dataIndex: 'name',
@@ -105,9 +135,9 @@ export function ExamMatrixTable({
             render: (subjectName: string, record) => (
                 <div className="exam-matrix-table__subject-cell">
                     <Text>{subjectName}</Text>
-                    {record.grade != null && record.grade !== '' && (
+                    {record.gradeLevel != null && (
                         <Text type="secondary" className="exam-matrix-table__meta">
-                            Lớp {String(record.grade).replace(/^Lớp\s*/i, '')}
+                            Lớp {String(record.gradeLevel).replace(/^Lớp\s*/i, '')}
                         </Text>
                     )}
                 </div>
@@ -115,16 +145,22 @@ export function ExamMatrixTable({
         },
         {
             title: 'Tổng số câu',
-            dataIndex: 'questionCount',
             key: 'questionCount',
             align: 'center',
             width: 130,
-            sorter: (a, b) => a.questionCount - b.questionCount,
-            render: (questionCount: number) => (
-                <Text className="exam-matrix-table__question-count">
-                    {questionCount.toLocaleString('vi-VN')}
-                </Text>
-            ),
+            sorter: (a: any, b: any) => {
+                const countA = a.questionCount ?? a.cells?.reduce((sum: number, cell: any) => sum + (cell.questionCount || 0), 0) ?? 0;
+                const countB = b.questionCount ?? b.cells?.reduce((sum: number, cell: any) => sum + (cell.questionCount || 0), 0) ?? 0;
+                return countA - countB;
+            },
+            render: (_, record: any) => {
+                const total = record.questionCount ?? record.cells?.reduce((sum: number, cell: any) => sum + (cell.questionCount || 0), 0) ?? 0;
+                return (
+                    <Text className="exam-matrix-table__question-count">
+                        {total.toLocaleString('vi-VN')}
+                    </Text>
+                );
+            },
         },
         {
             title: 'Cập nhật lần cuối',
@@ -144,9 +180,19 @@ export function ExamMatrixTable({
             title: 'Thao tác',
             key: 'actions',
             align: 'center',
-            width: onDeleteMatrix ? 120 : 80,
+            width: onDuplicateMatrix || onDeleteMatrix ? 140 : 100,
             render: (_value, record) => (
                 <Space size={4} className="exam-matrix-table__actions">
+                    {onDuplicateMatrix && (
+                        <Tooltip title="Nhân bản ma trận">
+                            <Button
+                                type="text"
+                                icon={<CopyOutlined />}
+                                aria-label={`Nhân bản ma trận ${record.name}`}
+                                onClick={() => onDuplicateMatrix(record.id)}
+                            />
+                        </Tooltip>
+                    )}
                     <Tooltip title="Chỉnh sửa ma trận">
                         <Button
                             type="text"
@@ -193,7 +239,7 @@ export function ExamMatrixTable({
                 </Text>
             </div>
 
-            <Table<ExamMatrix>
+            <Table<any>
                 rowKey="id"
                 columns={columns}
                 dataSource={filteredMatrices}
