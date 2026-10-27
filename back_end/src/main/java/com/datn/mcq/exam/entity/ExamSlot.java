@@ -25,6 +25,9 @@ public class ExamSlot {
     public static final String KEPT = "kept";
     public static final String EDITED = "edited";
 
+    public static final String FAILURE_LLM_ERROR = "llm_error";
+    public static final String FAILURE_QC_EXHAUSTED = "qc_exhausted";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
@@ -47,6 +50,10 @@ public class ExamSlot {
 
     @Column(name = "state", nullable = false, length = 20)
     private String state = PENDING;
+
+    /** V23 (W2-4b): lý do chỗ hỏng khi state = 'failed' (llm_error hoặc qc_exhausted); null ở mọi trạng thái khác. */
+    @Column(name = "failure_reason", length = 20)
+    private String failureReason;
 
     @Column(name = "bank_item_id")
     private Integer bankItemId;
@@ -123,7 +130,18 @@ public class ExamSlot {
 
     public void setState(String state) {
         this.state = state;
+        if (!FAILED.equals(state)) {
+            this.failureReason = null;
+        }
         this.updatedAt = LocalDateTime.now();
+    }
+
+    public String getFailureReason() {
+        return failureReason;
+    }
+
+    public void setFailureReason(String failureReason) {
+        this.failureReason = failureReason;
     }
 
     public Integer getBankItemId() {

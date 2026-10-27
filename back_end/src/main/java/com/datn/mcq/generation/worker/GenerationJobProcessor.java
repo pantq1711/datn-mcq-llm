@@ -359,6 +359,7 @@ public class GenerationJobProcessor {
         qcOrchestrator.recordSolver(gq.getId(), verdict);
         QuestionStatus status = qcOrchestrator.decideWithStoredChecks(gq.getId(), verdict.status());
         gq.setStatus(status);
+        gq.setSolverError(null);
         generatedQuestionRepository.save(gq);
         finishQuestionJob(ctx.jobId(), null);
         return status;
@@ -578,8 +579,40 @@ public class GenerationJobProcessor {
         }
         job.setUpdatedAt(LocalDateTime.now());
         generationJobRepository.save(job);
+        enqueueAnswerCheckOnSolverError(job, questionId, newStatus, solverError, jobNote);
         enqueueGrounding(job, questionId, newStatus);
         return true;
+    }
+
+    /**
+     * W2-4b (B): khi câu vừa sinh qua format và dedup (newStatus == GENERATED) nhưng Solver nội tuyến gặp lỗi kỹ thuật
+     * (solverError != null, không phải lỗi sau khi lưu câu jobNote != null), xếp một job answer_check riêng cho chính
+     * câu đó để thử lại riêng bước Solver (tối đa max-attempts lần) thay vì sinh lại câu mới.
+     */
+    private void enqueueAnswerCheckOnSolverError(GenerationJob origin, Integer questionId, QuestionStatus status,
+                                                 String solverError, String jobNote) {
+        if (solverError == null
+                || jobNote != null
+                || !GenerationJob.TYPE_GENERATE.equals(origin.getJobType())
+                || status != QuestionStatus.GENERATED
+                || generationJobRepository.findFirstByQuestionIdAndJobTypeOrderByIdDesc(questionId,
+                        GenerationJob.TYPE_ANSWER_CHECK).isPresent()) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        GenerationJob check = new GenerationJob();
+        check.setJobType(GenerationJob.TYPE_ANSWER_CHECK);
+        check.setRunId(origin.getRunId());
+        check.setTemplateId(origin.getTemplateId());
+        check.setQuestionType(origin.getQuestionType());
+        check.setTargetStatementDifficulties(origin.getTargetStatementDifficulties());
+        check.setQuestionId(questionId);
+        check.setStatus(JobStatus.PENDING);
+        check.setAttempt(0);
+        check.setNextRunAt(now);
+        check.setCreatedAt(now);
+        check.setUpdatedAt(now);
+        generationJobRepository.save(check);
     }
 
     /**
@@ -639,6 +672,14 @@ public class GenerationJobProcessor {
         int currentAttempt = job.getAttempt() != null ? job.getAttempt() : 1;
         job.setLastError(errorMsg);
         job.setUpdatedAt(LocalDateTime.now());
+        if (ctx.answerCheck() && ctx.questionId() != null && errorMsg != null) {
+            generatedQuestionRepository.findById(ctx.questionId()).ifPresent(gq -> {
+                if (gq.getEditedFromQuestionId() == null) {
+                    gq.setSolverError(TextClip.clip(errorMsg, MAX_SOLVER_ERROR));
+                    generatedQuestionRepository.save(gq);
+                }
+            });
+        }
         if (currentAttempt < maxAttempts) {
             job.setStatus(JobStatus.PENDING);
             // Backoff lũy tiến 15s, 30s, 45s... khi gặp lỗi mạng hoặc rate-limit 429/503

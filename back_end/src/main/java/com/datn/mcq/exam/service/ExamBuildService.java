@@ -4,6 +4,7 @@ import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.service.CatalogService;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.ExamStatus;
+import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.exam.dto.ExamBuildDtos.BuildExamRequest;
@@ -301,7 +302,8 @@ public class ExamBuildService {
                 return;
             }
             case FAILED -> {
-                retryOrFail(slot);
+                // W2-4b: job generate đã tự thử lại kỹ thuật tới max-attempts; không xếp job thứ hai cho chỗ.
+                failOrUseFallback(slot, ExamSlot.FAILURE_LLM_ERROR);
                 return;
             }
             case DONE -> {
@@ -309,15 +311,21 @@ public class ExamBuildService {
             }
         }
         if (job.getQuestionId() == null) {
-            retryOrFail(slot);
+            failOrUseFallback(slot, ExamSlot.FAILURE_LLM_ERROR);
             return;
         }
         GeneratedQuestion q = generationService.getQuestionById(job.getQuestionId());
         switch (q.getStatus()) {
             case QC_PASSED, IN_BANK -> useQuestion(slot, q.getId());
             case GENERATED -> {
-                // Lệch Solver (hoặc answer_check/dedup chưa kết luận): sinh lại 1 lần; vẫn lệch thì dùng câu này.
-                if (slot.getSolverRetries() < MAX_SOLVER_RETRIES && slot.getAttempts() < MAX_ATTEMPTS) {
+                // W2-4b: tách ERROR (Solver lỗi kỹ thuật, đang chờ job answer_check hoặc đã failed) với INCONSISTENT.
+                Optional<GenerationJob> check = generationService.latestAnswerCheckJob(q.getId());
+                if (check.isPresent() && (check.get().getStatus() == JobStatus.PENDING
+                        || check.get().getStatus() == JobStatus.RUNNING)) {
+                    return;
+                }
+                boolean solverInconsistent = Boolean.FALSE.equals(qcSummaryService.summarize(q.getId()).answerCheckPassed());
+                if (solverInconsistent && slot.getSolverRetries() < MAX_SOLVER_RETRIES && slot.getAttempts() < MAX_ATTEMPTS) {
                     slot.setFallbackQuestionId(q.getId());
                     slot.setSolverRetries(slot.getSolverRetries() + 1);
                     enqueueRetry(slot);
@@ -333,10 +341,18 @@ public class ExamBuildService {
     private void retryOrFail(ExamSlot slot) {
         if (slot.getAttempts() < MAX_ATTEMPTS) {
             enqueueRetry(slot);
-        } else if (slot.getFallbackQuestionId() != null) {
+            slotRepository.save(slot);
+        } else {
+            failOrUseFallback(slot, ExamSlot.FAILURE_QC_EXHAUSTED);
+        }
+    }
+
+    private void failOrUseFallback(ExamSlot slot, String failureReason) {
+        if (slot.getFallbackQuestionId() != null) {
             useQuestion(slot, slot.getFallbackQuestionId());
         } else {
             slot.setState(ExamSlot.FAILED);
+            slot.setFailureReason(failureReason);
         }
         slotRepository.save(slot);
     }
@@ -344,6 +360,7 @@ public class ExamBuildService {
     private static void useQuestion(ExamSlot slot, Integer questionId) {
         slot.setGeneratedQuestionId(questionId);
         slot.setState(ExamSlot.READY);
+        slot.setFailureReason(null);
     }
 
     /**
@@ -365,6 +382,7 @@ public class ExamBuildService {
         // Chuyển trạng thái trước mọi truy vấn: Hibernate có thể ghi chỗ xuống DB trước khi truy vấn exam_slot, và chỗ
         // vừa bỏ câu khi Đổi mà còn 'ready' thì vi phạm chk_es_ready.
         slot.setState(ExamSlot.GENERATING);
+        slot.setFailureReason(null);
         ExamMatrixCell cell = matrixService.getCell(slot.getCellId());
         ExamMatrix matrix = matrixService.getMatrix(cell.getMatrixId());
         Subject subject = catalogService.getSubjectById(matrix.getSubjectId());
@@ -501,7 +519,7 @@ public class ExamBuildService {
     static SlotDto toDto(ExamSlot s) {
         String source = s.getGeneratedQuestionId() != null ? "generated" : s.getBankItemId() != null ? "bank" : null;
         return new SlotDto(s.getId(), s.getCellId(), s.getSlotNo(), s.getQuestionType(), s.getState(), source,
-                s.getBankItemId(), s.getGeneratedQuestionId(), s.getAttempts());
+                s.getBankItemId(), s.getGeneratedQuestionId(), s.getAttempts(), s.getFailureReason());
     }
 
     private String newExamCode() {
