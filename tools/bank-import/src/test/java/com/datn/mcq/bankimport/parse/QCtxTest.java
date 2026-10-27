@@ -82,4 +82,37 @@ class QCtxTest {
         assertEquals("$A$ $B$ $C$", res2);
         assertFalse(res2.matches(".*\\$\\s+[^$\\s].*"), "Không bao giờ có khoảng trắng ngay sau $ mở: " + res2);
     }
+
+    @Test
+    void chenKhoangTrangTruocCongThucKhiKyTuTruocLaChuCai() {
+        QCtx c = createCtx(Map.of("A", "A", "MBC", "MBC", "x", "x", "B", "B"));
+
+        // "tại"+$A$ → "tại $A$"
+        RichText rtTaiA = richText("tại", eq("A"));
+        assertEquals("tại $A$", c.render(rtTaiA, "stem"));
+
+        // "giác"+$MBC$ → "giác $MBC$"
+        RichText rtGiacMBC = richText("giác", eq("MBC"));
+        assertEquals("giác $MBC$", c.render(rtGiacMBC, "stem"));
+
+        // "là "+$x$ → "là $x$" (không thành 2 dấu cách)
+        RichText rtLaX = richText("là ", eq("x"));
+        assertEquals("là $x$", c.render(rtLaX, "stem"));
+
+        // "("+$x$ → "($x$"
+        RichText rtNgoacX = richText("(", eq("x"));
+        assertEquals("($x$", c.render(rtNgoacX, "stem"));
+
+        // "2"+$x$ → "2$x$"
+        RichText rt2X = richText("2", eq("x"));
+        assertEquals("2$x$", c.render(rt2X, "stem"));
+
+        // công thức+công thức không đổi
+        RichText rtAB = richText(eq("A"), eq("B"));
+        assertEquals("$A$$B$", c.render(rtAB, "stem"));
+
+        // một ca có cả trước và sau: "tại"+$A$+"có" → "tại $A$ có"
+        RichText rtTaiACo = richText("tại", eq("A"), "có");
+        assertEquals("tại $A$ có", c.render(rtTaiACo, "stem"));
+    }
 }

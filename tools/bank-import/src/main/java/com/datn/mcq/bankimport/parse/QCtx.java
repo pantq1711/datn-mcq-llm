@@ -50,8 +50,12 @@ final class QCtx {
             if (rt.objIdx[i] >= 0) {
                 Obj o = rt.objs.get(rt.objIdx[i]);
                 String tok = token(o, role);
+                boolean isFormula = o.equation() && tok.startsWith("$") && tok.endsWith("$");
+                if (isFormula && precededByLetter(sb)) {
+                    sb.append(' ');
+                }
                 sb.append(tok);
-                if (o.equation() && tok.startsWith("$") && tok.endsWith("$") && followedByLetterOrDigit(rt, i + 1, omitFrom, omitTo)) {
+                if (isFormula && followedByLetterOrDigit(rt, i + 1, omitFrom, omitTo)) {
                     sb.append(' ');
                 }
                 i++;
@@ -72,6 +76,10 @@ final class QCtx {
             }
         }
         return tidy(sb.toString());
+    }
+
+    private static boolean precededByLetter(StringBuilder sb) {
+        return !sb.isEmpty() && Character.isLetter(sb.codePointBefore(sb.length()));
     }
 
     private static boolean followedByLetterOrDigit(RichText rt, int next, int omitFrom, int omitTo) {
