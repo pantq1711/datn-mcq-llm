@@ -30,7 +30,6 @@ import com.datn.mcq.generation.repository.GeneratedQuestionRepository;
 import com.datn.mcq.generation.repository.GeneratedQuestionStatementRepository;
 import com.datn.mcq.generation.repository.GenerationJobRepository;
 import com.datn.mcq.generation.service.StoredQcInput;
-import com.datn.mcq.llm.client.GeminiDailyUsageLookup;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.llm.prompt.PromptBuilder;
 import com.datn.mcq.qc.dto.GroundingResult;
@@ -61,23 +60,9 @@ import java.util.Optional;
  * về hay nhận lại giữa chừng.
  */
 @Service
-public class GenerationJobProcessor implements GeminiDailyUsageLookup {
+public class GenerationJobProcessor {
 
     private static final Logger LOG = LoggerFactory.getLogger(GenerationJobProcessor.class);
-
-    /**
-     * W2-4b (C): đếm tổng số lượt gọi Gemini đã lưu kết quả trong DB kể từ mốc {@code since} (00:00 giờ Thái Bình Dương
-     * đã đổi sang giờ địa phương của JVM): câu LLM sinh ({@code edited_from_question_id IS NULL}) + kết quả Solver có
-     * {@code token_count} + kết quả judge "bám tài liệu" có {@code token_count}.
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public int countCallsSince(LocalDateTime since) {
-        int questions = generatedQuestionRepository.countLlmGeneratedSince(since);
-        int solver = qcOrchestrator.countSolverCallsSince(since);
-        int grounding = groundingService != null ? groundingService.countCallsSince(since) : 0;
-        return questions + solver + grounding;
-    }
 
     /** V14: giới hạn độ dài generated_question.solver_error (khớp CHECK chk_gq_solver_error). */
     public static final int MAX_SOLVER_ERROR = 1000;
@@ -258,24 +243,24 @@ public class GenerationJobProcessor implements GeminiDailyUsageLookup {
         boolean isMath = isMathSubject(subject.getName());
 
         return Optional.of(new ClaimedJobContext(
-                job.getId(),
-                job.getRunId(),
-                job.getTemplateId(),
-                nextAttempt,
-                job.getTargetDifficulty(),
-                run.getStrategy(),
-                run.getModelName(),
-                run.getTemperature(),
-                prompt,
-                isMath,
-                questionType,
-                statementLevels,
-                run.getPurpose(),
-                matrix && questionType == QuestionType.TF ? TfLabelPattern.fromNote(job.getPromptNote()) : null,
-                job.getJobType(),
-                null,
-                job.getExamSlotId(),
-                claimSeq
+            job.getId(),
+            job.getRunId(),
+            job.getTemplateId(),
+            nextAttempt,
+            job.getTargetDifficulty(),
+            run.getStrategy(),
+            run.getModelName(),
+            run.getTemperature(),
+            prompt,
+            isMath,
+            questionType,
+            statementLevels,
+            run.getPurpose(),
+            matrix && questionType == QuestionType.TF ? TfLabelPattern.fromNote(job.getPromptNote()) : null,
+            job.getJobType(),
+            null,
+            job.getExamSlotId(),
+            claimSeq
         ));
     }
 
