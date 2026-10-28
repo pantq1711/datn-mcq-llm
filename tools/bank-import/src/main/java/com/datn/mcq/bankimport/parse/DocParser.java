@@ -159,8 +159,8 @@ public final class DocParser {
             out.add(tf(g, ++n));
         }
         n = 0;
-        for (List<Block> qb : splitByStem(regions.get("III"))) {
-            out.add(sa(qb, ++n));
+        for (SaPart sp : saParts(regions.get("III"))) {
+            out.add(sa(sp.blocks(), ++n, sp.context()));
         }
         for (Question q : out) {
             attachMissingImageTags(q);
@@ -686,13 +686,102 @@ public final class DocParser {
 
     // ---------- phần III: trả lời ngắn ----------
 
-    private Question sa(List<Block> qb, int ordinal) {
+    /** Khối của một câu và ngữ cảnh dùng chung (đoạn giới thiệu, hình, bảng) mà câu đó nhận; context rỗng nếu không có. */
+    private record SaPart(List<Block> blocks, List<Block> context) {}
+
+    /**
+     * Tách Phần III theo đầu câu và gán ngữ cảnh dùng chung: khối đứng trước câu đầu tiên, hoặc khối sau "Đáp số" của một
+     * câu có bảng (một đoạn giới thiệu ngay trước bảng + bảng + phần sau). Ngữ cảnh áp cho các câu sau tới khi có ngữ cảnh
+     * mới hoặc gặp câu có bảng riêng trong thân câu.
+     */
+    private static List<SaPart> saParts(List<Block> region) {
+        List<Block> preamble = new ArrayList<>();
+        List<List<Block>> qbs = new ArrayList<>();
+        List<Block> cur = null;
+        for (Block b : region) {
+            if (b instanceof Para p && head(p.text()) != null) {
+                cur = new ArrayList<>();
+                qbs.add(cur);
+            }
+            (cur == null ? preamble : cur).add(b);
+        }
+        List<Block> ctx = preamble.stream().anyMatch(DocParser::hasContent) ? preamble : List.of();
+        List<SaPart> out = new ArrayList<>();
+        for (List<Block> qb : qbs) {
+            int ans = answerIndex(qb);
+            if (qb.subList(0, ans < 0 ? qb.size() : ans).stream().anyMatch(b -> b instanceof Tbl)) {
+                ctx = List.of();                              // câu có bảng riêng: ngữ cảnh cũ dừng
+            }
+            List<Block> trailing = trailingContext(qb, ans);
+            out.add(new SaPart(qb.subList(0, qb.size() - trailing.size()), ctx));
+            if (!trailing.isEmpty()) {
+                ctx = trailing;
+            }
+        }
+        return out;
+    }
+
+    private static int answerIndex(List<Block> qb) {
+        for (int i = 0; i < qb.size(); i++) {
+            if (qb.get(i) instanceof Para p && ANSWER_SA.matcher(p.text().s).find()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Ngữ cảnh của các câu sau nằm ở đuôi câu này: từ đoạn giới thiệu ngay trước bảng đầu tiên sau "Đáp số" tới hết. */
+    private static List<Block> trailingContext(List<Block> qb, int ans) {
+        if (ans < 0) {
+            return List.of();
+        }
+        int tbl = -1;
+        for (int i = ans + 1; i < qb.size() && tbl < 0; i++) {
+            if (qb.get(i) instanceof Tbl) {
+                tbl = i;
+            }
+        }
+        if (tbl < 0) {
+            return List.of();
+        }
+        int start = tbl;
+        for (int i = tbl - 1; i > ans; i--) {
+            if (hasContent(qb.get(i))) {
+                start = i;
+                break;
+            }
+        }
+        return qb.subList(start, qb.size());
+    }
+
+    private static boolean hasContent(Block b) {
+        return b instanceof Tbl || b instanceof Para p && (!p.text().isBlank() || !p.text().objs.isEmpty());
+    }
+
+    private Question sa(List<Block> qb, int ordinal, List<Block> context) {
         Question q = newQuestion("sa", "III", ordinal);
         QCtx c = new QCtx(q, ln.source().docId(), formulas);
         List<Tbl> tables = new ArrayList<>();
         List<FP> fps = flatten(qb, tables);
         Head head = head(fps.get(0).para().text());
         setLevel(q, head);
+
+        // ngữ cảnh dùng chung đứng trước đề riêng: đoạn (kể cả hình) vào đầu stem, bảng vào đầu tables
+        List<String> lines = new ArrayList<>();
+        List<List<List<String>>> contextTables = new ArrayList<>();
+        for (Block b : context) {
+            if (b instanceof Para p) {
+                String s = c.render(p.text(), "stem");
+                if (!s.isEmpty()) {
+                    lines.add(s);
+                }
+            } else if (b instanceof Tbl t) {
+                contextTables.add(renderTable(t, c, "stem"));
+            }
+        }
+        if (!context.isEmpty()) {
+            q.addFlag("shared_context");
+        }
 
         int ansIdx = -1;
         int replyIdx = -1;
@@ -715,7 +804,6 @@ public final class DocParser {
             }
         }
         // đề: đoạn thân trước "Trả lời"/"Đáp số"; bảng dữ liệu nằm riêng
-        List<String> lines = new ArrayList<>();
         for (int i = 0; i < stemEnd; i++) {
             if (fps.get(i).tbl() >= 0) {
                 continue;
@@ -727,7 +815,7 @@ public final class DocParser {
             }
         }
         q.stem = String.join("\n", lines);
-        q.tables = new ArrayList<>();
+        q.tables = new ArrayList<>(contextTables);
         for (Tbl t : tables) {
             q.tables.add(renderTable(t, c, "stem"));
         }

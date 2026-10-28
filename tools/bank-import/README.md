@@ -11,7 +11,7 @@ không chép nội dung câu vào repo. Fixture của test hoàn toàn tự tạ
 
 ```bash
 cd tools/bank-import
-mvn test                    # 93 test, không cần DB hay mạng
+mvn test                    # 99 test, không cần DB hay mạng
 mvn -q package -DskipTests  # tạo target/classes và target/lib
 cd ../..
 java -Djava.awt.headless=true -cp "tools/bank-import/target/classes;tools/bank-import/target/lib/*" \
@@ -64,10 +64,14 @@ Console chỉ in số liệu và id; không in nội dung câu hay tên file g�
   Cột `structure_ok` riêng cho biết cấu trúc/đáp án của câu có tin cậy không; để lọc tập cho Solver nên dùng cả hai.
 - Cờ cấu trúc (đáng xem): `answer_missing`, `answer_ambiguous`, `answer_conflict`, `structure_*`. Cờ thông tin: `level_missing`,
   `formula_unsupported`, `formula_partial`, `formula_image`, `ole_drawing`, `plain_math_vertalign`, `hint_after_statements`, `empty_formula`,
-  `stem_extra_text`.
+  `stem_extra_text`, `shared_context`.
 - Phần II: hàng "Gợi ý" nằm sau các ý được đưa vào **đầu `solution`** (trước lời giải ở đoạn sau bảng), cờ `hint_after_statements`.
   Chữ giữ chỗ "Câu hỏi…" ngay sau nhãn mức và các đoạn câu phụ tự luận `a/`, `b/`… liền nhau ở **cuối** đề dẫn bị bỏ, cờ
   `stem_extra_text` (đoạn `a/` ở giữa đề hoặc chữ `a/` giữa câu thì giữ).
+- Phần III, ngữ cảnh dùng chung: khối đứng trước câu đầu tiên, hoặc khối sau "Đáp số" của một câu **có bảng** (một đoạn
+  giới thiệu ngay trước bảng + bảng + phần sau), được nhân bản vào các câu sau tới khi có ngữ cảnh mới hoặc gặp câu có bảng
+  riêng trong thân câu: đoạn (kể cả hình) đặt đầu `stem`, bảng đặt đầu `tables`, cờ `shared_context`. Đuôi sau "Đáp số" không
+  có bảng (lời giải có công thức/ảnh) vẫn là `solution`.
 
 ## Quy ước trong file Word mà công cụ nhận ra
 
