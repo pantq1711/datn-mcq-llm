@@ -127,3 +127,14 @@ export interface ExamDetail {
     createdAt: string;
     updatedAt: string;
 }
+
+export interface ExamProgressCell {
+    cellId: string;
+    answered: boolean;
+    needReview?: boolean;
+}
+
+export interface ExamProgress {
+    examId: string;
+    cells: ExamProgressCell[];
+}

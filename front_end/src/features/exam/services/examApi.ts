@@ -1,5 +1,5 @@
 import axiosInstance from "../../../services/apiClient";
-import type { Subject, GenerateExamPayload, GeneratedExamCode, ExamQuestionItem, ExamListResponse, GetMyExamsParams, ExamDetail } from "../types/exam.types";
+import type { Subject, GenerateExamPayload, GeneratedExamCode, ExamQuestionItem, ExamListResponse, GetMyExamsParams, ExamDetail, ExamProgress } from "../types/exam.types";
 
 export async function getCatalogSubjects(): Promise<Subject[]> {
     const response = await axiosInstance.get<Subject[]>("/api/catalog/subjects");
@@ -80,4 +80,10 @@ export async function getMyExams(params?: GetMyExamsParams): Promise<ExamListRes
 export const getExamDetail = async (examId: string) => {
     const { data } = await axiosInstance.get<ExamDetail>(`/api/exams/${examId}`);
     return data;   // kiểu ExamDetail định nghĩa trong types
+};
+
+// src/features/exam/services/examApi.ts
+export const getExamProgress = async (examId: string) => {
+    const { data } = await axiosInstance.get<ExamProgress>(`/api/exams/${examId}/progress`);
+    return data; // kiểu ExamProgress cần khai báo trong exam.types.ts
 };
