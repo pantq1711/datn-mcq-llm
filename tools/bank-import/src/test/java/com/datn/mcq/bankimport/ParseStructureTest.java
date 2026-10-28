@@ -234,7 +234,8 @@ class ParseStructureTest {
     @Test
     void tfHangMotOByKhongNhanMucLaLoiGoiYKhongPhaiCauMoi() {
         Question x = q("tf", 6);
-        assertEquals("Đề dẫn không đáp án.\nGợi ý: gợi ý giả.", x.stem);
+        assertEquals("Đề dẫn không đáp án.", x.stem);
+        assertEquals("Gợi ý: gợi ý giả.", x.solution, "nhóm E: gợi ý sau các ý thuộc lời giải, không thuộc đề");
         assertTrue(x.flags.contains("hint_after_statements"), x.flags.toString());
         assertEquals(6, doc.questions().stream().filter(y -> y.type.equals("tf")).count());
     }

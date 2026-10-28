@@ -48,6 +48,11 @@ public final class DocParser {
     private static final Pattern STATEMENT_LABEL = Pattern.compile("^[\\s\\uE001]*[a-dA-D]\\s*[).]\\s*");
     private static final Pattern OPTION_LABEL = Pattern.compile("(?<![^\\s\\u00A0\\uE001\\uFFFC])([ABCD])\\s*[.)]");
     private static final Pattern NUMERIC = Pattern.compile("^-?\\d+(?:[.,]\\d+)?$");
+    /** Chữ giữ chỗ của mẫu còn sót sau nhãn mức ("[NB] Câu hỏi…"). */
+    private static final Pattern PLACEHOLDER = Pattern.compile("^\\s*Câu\\s+hỏi\\s*(?:…|\\.{3,})\\s*$",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    /** Câu phụ tự luận "a/ ..." còn sót ở cuối đề dẫn câu Đúng/Sai (khác nhãn ý "a)"). */
+    private static final Pattern SUB_QUESTION = Pattern.compile("^[\\s\\uE001]*[a-dA-D]\\s*/");
 
     private static final String LEVEL = "VDC|VẬN\\s*DỤNG\\s*CAO|VD|VẬN\\s*DỤNG|THÔNG\\s*HIỂU|TH|NHẬN\\s*BIẾT|NB";
     /** "Câu N." + nhãn mức ở các dạng: [NB], [[NHẬN BIẾT], NHẬN BIẾT], "Câu 2 [NB].", "Câu 2. [NB]". */
@@ -580,25 +585,40 @@ public final class DocParser {
     private Question tf(Group g, int ordinal) {
         Question q = newQuestion("tf", "II", ordinal);
         QCtx c = new QCtx(q, ln.source().docId(), formulas);
-        List<Para> stem = g.stem.stream().filter(p -> !p.text().isBlank() || !p.text().objs.isEmpty()).toList();
+        List<Para> stem = new ArrayList<>(g.stem.stream().filter(p -> !p.text().isBlank() || !p.text().objs.isEmpty()).toList());
         Head head = stem.isEmpty() ? null : head(stem.get(0).text());
         setLevel(q, head);
+        boolean extra = false;
+        // câu phụ "a/ b/" liền nhau ở cuối đề dẫn: sót lại từ bản tự luận, các ý a-d đã thay chúng
+        while (stem.size() > 1 && SUB_QUESTION.matcher(stem.get(stem.size() - 1).text().s).find()) {
+            stem.remove(stem.size() - 1);
+            extra = true;
+        }
         List<String> lines = new ArrayList<>();
         for (int i = 0; i < stem.size(); i++) {
             RichText rt = stem.get(i).text();
             String s = i == 0 && head != null ? c.render(rt, "stem", head.omitFrom(), head.omitTo()) : c.render(rt, "stem");
+            if (i == 0 && PLACEHOLDER.matcher(s).matches()) {
+                extra = true;
+                continue;
+            }
             if (!s.isEmpty()) {
                 lines.add(s);
             }
         }
+        if (extra) {
+            q.addFlag("stem_extra_text");
+        }
+        q.stem = String.join("\n", lines);
+        // hàng "Gợi ý" sau các ý thuộc lời giải, đứng trước lời giải ở đoạn sau bảng
+        List<String> hint = new ArrayList<>();
         for (Para p : g.hint) {
-            String s = c.render(p.text(), "stem");
+            String s = c.render(p.text(), "solution");
             if (!s.isEmpty()) {
-                lines.add(s);
+                hint.add(s);
                 q.addFlag("hint_after_statements");
             }
         }
-        q.stem = String.join("\n", lines);
 
         q.statements = new ArrayList<>();
         boolean anyYellow = false;
@@ -653,7 +673,14 @@ public final class DocParser {
         } else {
             q.addFlag("answer_missing");
         }
-        q.solution = solution(rest, c);
+        String sol = solution(rest, c);
+        if (!hint.isEmpty()) {
+            if (sol != null) {
+                hint.add(sol);
+            }
+            sol = String.join("\n", hint);
+        }
+        q.solution = sol;
         return q;
     }
 

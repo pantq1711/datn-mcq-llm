@@ -11,7 +11,7 @@ không chép nội dung câu vào repo. Fixture của test hoàn toàn tự tạ
 
 ```bash
 cd tools/bank-import
-mvn test                    # 70 test, không cần DB hay mạng
+mvn test                    # 93 test, không cần DB hay mạng
 mvn -q package -DskipTests  # tạo target/classes và target/lib
 cd ../..
 java -Djava.awt.headless=true -cp "tools/bank-import/target/classes;tools/bank-import/target/lib/*" \
@@ -63,7 +63,11 @@ Console chỉ in số liệu và id; không in nội dung câu hay tên file g�
 - `usable_text_only` (trong `catalog.csv`): không có ảnh nào (kể cả ảnh công thức và đối tượng vẽ) **và** mọi công thức `ok`.
   Cột `structure_ok` riêng cho biết cấu trúc/đáp án của câu có tin cậy không; để lọc tập cho Solver nên dùng cả hai.
 - Cờ cấu trúc (đáng xem): `answer_missing`, `answer_ambiguous`, `answer_conflict`, `structure_*`. Cờ thông tin: `level_missing`,
-  `formula_unsupported`, `formula_partial`, `formula_image`, `ole_drawing`, `plain_math_vertalign`, `hint_after_statements`, `empty_formula`.
+  `formula_unsupported`, `formula_partial`, `formula_image`, `ole_drawing`, `plain_math_vertalign`, `hint_after_statements`, `empty_formula`,
+  `stem_extra_text`.
+- Phần II: hàng "Gợi ý" nằm sau các ý được đưa vào **đầu `solution`** (trước lời giải ở đoạn sau bảng), cờ `hint_after_statements`.
+  Chữ giữ chỗ "Câu hỏi…" ngay sau nhãn mức và các đoạn câu phụ tự luận `a/`, `b/`… liền nhau ở **cuối** đề dẫn bị bỏ, cờ
+  `stem_extra_text` (đoạn `a/` ở giữa đề hoặc chữ `a/` giữa câu thì giữ).
 
 ## Quy ước trong file Word mà công cụ nhận ra
 
