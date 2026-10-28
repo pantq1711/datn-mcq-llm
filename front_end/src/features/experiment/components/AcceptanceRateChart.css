@@ -1,0 +1,85 @@
+.acceptance-rate-chart {
+    width: 100%;
+}
+
+.acceptance-rate-chart-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.acceptance-rate-chart-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    min-width: 0;
+}
+
+.acceptance-rate-chart-summary-value {
+    font-size: 20px;
+    line-height: 1.4;
+}
+
+.acceptance-rate-chart-best {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.acceptance-rate-chart-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.acceptance-rate-chart-item {
+    width: 100%;
+    min-width: 0;
+}
+
+.acceptance-rate-chart-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+
+    margin-bottom: 6px;
+}
+
+.acceptance-rate-chart-label {
+    min-width: 0;
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.acceptance-rate-chart-value {
+    flex-shrink: 0;
+}
+
+.acceptance-rate-chart-item .ant-progress {
+    display: block;
+    width: 100%;
+}
+
+.acceptance-rate-chart-item-footer {
+    margin-top: 4px;
+}
+
+@media (max-width: 576px) {
+    .acceptance-rate-chart-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .acceptance-rate-chart-item-header {
+        gap: 8px;
+    }
+}

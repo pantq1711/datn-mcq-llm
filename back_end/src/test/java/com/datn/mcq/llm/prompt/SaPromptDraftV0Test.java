@@ -2,7 +2,6 @@ package com.datn.mcq.llm.prompt;
 
 import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.enums.Difficulty;
-import com.datn.mcq.enums.Strategy;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -84,8 +83,7 @@ class SaPromptDraftV0Test {
     @Test
     void phienBanPromptVaPromptMcqKhongDoi() {
         assertEquals("sa-v1-draft", SaPromptDraftV0.PROMPT_VERSION);
-        String mcq = new PromptBuilder().buildGenerationPrompt("Toán", 8, null, null, null, Strategy.ZERO_SHOT,
-                Difficulty.EASY);
+        String mcq = new PromptBuilder().buildGenerationPrompt("Toán", 8, null, null, null, Difficulty.EASY);
         assertTrue(mcq.startsWith("Bạn là giáo viên THCS biên soạn câu hỏi trắc nghiệm 4 lựa chọn."));
         assertTrue(mcq.contains("đủ 7 trường"));
     }

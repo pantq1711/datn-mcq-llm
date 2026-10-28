@@ -3,6 +3,7 @@ package com.datn.mcq.generation.service;
 import com.datn.mcq.catalog.entity.QuestionTemplate;
 import com.datn.mcq.catalog.service.CatalogService;
 import com.datn.mcq.common.exception.ApiErrorException;
+import com.datn.mcq.common.util.ShortAnswerValue;
 import com.datn.mcq.common.util.TextDistanceUtils;
 import com.datn.mcq.enums.DbEnum;
 import com.datn.mcq.enums.Difficulty;
@@ -110,6 +111,12 @@ public class QuestionEditService {
     @Transactional
     public EditOutcome createVersion(Integer baseQuestionId, QuestionEditInput input,
                                      List<DedupCandidate> sameExamCandidates) {
+        return createVersion(baseQuestionId, input, sameExamCandidates, null);
+    }
+
+    @Transactional
+    public EditOutcome createVersion(Integer baseQuestionId, QuestionEditInput input,
+                                     List<DedupCandidate> sameExamCandidates, Integer creatorUserId) {
         GeneratedQuestion base = questionRepository.findById(baseQuestionId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu hỏi id=" + baseQuestionId));
         QuestionType type = base.getQuestionType() != null ? base.getQuestionType() : QuestionType.MCQ;
@@ -137,7 +144,7 @@ public class QuestionEditService {
 
         DedupScope scope = dedupScopeResolver.resolve(version.getRunId());
         if (scope != null) {
-            scope = scope.excluding(chainIds(base)).withExtraCandidates(sameExamCandidates);
+            scope = scope.excluding(chainIds(base)).withExtraCandidates(sameExamCandidates).withCreatorUserId(creatorUserId);
         }
         QcPipelineReport report = qcOrchestrator.evaluateAndSave(
                 edited.qcInput(version.getId(), validateLatex, repairs), scope);
@@ -159,7 +166,52 @@ public class QuestionEditService {
         jobRepository.cancelPendingAnswerChecks(base.getId(), LocalDateTime.now());
         version.setStatus(status);
         questionRepository.save(version);
+        enqueueGrounding(base, version, type, status);
         return new EditOutcome(true, version.getId(), changed, edited.editDistance(current));
+    }
+
+    /**
+     * W2-3 bước 8: câu của chuỗi sinh từ đề có tài liệu thì bản sửa cũng được chấm "bám tài liệu" lại, vì judge thấy cả đề,
+     * phương án, đáp án và lời giải nên bất kỳ thay đổi nào cũng có thể đổi kết luận. Job dùng lại NGUYÊN ảnh chụp đoạn tài
+     * liệu của chuỗi (job grounding của bản gần nhất có, nếu không thì job sinh câu), không chọn lại đoạn. Chỉ xếp job, không
+     * gọi LLM trong request. Bản trước (nếu job còn chờ) bị bỏ qua ở worker vì đã có bản sửa thay thế. Cùng điều kiện với câu
+     * sinh ra: chỉ câu còn dùng được (qua QC hoặc đang chờ Solver).
+     */
+    private void enqueueGrounding(GeneratedQuestion base, GeneratedQuestion version, QuestionType type,
+                                  QuestionStatus status) {
+        if (status != QuestionStatus.QC_PASSED && status != QuestionStatus.GENERATED) {
+            return;
+        }
+        groundingSource(base).ifPresent(source -> {
+            LocalDateTime now = LocalDateTime.now();
+            GenerationJob job = new GenerationJob();
+            job.setJobType(GenerationJob.TYPE_GROUNDING_CHECK);
+            job.setQuestionType(type);
+            job.setRunId(version.getRunId());
+            job.setTemplateId(version.getTemplateId());
+            job.setQuestionId(version.getId());
+            job.setMaterialContext(source.getMaterialContext());
+            job.setMaterialRefs(source.getMaterialRefs());
+            job.setStatus(JobStatus.PENDING);
+            job.setAttempt(0);
+            job.setNextRunAt(now);
+            job.setCreatedAt(now);
+            job.setUpdatedAt(now);
+            jobRepository.save(job);
+        });
+    }
+
+    /** Job (grounding hoặc sinh câu) gần nhất của chuỗi bản sửa mang ảnh chụp tài liệu; rỗng khi câu không dùng tài liệu. */
+    private Optional<GenerationJob> groundingSource(GeneratedQuestion base) {
+        for (Integer id : chainIds(base)) {
+            for (String jobType : List.of(GenerationJob.TYPE_GROUNDING_CHECK, GenerationJob.TYPE_GENERATE)) {
+                Optional<GenerationJob> job = jobRepository.findFirstByQuestionIdAndJobTypeOrderByIdDesc(id, jobType);
+                if (job.isPresent() && job.get().getMaterialContext() != null) {
+                    return job;
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     /** Job answer_check đang chờ hoặc đang chạy của câu. */
@@ -305,6 +357,9 @@ public class QuestionEditService {
                     forbid(in.statements(), "statements", type);
                     // Như parser sa: đáp số chỉ trim, vẫn tự đóng "$" (ví dụ "$3\sqrt{2}").
                     c.saAnswer = text("answer", required(in.saAnswer(), "saAnswer"), repairs);
+                    // 27/10: đáp án đạt STRICT được lưu ở dạng chuẩn hóa; không đạt thì giữ nguyên để FormatChecker báo 400.
+                    String normalized = ShortAnswerValue.normalizedStrictAnswer(c.saAnswer);
+                    c.saAnswer = normalized != null ? normalized : c.saAnswer;
                 }
                 case TF -> {
                     forbidOptions(in, type);
@@ -406,6 +461,12 @@ public class QuestionEditService {
 
         private static String text(String field, String value, List<String> repairs) {
             String s = value.strip();
+            // Như parser sinh câu: gỡ vỏ \text{...} ngoài $ rồi mới tự đóng $ (27/10, đơn vị đo viết ngoài công thức).
+            LlmOutputRepair.TextRepair t = LlmOutputRepair.stripTextOutsideMath(s);
+            if (t.removed() > 0) {
+                repairs.add(LlmOutputRepair.textWarning(field, t.removed()));
+                s = t.text();
+            }
             LlmOutputRepair.DollarRepair d = LlmOutputRepair.closeTrailingDollar(s);
             if (d.closed()) {
                 repairs.add(LlmOutputRepair.dollarWarning(field));

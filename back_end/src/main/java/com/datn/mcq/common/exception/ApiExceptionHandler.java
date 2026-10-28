@@ -4,6 +4,7 @@ import com.datn.mcq.config.JsonSecurityErrorHandler;
 import com.datn.mcq.exam.export.DocumentExportException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -11,9 +12,16 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.util.unit.DataSize;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
+import com.datn.mcq.llm.client.QuotaExhaustedException;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -22,6 +30,19 @@ import java.util.NoSuchElementException;
 public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
+    /** Giới hạn một file khi tải lên, từ cấu hình multipart (ghi trong thông báo 413). */
+    @Value("${spring.servlet.multipart.max-file-size:10MB}")
+    private DataSize maxFileSize = DataSize.ofMegabytes(10);
+
+    void setMaxFileSize(DataSize maxFileSize) {
+        this.maxFileSize = maxFileSize;
+    }
+
+    private static String formatSize(long bytes) {
+        long mb = 1024L * 1024;
+        return bytes % mb == 0 ? bytes / mb + " MB" : bytes % 1024 == 0 ? bytes / 1024 + " KB" : bytes + " byte";
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleBadRequest(IllegalArgumentException ex) {
@@ -97,9 +118,16 @@ public class ApiExceptionHandler {
     /** Xuất đề ra Word không thành (thiếu pandoc, quá thời gian, pandoc báo lỗi): trả đúng mã kèm thông báo. */
     @ExceptionHandler(DocumentExportException.class)
     public ResponseEntity<Map<String, String>> handleExport(DocumentExportException ex) {
-        return ResponseEntity.status(ex.getHttpStatus())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("error", ex.getMessage() != null ? ex.getMessage() : "Không xuất được đề"));
+        var builder = ResponseEntity.status(ex.getHttpStatus()).contentType(MediaType.APPLICATION_JSON);
+        if (ex.getRetryAfterSeconds() != null && ex.getRetryAfterSeconds() > 0) {
+            builder.header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        Map<String, String> body = new LinkedHashMap<>();
+        body.put("error", ex.getMessage() != null ? ex.getMessage() : "Không xuất được đề");
+        if (ex.getCode() != null) {
+            body.put("code", ex.getCode());
+        }
+        return builder.body(body);
     }
 
     /** W1-1: đăng nhập hoặc refresh không thành: 401 kèm code (INVALID_CREDENTIALS, REFRESH_INVALID). */
@@ -131,10 +159,61 @@ public class ApiExceptionHandler {
                 .body(Map.of("error", JsonSecurityErrorHandler.FORBIDDEN_MESSAGE, "code", "FORBIDDEN"));
     }
 
+    /**
+     * W2-3: tải tài liệu vượt giới hạn multipart của máy chủ (spring.servlet.multipart.max-file-size): 413 kèm mã
+     * FILE_TOO_LARGE, cùng mã với lỗi quá lớn do bước trích văn bản.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        // Tomcat/Spring không báo ngưỡng khi từ chối (getMaxUploadSize() = -1): lấy từ cấu hình multipart.
+        long max = ex.getMaxUploadSize() > 0 ? ex.getMaxUploadSize() : maxFileSize.toBytes();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", "File quá lớn: tối đa " + formatSize(max) + " mỗi file.");
+        body.put("code", "FILE_TOO_LARGE");
+        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE).body(body);
+    }
+
+    /** W2-3: yêu cầu tải lên thiếu phần file (hoặc phần khác): 400 kèm mã. */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<Map<String, String>> handleMissingPart(MissingServletRequestPartException ex) {
+        boolean file = "file".equals(ex.getRequestPartName());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "error", file ? "Thiếu file: gửi multipart với phần \"file\"." : "Thiếu phần \"" + ex.getRequestPartName()
+                        + "\" của yêu cầu.",
+                "code", file ? "MISSING_FILE" : "MISSING_PART"));
+    }
+
+    /** W2-3: yêu cầu multipart hỏng (sai boundary, bị cắt giữa chừng): 400 thay vì 500. */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<Map<String, String>> handleMultipart(MultipartException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "error", "Yêu cầu tải file không hợp lệ.", "code", "INVALID_MULTIPART"));
+    }
+
+
+    /** W2-4b (C): chạm hạn mức ngày của Gemini: 429 kèm Retry-After (giây) và mã LLM_DAILY_QUOTA_EXHAUSTED. */
+    @ExceptionHandler(QuotaExhaustedException.class)
+    public ResponseEntity<Map<String, String>> handleQuotaExhausted(QuotaExhaustedException ex) {
+        long retryAfterSeconds = 0;
+        if (ex.getResetAt() != null) {
+            long sec = Duration.between(LocalDateTime.now(), ex.getResetAt()).toSeconds();
+            retryAfterSeconds = Math.max(1, sec);
+        }
+        var builder = ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS);
+        if (retryAfterSeconds > 0) {
+            builder.header(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSeconds));
+        }
+        return builder.body(Map.of(
+                "error", ex.getMessage() != null ? ex.getMessage() : "Đã chạm hạn mức gọi Gemini trong ngày",
+                "code", "LLM_DAILY_QUOTA_EXHAUSTED"
+        ));
+    }
+
     /** Gemini trả 429 hoặc 503: trả lại đúng mã đó thay vì 500. */
     @ExceptionHandler(UpstreamServiceException.class)
     public ResponseEntity<Map<String, String>> handleUpstream(UpstreamServiceException ex) {
         return ResponseEntity.status(ex.getHttpStatus())
+
                 .body(Map.of("error", ex.getMessage() != null ? ex.getMessage() : "Dịch vụ ngoài tạm thời không phục vụ"));
     }
 }

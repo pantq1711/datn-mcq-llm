@@ -14,6 +14,8 @@ public final class TestDataCleaner {
 
     public static void cleanAll(DataSource dataSource, JdbcTemplate jdbcTemplate, String stage) {
         TestSafetyConfiguration.TestDatabaseGuard.validateTestDatabase(dataSource, stage);
+        jdbcTemplate.update("DELETE FROM exam_context_material");
+        jdbcTemplate.update("DELETE FROM exam_generation_context");
         jdbcTemplate.update("DELETE FROM exam_slot_action");
         jdbcTemplate.update("UPDATE generation_job SET exam_slot_id = NULL WHERE exam_slot_id IS NOT NULL");
         jdbcTemplate.update("DELETE FROM exam_slot");
@@ -28,6 +30,7 @@ public final class TestDataCleaner {
         jdbcTemplate.update("DELETE FROM label_assignment");
         jdbcTemplate.update("DELETE FROM dedup_gold_label");
         jdbcTemplate.update("DELETE FROM dedup_gold_pair");
+        jdbcTemplate.update("DELETE FROM question_grounding");
         jdbcTemplate.update("DELETE FROM answer_check_statement");
         jdbcTemplate.update("DELETE FROM quality_check_result");
         jdbcTemplate.update("DELETE FROM question_embedding");
@@ -39,6 +42,7 @@ public final class TestDataCleaner {
         jdbcTemplate.update("DELETE FROM exam_matrix");
         jdbcTemplate.update("DELETE FROM question_template");
         jdbcTemplate.update("DELETE FROM subject");
+        jdbcTemplate.update("DELETE FROM lesson_material");
         // refresh_token (V11) bị xóa theo users nhờ ON DELETE CASCADE.
         jdbcTemplate.update("DELETE FROM users");
     }

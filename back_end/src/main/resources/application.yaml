@@ -22,10 +22,20 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  # Tải tài liệu bài học (W2-3): khớp app.materials.max-file-bytes (10 MB); request thêm 1 MB cho phần multipart.
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+
 # Sau nginx: đặt FORWARD_HEADERS_STRATEGY=native để IP người dùng (X-Forwarded-For, chỉ tin proxy nội bộ) dùng cho
 # giới hạn đăng nhập sai; mặc định none (chạy trực tiếp, không tin header do client tự gửi).
 server:
   forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
+  tomcat:
+    # Vượt giới hạn multipart thì Tomcat đọc bỏ phần thân còn lại tối đa chừng này để trả được 413 JSON (mặc định 2 MB làm
+    # ngắt kết nối giữa chừng thay vì trả 413).
+    max-swallow-size: 25MB
 
 management:
   endpoints:
@@ -43,11 +53,21 @@ app:
     solver-model: ${LLM_SOLVER_MODEL:gemini-3.5-flash-lite}
     # Chỉ đặt khi kiểm chứng bằng Gemini giả (W1-5); để trống thì gọi https://generativelanguage.googleapis.com/v1beta/models/
     base-url: ${LLM_BASE_URL:}
+    # W2-4b (C): bộ điều tiết lượt gọi Gemini dùng chung (15 RPM / 500 RPD free tier, có biên an toàn).
+    min-spacing-ms: ${LLM_MIN_SPACING_MS:4200}
+    daily-quota: ${LLM_DAILY_QUOTA:480}
+    rate-limit-cooldown-ms: ${LLM_RATE_LIMIT_COOLDOWN_MS:60000}
   embedding:
     model: ${EMBEDDING_MODEL:}
+  # Công cụ thí nghiệm (quyết định 25/10): /api/generation/* và /api/catalog/templates chỉ tồn tại khi bật. Mặc định tắt;
+  # không bật ở prod (admin gọi các đường này sẽ gọi Gemini tính phí).
+  experiment:
+    enabled: ${EXPERIMENT_ENABLED:false}
   worker:
     enabled: ${WORKER_ENABLED:false}
     poll-delay-ms: ${WORKER_POLL_DELAY_MS:15000}
+    concurrency: ${WORKER_CONCURRENCY:2}
+    idle-delay-ms: ${WORKER_IDLE_DELAY_MS:2000}
     max-attempts: ${WORKER_MAX_ATTEMPTS:3}
     # Job running quá ngưỡng này (giây) được trả về pending khi khởi động và mỗi stale-check-ms (chỉ khi worker bật).
     stale-after-seconds: ${WORKER_STALE_AFTER_SECONDS:300}
@@ -76,6 +96,18 @@ app:
   # Xuất đề ra Word (GET /api/exams/{id}/export/docx) cần pandoc; mặc định tìm "pandoc" trên PATH.
   export:
     pandoc-path: ${PANDOC_PATH:pandoc}
+  # Tài liệu bài học đính kèm (W2-3, V18): giới hạn khi trích văn bản docx/pdf/txt. Mặc định ở MaterialProperties;
+  # docx cần pandoc (cùng app.export.pandoc-path), pdf dùng PDFBox. Giá trị ở đây khớp mặc định, đổi bằng biến môi trường.
+  materials:
+    max-file-bytes: ${MATERIAL_MAX_FILE_BYTES:10485760}
+    max-chars: ${MATERIAL_MAX_CHARS:300000}
+    max-pages: ${MATERIAL_MAX_PAGES:200}
+    max-per-owner: ${MATERIAL_MAX_PER_OWNER:50}
+    max-uploads-per-hour: ${MATERIAL_MAX_UPLOADS_PER_HOUR:30}
+    max-concurrent-extractions: ${MATERIAL_MAX_CONCURRENT:1}
+    queue-wait: ${MATERIAL_QUEUE_WAIT:30s}
+    extract-timeout: ${MATERIAL_EXTRACT_TIMEOUT:30s}
+    pandoc-heap-mb: ${MATERIAL_PANDOC_HEAP_MB:256}
   # Bảng điểm cho phần tạo đề sau này (V4); luồng sinh câu không dùng. Giá trị mặc định nằm ở ExamScoringProperties.
   exam:
     scoring:

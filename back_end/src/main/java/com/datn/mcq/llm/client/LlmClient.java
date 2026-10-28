@@ -2,7 +2,6 @@ package com.datn.mcq.llm.client;
 
 import com.datn.mcq.common.exception.UpstreamServiceException;
 import com.datn.mcq.common.util.SimpleJson;
-import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +17,9 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class LlmClient {
@@ -27,32 +29,29 @@ public class LlmClient {
     /** Địa chỉ gốc của Gemini; {@code app.llm.base-url} chỉ đổi khi kiểm chứng bằng Gemini giả (W1-5). */
     static final String DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
 
-    private static final String MCQ_RESPONSE_SCHEMA_JSON = """
-            {"type":"OBJECT","properties":{
-              "question_text":{"type":"STRING"},
-              "option_a":{"type":"STRING"},
-              "option_b":{"type":"STRING"},
-              "option_c":{"type":"STRING"},
-              "option_d":{"type":"STRING"},
-              "explanation":{"type":"STRING"},
-              "correct_option":{"type":"STRING","enum":["A","B","C","D"]}
-            },"required":["question_text","option_a","option_b","option_c","option_d","explanation","correct_option"]}
-            """;
+    private static final Pattern RETRY_DELAY_PATTERN =
+            Pattern.compile("\"retryDelay\"\\s*:\\s*\"([^\"]+)\"");
 
     private final HttpClient httpClient;
     private final String defaultApiKey;
     private final String defaultModel;
     private final String baseUrl;
+    private final GeminiRateLimiter rateLimiter;
 
     public LlmClient(String defaultApiKey, String defaultModel) {
-        this(defaultApiKey, defaultModel, null);
+        this(defaultApiKey, defaultModel, null, null);
+    }
+
+    public LlmClient(String defaultApiKey, String defaultModel, String baseUrl) {
+        this(defaultApiKey, defaultModel, baseUrl, null);
     }
 
     @Autowired
     public LlmClient(
             @Value("${app.llm.api-key:}") String defaultApiKey,
             @Value("${app.llm.model:gemini-3.5-flash-lite}") String defaultModel,
-            @Value("${app.llm.base-url:}") String baseUrl) {
+            @Value("${app.llm.base-url:}") String baseUrl,
+            @Autowired(required = false) GeminiRateLimiter rateLimiter) {
         this.baseUrl = normalizeBaseUrl(baseUrl);
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(20))
@@ -61,6 +60,7 @@ public class LlmClient {
         this.defaultModel = (defaultModel != null && !defaultModel.isBlank())
                 ? defaultModel.trim()
                 : "gemini-3.5-flash-lite";
+        this.rateLimiter = rateLimiter;
     }
 
     /** Trống thì dùng địa chỉ Gemini thật; luôn kết thúc bằng "/" để ghép tên model. */
@@ -78,11 +78,6 @@ public class LlmClient {
 
     public String getDefaultModel() {
         return defaultModel;
-    }
-
-    public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-        String generationConfig = buildGenerationConfig(strategy, temperature);
-        return callGemini(prompt, modelName, generationConfig);
     }
 
     public LlmCallResult callJsonMode(String prompt, String modelName, Double temperature) {
@@ -112,20 +107,6 @@ public class LlmClient {
                 + ",\"responseSchema\":" + responseSchemaJson.strip() + "}";
     }
 
-    private String buildGenerationConfig(Strategy strategy, Double temperature) {
-        double temp = temperature != null ? temperature : 0.7;
-        if (strategy == Strategy.FEW_SHOT_STRUCTURED) {
-            return "\"generationConfig\":{\"temperature\":" + temp
-                    + ",\"responseMimeType\":\"application/json\""
-                    + ",\"responseSchema\":" + MCQ_RESPONSE_SCHEMA_JSON + "}";
-        }
-        if (strategy == Strategy.FEW_SHOT) {
-            return "\"generationConfig\":{\"temperature\":" + temp
-                    + ",\"responseMimeType\":\"application/json\"}";
-        }
-        return "\"generationConfig\":{\"temperature\":" + temp + "}";
-    }
-
     @SuppressWarnings("unchecked")
     private LlmCallResult callGemini(String prompt, String requestedModel, String generationConfigFragment) {
         String apiKey = resolveApiKey();
@@ -147,6 +128,10 @@ public class LlmClient {
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
 
+        if (rateLimiter != null) {
+            rateLimiter.acquire();
+        }
+
         long startNanos = System.nanoTime();
         HttpResponse<String> response;
         try {
@@ -161,6 +146,9 @@ public class LlmClient {
 
         int status = response.statusCode();
         if (status < 200 || status >= 300) {
+            if (status == 429 && rateLimiter != null) {
+                rateLimiter.onRateLimited(parseRetryDelay(response.body()).orElse(null));
+            }
             throw errorForStatus(status, response.body());
         }
 
@@ -187,6 +175,76 @@ public class LlmClient {
             }
         }
         return new LlmCallResult(text, totalTokens, latencyMs, 0.0, model);
+    }
+
+    /**
+     * Đọc {@code retryDelay} từ thân phản hồi lỗi HTTP 429 của Gemini (ví dụ {@code "retryDelay": "42s"} hoặc
+     * {@code "42.5s"} trong {@code error.details} kiểu {@code RetryInfo}). Trả rỗng khi không có hoặc không đọc được.
+     */
+    public static Optional<Duration> parseRetryDelay(String body) {
+        if (body == null || body.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            Map<String, Object> root = SimpleJson.parseObject(body);
+            Object errObj = root.get("error");
+            if (errObj instanceof Map<?, ?> errMap) {
+                Object direct = errMap.get("retryDelay");
+                if (direct instanceof String s) {
+                    Optional<Duration> parsed = parseDurationString(s);
+                    if (parsed.isPresent()) {
+                        return parsed;
+                    }
+                }
+                Object detailsObj = errMap.get("details");
+                if (detailsObj instanceof List<?> details) {
+                    for (Object item : details) {
+                        if (item instanceof Map<?, ?> detailMap) {
+                            Object val = detailMap.get("retryDelay");
+                            if (val instanceof String s) {
+                                Optional<Duration> parsed = parseDurationString(s);
+                                if (parsed.isPresent()) {
+                                    return parsed;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // Fallback sang biểu thức chính quy nếu JSON không chuẩn.
+        }
+        Matcher m = RETRY_DELAY_PATTERN.matcher(body);
+        if (m.find()) {
+            return parseDurationString(m.group(1));
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<Duration> parseDurationString(String raw) {
+        if (raw == null) {
+            return Optional.empty();
+        }
+        String s = raw.trim();
+        if (s.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            if (s.endsWith("ms")) {
+                long ms = Math.round(Double.parseDouble(s.substring(0, s.length() - 2).trim()));
+                return ms >= 0 ? Optional.of(Duration.ofMillis(ms)) : Optional.empty();
+            }
+            if (s.endsWith("s")) {
+                double seconds = Double.parseDouble(s.substring(0, s.length() - 1).trim());
+                long ms = (long) Math.ceil(seconds * 1000.0);
+                return ms >= 0 ? Optional.of(Duration.ofMillis(ms)) : Optional.empty();
+            }
+            double seconds = Double.parseDouble(s);
+            long ms = (long) Math.ceil(seconds * 1000.0);
+            return ms >= 0 ? Optional.of(Duration.ofMillis(ms)) : Optional.empty();
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     /**
@@ -227,4 +285,3 @@ public class LlmClient {
         return llmKey != null ? llmKey.trim() : "";
     }
 }
-

@@ -8,9 +8,7 @@ import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
 import com.datn.mcq.enums.SourceType;
-import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.enums.TruthChoice;
-import com.datn.mcq.enums.UserRole;
 import com.datn.mcq.generation.service.DedupScopeResolver;
 import com.datn.mcq.generation.service.QcRerunService;
 import com.datn.mcq.generation.worker.GenerationJobPoller;
@@ -22,9 +20,6 @@ import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import com.datn.mcq.qc.service.AnswerCheckRecorder;
-import com.datn.mcq.review.service.TeacherReviewService;
-import com.datn.mcq.user.entity.UserAccount;
-import com.datn.mcq.user.repository.UserAccountRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,7 +39,6 @@ import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,16 +48,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Luồng Đúng/Sai trọn vẹn qua HTTP thật trên datn_mcq_test (GĐ3): generate-sync với rawLlmOutputOverride, format,
- * dedup, Solver giả (không gọi mạng), chấm mù, ngân hàng với 4 ý đúng thứ tự; job bất đồng bộ; chạy lại QC.
+ * dedup, Solver giả (không gọi mạng); job bất đồng bộ; chạy lại QC.
  */
-@SpringBootTest
+@SpringBootTest(properties = "app.experiment.enabled=true")
 @Import(TestSafetyConfiguration.class)
 class TrueFalseFlowTest {
 
@@ -91,10 +84,6 @@ class TrueFalseFlowTest {
             return true;
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            throw new UnsupportedOperationException("Không sinh câu MCQ trong test này");
-        }
 
         @Override
         public LlmCallResult callJsonModeWithSchema(String prompt, String modelName, Double temperature, String schema) {
@@ -125,8 +114,6 @@ class TrueFalseFlowTest {
     @Autowired
     private QuestionTemplateRepository templateRepository;
     @Autowired
-    private UserAccountRepository userRepository;
-    @Autowired
     private GenerationJobProcessor jobProcessor;
     @Autowired
     private QcOrchestrator qcOrchestrator;
@@ -136,14 +123,11 @@ class TrueFalseFlowTest {
     private QcRerunService qcRerunService;
     @Autowired
     private AnswerCheckRecorder answerCheckRecorder;
-    @Autowired
-    private TeacherReviewService teacherReviewService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private MockMvc mockMvc;
     private Subject subject;
     private QuestionTemplate template;
-    private UserAccount teacher;
 
     @BeforeEach
     void setUp() {
@@ -162,7 +146,6 @@ class TrueFalseFlowTest {
         tpl.setSourceQuestion("Rút gọn phân thức.");
         tpl.setIsActive(true);
         template = templateRepository.save(tpl);
-        teacher = userRepository.save(new UserAccount("GV TF", "gv.tf@test", UserRole.TEACHER));
     }
 
     static String solverSays(String a, String b, String c, String d) {
@@ -195,28 +178,6 @@ class TrueFalseFlowTest {
         return actions.andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
     }
 
-    private JsonNode getJson(String url) throws Exception {
-        return objectMapper.readTree(body(mockMvc.perform(get(url)).andExpect(status().isOk())));
-    }
-
-    private static Set<String> allKeys(JsonNode node) {
-        Set<String> keys = new HashSet<>();
-        collect(node, keys);
-        return keys;
-    }
-
-    private static void collect(JsonNode node, Set<String> keys) {
-        if (node.isObject()) {
-            node.fieldNames().forEachRemaining(keys::add);
-        }
-        node.elements().forEachRemaining(n -> collect(n, keys));
-    }
-
-    private static final Set<String> FORBIDDEN_IN_REVIEW = Set.of(
-            "label", "llmLabel", "llm_label", "labelCorrect", "difficulty", "llmDifficulty", "finalDifficulty",
-            "explanation", "answerCorrect", "status", "correctOption", "optionA", "judgeLabel", "tfJudgements",
-            "judgeAnswer", "answerWarnings", "qcReport", "strategy", "saAnswer", "rawLlmOutput");
-
     private List<Map<String, Object>> rows(String sql, Object... args) {
         return jdbc.queryForList(sql, args);
     }
@@ -224,7 +185,7 @@ class TrueFalseFlowTest {
     // ---------- trọn luồng ----------
 
     @Test
-    void tfDiQuaQcChamMuVaoNganHangDungThuTu() throws Exception {
+    void tfDiQuaQcVoiBonYDungThuTu() throws Exception {
         JsonNode resp = generateTf(tfJson(STEM, STATEMENTS, List.of("T", "T", "F", "F")), true);
         JsonNode question = resp.get("question");
         JsonNode qc = resp.get("qcReport");
@@ -268,74 +229,12 @@ class TrueFalseFlowTest {
         assertNull(answerCheck.get("judge_answer"));
         assertEquals(List.of("T", "T", "F", "F"), jdbc.queryForList("SELECT judge_label FROM answer_check_statement"
                 + " WHERE qc_result_id = ? ORDER BY position", String.class, answerCheck.get("id")));
+        assertEquals(10, answerCheck.get("token_count"), "V21: số liệu lượt Solver tf ghi ở dòng answer_check");
+        assertEquals(1.0, answerCheck.get("latency_ms"));
 
-        // Chấm mù: đề dẫn và 4 ý, không có nhãn hay mức của LLM.
-        JsonNode list = getJson("/api/reviews/questions");
-        assertEquals("tf", list.get(0).get("questionType").asText());
-        JsonNode form = getJson("/api/reviews/questions/" + id);
-        assertEquals("tf", form.get("questionType").asText());
-        assertEquals(STEM, form.get("questionText").asText());
-        assertEquals(4, form.get("statements").size());
-        for (int i = 0; i < 4; i++) {
-            assertEquals(List.of("a", "b", "c", "d").get(i), form.get("statements").get(i).get("key").asText());
-            assertEquals(STATEMENTS.get(i), form.get("statements").get(i).get("text").asText());
-            assertEquals(Set.of("key", "text"), Set.copyOf(fieldNames(form.get("statements").get(i))));
-        }
-        for (JsonNode node : List.of(list, form)) {
-            Set<String> leaked = new HashSet<>(allKeys(node));
-            leaked.retainAll(FORBIDDEN_IN_REVIEW);
-            assertEquals(Set.of(), leaked, "Form chấm TF lộ trường");
-            assertFalse(node.toString().contains("BÍ MẬT"));
-        }
-
-        // Giáo viên chọn khác LLM ở ý d (T thay vì F) và duyệt nguyên trạng.
-        String submit = """
-                {"reviewerId": %d, "reviewPurpose": "production", "questionType": "tf", "formatOk": true,
-                 "decision": "approved_as_is", "statements": [
-                   {"key": "a", "reviewerLabel": "T", "difficultyLabel": "easy"},
-                   {"key": "b", "reviewerLabel": "T", "difficultyLabel": "medium"},
-                   {"key": "c", "reviewerLabel": "F", "difficultyLabel": "medium"},
-                   {"key": "d", "reviewerLabel": "T", "difficultyLabel": "hard"}]}
-                """.formatted(teacher.getId());
-        JsonNode submitted = objectMapper.readTree(body(mockMvc.perform(post("/api/reviews/questions/" + id)
-                        .contentType(MediaType.APPLICATION_JSON).content(submit))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.questionStatus").value("in_bank"))
-                .andExpect(jsonPath("$.statements[3].reviewerLabel").value("T"))
-                .andExpect(jsonPath("$.statements[3].finalLabel").value("T"))));
-        Set<String> leakedAfterSubmit = new HashSet<>(allKeys(submitted));
-        leakedAfterSubmit.retainAll(Set.of("labelCorrect", "answerCorrect", "llmLabel", "judgeLabel", "explanation"));
-        assertEquals(Set.of(), leakedAfterSubmit);
-
-        Map<String, Object> review = jdbc.queryForMap("SELECT * FROM teacher_review WHERE question_id = ?", id);
-        assertEquals("tf", review.get("question_type"));
-        assertNull(review.get("answer_correct"));
-        assertNull(review.get("difficulty_label"));
-        assertNull(review.get("reviewer_answer"));
-        int reviewId = ((Number) review.get("id")).intValue();
-        assertEquals(List.of(true, true, true, false), jdbc.queryForList("SELECT label_correct FROM"
-                + " teacher_review_statement WHERE review_id = ? ORDER BY position", Boolean.class, reviewId));
-        assertEquals(3L, teacherReviewService.countMatchedStatements(reviewId), "số ý khớp nhãn LLM");
-
-        Map<String, Object> bank = jdbc.queryForMap("SELECT * FROM bank_item WHERE source_question_id = ?", id);
-        assertEquals("tf", bank.get("question_type"));
-        assertNull(bank.get("difficulty"));
-        List<Map<String, Object>> bankStatements = rows("SELECT * FROM bank_item_statement WHERE bank_item_id = ?"
-                + " ORDER BY position", bank.get("id"));
-        assertEquals(List.of("a", "b", "c", "d"), bankStatements.stream().map(r -> r.get("position")).toList());
-        assertEquals(STATEMENTS, bankStatements.stream().map(r -> r.get("statement_text")).toList());
-        assertEquals(List.of("T", "T", "F", "T"), bankStatements.stream().map(r -> r.get("label")).toList());
-        assertEquals(List.of("easy", "medium", "medium", "hard"),
-                bankStatements.stream().map(r -> r.get("difficulty")).toList());
-        assertEquals(List.of("easy", "medium", "medium", "hard"), jdbc.queryForList("SELECT final_difficulty FROM"
-                + " generated_question_statement WHERE question_id = ? ORDER BY position", String.class, id));
-        assertEquals("in_bank", jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
-                String.class, id));
-
-        JsonNode bankItems = getJson("/api/bank-items?questionType=tf").get("items");  // W1-3: danh sách là một trang
-        assertEquals(1, bankItems.size());
-        assertEquals("d", bankItems.get(0).get("statements").get(3).get("key").asText());
-        assertEquals("T", bankItems.get(0).get("statements").get(3).get("label").asText());
+        // Chưa có thao tác của giáo viên nên chưa có review hay ngân hàng (Giữ vào ngân hàng: ExamBuildTest).
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM teacher_review", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM bank_item", Integer.class));
     }
 
     private static List<String> fieldNames(JsonNode node) {
@@ -489,10 +388,6 @@ class TrueFalseFlowTest {
             super("FAKE_KEY_FOR_TESTS", "fake-generator-model");
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            throw new UnsupportedOperationException("Câu tf không được sinh qua generateMcq");
-        }
 
         @Override
         public LlmCallResult callJsonModeWithSchema(String prompt, String modelName, Double temperature, String schema) {

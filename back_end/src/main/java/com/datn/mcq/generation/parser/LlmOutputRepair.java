@@ -5,11 +5,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
- * Sửa hai lỗi lặp lại của đầu ra LLM trước/sau khi giải mã JSON (ngày 23/10, dùng chung cho parser mcq/sa/tf, chỉ ở chế
+ * Sửa các lỗi lặp lại của đầu ra LLM trước/sau khi giải mã JSON (ngày 23/10, dùng chung cho parser mcq/sa/tf, chỉ ở chế
  * độ sửa của parser, tức run production):
  * <ol>
  *   <li>{@link #repairLatexEscapes}: dấu "\" của lệnh LaTeX chưa nhân đôi trong chuỗi JSON (ví dụ "$75^\circ$").</li>
  *   <li>{@link #closeTrailingDollar}: công thức mở bằng "$" ở cuối trường mà quên "$" đóng.</li>
+ *   <li>{@link #stripTextOutsideMath} (27/10): vỏ {@code \text{...}} của đơn vị đo viết ngoài $ ("$40$ \text{km/h}").</li>
  * </ol>
  */
 public final class LlmOutputRepair {
@@ -188,6 +189,100 @@ public final class LlmOutputRepair {
         return field + ": đã tự đóng $";
     }
 
+    /** @param text văn bản sau khi sửa; {@code removed} là số {@code \text{...}} đã gỡ vỏ */
+    public record TextRepair(String text, int removed) {}
+
+    private static final String TEXT_COMMAND = "\\text{";
+
+    /**
+     * Gỡ vỏ {@code \text{X}} nằm NGOÀI cặp $...$ thành X đã trim (model hay viết đơn vị đo như "$40$ \text{km/h}"). Cách
+     * xác định trong/ngoài $ theo {@code LatexValidationRules}: "$" mở/đóng, "$$" là công thức riêng dòng, "\$" và mọi ký
+     * hiệu "\" khác được bỏ qua nguyên khối. Chỉ xử lý đúng lệnh \text ngay sau là "{" (không đụng \textbf, \textit...).
+     * Giữ nguyên khi ngoặc nhọn không cân, hoặc X chứa "\" hoặc "$" để bộ kiểm tra báo lỗi như cũ. Nếu ký tự đứng trước
+     * không phải khoảng trắng hay ngoặc mở và X không rỗng thì chèn đúng một dấu cách ("$6$\text{km}" thành "$6$ km").
+     */
+    public static TextRepair stripTextOutsideMath(String text) {
+        if (text == null || !text.contains(TEXT_COMMAND)) {
+            return new TextRepair(text, 0);
+        }
+        StringBuilder sb = new StringBuilder(text.length());
+        boolean inMath = false;
+        boolean display = false;
+        int removed = 0;
+        int n = text.length();
+        int i = 0;
+        while (i < n) {
+            char c = text.charAt(i);
+            if (c == '\\') {
+                int close = inMath || !text.startsWith(TEXT_COMMAND, i)
+                        ? -1
+                        : findTextClose(text, i + TEXT_COMMAND.length());
+                if (close < 0) {
+                    sb.append(c);
+                    if (i + 1 < n) {
+                        sb.append(text.charAt(i + 1));
+                    }
+                    i += 2;
+                    continue;
+                }
+                String inner = text.substring(i + TEXT_COMMAND.length(), close).trim();
+                if (!inner.isEmpty() && sb.length() > 0) {
+                    char prev = sb.charAt(sb.length() - 1);
+                    if (!Character.isWhitespace(prev) && "([{".indexOf(prev) < 0) {
+                        sb.append(' ');
+                    }
+                }
+                sb.append(inner);
+                removed++;
+                i = close + 1;
+                continue;
+            }
+            if (c == '$') {
+                boolean doubleDollar = i + 1 < n && text.charAt(i + 1) == '$';
+                if (!inMath) {
+                    display = doubleDollar;
+                    inMath = true;
+                    sb.append(display ? "$$" : "$");
+                    i += display ? 2 : 1;
+                } else {
+                    inMath = false;
+                    boolean two = display && doubleDollar;
+                    sb.append(two ? "$$" : "$");
+                    i += two ? 2 : 1;
+                }
+                continue;
+            }
+            sb.append(c);
+            i++;
+        }
+        return removed == 0 ? new TextRepair(text, 0) : new TextRepair(sb.toString(), removed);
+    }
+
+    /** Vị trí "}" đóng của lệnh \text mở ngay trước {@code from}; -1 nếu ngoặc không cân hoặc nội dung có "\" hoặc "$". */
+    private static int findTextClose(String text, int from) {
+        int depth = 1;
+        for (int k = from; k < text.length(); k++) {
+            char c = text.charAt(k);
+            if (c == '\\' || c == '$') {
+                return -1;
+            }
+            if (c == '{') {
+                depth++;
+            } else if (c == '}' && --depth == 0) {
+                return k;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Cảnh báo khi đã gỡ \text ngoài $. Cùng tiền tố với cảnh báo sửa escape nên lưu ở warnings, hiện trong vết QC như
+     * một lần tự sửa và không bật "cần xem kỹ" (gỡ vỏ không đổi nghĩa).
+     */
+    public static String textWarning(String field, int removed) {
+        return ESCAPE_WARNING_PREFIX + removed + " \\text{} ngoài $ (đã gỡ vỏ) ở " + field;
+    }
+
     /** Chế độ sửa: sửa escape LaTeX trong chuỗi JSON trước khi giải mã, ghi cảnh báo nếu có sửa. */
     static String repairJson(String json, boolean repair, List<String> warnings) {
         if (!repair) {
@@ -210,6 +305,11 @@ public final class LlmOutputRepair {
         }
         String s = String.valueOf(val);
         if (repair) {
+            TextRepair t = stripTextOutsideMath(s);
+            if (t.removed() > 0) {
+                warnings.add(textWarning(field, t.removed()));
+                s = t.text();
+            }
             DollarRepair d = closeTrailingDollar(s);
             if (d.closed()) {
                 warnings.add(dollarWarning(field));

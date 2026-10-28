@@ -1,5 +1,6 @@
 package com.datn.mcq.generation.parser;
 
+import com.datn.mcq.common.util.ShortAnswerValue;
 import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.generation.dto.ParsedSaDto;
 
@@ -43,6 +44,11 @@ public final class SaJsonParser {
         String answerText = answer instanceof String
                 ? LlmOutputRepair.textField("answer", answer, repair, false, warnings)
                 : answer != null ? String.valueOf(answer).trim() : null;
+        if (repair && answerText != null) {
+            // 27/10: đáp án đạt STRICT được lưu ở dạng chuẩn hóa; không đạt thì giữ nguyên văn để FormatChecker báo lỗi.
+            String normalized = ShortAnswerValue.normalizedStrictAnswer(answerText);
+            answerText = normalized != null ? normalized : answerText;
+        }
         return new ParsedSaDto(true, questionText, explanation, answerText, answer instanceof String, null, warnings);
     }
 }

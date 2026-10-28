@@ -2,7 +2,6 @@ package com.datn.mcq.generation.worker;
 
 import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
-import com.datn.mcq.enums.Strategy;
 import com.datn.mcq.generation.service.DedupScopeResolver;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
@@ -60,10 +59,6 @@ class GenerationJobQueueTest {
             return true;
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            return new LlmCallResult(body, 10, 1.0, 0.0, modelName);
-        }
 
         @Override
         public LlmCallResult callJsonModeWithSchema(String prompt, String modelName, Double temperature, String schema) {
@@ -120,7 +115,7 @@ class GenerationJobQueueTest {
 
     private Map<String, Object> row(int id) {
         return jdbc.queryForMap("SELECT status, attempt, last_error, started_at, abs(extract(epoch FROM"
-                + " (next_run_at - now()))) AS due_in FROM generation_job WHERE id = ?", id);
+                + " (next_run_at - updated_at))) AS due_in FROM generation_job WHERE id = ?", id);
     }
 
     // ---------- 1. job kẹt RUNNING ----------
@@ -175,19 +170,63 @@ class GenerationJobQueueTest {
                 Integer.class));
     }
 
+    /**
+     * W2-4b (A): lỗi xảy ra SAU khi câu đã lưu không được làm sinh câu mới (mỗi lần thử lại là một lượt gọi LLM và một câu
+     * mồ côi). Job kết thúc done, câu giữ generated và ghi lỗi; phần kiểm còn thiếu do bước kiểm lại xử lý.
+     */
     @Test
-    void loiKhiChayQcSauLoiGoiLlmKhongDeJobKetRunning() {
+    void loiKhiChayQcSauKhiDaLuuCauKhongSinhCauMoiJobDoneCauGiuGenerated() {
         int id = pendingJob();
         QcOrchestrator broken = mock(QcOrchestrator.class);
         when(broken.evaluateAndSave(any(), any())).thenThrow(new IllegalStateException("QC hỏng"));
         GenerationJobPoller poller = new GenerationJobPoller(processor, new FixedLlm(VALID_MCQ), broken,
                 dedupScopeResolver, 3);
         GenerationJobPoller.ProcessedJobSummary summary = poller.processNextJob(false);
-        assertEquals("pending", summary.jobStatus());
+        assertEquals("done", summary.jobStatus());
+        assertEquals("generated", summary.questionStatus());
         assertTrue(summary.error().contains("QC hỏng"), summary.error());
         Map<String, Object> r = row(id);
-        assertEquals("pending", r.get("status"), "thử lại theo đường hiện có");
+        assertEquals("done", r.get("status"), "không thử lại: câu đã lưu");
         assertTrue(((String) r.get("last_error")).contains("QC hỏng"));
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM generated_question", Integer.class));
+        Map<String, Object> q = jdbc.queryForMap("SELECT status, solver_error FROM generated_question");
+        assertEquals("generated", q.get("status"));
+        assertTrue(((String) q.get("solver_error")).contains("QC hỏng"));
+
+        jdbc.update("UPDATE generation_job SET next_run_at = now() - interval '1 minute' WHERE id = ?", id);
+        assertTrue(!poller.processNextJob(false).processed(), "job done không chạy lại");
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM generated_question", Integer.class));
+    }
+
+    // ---------- 1b. job mcq cũ theo chiến lược few-shot (async-queue-v1) ----------
+
+    /**
+     * Quyết định 25/10: thí nghiệm C1/C2/C3 đã bỏ. Job mcq tạo trước đó (run prompt_version async-queue-v1) không được
+     * dựng lại prompt: bị đánh dấu failed ngay với last_error rõ ràng, không gọi LLM, và worker nhận tiếp job kế.
+     */
+    @Test
+    void jobMcqCuAsyncQueueV1ThatBaiVoiLoiRoRangVaWorkerNhanJobKe() {
+        int legacyRun = insert("INSERT INTO experiment_run (subject_id, strategy, model_name, temperature, prompt_text,"
+                + " purpose, prompt_version) VALUES ((SELECT subject_id FROM question_template WHERE id = ?),"
+                + " 'few-shot-structured', 'm', 0.7, 'p', 'production', 'async-queue-v1')", template);
+        int legacy = insert("INSERT INTO generation_job (run_id, template_id, target_difficulty, next_run_at)"
+                + " VALUES (?, ?, 'easy', now() - interval '1 minute')", legacyRun, template);
+        int good = pendingJob();
+
+        Optional<GenerationJobProcessor.ClaimedJobContext> claimed = processor.claimNextPendingJob();
+
+        assertEquals(good, claimed.orElseThrow().jobId(), "job cũ bị bỏ qua, job hợp lệ kế tiếp được nhận");
+        Map<String, Object> r = row(legacy);
+        assertEquals("failed", r.get("status"));
+        String error = (String) r.get("last_error");
+        assertTrue(error.contains("async-queue-v1") && error.contains("không còn được hỗ trợ"), error);
+
+        // Chỉ còn job cũ: không có gì để nhận, job vẫn failed (không kẹt running, không quay lại pending).
+        jdbc.update("UPDATE generation_job SET status = 'failed' WHERE id = ?", good);
+        int legacy2 = insert("INSERT INTO generation_job (run_id, template_id, target_difficulty, next_run_at)"
+                + " VALUES (?, ?, 'easy', now() - interval '1 minute')", legacyRun, template);
+        assertTrue(processor.claimNextPendingJob().isEmpty());
+        assertEquals("failed", row(legacy2).get("status"));
     }
 
     // ---------- 2. nhận job có khóa ----------

@@ -1,0 +1,123 @@
+.exam-matrix-template-modal .ant-modal-content {
+    overflow: hidden;
+    padding: 0;
+}
+
+.exam-matrix-template-modal .ant-modal-header {
+    margin: 0;
+    padding: 20px 24px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.exam-matrix-template-modal .ant-modal-title {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.exam-matrix-template-modal .ant-modal-body {
+    padding: 20px 24px;
+}
+
+.exam-matrix-template-modal__content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+.exam-matrix-template-modal__intro {
+    color: #595959;
+    line-height: 1.6;
+}
+
+.exam-matrix-template-modal__filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 190px;
+    gap: 12px;
+}
+
+.exam-matrix-template-modal__subject-filter {
+    width: 100%;
+}
+
+.exam-matrix-template-modal__results-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 20px;
+}
+
+.exam-matrix-template-modal__grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 14px;
+}
+
+.exam-matrix-template-modal__empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 220px;
+    padding: 24px 12px;
+}
+
+.exam-matrix-template-modal .ant-modal-footer {
+    margin: 0;
+    padding: 14px 24px;
+    border-top: 1px solid #f0f0f0;
+}
+
+.exam-matrix-template-modal__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.exam-matrix-template-modal__selection-hint {
+    text-align: left;
+}
+
+@media (max-width: 767px) {
+    .exam-matrix-template-modal {
+        max-width: calc(100vw - 24px);
+    }
+
+    .exam-matrix-template-modal .ant-modal-header {
+        padding: 16px;
+    }
+
+    .exam-matrix-template-modal .ant-modal-body {
+        padding: 16px;
+    }
+
+    .exam-matrix-template-modal__filters {
+        grid-template-columns: 1fr;
+    }
+
+    .exam-matrix-template-modal__grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .exam-matrix-template-modal .ant-modal-footer {
+        padding: 12px 16px;
+    }
+}
+
+@media (max-width: 479px) {
+    .exam-matrix-template-modal__grid {
+        grid-template-columns: 1fr;
+    }
+
+    .exam-matrix-template-modal__footer {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .exam-matrix-template-modal__footer>.ant-space {
+        display: flex;
+        justify-content: flex-end;
+    }
+}

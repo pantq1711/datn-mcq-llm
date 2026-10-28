@@ -13,9 +13,24 @@ public final class ExamBuildDtos {
     /**
      * Người tạo đề là người đăng nhập (W1-1, đã bỏ teacherId; client cũ gửi lên thì bị bỏ qua).
      *
-     * @param title bỏ trống thì lấy tên ma trận
+     * @param title       bỏ trống thì lấy tên ma trận
+     * @param materialIds (W2-3) tài liệu bài học áp cho cả ma trận (của chính người gọi); tùy chọn
+     * @param cells       (W2-3) ngữ cảnh riêng của từng ô (tài liệu, yêu cầu thêm cho AI); tùy chọn. Tối đa 5 tài liệu
+     *                    khác nhau trong cả lần tạo đề
      */
-    public record BuildExamRequest(Integer matrixId, String title) {}
+    public record BuildExamRequest(Integer matrixId, String title, List<Integer> materialIds,
+                                   List<CellContextInput> cells) {}
+
+    /**
+     * Ngữ cảnh sinh câu riêng của một ô ma trận (W2-3). Ô có tài liệu hoặc yêu cầu thêm thì bỏ qua ngân hàng khi tạo đề
+     * (câu lấy từ ngân hàng không theo được tài liệu hay yêu cầu).
+     *
+     * @param cellId           ô thuộc ma trận của đề; mỗi ô tối đa một phần tử
+     * @param materialIds      tài liệu của ô (hợp với tài liệu của cả ma trận)
+     * @param extraInstruction "yêu cầu thêm cho AI" cho ô, tối đa 1000 ký tự; là DỮ LIỆU cho prompt, không đổi định dạng,
+     *                         số lượng, mức độ hay QC
+     */
+    public record CellContextInput(Integer cellId, List<Integer> materialIds, String extraInstruction) {}
 
     /**
      * @param fromBank   số chỗ lấy câu từ ngân hàng
@@ -55,6 +70,12 @@ public final class ExamBuildDtos {
             @JsonInclude(JsonInclude.Include.NON_NULL) String source,
             @JsonInclude(JsonInclude.Include.NON_NULL) Integer bankItemId,
             @JsonInclude(JsonInclude.Include.NON_NULL) Integer questionId,
-            int attempts
-    ) {}
+            int attempts,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String failureReason
+    ) {
+        public SlotDto(Integer slotId, Integer cellId, Integer slotNo, QuestionType questionType, String state,
+                       String source, Integer bankItemId, Integer questionId, int attempts) {
+            this(slotId, cellId, slotNo, questionType, state, source, bankItemId, questionId, attempts, null);
+        }
+    }
 }

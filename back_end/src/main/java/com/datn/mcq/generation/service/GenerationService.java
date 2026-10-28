@@ -73,6 +73,8 @@ public class GenerationService {
         }
     }
 
+    static final String MCQ_STRATEGY_MESSAGE =
+            "Câu trắc nghiệm luôn sinh với strategy zero-shot (thí nghiệm few-shot đã bỏ ngày 25/10).";
     static final String SA_STRATEGY_MESSAGE = "Câu trả lời ngắn luôn sinh với strategy zero-shot.";
     static final String TF_STRATEGY_MESSAGE = "Câu đúng/sai luôn sinh với strategy zero-shot.";
     static final String TF_LEVELS_MESSAGE =
@@ -86,6 +88,9 @@ public class GenerationService {
     static void requireZeroShotForShortAnswer(QuestionType type, Strategy strategy) {
         if (strategy == null || strategy == Strategy.ZERO_SHOT) {
             return;
+        }
+        if (type == QuestionType.MCQ) {
+            throw new IllegalArgumentException(MCQ_STRATEGY_MESSAGE);
         }
         if (type == QuestionType.SA) {
             throw new IllegalArgumentException(SA_STRATEGY_MESSAGE);
@@ -244,7 +249,7 @@ public class GenerationService {
             return generateTrueFalseSync(req, tpl, subject);
         }
 
-        Strategy strategy = req.strategy() != null ? req.strategy() : Strategy.FEW_SHOT_STRUCTURED;
+        Strategy strategy = Strategy.ZERO_SHOT;
         Difficulty targetDiff = req.targetDifficulty() != null ? req.targetDifficulty() : Difficulty.EASY;
         Double temperature = req.temperature() != null ? req.temperature() : 0.7;
         String model = (req.modelName() != null && !req.modelName().isBlank())
@@ -257,7 +262,6 @@ public class GenerationService {
                 tpl.getTopic(),
                 tpl.getLearningOutcome(),
                 tpl.getSourceQuestion(),
-                strategy,
                 targetDiff
         );
 
@@ -430,7 +434,7 @@ public class GenerationService {
                 runAnswerCheck,
                 parsed.parseError(),
                 parsed.parseWarnings()
-        );
+        ).withLlmOutput(true);
     }
 
     /** 4 ý của một câu tf theo thứ tự a-d (rỗng với mcq/sa hoặc khi giải mã lỗi). */
@@ -550,10 +554,26 @@ public class GenerationService {
                 spec.toJson());
     }
 
-    /** V7: một job sinh câu cho một chỗ trong đề, thuộc run của ô. */
+    /**
+     * Ảnh chụp đoạn tài liệu bài học của một job sinh câu (W2-3): {@code context} là khối văn bản đưa vào prompt, {@code
+     * refsJson} là mảng JSON các đoạn đã chọn (để truy vết).
+     */
+    public record MaterialSnapshot(String context, String refsJson) {}
+
+    /** V7: một job sinh câu cho một chỗ trong đề, thuộc run của ô (không có tài liệu). */
     @Transactional
     public GenerationJob enqueueMatrixJob(Integer runId, Integer templateId, MatrixCellSpec spec, Integer examSlotId,
                                           LocalDateTime nextRunAt, String promptNote) {
+        return enqueueMatrixJob(runId, templateId, spec, examSlotId, nextRunAt, promptNote, null);
+    }
+
+    /**
+     * V7: một job sinh câu cho một chỗ trong đề. W2-3: {@code material} (null khi không có tài liệu) được ghi vào
+     * generation_job.material_context/material_refs; worker dựng prompt từ đúng ảnh chụp này.
+     */
+    @Transactional
+    public GenerationJob enqueueMatrixJob(Integer runId, Integer templateId, MatrixCellSpec spec, Integer examSlotId,
+                                          LocalDateTime nextRunAt, String promptNote, MaterialSnapshot material) {
         LocalDateTime now = LocalDateTime.now();
         GenerationJob job = new GenerationJob();
         job.setQuestionType(spec.questionType());
@@ -564,6 +584,8 @@ public class GenerationService {
                 ? joinLevels(spec.statementDifficulties()) : null);
         job.setExamSlotId(examSlotId);
         job.setPromptNote(promptNote == null || promptNote.isBlank() ? null : promptNote);
+        job.setMaterialContext(material == null ? null : material.context());
+        job.setMaterialRefs(material == null ? null : material.refsJson());
         job.setStatus(JobStatus.PENDING);
         job.setAttempt(0);
         job.setNextRunAt(nextRunAt != null ? nextRunAt : now);
@@ -583,6 +605,13 @@ public class GenerationService {
     public java.util.Optional<GenerationJob> latestAnswerCheckJob(Integer questionId) {
         return generationJobRepository.findFirstByQuestionIdAndJobTypeOrderByIdDesc(questionId,
                 GenerationJob.TYPE_ANSWER_CHECK);
+    }
+
+    /** W2-3: job grounding (chấm "bám tài liệu") của một câu; rỗng khi câu không có tài liệu hoặc chưa được xếp job. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<GenerationJob> latestGroundingJob(Integer questionId) {
+        return generationJobRepository.findFirstByQuestionIdAndJobTypeOrderByIdDesc(questionId,
+                GenerationJob.TYPE_GROUNDING_CHECK);
     }
 
     /** W1-3: mọi job sinh câu (không kể answer_check) của một chỗ trong đề, theo thứ tự tạo. */
@@ -644,8 +673,7 @@ public class GenerationService {
         Subject subject = catalogService.getSubjectById(tpl.getSubjectId());
         boolean trueFalse = questionType == QuestionType.TF;
         boolean shortAnswer = questionType == QuestionType.SA;
-        Strategy chosenStrategy = shortAnswer || trueFalse ? Strategy.ZERO_SHOT
-                : strategy != null ? strategy : Strategy.FEW_SHOT_STRUCTURED;
+        Strategy chosenStrategy = Strategy.ZERO_SHOT;
         Difficulty chosenDiff = trueFalse ? null : targetDifficulty != null ? targetDifficulty : Difficulty.EASY;
         String prompt;
         String promptVersion;
@@ -659,8 +687,9 @@ public class GenerationService {
             promptVersion = SaPromptDraftV0.PROMPT_VERSION;
         } else {
             prompt = promptBuilder.buildGenerationPrompt(subject.getName(), tpl.getGradeLevel(), tpl.getTopic(),
-                    tpl.getLearningOutcome(), tpl.getSourceQuestion(), chosenStrategy, chosenDiff);
-            promptVersion = "async-queue-v1";
+                    tpl.getLearningOutcome(), tpl.getSourceQuestion(), chosenDiff);
+            // async-queue-v1 là run few-shot cũ (C1/C2/C3), worker từ chối; zero-shot dùng bản v2.
+            promptVersion = "async-queue-v2";
         }
         ExperimentRun run = experimentService.createRun(
                 subject.getId(),
@@ -685,8 +714,8 @@ public class GenerationService {
             job.setTargetStatementDifficulties(trueFalse ? joinLevels(targetStatementDifficulties) : null);
             job.setStatus(JobStatus.PENDING);
             job.setAttempt(0);
-            // Giãn cách mỗi job 13 giây để tránh đụng trần 5 RPM trên Free Tier
-            job.setNextRunAt(now.plusSeconds(13L * i));
+            // W2-4b (C): bộ điều tiết Gemini dùng chung lo giãn cách giữa các lượt gọi; job xếp hàng chạy ngay.
+            job.setNextRunAt(now);
             job.setCreatedAt(now);
             job.setUpdatedAt(now);
             created.add(generationJobRepository.save(job));
@@ -703,19 +732,6 @@ public class GenerationService {
     public GeneratedQuestion getQuestionById(Integer id) {
         return generatedQuestionRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu hỏi id=" + id));
-    }
-
-    @Transactional(readOnly = true)
-    public List<GeneratedQuestion> listQuestions(QuestionStatus status) {
-        if (status != null) {
-            return generatedQuestionRepository.findByStatusOrderByIdDesc(status);
-        }
-        return generatedQuestionRepository.findAllByOrderByIdDesc();
-    }
-
-    @Transactional(readOnly = true)
-    public List<GeneratedQuestion> listQuestionsByRunId(Integer runId) {
-        return generatedQuestionRepository.findByRunIdOrderByIdAsc(runId);
     }
 
     @Transactional

@@ -33,8 +33,7 @@ class FormatCheckerShortAnswerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"$-\\frac{3}{4}$", "-0,75", "-0.75", "−0,75", "$3\\sqrt{2}$", "0", "12,6",
-            "$\\dfrac{1}{2}$", "√12", "0,33"})
+    @ValueSource(strings = {"-0,7", "-0.7", "−0,7", "$1,5$", "0", "12,6", "2,75", "1234", "0,33"})
     void dapSoHopLe(String answer) {
         FormatChecker.FormatCheckOutcome outcome = check(answer);
         assertTrue(outcome.passed(), answer + " phải hợp lệ, lỗi: " + outcome.errors());
@@ -48,12 +47,24 @@ class FormatCheckerShortAnswerTest {
 
     @Test
     void dapSoLlmSaiDinhDang() {
+        String format = "answer: " + ShortAnswerValue.MSG_SA_ANSWER_FORMAT;
         assertError("05", "answer: " + ShortAnswerValue.MSG_LEADING_ZERO);
         assertError("-0", "answer: " + ShortAnswerValue.MSG_NEGATIVE_ZERO);
-        assertError("1 + \\sqrt{2}", "answer: " + ShortAnswerValue.MSG_UNPARSEABLE);
-        assertError("x = 2", "answer: " + ShortAnswerValue.MSG_UNPARSEABLE);
-        assertError("1.500", "answer: " + ShortAnswerValue.MSG_THOUSANDS);
-        assertError("1/0", "answer: " + ShortAnswerValue.MSG_ZERO_DENOMINATOR);
+        assertError("1 + \\sqrt{2}", format);
+        assertError("x = 2", format);
+        assertError("1.500", format);
+        assertError("1/0", format);
+        assertError("-0,75", format);
+    }
+
+    /** 27/10 (exam 9 ô 23): phân số, hỗn số bị loại với thông điệp nói rõ cách sửa, thay vì lỗi LaTeX ngoài $. */
+    @Test
+    void phanSoVaHonSoBiLoaiVoiThongDiepDapAnUuTienHonLoiLatex() {
+        for (String answer : List.of("\\frac{11}{4}", "$3\\frac{1}{4}$", "4\\frac{1}{3}")) {
+            FormatChecker.FormatCheckOutcome outcome = check(answer);
+            assertFalse(outcome.passed(), answer);
+            assertEquals(List.of("answer: " + ShortAnswerValue.MSG_SA_ANSWER_FORMAT), outcome.errors(), answer);
+        }
     }
 
     private void assertError(String answer, String expected) {
@@ -64,20 +75,18 @@ class FormatCheckerShortAnswerTest {
 
     @Test
     void lenhLatexNgoaiCongThucODapSoLaLoiChan() {
-        // Quyết định B: \frac viết trần (ngoài $...$) phân tích được nhưng vi phạm quy tắc LaTeX.
         FormatChecker.FormatCheckOutcome outcome = check("\\frac{1}{2}");
         assertFalse(outcome.passed());
         assertTrue(outcome.errors().stream().anyMatch(e -> e.startsWith("answer: ")), outcome.errors().toString());
     }
 
     @Test
-    void phanSoChuaToiGianChiCanhBao() {
-        FormatChecker.FormatCheckOutcome outcome = check("2/4");
-        assertTrue(outcome.passed(), outcome.errors().toString());
-        assertEquals(List.of("answer: " + ShortAnswerValue.WARN_UNREDUCED_FRACTION), outcome.answerWarnings());
-        FormatChecker.FormatCheckOutcome latex = check("$\\frac{6}{8}$");
-        assertTrue(latex.passed());
-        assertEquals(List.of("answer: " + ShortAnswerValue.WARN_UNREDUCED_FRACTION), latex.answerWarnings());
+    void phanSoKhongConHopLeNenKhongCoCanhBaoToiGian() {
+        for (String answer : List.of("2/4", "$\\frac{6}{8}$")) {
+            FormatChecker.FormatCheckOutcome outcome = check(answer);
+            assertFalse(outcome.passed(), answer);
+            assertEquals(List.of(), outcome.answerWarnings(), answer);
+        }
     }
 
     @Test
@@ -107,7 +116,7 @@ class FormatCheckerShortAnswerTest {
 
     @Test
     void khongKiemLatexKhiMonKhongPhaiToan() {
-        QuestionQcInput input = QuestionQcInput.shortAnswer(1, true, "Q", "E", "\\frac{1}{2}", true, false, false, null);
+        QuestionQcInput input = QuestionQcInput.shortAnswer(1, true, "Q", "E", "0,5", true, false, false, null);
         assertTrue(checker.check(input).passed());
     }
 

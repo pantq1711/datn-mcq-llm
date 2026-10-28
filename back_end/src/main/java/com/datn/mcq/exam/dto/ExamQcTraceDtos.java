@@ -7,6 +7,7 @@ import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.StatementKey;
 import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.enums.TruthValue;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -53,8 +54,30 @@ public final class ExamQcTraceDtos {
                                  SaJudgeKind judgeSaKind, String judgeSaAnswer, List<JudgeLabelDto> judgeLabels,
                                  String solverReasoning, String error, LocalDateTime checkedAt, JobDto job) {}
 
+    /** Một đoạn tài liệu bài học đã đưa vào prompt (khoảng {@code [from, to)} của văn bản đã trích của tài liệu). */
+    public record MaterialRefDto(Integer materialId, String sha256, Integer from, Integer to, Integer rank, Double score,
+                                 String selection) {}
+
+    /**
+     * Bước QC "bám tài liệu" (W2-3); {@code null} với câu không dùng tài liệu.
+     *
+     * @param state          {@code supported}, {@code not_supported}, {@code unknown} (đã có kết quả), {@code pending}
+     *                       (job đang chờ hoặc chạy), {@code error} (job lỗi, không có kết quả) hoặc {@code not_run} (job
+     *                       đã bỏ qua, ví dụ câu đã bị bản sửa thay)
+     * @param reason         lý do ngắn của judge; với UNKNOWN do trích dẫn không kiểm chứng được bắt đầu bằng
+     *                       {@code evidence_not_found:}
+     * @param evidenceQuote  trích dẫn nguyên văn từ tài liệu mà judge đưa ra
+     * @param evidenceFound  trích dẫn có thật trong đoạn tài liệu đã đưa vào prompt không; null khi judge không trích dẫn
+     * @param materialRefs   các đoạn tài liệu đã dùng (cũng là thứ judge đã thấy)
+     * @param error          với {@code error} và {@code not_run}: lý do (generation_job.last_error)
+     * @param job            job grounding_check của bản
+     */
+    public record GroundingDto(String state, String reason, String evidenceQuote, Boolean evidenceFound,
+                               String judgeModel, List<MaterialRefDto> materialRefs, LocalDateTime checkedAt, String error,
+                               JobDto job) {}
+
     /** Mỗi bước là null khi chưa có dòng QC tương ứng. */
-    public record QcDto(FormatDto format, DedupDto dedup, AnswerCheckDto answerCheck) {}
+    public record QcDto(FormatDto format, DedupDto dedup, AnswerCheckDto answerCheck, GroundingDto grounding) {}
 
     /**
      * Một phiên bản của câu.
@@ -81,5 +104,14 @@ public final class ExamQcTraceDtos {
     public record QcTraceDto(Integer examId, Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
                              QuestionType questionType, String state, String source, Integer currentQuestionId,
                              Integer bankItemId, Integer attempts, Integer solverRetries, List<LineageDto> lineages,
-                             List<ActionDto> actions) {}
+                             List<ActionDto> actions,
+                             @JsonInclude(JsonInclude.Include.NON_NULL) String failureReason) {
+        public QcTraceDto(Integer examId, Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
+                          QuestionType questionType, String state, String source, Integer currentQuestionId,
+                          Integer bankItemId, Integer attempts, Integer solverRetries, List<LineageDto> lineages,
+                          List<ActionDto> actions) {
+            this(examId, slotId, cellId, slotNo, part, topic, questionType, state, source, currentQuestionId,
+                    bankItemId, attempts, solverRetries, lineages, actions, null);
+        }
+    }
 }

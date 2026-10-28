@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +16,16 @@ import java.util.Optional;
 public interface QualityCheckResultRepository extends JpaRepository<QualityCheckResult, Integer> {
     List<QualityCheckResult> findByQuestionIdOrderByIdAsc(Integer questionId);
     Optional<QualityCheckResult> findByQuestionIdAndCheckType(Integer questionId, CheckType checkType);
+
+    /**
+     * W2-4b (C): đếm số lượt gọi Solver thành công (V21: {@code check_type = 'answer_check'} và có {@code token_count};
+     * dòng chép từ bản trước có {@code token_count IS NULL} nên không tính) từ mốc {@code since}.
+     */
+    @Query(value = """
+            SELECT count(*) FROM quality_check_result
+            WHERE check_type = 'answer_check' AND token_count IS NOT NULL AND checked_at >= :since
+            """, nativeQuery = true)
+    int countSolverCallsSince(@Param("since") LocalDateTime since);
 
     /** Xóa các dòng QC của một câu theo loại kiểm tra, trong transaction riêng (dùng khi chạy lại QC). */
     @Modifying
@@ -37,6 +48,7 @@ public interface QualityCheckResultRepository extends JpaRepository<QualityCheck
     @Query(value = """
             SELECT g.id, g.question_text, g.option_a, g.option_b, g.option_c, g.option_d
             FROM generated_question g
+            LEFT JOIN bank_item bi ON bi.source_question_id = g.id
             WHERE g.id <> :questionId
               AND g.question_type = 'mcq'
               AND (
@@ -48,12 +60,27 @@ public interface QualityCheckResultRepository extends JpaRepository<QualityCheck
                                    AND d.check_type = 'dedup'
                                    AND d.passed = TRUE))
                   )
+               AND (
+                     (bi.id IS NOT NULL AND bi.visible_to_user_id IS NULL)
+                  OR (bi.id IS NOT NULL AND :creatorUserId IS NOT NULL AND bi.visible_to_user_id = :creatorUserId)
+                  OR (bi.id IS NULL AND (
+                         (:creatorUserId IS NOT NULL AND EXISTS (
+                             SELECT 1 FROM exam_slot s
+                             JOIN exam e ON s.exam_id = e.id
+                             LEFT JOIN generation_job j ON j.exam_slot_id = s.id
+                             WHERE (s.generated_question_id = g.id OR j.question_id = g.id)
+                               AND e.created_by = :creatorUserId
+                         ))
+                         OR (:creatorUserId IS NULL)
+                     ))
+                   )
             ORDER BY g.id
             """, nativeQuery = true)
     List<Object[]> findDedupCandidateRows(
             @Param("questionId") Integer questionId,
             @Param("runId") Integer runId,
-            @Param("comparableRunIds") Collection<Integer> comparableRunIds);
+            @Param("comparableRunIds") Collection<Integer> comparableRunIds,
+            @Param("creatorUserId") Integer creatorUserId);
 
     /**
      * Ứng viên so trùng của câu Trả lời ngắn (V4): cùng phạm vi và điều kiện như
@@ -62,6 +89,7 @@ public interface QualityCheckResultRepository extends JpaRepository<QualityCheck
     @Query(value = """
             SELECT g.id, g.question_text, g.sa_answer
             FROM generated_question g
+            LEFT JOIN bank_item bi ON bi.source_question_id = g.id
             WHERE g.id <> :questionId
               AND g.question_type = 'sa'
               AND (
@@ -73,12 +101,27 @@ public interface QualityCheckResultRepository extends JpaRepository<QualityCheck
                                    AND d.check_type = 'dedup'
                                    AND d.passed = TRUE))
                   )
+               AND (
+                     (bi.id IS NOT NULL AND bi.visible_to_user_id IS NULL)
+                  OR (bi.id IS NOT NULL AND :creatorUserId IS NOT NULL AND bi.visible_to_user_id = :creatorUserId)
+                  OR (bi.id IS NULL AND (
+                         (:creatorUserId IS NOT NULL AND EXISTS (
+                             SELECT 1 FROM exam_slot s
+                             JOIN exam e ON s.exam_id = e.id
+                             LEFT JOIN generation_job j ON j.exam_slot_id = s.id
+                             WHERE (s.generated_question_id = g.id OR j.question_id = g.id)
+                               AND e.created_by = :creatorUserId
+                         ))
+                         OR (:creatorUserId IS NULL)
+                     ))
+                   )
             ORDER BY g.id
             """, nativeQuery = true)
     List<Object[]> findShortAnswerDedupCandidateRows(
             @Param("questionId") Integer questionId,
             @Param("runId") Integer runId,
-            @Param("comparableRunIds") Collection<Integer> comparableRunIds);
+            @Param("comparableRunIds") Collection<Integer> comparableRunIds,
+            @Param("creatorUserId") Integer creatorUserId);
 
     /**
      * Ứng viên so trùng của câu Đúng/Sai (GĐ3): cùng phạm vi và điều kiện như {@link #findDedupCandidateRows}, chỉ
@@ -95,6 +138,7 @@ public interface QualityCheckResultRepository extends JpaRepository<QualityCheck
                    (SELECT s.statement_text FROM generated_question_statement s
                      WHERE s.question_id = g.id AND s.position = 'd')
             FROM generated_question g
+            LEFT JOIN bank_item bi ON bi.source_question_id = g.id
             WHERE g.id <> :questionId
               AND g.question_type = 'tf'
               AND (
@@ -106,10 +150,25 @@ public interface QualityCheckResultRepository extends JpaRepository<QualityCheck
                                    AND d.check_type = 'dedup'
                                    AND d.passed = TRUE))
                   )
+               AND (
+                     (bi.id IS NOT NULL AND bi.visible_to_user_id IS NULL)
+                  OR (bi.id IS NOT NULL AND :creatorUserId IS NOT NULL AND bi.visible_to_user_id = :creatorUserId)
+                  OR (bi.id IS NULL AND (
+                         (:creatorUserId IS NOT NULL AND EXISTS (
+                             SELECT 1 FROM exam_slot s
+                             JOIN exam e ON s.exam_id = e.id
+                             LEFT JOIN generation_job j ON j.exam_slot_id = s.id
+                             WHERE (s.generated_question_id = g.id OR j.question_id = g.id)
+                               AND e.created_by = :creatorUserId
+                         ))
+                         OR (:creatorUserId IS NULL)
+                     ))
+                   )
             ORDER BY g.id
             """, nativeQuery = true)
     List<Object[]> findTrueFalseDedupCandidateRows(
             @Param("questionId") Integer questionId,
             @Param("runId") Integer runId,
-            @Param("comparableRunIds") Collection<Integer> comparableRunIds);
+            @Param("comparableRunIds") Collection<Integer> comparableRunIds,
+            @Param("creatorUserId") Integer creatorUserId);
 }

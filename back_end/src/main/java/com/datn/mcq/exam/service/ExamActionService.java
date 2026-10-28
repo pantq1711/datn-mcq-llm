@@ -1,5 +1,6 @@
 package com.datn.mcq.exam.service;
 
+import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.common.exception.ApiErrorException;
 import com.datn.mcq.common.util.JsonStringArray;
 import com.datn.mcq.exam.dto.ExamEditDtos.EditQuestionRequest;
@@ -14,7 +15,7 @@ import com.datn.mcq.exam.repository.ExamSlotRepository;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
-import com.datn.mcq.review.service.TeacherReviewService;
+import com.datn.mcq.review.service.AssistedKeepService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,29 +51,34 @@ public class ExamActionService {
     private final ExamBuildService buildService;
     private final ExamViewService viewService;
     private final MatrixService matrixService;
-    private final TeacherReviewService teacherReviewService;
+    private final AssistedKeepService assistedKeepService;
     private final QuestionEditService questionEditService;
     private final GenerationService generationService;
     private final ExamSlotSiblings siblings;
+    private final ExamContextService contextService;
+    private final BankService bankService;
 
     public ExamActionService(ExamSlotRepository slotRepository, ExamSlotActionRepository actionRepository,
                              ExamBuildService buildService, ExamViewService viewService, MatrixService matrixService,
-                             TeacherReviewService teacherReviewService, QuestionEditService questionEditService,
-                             GenerationService generationService, ExamSlotSiblings siblings) {
+                             AssistedKeepService assistedKeepService, QuestionEditService questionEditService,
+                             GenerationService generationService, ExamSlotSiblings siblings,
+                             ExamContextService contextService, BankService bankService) {
         this.siblings = siblings;
         this.slotRepository = slotRepository;
         this.actionRepository = actionRepository;
         this.buildService = buildService;
         this.viewService = viewService;
         this.matrixService = matrixService;
-        this.teacherReviewService = teacherReviewService;
+        this.assistedKeepService = assistedKeepService;
         this.questionEditService = questionEditService;
         this.generationService = generationService;
+        this.contextService = contextService;
+        this.bankService = bankService;
     }
 
     /**
      * Giữ câu: câu lấy từ ngân hàng thì chỉ đánh dấu; câu hệ thống sinh thì ghi teacher_review 'assisted' và bank_item
-     * (TeacherReviewService#keepAssisted) trong cùng transaction.
+     * (AssistedKeepService#keepAssisted) trong cùng transaction.
      */
     @Transactional
     public ExamItemDto keep(Integer examId, Integer slotId, Integer actorId) {
@@ -92,8 +98,12 @@ public class ExamActionService {
                 throw ApiErrorException.conflict(QC_CHECKING, QC_CHECKING_MESSAGE);
             }
             edited = generationService.getQuestionById(slot.getGeneratedQuestionId()).getEditedFromQuestionId() != null;
-            Integer bankItemId = teacherReviewService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
+            Integer bankItemId = assistedKeepService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
             slot.setBankItemId(bankItemId);
+            // W2-3 (quyết định E): câu sinh từ tài liệu của giáo viên vào ngân hàng nhưng chỉ chính họ thấy và dùng lại.
+            if (!contextService.materialsFor(examId, slot.getCellId()).isEmpty()) {
+                bankService.restrictToUser(bankItemId, actorId);
+            }
         }
         // W1-2 (D6): Giữ bản giáo viên sửa thì chỗ ở trạng thái edited (V7), câu chưa sửa là kept.
         slot.setState(edited ? ExamSlot.EDITED : ExamSlot.KEPT);
@@ -133,8 +143,8 @@ public class ExamActionService {
         Integer newBankItemId = null;
         if (ExamSlotAction.SOURCE_BANK.equals(replaceSource)) {
             ExamMatrixCell cell = matrixService.getCell(slot.getCellId());
-            List<Integer> candidates = buildService.bankCandidates(examId, matrixService.getMatrix(cell.getMatrixId()),
-                    cell, 1);
+            List<Integer> candidates = buildService.bankCandidates(examId, actorId,
+                    matrixService.getMatrix(cell.getMatrixId()), cell, 1);
             if (candidates.isEmpty()) {
                 throw ApiErrorException.conflict(BANK_EXHAUSTED, BANK_EXHAUSTED_MESSAGE);
             }
@@ -148,6 +158,7 @@ public class ExamActionService {
         slot.setBankItemId(newBankItemId);
         slot.setGeneratedQuestionId(null);
         slot.setFallbackQuestionId(null);
+        slot.setFailureReason(null);
         slot.setAttempts(0);
         slot.setSolverRetries(0);
         if (newBankItemId != null) {
@@ -204,7 +215,7 @@ public class ExamActionService {
         }
         // W1-3: bản sửa cũng được so trùng với các câu đang nằm ở những chỗ khác của đề.
         QuestionEditService.EditOutcome outcome = questionEditService.createVersion(slot.getGeneratedQuestionId(),
-                toInput(request), siblings.candidates(examId, slot.getId(), slot.getQuestionType()));
+                toInput(request), siblings.candidates(examId, slot.getId(), slot.getQuestionType()), actorId);
         if (outcome.changed()) {
             slot.setGeneratedQuestionId(outcome.questionId());
             slot.setState(ExamSlot.READY);

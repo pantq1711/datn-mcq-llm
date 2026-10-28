@@ -58,6 +58,9 @@ services:
       FORWARD_HEADERS_STRATEGY: native   # bắt buộc sau proxy (xem docs/deploy/README.md mục 6)
       WORKER_ENABLED: "true"             # false thì job sinh câu nằm pending mãi
       PANDOC_PATH: pandoc
+      MATERIAL_PANDOC_HEAP_MB: ${MATERIAL_PANDOC_HEAP_MB:-256}
+      MATERIAL_MAX_CONCURRENT: ${MATERIAL_MAX_CONCURRENT:-1}
+      MATERIAL_QUEUE_WAIT: ${MATERIAL_QUEUE_WAIT:-30s}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}   # chỉ đặt false khi chạy thử qua http (xem README mục 9)
     expose:
       - "8080"
@@ -66,8 +69,8 @@ services:
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
-    tmpfs:
-      - /tmp:size=128m   # thư mục tạm của pandoc khi xuất Word
+    volumes:
+      - app_tmp:/tmp     # thư mục tạm của pandoc/trích xuất trên đĩa (không tốn RAM tmpfs, tương thích read_only: true)
     networks: [internal, edge]   # edge: gọi Gemini ra Internet
     logging: *logging
 
@@ -104,3 +107,4 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  app_tmp:

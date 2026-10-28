@@ -1,0 +1,98 @@
+/* ===== Loading state ===== */
+.profile-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    min-height: 200px;
+}
+
+.profile-loading-text {
+    font-size: 14px;
+}
+
+/* ===== Page wrapper ===== */
+.profile-page {
+    width: 100%;
+}
+
+/* ===== Card ===== */
+.profile-card {
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* ===== Header: avatar + info ===== */
+.profile-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.profile-avatar {
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #1677ff 0%, #4096ff 100%);
+    font-size: 36px !important;
+}
+
+.profile-header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.profile-name {
+    margin: 0 !important;
+    line-height: 1.2 !important;
+}
+
+.profile-role-tag {
+    width: fit-content;
+    font-size: 13px;
+    padding: 2px 12px;
+    border-radius: 12px;
+}
+
+/* ===== Divider ===== */
+.profile-divider {
+    margin: 20px 0 16px;
+}
+
+/* ===== Descriptions ===== */
+.profile-descriptions .ant-descriptions-item {
+    padding-bottom: 14px !important;
+}
+
+.profile-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.profile-label-icon {
+    font-size: 16px;
+    color: #1677ff;
+}
+
+.profile-id {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 13px;
+    color: #8c8c8c;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 576px) {
+    .profile-header {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .profile-header-info {
+        align-items: center;
+    }
+
+    .profile-role-tag {
+        margin: 0 auto;
+    }
+}

@@ -7,6 +7,7 @@ import com.datn.mcq.generation.worker.GenerationJobPoller;
 import com.datn.mcq.generation.worker.GenerationJobProcessor;
 import com.datn.mcq.llm.prompt.PromptBuilder;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
+import com.datn.mcq.qc.checker.GroundingChecker;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,6 +45,16 @@ abstract class ExamFlowTestBase {
         return new AnswerSolverChecker(SOLVER, new PromptBuilder(), "fake-solver-model");
     }
 
+    /** W2-3 bước 6: LLM giả của bước QC "bám tài liệu" (không gọi mạng); xem {@link GroundingFake}. */
+    static final GroundingFake GROUNDING = new GroundingFake();
+
+    @TestBean
+    private GroundingChecker groundingChecker;
+
+    static GroundingChecker groundingChecker() {
+        return new GroundingChecker(GROUNDING, "fake-grounding-model");
+    }
+
     @Autowired
     WebApplicationContext webApplicationContext;
     @Autowired
@@ -75,6 +86,7 @@ abstract class ExamFlowTestBase {
         SOLVER.fail = false;
         SOLVER.onCall = null;
         SOLVER.calls = 0;
+        GROUNDING.reset();
         ExamBuildTest.FakeGenerator.lastTfLabels = "T,F,T,F";
         generator = new ExamBuildTest.FakeGenerator();
         subject = insert("INSERT INTO subject (name) VALUES ('Toán')");

@@ -71,6 +71,35 @@ public class ExamViewService {
     public static final String SOLVER_PENDING = "solver_pending";
     /** W1-2: job kiểm lại bằng Solver thất bại (hết lượt thử, thiếu cấu hình); thay solver_not_run. */
     public static final String SOLVER_FAILED = "solver_failed";
+    /** W2-3: job "bám tài liệu" của câu đang chờ hoặc đang chạy (chưa có kết quả). */
+    public static final String GROUNDING_PENDING = "grounding_pending";
+    /** W2-3: job "bám tài liệu" của câu thất bại (hết lượt thử, thiếu cấu hình), không có kết quả. */
+    public static final String GROUNDING_FAILED = "grounding_failed";
+
+    /**
+     * W2-3: lý do "cần xem kỹ" của một câu: lý do đã lưu (kể cả kết luận "bám tài liệu" NOT_SUPPORTED/UNKNOWN) cộng, khi câu
+     * có job grounding mà chưa có kết quả, {@value #GROUNDING_PENDING} (đang chờ/chạy) hoặc {@value #GROUNDING_FAILED}.
+     * Câu không dùng tài liệu không có job nên không bị ảnh hưởng.
+     */
+    private List<String> reviewReasonsOf(Integer questionId) {
+        List<String> reasons = new ArrayList<>(qcSummaryService.summarize(questionId).reviewReasons());
+        addGroundingJobReason(generationService, questionId, reasons);
+        return reasons;
+    }
+
+    /** Xem {@link #reviewReasonsOf}; dùng chung với vết QC. */
+    static void addGroundingJobReason(GenerationService generationService, Integer questionId, List<String> reasons) {
+        if (reasons.contains(QcSummaryService.GROUNDING_NOT_SUPPORTED) || reasons.contains(QcSummaryService.GROUNDING_UNKNOWN)) {
+            return;
+        }
+        generationService.latestGroundingJob(questionId).ifPresent(job -> {
+            if (job.getStatus() == JobStatus.PENDING || job.getStatus() == JobStatus.RUNNING) {
+                reasons.add(GROUNDING_PENDING);
+            } else if (job.getStatus() == JobStatus.FAILED) {
+                reasons.add(GROUNDING_FAILED);
+            }
+        });
+    }
 
     /**
      * Đề của người gọi, mới nhất trước (W1-1). Chỉ đọc, không đối soát: số chỗ theo lần đối soát gần nhất. Cờ "cần xem
@@ -108,7 +137,7 @@ public class ExamViewService {
                     case ExamSlot.READY -> {
                         ready++;
                         if (s.getBankItemId() == null && s.getGeneratedQuestionId() != null
-                                && !qcSummaryService.summarize(s.getGeneratedQuestionId()).reviewReasons().isEmpty()) {
+                                && !reviewReasonsOf(s.getGeneratedQuestionId()).isEmpty()) {
                             needsReview++;
                         }
                     }
@@ -205,17 +234,18 @@ public class ExamViewService {
                                     s.getFinalDifficulty() != null ? s.getFinalDifficulty() : s.getLlmDifficulty()))
                             .toList();
             Difficulty difficulty = q.getFinalDifficulty() != null ? q.getFinalDifficulty() : q.getLlmDifficulty();
-            List<String> reasons = new ArrayList<>(qcSummaryService.summarize(q.getId()).reviewReasons());
-            // W1-2: bản giáo viên sửa chờ Solver kiểm lại (job answer_check) thì "đang kiểm", job thất bại thì nói rõ;
+            List<String> reasons = reviewReasonsOf(q.getId());
+            // W1-2 / W2-4b: câu chờ Solver kiểm (job answer_check) thì "đang kiểm", job thất bại hoặc Solver lỗi thì nói rõ;
             // cả hai không bao giờ là đạt.
             String qcState = null;
             Optional<GenerationJob> check = generationService.latestAnswerCheckJob(q.getId());
-            if (check.isPresent() && reasons.contains(QcSummaryService.SOLVER_NOT_RUN)) {
-                JobStatus js = check.get().getStatus();
-                if (js == JobStatus.PENDING || js == JobStatus.RUNNING) {
+            if (reasons.contains(QcSummaryService.SOLVER_NOT_RUN)) {
+                if (check.isPresent() && (check.get().getStatus() == JobStatus.PENDING
+                        || check.get().getStatus() == JobStatus.RUNNING)) {
                     reasons.set(reasons.indexOf(QcSummaryService.SOLVER_NOT_RUN), SOLVER_PENDING);
                     qcState = ExamItemDto.QC_CHECKING;
-                } else if (js == JobStatus.FAILED) {
+                } else if ((check.isPresent() && check.get().getStatus() == JobStatus.FAILED)
+                        || q.getSolverError() != null) {
                     reasons.set(reasons.indexOf(QcSummaryService.SOLVER_NOT_RUN), SOLVER_FAILED);
                 }
             }
@@ -231,6 +261,6 @@ public class ExamViewService {
         }
         return new ExamItemDto(slot.getId(), slot.getCellId(), slot.getSlotNo(), cell.getPart(), cell.getTopic(),
                 slot.getQuestionType(), slot.getState(), null, null, null, null, null, null, null, null, null, null,
-                null, null, null, false, List.of());
+                null, null, null, false, List.of(), null, false, null, slot.getFailureReason());
     }
 }

@@ -16,6 +16,8 @@ import java.util.List;
  * @param statements       (tf) 4 ý theo thứ tự a-d; rỗng với mcq/sa
  * @param statementLabels  (tf) 4 nhãn đúng như LLM viết (đã trim) theo thứ tự a-d; rỗng với mcq/sa
  * @param parseWarnings    (tf) cảnh báo từ bước giải mã, FormatChecker chép vào answerWarnings; rỗng khi không có
+ * @param llmOutput        câu là đầu ra của LLM (luồng sinh), không phải chữ giáo viên viết hay sửa; FormatChecker chỉ áp cho
+ *                         đầu ra LLM quy tắc loại lời giải tf tự thú nhận gán nhãn theo mẫu. Mặc định false.
  */
 public record QuestionQcInput(
         Integer questionId,
@@ -35,7 +37,8 @@ public record QuestionQcInput(
         boolean saAnswerIsString,
         List<String> statements,
         List<String> statementLabels,
-        List<String> parseWarnings
+        List<String> parseWarnings,
+        boolean llmOutput
 ) {
     public QuestionQcInput {
         questionType = questionType != null ? questionType : QuestionType.MCQ;
@@ -44,6 +47,31 @@ public record QuestionQcInput(
         statementLabels = statementLabels == null ? List.of()
                 : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(statementLabels));
         parseWarnings = parseWarnings == null ? List.of() : List.copyOf(parseWarnings);
+    }
+
+    /** Không phải đầu ra của LLM (chữ ký trước khi có {@code llmOutput}). */
+    public QuestionQcInput(
+            Integer questionId,
+            boolean parseSuccess,
+            String questionText,
+            String optionA,
+            String optionB,
+            String optionC,
+            String optionD,
+            Option correctOption,
+            String explanation,
+            boolean validateLatex,
+            boolean runAnswerCheck,
+            String parseError,
+            QuestionType questionType,
+            String saAnswer,
+            boolean saAnswerIsString,
+            List<String> statements,
+            List<String> statementLabels,
+            List<String> parseWarnings) {
+        this(questionId, parseSuccess, questionText, optionA, optionB, optionC, optionD, correctOption, explanation,
+                validateLatex, runAnswerCheck, parseError, questionType, saAnswer, saAnswerIsString, statements,
+                statementLabels, parseWarnings, false);
     }
 
     /** Câu trắc nghiệm 4 phương án (chữ ký trước V4). */
@@ -85,7 +113,14 @@ public record QuestionQcInput(
     public QuestionQcInput withParseWarnings(List<String> warnings) {
         return new QuestionQcInput(questionId, parseSuccess, questionText, optionA, optionB, optionC, optionD,
                 correctOption, explanation, validateLatex, runAnswerCheck, parseError, questionType, saAnswer,
-                saAnswerIsString, statements, statementLabels, warnings);
+                saAnswerIsString, statements, statementLabels, warnings, llmOutput);
+    }
+
+    /** Bản sao đánh dấu câu là đầu ra của LLM (luồng sinh) hay không. */
+    public QuestionQcInput withLlmOutput(boolean fromLlm) {
+        return new QuestionQcInput(questionId, parseSuccess, questionText, optionA, optionB, optionC, optionD,
+                correctOption, explanation, validateLatex, runAnswerCheck, parseError, questionType, saAnswer,
+                saAnswerIsString, statements, statementLabels, parseWarnings, fromLlm);
     }
 
     /** Câu Trả lời ngắn (V4): không có phương án và correct_option. */

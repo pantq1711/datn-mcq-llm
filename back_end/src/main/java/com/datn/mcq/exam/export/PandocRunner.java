@@ -1,5 +1,7 @@
 package com.datn.mcq.exam.export;
 
+import com.datn.mcq.config.PandocLimiter;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -8,6 +10,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Comparator;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -15,6 +18,7 @@ import java.util.stream.Stream;
 /**
  * Chuyển Markdown sang docx bằng pandoc ("-f markdown+tex_math_dollars -t docx --reference-doc"), để công thức $...$
  * thành Equation gốc của Word (OMML). Chạy trong một thư mục tạm riêng, giới hạn {@value #TIMEOUT_SECONDS} giây, xóa thư mục khi xong.
+ * Giới hạn bộ nhớ pandoc qua cờ +RTS -M<heap>m -RTS và dùng chung Semaphore với trích tài liệu để chống OOM (W2-4a Mục 1).
  * Không cài pandoc; máy chủ không có pandoc thì ném {@link DocumentExportException} 503.
  *
  * <p>Đường dẫn pandoc: {@code app.export.pandoc-path} (mặc định "pandoc", tìm trên PATH).
@@ -29,12 +33,44 @@ public class PandocRunner {
             + "hướng dẫn trong docs/api/README.md (mục 7.6 Xuất đề ra Word) rồi khởi động lại backend, hoặc đặt PANDOC_PATH.";
 
     private final String pandocPath;
+    private final PandocLimiter limiter;
 
-    public PandocRunner(@Value("${app.export.pandoc-path:pandoc}") String pandocPath) {
+    @Autowired
+    public PandocRunner(@Value("${app.export.pandoc-path:pandoc}") String pandocPath,
+                        PandocLimiter limiter) {
         this.pandocPath = pandocPath;
+        this.limiter = limiter;
+    }
+
+    public PandocRunner(String pandocPath) {
+        this(pandocPath, new PandocLimiter(1, Duration.ofSeconds(30), 256));
     }
 
     public byte[] markdownToDocx(String markdown) {
+        boolean acquired = false;
+        if (limiter != null) {
+            long waitSeconds = Math.max(1, limiter.getTimeout().toSeconds());
+            try {
+                acquired = limiter.tryAcquire();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new DocumentExportException(503, "EXPORT_BUSY", "Xuất đề bị ngắt, hãy thử lại.", waitSeconds);
+            }
+            if (!acquired) {
+                throw new DocumentExportException(503, "EXPORT_BUSY",
+                        "Máy chủ đang bận xử lý tài liệu khác, hãy thử lại sau " + waitSeconds + " giây.", waitSeconds);
+            }
+        }
+        try {
+            return doMarkdownToDocx(markdown);
+        } finally {
+            if (limiter != null && acquired) {
+                limiter.release();
+            }
+        }
+    }
+
+    private byte[] doMarkdownToDocx(String markdown) {
         Path dir;
         try {
             dir = Files.createTempDirectory(TEMP_PREFIX);
@@ -45,9 +81,11 @@ public class PandocRunner {
             Files.writeString(dir.resolve("exam.md"), markdown, StandardCharsets.UTF_8);
             copyReferenceDoc(dir.resolve("reference.docx"));
             Path log = dir.resolve("pandoc.log");
+            int heapMb = limiter != null ? limiter.getPandocHeapMb() : 256;
             Process process;
             try {
-                process = new ProcessBuilder(pandocPath, "exam.md", "-f", "markdown+tex_math_dollars", "-t", "docx",
+                process = new ProcessBuilder(pandocPath, "+RTS", "-M" + heapMb + "m", "-RTS",
+                        "exam.md", "-f", "markdown+tex_math_dollars", "-t", "docx",
                         "--reference-doc=reference.docx", "-o", "exam.docx")
                         .directory(dir.toFile())
                         .redirectErrorStream(true)

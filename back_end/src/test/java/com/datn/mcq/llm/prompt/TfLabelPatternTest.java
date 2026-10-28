@@ -8,11 +8,12 @@ import java.util.Random;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Mẫu nhãn bắt buộc cho câu Đúng/Sai trong đề theo ma trận (ngày 23/10, việc 1). */
+/** Mẫu nhãn mục tiêu cho câu Đúng/Sai trong đề theo ma trận (ngày 23/10 là "bắt buộc"; đổi thành mục tiêu sau đo 26/10). */
 class TfLabelPatternTest {
 
     private static long trueCount(String pattern) {
@@ -48,21 +49,55 @@ class TfLabelPatternTest {
         assertEquals(14, any.size());
     }
 
+    /**
+     * Đo baseline 26/10 (20 chỗ tf): lệnh "phải" làm model gán nhãn theo mẫu bất chấp toán học, rồi tự thú nhận trong lời giải.
+     * Mẫu giờ là MỤC TIÊU: nhãn theo đúng/sai thật, được lệch mẫu khi không viết được ý hợp lý.
+     */
     @Test
-    void dongPromptVaDocLaiTuGhiChu() {
+    void dongPromptNoiMauLaMucTieuVaNhanPhaiTheoDungSaiThat() {
         String line = TfLabelPattern.promptLine("TFFT");
-        assertEquals("Mẫu nhãn bắt buộc (T,F,F,T): ý a phải Đúng, ý b phải Sai, ý c phải Sai, ý d phải Đúng. "
-                + "Soạn nội dung và lời giải từng ý cho khớp mẫu này.", line);
-        String note = "Đây là câu thứ 2/3 của ô này: ...\n" + line;
-        assertEquals("TFFT", TfLabelPattern.fromNote(note));
+        assertTrue(line.startsWith("Mẫu nhãn mục tiêu (T,F,F,T): cố gắng viết ý a Đúng, ý b Sai, ý c Sai, ý d Đúng."), line);
+        for (String phrase : List.of(
+                "Nhãn phải khớp tính đúng/sai THẬT của khẳng định",
+                "muốn một ý Sai thì viết khẳng định sai (đổi hệ số, dấu hoặc kết luận so với kết quả đúng)",
+                "muốn một ý Đúng thì chỉ nêu giá trị đã tính đúng",
+                "Nếu không viết được một ý theo đúng nhãn mục tiêu một cách hợp lý, hãy ưu tiên tính đúng",
+                "gán nhãn thật cho ý đó (được lệch mẫu)",
+                "Không gán nhãn trái với lời giải",
+                "lời giải không được nhắc tới mẫu nhãn hay việc gán nhãn theo yêu cầu")) {
+            assertTrue(line.contains(phrase), phrase + " | " + line);
+        }
+        assertFalse(line.contains("bắt buộc"), "không còn lệnh bắt buộc: " + line);
+        assertFalse(line.contains("phải Đúng") || line.contains("phải Sai"), "không ép nhãn từng ý: " + line);
+        assertFalse(line.contains("\n"), "một dòng ghi chú");
+    }
+
+    @Test
+    void docLaiMauTuGhiChuMoiVaCu() {
+        String line = TfLabelPattern.promptLine("TFFT");
+        assertEquals("TFFT", TfLabelPattern.fromNote("Đây là câu thứ 2/3 của ô này: ...\n" + line));
+        // job xếp hàng trước khi đổi chữ (và dữ liệu cũ) vẫn đọc được mẫu
+        assertEquals("TFFT", TfLabelPattern.fromNote("Đây là câu thứ 2/3 của ô này: ...\nMẫu nhãn bắt buộc (T,F,F,T): ý a phải"
+                + " Đúng, ý b phải Sai, ý c phải Sai, ý d phải Đúng. Soạn nội dung và lời giải từng ý cho khớp mẫu này."));
         assertNull(TfLabelPattern.fromNote("Đây là câu thứ 2/3 của ô này: ..."));
         assertNull(TfLabelPattern.fromNote(null));
     }
 
     @Test
-    void canhBaoKhiNhanKhacMauBatBuoc() {
+    void nhanDienCanhBaoLechMauKeCaDuLieuCu() {
+        String warning = TfLabelPattern.mismatchWarning("TFFT", List.of("T", "T", "F", "F"));
+        assertTrue(TfLabelPattern.isDeviationWarning(warning), warning);
+        assertTrue(TfLabelPattern.isDeviationWarning("label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)"));
+        assertFalse(TfLabelPattern.isDeviationWarning("label: 4 ý cùng nhãn T"));
+        assertFalse(TfLabelPattern.isDeviationWarning("statement_b: đã tự đóng $"));
+        assertFalse(TfLabelPattern.isDeviationWarning(""));
+        assertFalse(TfLabelPattern.isDeviationWarning(null));
+    }
+
+    @Test
+    void canhBaoKhiNhanKhacMauMucTieu() {
         assertNull(TfLabelPattern.mismatchWarning("TFFT", List.of("T", "F", "F", "T")));
-        assertEquals("label: khác mẫu bắt buộc T,F,F,T (nhận T,T,F,F)",
+        assertEquals("label: khác mẫu mục tiêu T,F,F,T (nhận T,T,F,F)",
                 TfLabelPattern.mismatchWarning("TFFT", List.of("T", "T", "F", "F")));
         assertNull(TfLabelPattern.mismatchWarning("TFFT", List.of("T", "x", "F", "T")),
                 "nhãn không hợp lệ là lỗi format, không cảnh báo thêm");

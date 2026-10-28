@@ -72,7 +72,7 @@ public class FormatChecker {
             validateFieldLatex("option_c", input.optionC(), errors, warnings);
             validateFieldLatex("option_d", input.optionD(), errors, warnings);
             // Việc 2 (22/10): lỗi LaTeX của lời giải chỉ là cảnh báo, không làm câu format_failed;
-            // khi chép vào ngân hàng, lời giải còn lỗi nghiêm trọng được lưu NULL (TeacherReviewService).
+            // khi chép vào ngân hàng, lời giải còn lỗi nghiêm trọng được lưu NULL (AssistedKeepService).
             validateFieldLatex("explanation", input.explanation(), warnings, warnings);
         }
 
@@ -82,9 +82,10 @@ public class FormatChecker {
 
     /**
      * Câu Trả lời ngắn (V4, bản sửa 1 mục 5): question_text, explanation, answer không trống; answer là chuỗi JSON
-     * và phân tích được ở chế độ STRICT (lỗi là fatal). Với môn Toán, LaTeX ở question_text và answer là lỗi chặn
-     * (quyết định B), ở explanation chỉ là cảnh báo. Phân số chưa tối giản chỉ vào answerWarnings.
-     * Không còn quy tắc "đáp số không nguyên phải có yêu cầu làm tròn".
+     * và đạt chế độ STRICT (lỗi là fatal): từ 27/10 là số nguyên hoặc thập phân tối đa 4 ký tự theo phiếu trả lời Bộ
+     * GD&ĐT 2025, Phần III. Với môn Toán, LaTeX ở question_text và answer là lỗi chặn (quyết định B), ở explanation chỉ
+     * là cảnh báo; đáp án đã sai dạng thì chỉ báo lỗi dạng. Không còn quy tắc "đáp số không nguyên phải có yêu cầu làm
+     * tròn" (nay là việc của đề bài, xem prompt sa ma trận).
      */
     private FormatCheckOutcome checkShortAnswer(QuestionQcInput input) {
         List<String> errors = new ArrayList<>();
@@ -100,6 +101,7 @@ public class FormatChecker {
         checkNonBlank("question_text", input.questionText(), errors);
         checkNonBlank("explanation", input.explanation(), errors);
         String answer = input.saAnswer();
+        boolean answerRejected = false;
         if (answer == null || answer.isBlank()) {
             errors.add("answer: nội dung trống");
         } else if (!input.saAnswerIsString()) {
@@ -108,6 +110,7 @@ public class FormatChecker {
             ShortAnswerValue.ParseResult parsed = ShortAnswerValue.parse(answer, ShortAnswerValue.Mode.STRICT);
             if (!parsed.ok()) {
                 errors.add("answer: " + parsed.error());
+                answerRejected = true;
             }
             for (String w : parsed.warnings()) {
                 answerWarnings.add("answer: " + w);
@@ -115,7 +118,8 @@ public class FormatChecker {
         }
         if (input.validateLatex()) {
             validateFieldLatex("question_text", input.questionText(), errors, warnings);
-            if (input.saAnswerIsString()) {
+            // Đáp án đã bị loại vì sai dạng thì không báo thêm "LaTeX ngoài $": ghi chú sinh lại chỉ nói đúng cách sửa.
+            if (input.saAnswerIsString() && !answerRejected) {
                 validateFieldLatex("answer", answer, errors, warnings);
             }
             validateFieldLatex("explanation", input.explanation(), warnings, warnings);
@@ -151,6 +155,10 @@ public class FormatChecker {
             checkNonBlank("statement_" + TF_KEYS.get(i), statement, errors);
         }
         checkNonBlank("explanation", input.explanation(), errors);
+        if (input.llmOutput()) {
+            // Đo 26/10: lời giải tự thú nhận gán nhãn theo mẫu hoặc tự sửa đề; chỉ áp cho đầu ra LLM, không áp chữ giáo viên.
+            errors.addAll(TfExplanationLeak.errors(input.explanation()));
+        }
         for (int i = 0; i < TF_KEYS.size(); i++) {
             String raw = i < input.statementLabels().size() ? input.statementLabels().get(i) : null;
             String field = "label_" + TF_KEYS.get(i);

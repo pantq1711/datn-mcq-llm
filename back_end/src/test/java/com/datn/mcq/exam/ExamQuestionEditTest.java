@@ -1,5 +1,6 @@
 package com.datn.mcq.exam;
 
+import com.datn.mcq.common.util.ShortAnswerValue;
 import com.datn.mcq.config.AuthTestSupport;
 import com.datn.mcq.config.TestDataCleaner;
 import com.datn.mcq.config.TestSafetyConfiguration;
@@ -385,6 +386,19 @@ class ExamQuestionEditTest {
         assertNull(job.get("exam_slot_id"), "job Solver không gắn chỗ (đối soát không nhầm là job sinh câu)");
     }
 
+    /** Chữ của giáo viên là thẩm quyền: quy tắc loại lời giải tự thú nhận chỉ áp cho đầu ra của LLM. */
+    @Test
+    void suaTfCoCumGiongTuThuNhanVanLuuDuocVaKhongBiChanFormat() throws Exception {
+        int examId = readyExam();
+        int tfSlot = slotId(examId, "tf", 1);
+        ObjectNode tf = tfBody(questionOf(tfSlot));
+        String note = "Ghi chú: theo mẫu nhãn yêu cầu của tổ, ý b là Sai. Xin lỗi vì lần trước nhầm.";
+        tf.put("explanation", note);
+        int version = json(putQuestion(examId, tfSlot, tf).andExpect(status().isOk())).get("questionId").asInt();
+        assertEquals(note, jdbc.queryForObject("SELECT explanation FROM generated_question WHERE id = ?", String.class,
+                version));
+    }
+
     @Test
     void suaTfVaSaHopLe() throws Exception {
         int examId = readyExam();
@@ -472,6 +486,13 @@ class ExamQuestionEditTest {
         assertEquals("FORMAT_INVALID", badAnswer.get("code").asText());
         assertTrue(texts(badAnswer.get("errors")).stream().anyMatch(e -> e.startsWith("answer:")), badAnswer.toString());
 
+        // 27/10: giáo viên nhập phân số thì 400 với thông điệp nói rõ cách sửa (đáp án sa là số nguyên/thập phân <= 4 ký tự).
+        JsonNode fraction = json(putQuestion(examId, saSlot, saBody(questionOf(saSlot)).put("saAnswer", "$\\frac{11}{4}$"))
+                .andExpect(status().isBadRequest()));
+        assertEquals("FORMAT_INVALID", fraction.get("code").asText());
+        assertEquals(List.of("answer: " + ShortAnswerValue.MSG_SA_ANSWER_FORMAT), texts(fraction.get("errors")),
+                fraction.toString());
+
         JsonNode latex = json(putQuestion(examId, mcq, mcqBody(mcqBase)
                 .put("questionText", "Giá trị $x của biểu thức là:")).andExpect(status().isBadRequest()));
         assertEquals("FORMAT_INVALID", latex.get("code").asText());
@@ -499,6 +520,38 @@ class ExamQuestionEditTest {
         String warnings = jdbc.queryForObject("SELECT warnings::text FROM quality_check_result WHERE question_id = ?"
                 + " AND check_type = 'format'", String.class, version);
         assertTrue(warnings.contains("option_a: đã tự đóng $"), warnings);
+    }
+
+    /** 27/10 (exam 10 ô 25): giáo viên lưu đơn vị viết "\text{km}" ngoài $ thì được gỡ vỏ và qua format. */
+    @Test
+    void banSuaCoTextNgoaiDolaDuocGoVoVaQuaFormat() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int base = questionOf(slot);
+        JsonNode item = json(putQuestion(examId, slot, mcqBody(base)
+                .put("questionText", "Quãng đường dài $6$ \\text{km}. Đi bằng xe máy mất bao lâu?")
+                .put("optionA", "$6$\\text{ km}"))
+                .andExpect(status().isOk()));
+        int version = item.get("questionId").asInt();
+        assertEquals("Quãng đường dài $6$ km. Đi bằng xe máy mất bao lâu?", question(version).get("question_text"));
+        assertEquals("$6$ km", question(version).get("option_a"));
+        String format = jdbc.queryForObject("SELECT passed || ' ' || warnings::text FROM quality_check_result"
+                + " WHERE question_id = ? AND check_type = 'format'", String.class, version);
+        assertTrue(format.startsWith("true "), format);
+        assertTrue(format.contains("ngoài $ (đã gỡ vỏ) ở question_text"), format);
+        assertTrue(format.contains("ngoài $ (đã gỡ vỏ) ở option_a"), format);
+        assertTrue(texts(item.get("reviewReasons")).stream().noneMatch(t -> t.contains("đã gỡ vỏ")),
+                "gỡ vỏ không đổi nghĩa nên không bật cần xem kỹ: " + item);
+    }
+
+    /** 27/10: đáp án sa giáo viên nhập "2.75" được lưu "2,75". */
+    @Test
+    void suaDapAnSaLuuDangChuanHoa() throws Exception {
+        int examId = readyExam();
+        int saSlot = slotId(examId, "sa", 1);
+        int saVersion = json(putQuestion(examId, saSlot, saBody(questionOf(saSlot)).put("saAnswer", "$2.75$"))
+                .andExpect(status().isOk())).get("questionId").asInt();
+        assertEquals("2,75", question(saVersion).get("sa_answer"));
     }
 
     // ---------- dedup ----------

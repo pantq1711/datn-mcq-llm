@@ -2,6 +2,7 @@ package com.datn.mcq.exam.service;
 
 import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.common.util.JsonStringArray;
+import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
@@ -11,10 +12,12 @@ import com.datn.mcq.exam.dto.ExamQcTraceDtos.AnswerDto;
 import com.datn.mcq.exam.dto.ExamQcTraceDtos.ComparedToDto;
 import com.datn.mcq.exam.dto.ExamQcTraceDtos.DedupDto;
 import com.datn.mcq.exam.dto.ExamQcTraceDtos.FormatDto;
+import com.datn.mcq.exam.dto.ExamQcTraceDtos.GroundingDto;
 import com.datn.mcq.exam.dto.ExamQcTraceDtos.JobDto;
 import com.datn.mcq.exam.dto.ExamQcTraceDtos.JudgeLabelDto;
 import com.datn.mcq.exam.dto.ExamQcTraceDtos.LabelDto;
 import com.datn.mcq.exam.dto.ExamQcTraceDtos.LineageDto;
+import com.datn.mcq.exam.dto.ExamQcTraceDtos.MaterialRefDto;
 import com.datn.mcq.exam.dto.ExamQcTraceDtos.QcDto;
 import com.datn.mcq.exam.dto.ExamQcTraceDtos.QcTraceDto;
 import com.datn.mcq.exam.dto.ExamQcTraceDtos.UserRef;
@@ -109,7 +112,7 @@ public class ExamQcTraceService {
                 slot.getQuestionType(), slot.getState(), ctx.currentQuestionId == null ? null
                         : slot.getGeneratedQuestionId() != null ? "generated" : "bank",
                 ctx.currentQuestionId, slot.getBankItemId(), slot.getAttempts(), slot.getSolverRetries(), lineages,
-                actions.stream().map(a -> actionDto(a, ctx)).toList());
+                actions.stream().map(a -> actionDto(a, ctx)).toList(), slot.getFailureReason());
     }
 
     // ---------- phiên bản ----------
@@ -197,21 +200,67 @@ public class ExamQcTraceService {
         return new VersionDto(q.getId(), teacherEdit ? "teacher_edit" : "llm", q.getCreatedAt(),
                 q.getStatus().getDbValue(), q.getId().equals(ctx.currentQuestionId), editedBy, changedFields,
                 editDistance, answer(q), new QcDto(format(detail.format()), dedup(detail.dedup(), ctx),
-                        answerCheck(q, detail, check)), reasons);
+                        answerCheck(q, detail, check), grounding(q, detail)), reasons);
     }
 
     private List<String> reviewReasons(GeneratedQuestion q, Optional<GenerationJob> check) {
         List<String> reasons = new ArrayList<>(qcSummaryService.summarize(q.getId()).reviewReasons());
         int i = reasons.indexOf(QcSummaryService.SOLVER_NOT_RUN);
-        if (i >= 0 && check.isPresent()) {
-            JobStatus s = check.get().getStatus();
-            if (s == JobStatus.PENDING || s == JobStatus.RUNNING) {
+        if (i >= 0) {
+            if (check.isPresent() && (check.get().getStatus() == JobStatus.PENDING
+                    || check.get().getStatus() == JobStatus.RUNNING)) {
                 reasons.set(i, ExamViewService.SOLVER_PENDING);
-            } else if (s == JobStatus.FAILED) {
+            } else if ((check.isPresent() && check.get().getStatus() == JobStatus.FAILED)
+                    || q.getSolverError() != null) {
                 reasons.set(i, ExamViewService.SOLVER_FAILED);
             }
         }
+        ExamViewService.addGroundingJobReason(generationService, q.getId(), reasons);
         return reasons;
+    }
+
+    /** W2-3: bước "bám tài liệu"; null khi câu không dùng tài liệu (không có kết quả cũng không có job). */
+    private GroundingDto grounding(GeneratedQuestion q, QcDetail detail) {
+        Optional<GenerationJob> job = generationService.latestGroundingJob(q.getId());
+        QcSummaryService.GroundingStep g = detail.grounding();
+        if (g != null) {
+            return new GroundingDto(g.verdict().dbValue(), g.reason(), g.evidenceQuote(), g.evidenceFound(), g.judgeModel(),
+                    refs(g.materialRefs()), g.checkedAt(), null, job.map(ExamQcTraceService::jobDto).orElse(null));
+        }
+        if (job.isEmpty()) {
+            return null;
+        }
+        GenerationJob j = job.get();
+        String state = switch (j.getStatus()) {
+            case PENDING, RUNNING -> "pending";
+            case FAILED -> "error";
+            case DONE -> "not_run";
+        };
+        return new GroundingDto(state, null, null, null, null, refs(j.getMaterialRefs()), null,
+                j.getStatus() == JobStatus.PENDING || j.getStatus() == JobStatus.RUNNING ? null : j.getLastError(),
+                jobDto(j));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<MaterialRefDto> refs(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        Object parsed = SimpleJson.parseObject("{\"w\":" + json + "}").get("w");
+        List<MaterialRefDto> out = new ArrayList<>();
+        if (parsed instanceof List<?> list) {
+            for (Object o : list) {
+                Map<String, Object> r = (Map<String, Object>) o;
+                out.add(new MaterialRefDto(intOf(r.get("materialId")), (String) r.get("sha256"), intOf(r.get("from")),
+                        intOf(r.get("to")), intOf(r.get("rank")),
+                        r.get("score") instanceof Number n ? n.doubleValue() : null, (String) r.get("selection")));
+            }
+        }
+        return out;
+    }
+
+    private static Integer intOf(Object o) {
+        return o instanceof Number n ? n.intValue() : null;
     }
 
     private AnswerDto answer(GeneratedQuestion q) {

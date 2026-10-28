@@ -8,6 +8,8 @@ import com.datn.mcq.bank.dto.BankSearchDtos.OriginDto;
 import com.datn.mcq.bank.dto.BankSearchDtos.ProvenanceDto;
 import com.datn.mcq.bank.dto.BankSearchDtos.TopicDto;
 import com.datn.mcq.bank.dto.BankSearchDtos.UsageDto;
+import com.datn.mcq.bank.dto.BankSearchDtos.ReviewDto;
+import com.datn.mcq.bank.dto.BankSearchDtos.UserRef;
 import com.datn.mcq.bank.dto.BankSearchDtos.VersionDto;
 import com.datn.mcq.bank.dto.BankStatementInput;
 import com.datn.mcq.bank.entity.BankItem;
@@ -18,7 +20,6 @@ import com.datn.mcq.bank.repository.BankSearchRepository;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionType;
-import com.datn.mcq.exam.repository.ExamQuestionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,17 +36,14 @@ public class BankService {
 
     private final BankItemRepository bankItemRepository;
     private final BankItemStatementRepository bankItemStatementRepository;
-    private final ExamQuestionRepository examQuestionRepository;
     private final BankSearchRepository searchRepository;
 
     public BankService(BankItemRepository bankItemRepository,
                        BankItemStatementRepository bankItemStatementRepository,
-                       ExamQuestionRepository examQuestionRepository,
                        BankSearchRepository searchRepository) {
         this.searchRepository = searchRepository;
         this.bankItemRepository = bankItemRepository;
         this.bankItemStatementRepository = bankItemStatementRepository;
-        this.examQuestionRepository = examQuestionRepository;
     }
 
     public static final int MAX_PAGE_SIZE = 50;
@@ -63,11 +61,12 @@ public class BankService {
      * @param q      tìm trong đề, phương án, đáp số và các ý (không phân biệt hoa thường, tối đa 100 ký tự)
      * @param usage  {@code used} hoặc {@code unused}
      * @param sort   {@code newest} (mặc định), {@code oldest}, {@code least_used}, {@code recently_used}
+     * @param viewerId người xem: câu riêng tư (sinh từ tài liệu của một giáo viên, V19) chỉ hiện với chính người đó
      */
     @Transactional(readOnly = true)
     public BankPageDto search(Integer subjectId, Integer gradeLevel, QuestionType questionType, String topic,
                               String content, Difficulty difficulty, String levels, String origin, String q,
-                              String usage, String sort, int page, int size) {
+                              String usage, String sort, int page, int size, Integer viewerId) {
         if (page < 0) {
             throw new IllegalArgumentException("page phải từ 0");
         }
@@ -108,7 +107,8 @@ public class BankService {
                     "sort phải là newest, oldest, least_used hoặc recently_used");
         };
         BankSearchRepository.Filter filter = new BankSearchRepository.Filter(subjectId, gradeLevel, questionType,
-                blankToNull(topic), blankToNull(content), difficulty, lv, org, text == null ? null : text.strip(), use);
+                blankToNull(topic), blankToNull(content), difficulty, lv, org, text == null ? null : text.strip(), use,
+                viewerId);
         long total = searchRepository.count(filter);
         List<BankSearchRepository.Row> rows = searchRepository.search(filter, order, page * size, size);
         Map<Integer, List<BankItemStatement>> statements = statementsOf(rows);
@@ -123,26 +123,66 @@ public class BankService {
      */
     @Transactional(readOnly = true)
     public BankItemDetailDto detail(Integer id, Integer actorId) {
-        BankSearchRepository.Row row = searchRepository.findRow(id)
+        return detail(id, actorId, false);
+    }
+
+    /**
+     * W2-4a (Mục 2): Chi tiết một câu ngân hàng. Bảo vệ quyền riêng tư: không trả họ tên giáo viên khác trong
+     * versions và review. Chỉ trả tên thật khi chính người xem là người đó, hoặc người xem là admin.
+     */
+    @Transactional(readOnly = true)
+    public BankItemDetailDto detail(Integer id, Integer actorId, boolean isAdmin) {
+        BankSearchRepository.Row row = searchRepository.findRow(id, actorId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu ngân hàng id=" + id));
         BankListItemDto item = listItem(row, row.questionType() == QuestionType.TF
                 ? bankItemStatementRepository.findByBankItemIdInOrderByBankItemIdAscPositionAsc(List.of(id))
                 : List.of());
-        List<VersionDto> versions = searchRepository.versions(row.sourceQuestionId());
+        List<VersionDto> rawVersions = searchRepository.versions(row.sourceQuestionId());
+        List<VersionDto> versions = rawVersions.stream()
+                .map(v -> new VersionDto(v.questionId(), v.kind(), v.createdAt(),
+                        anonymize(v.editedBy(), actorId, isAdmin),
+                        v.changedFields(), v.editDistance()))
+                .toList();
         Integer llm = versions.isEmpty() ? row.sourceQuestionId() : versions.get(0).questionId();
         Optional<String[]> run = searchRepository.runOf(llm);
+        ReviewDto review = searchRepository.review(row.reviewId())
+                .map(r -> new ReviewDto(r.reviewId(), r.mode(), r.decision(),
+                        anonymize(r.reviewer(), actorId, isAdmin),
+                        r.reviewedAt()))
+                .orElse(null);
         ProvenanceDto provenance = new ProvenanceDto(llm, run.map(r -> Integer.valueOf(r[0])).orElse(null),
-                run.map(r -> r[1]).orElse(null), run.map(r -> r[2]).orElse(null), versions,
-                searchRepository.review(row.reviewId()).orElse(null));
+                run.map(r -> r[1]).orElse(null), run.map(r -> r[2]).orElse(null), versions, review);
         UsageDto usage = new UsageDto(row.usageCount(), row.lastUsedAt(),
                 searchRepository.examsOf(id, actorId, MAX_MY_EXAMS));
         return BankItemDetailDto.of(item, provenance, usage);
     }
 
+    private static UserRef anonymize(UserRef userRef, Integer viewerId, boolean isAdmin) {
+        if (userRef == null) {
+            return null;
+        }
+        if (isAdmin || (viewerId != null && viewerId.equals(userRef.id()))) {
+            return userRef;
+        }
+        return new UserRef(null, "Giáo viên khác");
+    }
+
     /** W1-3: chủ đề có câu trong ngân hàng kèm số câu, theo môn và khối (để dựng ô chọn bộ lọc). */
     @Transactional(readOnly = true)
-    public List<TopicDto> topics(Integer subjectId) {
-        return searchRepository.topics(subjectId);
+    public List<TopicDto> topics(Integer subjectId, Integer viewerId) {
+        return searchRepository.topics(subjectId, viewerId);
+    }
+
+    /**
+     * W2-3 (quyết định E): câu ngân hàng sinh từ tài liệu của giáo viên chỉ chính họ thấy và dùng lại. Gọi trong transaction
+     * của nơi Giữ câu, ngay sau khi câu vào ngân hàng.
+     */
+    @Transactional
+    public void restrictToUser(Integer bankItemId, Integer userId) {
+        BankItem item = bankItemRepository.findById(bankItemId)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu ngân hàng id=" + bankItemId));
+        item.setVisibleToUserId(userId);
+        bankItemRepository.save(item);
     }
 
     /** Câu nguồn {@code questionId} (generated_question) đã có trong ngân hàng. */
@@ -213,8 +253,8 @@ public class BankService {
     }
 
     /**
-     * Chép câu Trả lời ngắn vào ngân hàng (V4, GĐ2): không có phương án và correct_option; sa_answer là đáp số cuối
-     * giáo viên chốt (đã kiểm ở chế độ STRICT). Duyệt lại thì cập nhật dòng cũ.
+     * Chép câu Trả lời ngắn vào ngân hàng (V4, GĐ2): không có phương án và correct_option; sa_answer là đáp số của câu
+     * được Giữ. Chép lại thì cập nhật dòng cũ.
      */
     @Transactional
     public BankItem createOrUpdateShortAnswerFromReview(
@@ -284,17 +324,6 @@ public class BankService {
         }
         bankItemStatementRepository.flush();
         return saved;
-    }
-
-    @Transactional
-    public void removeBankItemIfUnused(Integer sourceQuestionId) {
-        bankItemRepository.findBySourceQuestionId(sourceQuestionId).ifPresent(item -> {
-            if (examQuestionRepository.existsByBankItemId(item.getId())) {
-                throw new IllegalStateException(
-                        "Câu hỏi đã được đưa vào đề thi (exam), không thể từ chối và gỡ khỏi ngân hàng câu hỏi.");
-            }
-            bankItemRepository.delete(item);
-        });
     }
 }
 

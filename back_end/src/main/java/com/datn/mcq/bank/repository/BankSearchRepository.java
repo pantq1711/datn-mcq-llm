@@ -29,10 +29,16 @@ import java.util.Optional;
 @Repository
 public class BankSearchRepository {
 
-    /** Bộ lọc đã kiểm tra hợp lệ; thuộc tính null là không lọc. */
+    /**
+     * Bộ lọc đã kiểm tra hợp lệ; thuộc tính null là không lọc. {@code viewerId} là người xem: câu riêng tư
+     * (bank_item.visible_to_user_id, V19) chỉ hiện với chính người đó.
+     */
     public record Filter(Integer subjectId, Integer gradeLevel, QuestionType questionType, String topic,
                          String content, Difficulty difficulty, String levels, String origin, String q,
-                         String usage) {}
+                         String usage, Integer viewerId) {}
+
+    /** Mảnh WHERE: câu dùng chung, hoặc câu riêng tư của chính người xem. */
+    private static final String VISIBLE = " AND (b.visible_to_user_id IS NULL OR b.visible_to_user_id = :viewerId)";
 
     /** Thứ tự sắp xếp; mỗi giá trị ứng với một mảnh ORDER BY cố định. */
     public enum Sort {
@@ -106,16 +112,17 @@ public class BankSearchRepository {
         return n == null ? 0 : n;
     }
 
-    /** Một dòng theo id (không lọc); rỗng nếu không có. */
-    public Optional<Row> findRow(Integer id) {
-        MapSqlParameterSource p = new MapSqlParameterSource("id", id);
+    /** Một dòng theo id mà {@code viewerId} được thấy (câu riêng tư của người khác như không có); rỗng nếu không có. */
+    public Optional<Row> findRow(Integer id, Integer viewerId) {
+        MapSqlParameterSource p = new MapSqlParameterSource("id", id).addValue("viewerId", viewerId);
         String sql = SELECT_ROW + FROM_JOINS.formatted(USAGE_SUBQUERY.formatted("WHERE u.bank_item_id = :id"))
-                + " WHERE b.id = :id";
+                + " WHERE b.id = :id" + VISIBLE;
         return jdbc.query(sql, p, (rs, i) -> row(rs)).stream().findFirst();
     }
 
     private static String where(Filter f, MapSqlParameterSource p) {
-        StringBuilder w = new StringBuilder(" WHERE TRUE");
+        StringBuilder w = new StringBuilder(" WHERE TRUE").append(VISIBLE);
+        p.addValue("viewerId", f.viewerId());
         if (f.subjectId() != null) {
             w.append(" AND t.subject_id = :subjectId");
             p.addValue("subjectId", f.subjectId());
@@ -234,15 +241,15 @@ public class BankSearchRepository {
                         time(rs, "created_at")));
     }
 
-    public List<TopicDto> topics(Integer subjectId) {
-        MapSqlParameterSource p = new MapSqlParameterSource();
+    public List<TopicDto> topics(Integer subjectId, Integer viewerId) {
+        MapSqlParameterSource p = new MapSqlParameterSource("viewerId", viewerId);
         String sql = """
                 SELECT t.subject_id, s.name, t.grade_level, min(btrim(t.topic)) AS topic, count(*) AS cnt
                 FROM bank_item b
                 JOIN generated_question g ON g.id = b.source_question_id
                 JOIN question_template t ON t.id = g.template_id
                 JOIN subject s ON s.id = t.subject_id
-                WHERE TRUE""" + (subjectId == null ? "" : " AND t.subject_id = :subjectId") + """
+                WHERE TRUE""" + VISIBLE + (subjectId == null ? "" : " AND t.subject_id = :subjectId") + """
 
                 GROUP BY t.subject_id, s.name, t.grade_level, lower(btrim(coalesce(t.topic, '')))
                 ORDER BY s.name, t.grade_level NULLS LAST, 4""";

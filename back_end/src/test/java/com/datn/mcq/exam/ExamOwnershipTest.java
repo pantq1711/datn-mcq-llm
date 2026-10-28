@@ -98,7 +98,7 @@ class ExamOwnershipTest {
         return jdbc.queryForList("SELECT id FROM exam_slot WHERE exam_id = ? ORDER BY slot_no", Integer.class, examId);
     }
 
-    /** Làm hỏng job của mọi chỗ trong đề: nếu đối soát chạy, nó sẽ xếp thêm job sinh lại. */
+    /** Làm hỏng job của mọi chỗ trong đề: nếu đối soát chạy, chỗ sẽ chuyển sang failed (llm_error). */
     private void failJobs(int examId) {
         jdbc.update("UPDATE generation_job SET status = 'failed', last_error = 'giả lập' WHERE exam_slot_id IN"
                 + " (SELECT id FROM exam_slot WHERE exam_id = ?)", examId);
@@ -148,9 +148,12 @@ class ExamOwnershipTest {
         assertEquals(List.of("generating"), jdbc.queryForList("SELECT DISTINCT state FROM exam_slot WHERE exam_id = ?",
                 String.class, examA));
 
-        // Đối chứng: chính chủ xem tiến độ thì đối soát chạy và xếp job sinh lại.
+        // Đối chứng: chính chủ xem tiến độ thì đối soát chạy và chuyển các chỗ có job lỗi sang failed (llm_error).
         getAs("/api/exams/" + examA + "/progress", AuthTestSupport.teacher(teacherA)).andExpect(status().isOk());
-        assertTrue(count("generation_job") > jobsBefore, "chủ sở hữu vẫn đối soát bình thường");
+        assertEquals(List.of("failed"), jdbc.queryForList("SELECT DISTINCT state FROM exam_slot WHERE exam_id = ?",
+                String.class, examA), "chủ sở hữu vẫn đối soát bình thường");
+        assertEquals(List.of("llm_error"), jdbc.queryForList("SELECT DISTINCT failure_reason FROM exam_slot WHERE exam_id = ?",
+                String.class, examA));
     }
 
     @Test
@@ -220,7 +223,7 @@ class ExamOwnershipTest {
         jdbc.update("UPDATE exam_slot SET state = 'ready', bank_item_id = ? WHERE id = ?", bank, s.get(0));
         jdbc.update("UPDATE exam_slot SET state = 'ready', generated_question_id = ? WHERE id = ?", generated, s.get(1));
         jdbc.update("UPDATE exam_slot SET state = 'kept', bank_item_id = ? WHERE id = ?", bank, s.get(2));
-        jdbc.update("UPDATE exam_slot SET state = 'failed' WHERE id = ?", s.get(3));
+        jdbc.update("UPDATE exam_slot SET state = 'failed', failure_reason = 'llm_error' WHERE id = ?", s.get(3));
         failJobs(older);
         int jobsBefore = count("generation_job");
 

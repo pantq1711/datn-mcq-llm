@@ -112,10 +112,6 @@ class QcRerunServiceTest {
             return true;
         }
 
-        @Override
-        public LlmCallResult generateMcq(String prompt, String modelName, Strategy strategy, Double temperature) {
-            throw new UnsupportedOperationException("Không được sinh câu trong test chạy lại QC");
-        }
 
         @Override
         public LlmCallResult callJsonMode(String prompt, String modelName, Double temperature) {

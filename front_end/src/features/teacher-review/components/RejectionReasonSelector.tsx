@@ -167,7 +167,7 @@ export default function RejectionReasonSelector({
 
             <div className="rejection-other-reason">
                 <Typography.Text strong>
-                    Lý do khác
+                    Lí do khác
                 </Typography.Text>
 
                 <Input.TextArea
