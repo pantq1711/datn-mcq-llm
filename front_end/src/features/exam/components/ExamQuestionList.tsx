@@ -12,8 +12,8 @@ interface ExamQuestionListProps {
     onRemove?: (question: ExamQuestionItem, index: number) => void;
     onKeep?: (question: ExamQuestionItem, index: number) => void;
     onChangeQuestion?: (question: ExamQuestionItem, index: number) => void;
-    onEdit?: (question: ExamQuestionItem, index: number) => void; // Thêm prop onEdit
-    examDetail?: ExamDetail; // Add optional exam detail prop
+    onEdit?: (question: ExamQuestionItem, index: number) => void;
+    examDetail?: ExamDetail;
 }
 
 const difficultyConfig: Record<
@@ -37,15 +37,13 @@ const difficultyConfig: Record<
     },
 };
 
-const optionLabels = ["A", "B", "C", "D"] as const;
-
 export default function ExamQuestionList({
     questions,
     loading = false,
     onRemove,
     onKeep,
     onChangeQuestion,
-    onEdit, // Nhận prop onEdit
+    onEdit,
 }: ExamQuestionListProps) {
     if (loading) {
         return (
@@ -81,14 +79,6 @@ export default function ExamQuestionList({
                     const difficulty = question.difficulty
                         ? difficultyConfig[question.difficulty]
                         : null;
-
-                    const options = {
-                        A: question.optionA,
-                        B: question.optionB,
-                        C: question.optionC,
-                        D: question.optionD,
-                    };
-                    const optionKeys = (question.optionC && question.optionD) ? optionLabels : ['A', 'B'];
 
                     return (
                         <List.Item
@@ -169,7 +159,7 @@ export default function ExamQuestionList({
                                 {(() => {
                                     const isShortAnswer = !question.optionA && !question.optionB && !question.optionC && !question.optionD;
                                     const isTrueFalse = !!question.optionA && !!question.optionB && !question.optionC && !question.optionD;
-                                    const optionsMap = {
+                                    const optionsMap: Record<'A' | 'B' | 'C' | 'D', string | undefined> = {
                                         A: question.optionA,
                                         B: question.optionB,
                                         C: question.optionC,
@@ -182,7 +172,7 @@ export default function ExamQuestionList({
                                             </div>
                                         );
                                     }
-                                    const keys = isTrueFalse ? ['A', 'B'] : ['A', 'B', 'C', 'D'];
+                                    const keys: ('A' | 'B' | 'C' | 'D')[] = isTrueFalse ? ['A', 'B'] : ['A', 'B', 'C', 'D'];
                                     return (
                                         <div className="exam-question-item-options">
                                             {keys.map(label => {

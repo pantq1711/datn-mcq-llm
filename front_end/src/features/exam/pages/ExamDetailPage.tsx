@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button, Card, Spin, Table, Space, Tag, Typography, message } from "antd";
+import { Button, Card, Spin, Space, Tag, Typography, message } from "antd";
 import { ArrowLeftOutlined, EditOutlined, DeleteOutlined, FileWordOutlined } from "@ant-design/icons";
 
 import ExamPreview from "../components/ExamPreview";
