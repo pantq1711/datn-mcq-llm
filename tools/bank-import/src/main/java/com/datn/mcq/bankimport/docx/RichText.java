@@ -13,8 +13,14 @@ public final class RichText {
     public static final char EQ = '';
     public static final char IMG = '';
 
-    /** Một đối tượng nhúng trong đoạn. */
-    public record Obj(boolean equation, String ref, String previewRef, String progId, String ext, Double widthCm, Double heightCm) {}
+    /** Một đối tượng nhúng trong đoạn; floating = hình nổi (wp:anchor), hiển thị lệch khỏi đoạn neo. */
+    public record Obj(boolean equation, String ref, String previewRef, String progId, String ext, Double widthCm, Double heightCm,
+                      boolean floating) {
+
+        public Obj(boolean equation, String ref, String previewRef, String progId, String ext, Double widthCm, Double heightCm) {
+            this(equation, ref, previewRef, progId, ext, widthCm, heightCm, false);
+        }
+    }
 
     public final String s;
     public final boolean[] yellow;

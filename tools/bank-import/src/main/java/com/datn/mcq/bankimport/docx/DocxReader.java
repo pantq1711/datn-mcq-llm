@@ -254,7 +254,7 @@ public final class DocxReader {
             w = intAttr(extent, "cx", 0) / 360000.0;
             h = intAttr(extent, "cy", 0) / 360000.0;
         }
-        b.obj(new Obj(false, ref, null, null, ext(ref), w, h), yellow, cyan);
+        b.obj(new Obj(false, ref, null, null, ext(ref), w, h, firstDesc(d, WP, "anchor") != null), yellow, cyan);
     }
 
     private void pict(Element pict, RichText.Builder b, boolean yellow, boolean cyan) {

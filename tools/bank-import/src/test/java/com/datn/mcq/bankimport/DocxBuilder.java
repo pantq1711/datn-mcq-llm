@@ -99,6 +99,19 @@ public final class DocxBuilder {
                 + "</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>");
     }
 
+    /** Ảnh nổi (w:drawing, wp:anchor): neo vào đoạn chứa nó nhưng hiển thị lệch sang phải, như hình "bên cạnh" trong Word. */
+    public Run anchored(String ext, byte[] bytes, double widthCm, double heightCm) {
+        String rid = addMedia(ext, bytes);
+        long cx = Math.round(widthCm * 360000);
+        long cy = Math.round(heightCm * 360000);
+        return new Run("<w:r><w:drawing><wp:anchor behindDoc=\"0\" allowOverlap=\"1\">"
+                + "<wp:positionH relativeFrom=\"column\"><wp:posOffset>4500000</wp:posOffset></wp:positionH>"
+                + "<wp:positionV relativeFrom=\"paragraph\"><wp:posOffset>250000</wp:posOffset></wp:positionV>"
+                + "<wp:extent cx=\"" + cx + "\" cy=\"" + cy + "\"/><wp:wrapSquare wrapText=\"bothSides\"/>"
+                + "<a:graphic><a:graphicData><pic:pic><pic:blipFill><a:blip r:embed=\"" + rid + "\"/></pic:blipFill></pic:pic>"
+                + "</a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>");
+    }
+
     /** Ảnh dạng w:pict/v:imagedata (thường là công thức dán thành ảnh WMF). */
     public Run pict(String ext, byte[] bytes, double widthCm, double heightCm) {
         String rid = addMedia(ext, bytes);

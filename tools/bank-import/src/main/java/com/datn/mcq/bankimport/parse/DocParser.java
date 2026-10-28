@@ -6,6 +6,7 @@ import com.datn.mcq.bankimport.docx.Block.Para;
 import com.datn.mcq.bankimport.docx.Block.Tbl;
 import com.datn.mcq.bankimport.docx.DocxReader;
 import com.datn.mcq.bankimport.docx.RichText;
+import com.datn.mcq.bankimport.docx.RichText.Obj;
 import com.datn.mcq.bankimport.model.Question;
 import com.datn.mcq.bankimport.model.Question.Answer;
 import com.datn.mcq.bankimport.model.Question.Option;
@@ -20,6 +21,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -53,6 +55,9 @@ public final class DocParser {
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     /** Câu phụ tự luận "a/ ..." còn sót ở cuối đề dẫn câu Đúng/Sai (khác nhãn ý "a)"). */
     private static final Pattern SUB_QUESTION = Pattern.compile("^[\\s\\uE001]*[a-dA-D]\\s*/");
+    /** Đề nhắc tới một hình cụ thể (không gồm tên hình học như "hình vuông", "hình thang"). */
+    private static final Pattern FIGURE_MENTION = Pattern.compile(
+            "hình\\s+(?:vẽ|bên|dưới|sau|\\d)|như\\s+hình", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     private static final String LEVEL = "VDC|VẬN\\s*DỤNG\\s*CAO|VD|VẬN\\s*DỤNG|THÔNG\\s*HIỂU|TH|NHẬN\\s*BIẾT|NB";
     /** "Câu N." + nhãn mức ở các dạng: [NB], [[NHẬN BIẾT], NHẬN BIẾT], "Câu 2 [NB].", "Câu 2. [NB]". */
@@ -121,6 +126,8 @@ public final class DocParser {
     private final DocxReader.Result pkg;
     private final FormulaService formulas;
     private final List<Problem> problems = new ArrayList<>();
+    /** Hình nổi (figure) neo trong vùng phương án của câu mcq: ứng viên chuyển sang câu sau. */
+    private final Map<Question, List<Obj>> floatingInOptions = new IdentityHashMap<>();
 
     private DocParser(LessonName.Parsed ln, DocxReader.Result pkg, boolean validateLatex) {
         this.ln = ln;
@@ -149,12 +156,8 @@ public final class DocParser {
                 regions.get(cur).add(b);
             }
         }
-        List<Question> out = new ArrayList<>();
+        List<Question> out = new ArrayList<>(mcqWithFloatingFigures(splitByStem(regions.get("I"))));
         int n = 0;
-        for (List<Block> qb : splitByStem(regions.get("I"))) {
-            out.add(mcq(qb, ++n));
-        }
-        n = 0;
         for (Group g : tfGroups(regions.get("II"))) {
             out.add(tf(g, ++n));
         }
@@ -165,6 +168,9 @@ public final class DocParser {
         for (Question q : out) {
             attachMissingImageTags(q);
             q.hasImage = !q.images.isEmpty();
+            if (q.stem != null && FIGURE_MENTION.matcher(q.stem).find() && !hasStemImage(q)) {
+                q.addFlag("mentions_figure_no_image");
+            }
             q.contentHash = hash(q);
             for (String f : q.flags) {
                 if (isStructural(f)) {
@@ -339,6 +345,43 @@ public final class DocParser {
 
     // ---------- phần I: trắc nghiệm ----------
 
+    /**
+     * Tạo các câu mcq; hình nổi neo trong vùng phương án của câu k được chuyển sang câu k+1 khi đề câu k+1 nhắc hình và chưa
+     * có ảnh ở đề, còn đề câu k không nhắc hình (Word hiển thị hình cạnh câu sau dù neo ở đoạn của câu trước). Lượt 1 tạo
+     * bình thường để có đề đã kết xuất; lượt 2 tạo lại đúng các câu có hình chuyển đi/đến.
+     */
+    private List<Question> mcqWithFloatingFigures(List<List<Block>> blocks) {
+        List<Question> qs = new ArrayList<>();
+        for (int i = 0; i < blocks.size(); i++) {
+            qs.add(mcq(blocks.get(i), i + 1, List.of(), List.of()));
+        }
+        List<List<Obj>> moveOut = new ArrayList<>();
+        List<List<Obj>> moveIn = new ArrayList<>();
+        for (int i = 0; i < qs.size(); i++) {
+            moveOut.add(new ArrayList<>());
+            moveIn.add(new ArrayList<>());
+        }
+        for (int i = 0; i + 1 < qs.size(); i++) {
+            List<Obj> figs = floatingInOptions.getOrDefault(qs.get(i), List.of());
+            Question next = qs.get(i + 1);
+            if (!figs.isEmpty() && !FIGURE_MENTION.matcher(qs.get(i).stem).find()
+                    && FIGURE_MENTION.matcher(next.stem).find() && !hasStemImage(next)) {
+                moveOut.get(i).addAll(figs);
+                moveIn.get(i + 1).addAll(figs);
+            }
+        }
+        for (int i = 0; i < qs.size(); i++) {
+            if (!moveOut.get(i).isEmpty() || !moveIn.get(i).isEmpty()) {
+                qs.set(i, mcq(blocks.get(i), i + 1, moveOut.get(i), moveIn.get(i)));
+            }
+        }
+        return qs;
+    }
+
+    private static boolean hasStemImage(Question q) {
+        return q.images.stream().anyMatch(im -> "stem".equals(im.role));
+    }
+
     private record Labels(int[][] pos) {}
 
     private static boolean isSpace(char c) {
@@ -408,9 +451,11 @@ public final class DocParser {
         return new Whole(RichText.join(parts), start, end, fps);
     }
 
-    private Question mcq(List<Block> qb, int ordinal) {
+    /** moveOut: hình nổi bỏ khỏi câu này; moveIn: hình nổi của câu trước được gán làm hình của đề câu này. */
+    private Question mcq(List<Block> qb, int ordinal, List<Obj> moveOut, List<Obj> moveIn) {
         Question q = newQuestion("mcq", "I", ordinal);
         QCtx c = new QCtx(q, ln.source().docId(), formulas);
+        moveOut.forEach(c::skip);
         List<Tbl> tables = new ArrayList<>();
         List<FP> fps = flatten(qb, tables);
         Head head = head(fps.get(0).para().text());
@@ -494,6 +539,23 @@ public final class DocParser {
                     c.registerImage(w.rt().objs.get(w.rt().objIdx[i]), "stem");
                 }
             }
+            // hình nổi trong vùng phương án (từ đầu đoạn chứa nhãn A): ứng viên thuộc câu sau
+            int optionsStart = lab[0][0];
+            for (int i = 0; i < w.fps().size(); i++) {
+                if (lab[0][0] >= w.start()[i] && lab[0][0] <= w.end()[i]) {
+                    optionsStart = w.start()[i];
+                }
+            }
+            List<Obj> floating = new ArrayList<>();
+            for (int i = optionsStart; i < w.rt().length(); i++) {
+                if (w.rt().objIdx[i] >= 0) {
+                    Obj o = w.rt().objs.get(w.rt().objIdx[i]);
+                    if (o.floating() && !o.equation() && QCtx.classify(o).equals("figure")) {
+                        floating.add(o);
+                    }
+                }
+            }
+            floatingInOptions.put(q, floating);
             q.answer = answer(hit.size() == 1 ? hit.get(0) : null, hit.isEmpty() ? "none" : "highlight_yellow");
             if (hit.isEmpty()) {
                 q.addFlag("answer_missing");
@@ -501,6 +563,10 @@ public final class DocParser {
                 q.addFlag("answer_ambiguous");
                 q.answer.evidence = "highlight_yellow_multiple";
             }
+        }
+        for (Obj o : moveIn) {
+            c.registerImage(o, "stem");
+            q.addFlag("figure_from_previous_question");
         }
         List<Para> solParas = sol.stream().map(FP::para).toList();
         q.solution = solution(solParas, c);
@@ -821,6 +887,15 @@ public final class DocParser {
         }
         if (q.tables.isEmpty()) {
             q.tables = null;
+        }
+        // hình nổi neo ở đoạn "Trả lời:" hiển thị cạnh đề: là hình của đề (chữ "Trả lời:" không vào đề)
+        if (replyIdx >= 0 && replyIdx != ansIdx) {
+            RichText reply = fps.get(replyIdx).para().text();
+            for (int i = 0; i < reply.length(); i++) {
+                if (reply.objIdx[i] >= 0) {
+                    c.registerImage(reply.objs.get(reply.objIdx[i]), "stem");
+                }
+            }
         }
 
         if (ansIdx < 0) {

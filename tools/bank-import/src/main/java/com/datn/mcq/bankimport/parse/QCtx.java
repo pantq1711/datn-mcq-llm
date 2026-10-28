@@ -92,6 +92,11 @@ final class QCtx {
         return false;
     }
 
+    /** Bỏ hẳn một đối tượng khỏi câu này (không token, không đăng ký), ví dụ hình nổi đã chuyển sang câu khác. */
+    void skip(Obj o) {
+        tokens.put(o, "");
+    }
+
     /** Chỉ đăng ký ảnh (không cần chuỗi), dùng cho ảnh nằm ngoài phương án, ví dụ ô ảnh của bảng bố cục. */
     void registerImage(Obj o, String role) {
         if (!o.equation()) {
