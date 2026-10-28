@@ -65,8 +65,9 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-49 | Bọc đề cho Solver chống chỉ thị nhúng (W2-4a mục 5) (bổ sung 26/10) | QC | Trung bình | Đã sửa |
 | L-50 | Đáp án câu Trả lời ngắn là phân số, hỗn số, vượt quy ước phiếu trả lời Bộ GD&ĐT (bổ sung 27/10) | LLM & parse | Trung bình | Đã sửa |
 | L-51 | Model viết đơn vị đo `\text{km/h}` ngoài `$...$`, cả ô mcq mức vừa bị loại 18/18 lượt sinh (bổ sung 27/10) | LLM & parse | Cao | Đã sửa |
+| L-52 | W2-4b: hàng đợi, bộ điều tiết Gemini, worker liên tục (bổ sung 28/10) | Hàng đợi/đồng thời | Cao | Đã sửa |
 
-**Thống kê theo nhóm** (51 mục):
+**Thống kê theo nhóm** (52 mục):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
@@ -75,11 +76,11 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | Quy trình git | 2 | 2 | 0 | 0 |
 | LLM & parse | 14 | 13 | 0 | 1 |
 | QC | 11 | 10 | 0 | 1 |
-| Hàng đợi/đồng thời | 7 | 6 | 0 | 1 |
+| Hàng đợi/đồng thời | 8 | 7 | 0 | 1 |
 | Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **51** | **48** | **0** | **3** |
+| **Tổng** | **52** | **49** | **0** | **3** |
 
-Theo mức độ: Cao 12, Trung bình 25, Thấp 14.
+Theo mức độ: Cao 13, Trung bình 25, Thấp 14.
 
 ---
 
@@ -841,6 +842,7 @@ Theo mức độ: Cao 12, Trung bình 25, Thấp 14.
 - Bài học: mọi trạng thái "đang chạy" lưu trong DB phải có cách tự hết hạn.
 - Trạng thái: Đã sửa. Còn một điểm để đợt B: nếu QC lỗi sau khi câu đã lưu, job thử lại và câu đã lưu nằm lại ở
   `generated` mà không gắn với chỗ nào.
+- Kiểm chứng thực tế khi tắt backend giữa chừng (28/10): xem L-52, mục 3.
 
 ### L-35 Nhận job không khóa (hai worker nhận trùng)
 - Nhóm: Hàng đợi/đồng thời
@@ -929,6 +931,43 @@ Theo mức độ: Cao 12, Trung bình 25, Thấp 14.
   `ApiExceptionHandlerDataIntegrityTest`, `MatrixManageTest.loiRangBuocThatCuaPostgresDuocAnhXaDungMaHttp`.
 - Bài học: tên chế độ khóa của ORM không nói loại khóa thật ở CSDL; khóa để chặn tranh chấp phải được kiểm bằng test hai
   luồng, không chỉ đọc code.
+- Trạng thái: Đã sửa.
+
+### L-52 W2-4b: hàng đợi, bộ điều tiết Gemini, worker liên tục (bổ sung 28/10)
+- Nhóm: Hàng đợi/đồng thời
+- Phạm vi: hàng rào `claim_seq` (V22), `StaleJobRecovery`, `GeminiRateLimiter`, worker liên tục. Chỉ ghi các số đã đo; các hạn chế đã
+  biết của W2-4b không chép lại ở đây (xem mục 4).
+1. Thời gian tạo đề 18 câu khi ngân hàng trống:
+   - Trước W2-4b: khoảng 15 phút.
+   - Sau W2-4b: đề 11 = 3:07, đề 12 = 2:47. Cả hai 18/18 `ready`, 0 lượt sinh bị loại ở bước format.
+2. Sự cố vòng phụ thuộc bean:
+   - Triệu chứng: app không khởi động (`APPLICATION FAILED TO START`) vì vòng `LlmClient → GeminiRateLimiter →
+     GenerationJobProcessor → QcOrchestrator → AnswerSolverChecker → LlmClient`, trong khi các test đều xanh.
+   - Nguyên nhân gốc: test xanh vì `TestSafetyConfiguration` thay `LlmClient` bằng bean giả `@Primary`.
+   - Cách sửa: tách việc đọc mức dùng Gemini trong ngày khỏi `GenerationJobProcessor` thành `DbGeminiDailyUsageLookup` (commit
+     `01a8dec`).
+   - Chống tái phát: `ProductionContextCircularDependencyTest`.
+   - Bài học: trước khi merge PR backend phải khởi động app thật, không chỉ chạy test.
+3. Test tắt app giữa chừng (chuyển từ L-34). Hai lần đo, mỗi lần tạo một đề mới 18 câu (6 mcq dễ, 6 mcq vừa, 4 tf, 2 sa, ngân hàng
+   chưa có câu) rồi tắt backend khi đề có 5 câu:
+   - Công thức thời gian hồi phục: lúc bật lại + phần còn lại của 300 giây kể từ lần gia hạn cuối + tối đa 120 giây chu kỳ quét.
+     Đo được 6 phút 43 giây từ lúc kill (11:32:23) đến lúc thấy `stale_reset` (11:39:06) ở lần 2.
+   - Lần 1 (đề 14, tắt bằng Ctrl+C): tạo 00:30:10; `ready=5` lúc 00:30:56 với `job: done=6 pending=11 running=2`; tắt 00:31:45,
+     bật lại 00:33:10 (khoảng 85 giây). `ready=18` lúc 00:36:46, 29 job `done`, `stale_reset` luôn bằng 0. Đến 00:36:46 mọi job
+     đã `done`. 3 job có `claim_seq = 2` đều có `attempt = 2`, bắt đầu từ 00:34:44 đến 00:36:26.
+   - Lần 2 (đề 15, `taskkill /F` tiến trình nghe cổng 8080, PID 23516): tạo 11:31:16; `ready=5 generating=13` lúc 11:32:23, kill
+     đúng lúc đó; bật lại sau khoảng 30 giây (giờ chính xác không ghi lại); số job lúc tắt không ghi lại. Sau khi bật lại, hai job
+     `running` đứng yên (`done=27 running=2`, `ready=16` không đổi) từ trước 11:35:25 đến 11:39:06; lần đọc 11:39:06 thấy
+     `stale_reset=2`, hai chỗ được sinh lại, `ready=18` lúc 11:39:35, 30 job `done`, không `failed`.
+   - Truy vấn sau lần 2: mỗi chỗ có tối đa 3 job `generate` và `job_generate = job_co_cau`; 0 câu mồ côi (câu của các run thuộc đề
+     mà không job hay chỗ nào trỏ tới); `attempt` lớn nhất 1; `claim_seq` lớn nhất 2 ở đúng 2 job (id 331 và 333) có `attempt = 1`,
+     khác lần 1 (`claim_seq = 2` đi cùng `attempt = 2`).
+   - Lưu ý khi đo: `last_error = 'stale: reset'` bị xóa khi job được nhận lại, nên đếm `last_error LIKE 'stale%'` sau khi đề xong
+     ra 0 (chỉ thấy ở một lần đọc lúc đang chờ); `claim_seq > attempt` còn lại sau khi xong. Chỗ trong đề chỉ chuyển `ready` khi
+     có lời gọi `reconcile` (API tiến độ, xem đề hoặc thao tác trên đề), nên vòng theo dõi chỉ đọc DB không thấy `ready`.
+   - Dòng log `Đã trả N job running quá 300 giây về pending` của lần 2 không được ghi lại. Mới đo một lần tắt đột ngột.
+4. Các hạn chế đã biết của W2-4b: xem `docs/architecture/backend-structure.md`, quy tắc 24.
+- Chống tái phát: `ProductionContextCircularDependencyTest`, `GeminiRateLimiterAndWorkerTest`.
 - Trạng thái: Đã sửa.
 
 ## Xuất file
