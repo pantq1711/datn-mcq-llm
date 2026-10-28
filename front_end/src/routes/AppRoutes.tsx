@@ -35,7 +35,7 @@ export default function AppRoutes() {
                 <Route path="profile" element={<ProfilePage />} />
             </Route>
 
-            <Route element={<RequireAuth />}>
+            <Route element={<RequireAuth allowedRoles={["GV"]} />}>
                 <Route element={<TeacherLayout />}>
                     <Route path="" element={<DashboardPage />} />
                     {/* <Route path="review" element={<ReviewQuestionsPage />} />

@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import { Button, Card, Input, Space, Typography, message } from 'antd';
+import { useState, useEffect } from 'react';
+import { Button, Card, Input, Space, Spin, Typography, message } from 'antd';
 import { CopyOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 import { ExamMatrixTable } from '../components/ExamMatrixTable';
 import { ExamMatrixTemplateModal } from '../components/ExamMatrixTemplateModal';
-import { MOCK_EXAM_MATRICES, MOCK_EXAM_MATRIX_TEMPLATES } from '../components/examMatrix.mock.ts';
-import type { ExamMatrix } from '../components/ExamMatrixTable';
+import type { ExamMatrix } from '../types/examMatrix.types.ts';
+import { listExamMatrices, deleteExamMatrix, duplicateExamMatrix, createExamMatrixFromSample } from "../services/examMatrixService";
 import './ExamMatrixListPage.css';
 
 const { Title } = Typography;
@@ -15,25 +15,83 @@ export default function ExamMatrixListPage() {
     const navigate = useNavigate();
     const [searchText, setSearchText] = useState('');
     const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-    const [matrices, setMatrices] = useState<ExamMatrix[]>(MOCK_EXAM_MATRICES);
+    const [matrices, setMatrices] = useState<ExamMatrix[]>([]);
+
+    const [loading, setLoading] = useState(false);
 
     const handleCreateMatrix = () => navigate('/exam-matrices/new');
     const handleEditMatrix = (matrixId: string) =>
         navigate(`/exam-matrices/${matrixId}/edit`);
 
-    const handleDeleteMatrix = (matrixId: string) => {
-        setMatrices((current) => current.filter((matrix) => matrix.id !== matrixId));
-        message.success('Đã xóa ma trận khỏi danh sách mẫu thử.');
+    const handleDeleteMatrix = async (matrixId: string) => {
+        setLoading(true);
+        try {
+            await deleteExamMatrix(matrixId);
+            // Cập nhật state sau khi xóa thành công
+            setMatrices((curr) => curr.filter((m) => m.id !== matrixId));
+            message.success("Đã xóa ma trận thành công.");
+        } catch (err: any) {
+            const msg =
+                err?.response?.data?.error ||
+                err?.message ||
+                "Xóa ma trận thất bại.";
+            message.error(msg);
+        } finally {
+            setLoading(false);
+        }
     };
+
 
     const handleSelectTemplate = (templateId: string) => {
         setIsTemplateModalOpen(false);
         navigate(`/exam-matrices/new?templateId=${encodeURIComponent(templateId)}`);
     };
 
+    const handleDuplicateMatrix = async (matrixId: string) => {
+        try {
+            const newMatrix = await duplicateExamMatrix(matrixId);
+            message.success(`Đã tạo bản sao: ${newMatrix.name}`);
+            // Refresh list (gọi listExamMatrices lại) để thấy ma trận mới
+            await listExamMatrices(); // hàm fetch list hiện tại
+        } catch (err: any) {
+            message.error(err?.response?.data?.error || 'Không thể nhân bản ma trận');
+        }
+    };
+
+    const handleCreateFromSample = async (key: string) => {
+        try {
+            const newMatrix = await createExamMatrixFromSample(key);
+            message.success(`Đã tạo ma trận: ${newMatrix.name}`);
+            // Nếu muốn mở ngay trang chỉnh sửa hoặc chi tiết:
+            navigate(`/exam-matrices/${newMatrix.id}`);
+        } catch (err: any) {
+            message.error(err?.response?.data?.error || 'Không thể tạo ma trận từ mẫu');
+        }
+    };
+
     const handleReset = () => {
         setSearchText('');
     };
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const data = await listExamMatrices();
+                setMatrices(data);
+            } catch (err: any) {
+                const msg =
+                    err?.response?.data?.error ||
+                    err?.message ||
+                    "Không thể tải danh sách ma trận.";
+                message.error(msg);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);          // chạy một lần khi component mount
 
     return (
         <div className="exam-matrix-list-page">
@@ -71,30 +129,37 @@ export default function ExamMatrixListPage() {
                 </div>
             </Card>
 
-            <Card className="exam-matrix-list-card">
-                <div className="exam-matrix-list-header">
-                    <div>
-                        <Title level={4} className="exam-matrix-list-title">
-                            Danh sách ma trận
-                        </Title>
-                    </div>
+            {loading ? (
+                <div className="exam-matrix-list-loading" style={{ textAlign: "center", padding: "80px 0" }}>
+                    <Spin size="large" />
+                    <p style={{ marginTop: "16px" }}>Đang tải danh sách ma trận…</p>
                 </div>
+            ) : (
+                <Card className="exam-matrix-list-card">
+                    <div className="exam-matrix-list-header">
+                        <div>
+                            <Title level={4} className="exam-matrix-list-title">
+                                Danh sách ma trận
+                            </Title>
+                        </div>
+                    </div>
 
-                <ExamMatrixTable
-                    matrices={matrices}
-                    searchText={searchText}
-                    loading={false}
-                    onEditMatrix={handleEditMatrix}
-                    onDeleteMatrix={handleDeleteMatrix}
-                />
-            </Card>
+                    <ExamMatrixTable
+                        matrices={matrices}
+                        searchText={searchText}
+                        loading={loading}
+                        onEditMatrix={handleEditMatrix}
+                        onDeleteMatrix={handleDeleteMatrix}
+                        onDuplicateMatrix={handleDuplicateMatrix}
+                    />
+                </Card>
+            )}
 
             <ExamMatrixTemplateModal
                 open={isTemplateModalOpen}
                 onCancel={() => setIsTemplateModalOpen(false)}
                 onSelectTemplate={handleSelectTemplate}
-                templates={MOCK_EXAM_MATRIX_TEMPLATES}
-                loading={false}
+                onCreateFromSample={handleCreateFromSample}
             />
         </div>
     );

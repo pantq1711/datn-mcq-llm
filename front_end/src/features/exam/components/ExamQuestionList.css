@@ -126,6 +126,18 @@
     white-space: pre-wrap;
 }
 
+/* Style for short answer display */
+.exam-question-short-answer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid #b7eb8f;
+    border-radius: 6px;
+    background: #f6ffed;
+    margin-top: 8px;
+}
+
 .exam-action-btn-keep {
     color: #52c41a !important;
     background-color: #ffffff !important;

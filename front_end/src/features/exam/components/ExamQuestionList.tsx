@@ -2,7 +2,7 @@ import { Button, Empty, List, Skeleton, Space, Tag, Tooltip, Typography } from "
 import { DeleteOutlined, BulbOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined } from "@ant-design/icons";
 
 import "./ExamQuestionList.css";
-import type { ExamQuestionDifficulty, ExamQuestionItem } from "../types/exam.types";
+import type { ExamQuestionDifficulty, ExamQuestionItem, ExamDetail } from "../types/exam.types";
 
 const { Text, Paragraph } = Typography;
 
@@ -12,7 +12,8 @@ interface ExamQuestionListProps {
     onRemove?: (question: ExamQuestionItem, index: number) => void;
     onKeep?: (question: ExamQuestionItem, index: number) => void;
     onChangeQuestion?: (question: ExamQuestionItem, index: number) => void;
-    onEdit?: (question: ExamQuestionItem, index: number) => void; // Thêm prop onEdit
+    onEdit?: (question: ExamQuestionItem, index: number) => void;
+    examDetail?: ExamDetail;
 }
 
 const difficultyConfig: Record<
@@ -36,15 +37,13 @@ const difficultyConfig: Record<
     },
 };
 
-const optionLabels = ["A", "B", "C", "D"] as const;
-
 export default function ExamQuestionList({
     questions,
     loading = false,
     onRemove,
     onKeep,
     onChangeQuestion,
-    onEdit, // Nhận prop onEdit
+    onEdit,
 }: ExamQuestionListProps) {
     if (loading) {
         return (
@@ -80,13 +79,6 @@ export default function ExamQuestionList({
                     const difficulty = question.difficulty
                         ? difficultyConfig[question.difficulty]
                         : null;
-
-                    const options = {
-                        A: question.optionA,
-                        B: question.optionB,
-                        C: question.optionC,
-                        D: question.optionD,
-                    };
 
                     return (
                         <List.Item
@@ -163,42 +155,44 @@ export default function ExamQuestionList({
                                     {question.questionText}
                                 </Paragraph>
 
-                                <div className="exam-question-item-options">
-                                    {optionLabels.map((label) => {
-                                        const isCorrect =
-                                            label ===
-                                            question.correctOption;
-
+                                {/* Render options based on question type */}
+                                {(() => {
+                                    const isShortAnswer = !question.optionA && !question.optionB && !question.optionC && !question.optionD;
+                                    const isTrueFalse = !!question.optionA && !!question.optionB && !question.optionC && !question.optionD;
+                                    const optionsMap: Record<'A' | 'B' | 'C' | 'D', string | undefined> = {
+                                        A: question.optionA,
+                                        B: question.optionB,
+                                        C: question.optionC,
+                                        D: question.optionD,
+                                    };
+                                    if (isShortAnswer) {
                                         return (
-                                            <div
-                                                key={label}
-                                                className={`exam-question-option ${isCorrect
-                                                    ? "exam-question-option-correct"
-                                                    : ""
-                                                    }`}
-                                            >
-                                                <div className="exam-question-option-label">
-                                                    <Text strong>
-                                                        {label}.
-                                                    </Text>
-                                                </div>
-
-                                                <Text className="exam-question-option-text">
-                                                    {options[label]}
-                                                </Text>
-
-                                                {isCorrect && (
-                                                    <Tag
-                                                        color="success"
-                                                        className="exam-question-option-answer"
-                                                    >
-                                                        Đáp án đúng
-                                                    </Tag>
-                                                )}
+                                            <div className="exam-question-short-answer">
+                                                <Text strong>Đáp án:</Text> {question.optionA}
                                             </div>
                                         );
-                                    })}
-                                </div>
+                                    }
+                                    const keys: ('A' | 'B' | 'C' | 'D')[] = isTrueFalse ? ['A', 'B'] : ['A', 'B', 'C', 'D'];
+                                    return (
+                                        <div className="exam-question-item-options">
+                                            {keys.map(label => {
+                                                const isCorrect = label === question.correctOption;
+                                                return (
+                                                    <div
+                                                        key={label}
+                                                        className={`exam-question-option ${isCorrect ? 'exam-question-option-correct' : ''}`}
+                                                    >
+                                                        <div className="exam-question-option-label"><Text strong>{label}.</Text></div>
+                                                        <Text className="exam-question-option-text">{optionsMap[label]}</Text>
+                                                        {isCorrect && (
+                                                            <Tag color="success" className="exam-question-option-answer">Đáp án đúng</Tag>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* Hiển thị lời giải chi tiết nếu có */}
                                 {question.explanation && (
