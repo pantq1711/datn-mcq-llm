@@ -1,0 +1,387 @@
+.exam-progress-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+    width: 100%;
+    color: #1f1f1f;
+}
+
+.exam-progress-detail--loading {
+    min-height: 240px;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+}
+
+.exam-progress-detail__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.exam-progress-detail__heading {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.exam-progress-detail__heading-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 46px;
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    background: #e6f4ff;
+    color: #1677ff;
+    font-size: 22px;
+}
+
+.exam-progress-detail__heading .ant-typography {
+    margin: 0;
+}
+
+.exam-progress-detail__heading .ant-typography+.ant-typography {
+    display: block;
+    margin-top: 5px;
+    line-height: 1.6;
+}
+
+.exam-progress-detail__summary {
+    width: 100%;
+}
+
+.exam-progress-detail__stat-card {
+    height: 100%;
+    min-height: 132px;
+    border: 1px solid #f0f0f0;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 3%);
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.exam-progress-detail__stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 14px rgb(0 0 0 / 6%);
+}
+
+.exam-progress-detail__stat-card .ant-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 16px;
+}
+
+.exam-progress-detail__stat-card .ant-statistic-title {
+    margin-bottom: 8px;
+    color: #595959;
+    font-size: 13px;
+}
+
+.exam-progress-detail__stat-card .ant-statistic-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 26px;
+    font-weight: 650;
+    line-height: 1.3;
+}
+
+.exam-progress-detail__stat-icon {
+    font-size: 19px;
+}
+
+.exam-progress-detail__stat-card .ant-typography {
+    font-size: 12px;
+}
+
+.exam-progress-detail__stat-card--total .exam-progress-detail__stat-icon {
+    color: #1677ff;
+}
+
+.exam-progress-detail__stat-card--answered .exam-progress-detail__stat-icon {
+    color: #389e0d;
+}
+
+.exam-progress-detail__stat-card--unanswered .exam-progress-detail__stat-icon {
+    color: #8c8c8c;
+}
+
+.exam-progress-detail__stat-card--review .exam-progress-detail__stat-icon {
+    color: #d48806;
+}
+
+.exam-progress-detail__main-card {
+    border: 1px solid #f0f0f0;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 3%);
+}
+
+.exam-progress-detail__main-card>.ant-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 24px;
+}
+
+.exam-progress-detail__completion {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 20px;
+    border: 1px solid #e6f4ff;
+    border-radius: 10px;
+    background: linear-gradient(110deg, #f7fbff 0%, #ffffff 100%);
+}
+
+.exam-progress-detail__completion-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.exam-progress-detail__completion-caption {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 12px;
+}
+
+.exam-progress-detail__completion-percent {
+    color: #1677ff;
+    font-size: 24px;
+    white-space: nowrap;
+}
+
+.exam-progress-detail__completion .ant-progress {
+    line-height: 1;
+}
+
+.exam-progress-detail__list-header {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.exam-progress-detail__list-header .ant-typography {
+    margin: 0;
+}
+
+.exam-progress-detail__list-header .ant-typography+.ant-typography {
+    display: inline-block;
+    margin-top: 5px;
+    font-size: 12px;
+}
+
+.exam-progress-detail__list-header .ant-segmented {
+    align-self: flex-start;
+    max-width: 100%;
+}
+
+.exam-progress-detail__list {
+    min-width: 0;
+}
+
+.exam-progress-detail__list .ant-list-items {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.exam-progress-detail__list-item {
+    padding: 14px 16px !important;
+    border: 1px solid #f0f0f0 !important;
+    border-radius: 10px;
+    background: #ffffff;
+    transition:
+        border-color 0.2s ease,
+        background-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.exam-progress-detail__list-item:hover {
+    border-color: #d6e4ff !important;
+    background: #fafcff;
+    transform: translateX(2px);
+}
+
+.exam-progress-detail__cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-width: 0;
+    gap: 16px;
+}
+
+.exam-progress-detail__cell-main {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 12px;
+}
+
+.exam-progress-detail__cell-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    font-size: 18px;
+}
+
+.exam-progress-detail__cell-icon--answered {
+    color: #389e0d;
+    background: #f6ffed;
+}
+
+.exam-progress-detail__cell-icon--unanswered {
+    color: #8c8c8c;
+    background: #f5f5f5;
+}
+
+.exam-progress-detail__cell-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.exam-progress-detail__cell-description {
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.exam-progress-detail__cell-tags {
+    justify-content: flex-end;
+    flex: 0 0 auto;
+}
+
+.exam-progress-detail__cell-tags .ant-tag {
+    margin-inline-end: 0;
+}
+
+.exam-progress-detail__empty {
+    padding-block: 24px;
+}
+
+.exam-progress-detail__error {
+    border-radius: 10px;
+}
+
+/* Responsive */
+
+@media (min-width: 768px) {
+    .exam-progress-detail__list-header {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .exam-progress-detail__list-header .ant-segmented {
+        align-self: center;
+    }
+}
+
+@media (max-width: 767px) {
+    .exam-progress-detail {
+        gap: 16px;
+    }
+
+    .exam-progress-detail__header {
+        align-items: flex-start;
+    }
+
+    .exam-progress-detail__heading {
+        gap: 10px;
+    }
+
+    .exam-progress-detail__heading-icon {
+        flex-basis: 40px;
+        width: 40px;
+        height: 40px;
+        font-size: 19px;
+    }
+
+    .exam-progress-detail__heading .ant-typography:first-child {
+        font-size: 18px;
+    }
+
+    .exam-progress-detail__stat-card {
+        min-height: 120px;
+    }
+
+    .exam-progress-detail__stat-card .ant-card-body {
+        padding: 12px;
+    }
+
+    .exam-progress-detail__stat-card .ant-statistic-content {
+        font-size: 23px;
+    }
+
+    .exam-progress-detail__stat-card .ant-statistic-title {
+        font-size: 12px;
+    }
+
+    .exam-progress-detail__main-card>.ant-card-body {
+        padding: 16px;
+        gap: 20px;
+    }
+
+    .exam-progress-detail__completion {
+        padding: 14px;
+    }
+
+    .exam-progress-detail__completion-percent {
+        font-size: 21px;
+    }
+
+    .exam-progress-detail__list-header .ant-segmented {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .exam-progress-detail__cell {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .exam-progress-detail__cell-tags {
+        padding-left: 50px;
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 380px) {
+    .exam-progress-detail__heading .ant-typography+.ant-typography {
+        font-size: 12px;
+    }
+
+    .exam-progress-detail__stat-card .ant-card-body {
+        padding: 10px;
+    }
+
+    .exam-progress-detail__stat-card .ant-statistic-content {
+        font-size: 21px;
+    }
+
+    .exam-progress-detail__main-card>.ant-card-body {
+        padding: 12px;
+    }
+
+    .exam-progress-detail__list-header .ant-segmented {
+        font-size: 11px;
+    }
+}

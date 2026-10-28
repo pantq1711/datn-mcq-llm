@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button, Card, Spin, Space, Tag, Typography, message } from "antd";
-import { ArrowLeftOutlined, EditOutlined, DeleteOutlined, FileWordOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, EditOutlined, DeleteOutlined, FileWordOutlined, LineChartOutlined } from "@ant-design/icons";
 
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import ChangeQuestionModal from "../components/ChangeQuestionModal";
 import QuestionReplacementPreview from "../components/QuestionReplacementPreview";
 import EditQuestionModal from "../components/EditQuestionModal";
+import { ExamProgressDetail } from '../components/ExamProgressDetail';
 
 const { Title, Text } = Typography;
 
@@ -35,6 +36,8 @@ export default function ExamDetailPage() {
     const [detail, setDetail] = useState<ExamDetail | null>(null);
     const [questions, setQuestions] = useState<ExamQuestionItem[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const [showProgress, setShowProgress] = useState(false);
 
     useEffect(() => {
         if (!examId) return;
@@ -166,6 +169,14 @@ export default function ExamDetailPage() {
                         className="exam-detail-page-actions"
                     >
                         <Button
+                            icon={<LineChartOutlined />}
+                            onClick={() => setShowProgress((prev) => !prev)}
+                            disabled={!examId}
+                        >
+                            {showProgress ? "Ẩn tiến độ" : "Xem tiến độ chi tiết"}
+                        </Button>
+
+                        <Button
                             type="primary"
                             icon={<FileWordOutlined />}
                             onClick={() => console.log("Export Word")}
@@ -196,6 +207,15 @@ export default function ExamDetailPage() {
                     <ExamPreview exam={exam} />
                 </Card>
             </div>
+
+            {showProgress && examId && (
+                <div className="exam-detail-page-progress">
+                    <ExamProgressDetail
+                        examId={examId}
+                        onClose={() => setShowProgress(false)}
+                    />
+                </div>
+            )}
 
             <div className="exam-detail-page-question-list">
                 <Card title="Danh sách câu hỏi">
