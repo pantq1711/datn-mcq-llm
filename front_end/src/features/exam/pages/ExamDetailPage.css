@@ -55,6 +55,26 @@
     width: 100%;
 }
 
+/* --- Question group layout --- */
+.question-group {
+    margin-bottom: 24px;
+    /* Khoảng cách giữa các nhóm */
+    padding: 12px;
+    /* Padding nội bộ để tạo không gian “air” */
+    background: rgba(255, 255, 255, 0.9);
+    /* Nền nhẹ, phù hợp với glassmorphism */
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Title của nhóm */
+.question-group-title {
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: #1890ff;
+    /* Màu chủ đạo, nhấn mạnh tiêu đề */
+}
+
 @media (max-width: 768px) {
     .exam-detail-page-header-content {
         flex-direction: column;
@@ -67,5 +87,10 @@
 
     .exam-detail-page-actions .ant-btn {
         flex: 1;
+    }
+
+    .question-group {
+        margin-bottom: 16px;
+        padding: 8px;
     }
 }

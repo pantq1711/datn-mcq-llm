@@ -1,15 +1,14 @@
-import { useParams } from "react-router-dom";
-import { Button, Card, Space, Tag, Typography, message } from "antd";
+import { useParams, useNavigate } from 'react-router-dom';
+import { Button, Card, Spin, Table, Space, Tag, Typography, message } from "antd";
 import { ArrowLeftOutlined, EditOutlined, DeleteOutlined, FileWordOutlined } from "@ant-design/icons";
-import { useNavigate } from "react-router-dom";
 
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
-import type { ExamPreviewData, ExamQuestionItem, ChangeQuestionRequest, QuestionReplacementCandidate } from "../types/exam.types";
-import { keepQuestion } from '../services/examApi';
+import type { ExamPreviewData, ExamQuestionItem, ChangeQuestionRequest, QuestionReplacementCandidate, ExamDetail } from "../types/exam.types";
+import { keepQuestion, getExamDetail } from '../services/examApi';
 
 import "./ExamDetailPage.css";
-import { useState } from "react";
+import { useEffect, useState } from 'react';
 import ChangeQuestionModal from "../components/ChangeQuestionModal";
 import QuestionReplacementPreview from "../components/QuestionReplacementPreview";
 import EditQuestionModal from "../components/EditQuestionModal";
@@ -33,41 +32,28 @@ export default function ExamDetailPage() {
     const [editingQuestion, setEditingQuestion] = useState<ExamQuestionItem | null>(null);
     const [savingEdit, setSavingEdit] = useState(false);
 
-    const [questions, setQuestions] = useState<ExamQuestionItem[]>([
-        {
-            id: 1,
-            questionText: "Nguyên tố hóa học nào có ký hiệu hóa học là 'H'?",
-            optionA: "Heli",
-            optionB: "Hiđrô",
-            optionC: "Hafni",
-            optionD: "Holmi",
-            correctOption: "B",
-            explanation: "Hiđrô là nguyên tố hóa học có ký hiệu là H, là nguyên tố nhẹ nhất trong bảng tuần hoàn.",
-            difficulty: "easy",
-        },
-        {
-            id: 2,
-            questionText: "Dung dịch axit nào sau đây làm quỳ tím chuyển sang màu đỏ?",
-            optionA: "NaCl",
-            optionB: "NaOH",
-            optionC: "HCl",
-            optionD: "Ba(OH)₂",
-            correctOption: "C",
-            explanation: "HCl là axit mạnh, làm quỳ tím hóa đỏ. NaCl là muối trung tính, NaOH và Ba(OH)₂ là bazơ làm quỳ tím hóa xanh.",
-            difficulty: "medium",
-        },
-        {
-            id: 3,
-            questionText: "Oxit nào sau đây là oxit lưỡng tính?",
-            optionA: "SO₂",
-            optionB: "Al₂O₃",
-            optionC: "CaO",
-            optionD: "CO₂",
-            correctOption: "B",
-            explanation: "Al₂O₃ (Nhôm oxit) là oxit lưỡng tính, vừa tác dụng với axit vừa tác dụng với bazơ.",
-            difficulty: "hard",
-        },
-    ]);
+    const [detail, setDetail] = useState<ExamDetail | null>(null);
+    const [questions, setQuestions] = useState<ExamQuestionItem[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!examId) return;
+        (async () => {
+            try {
+                const data = await getExamDetail(examId);
+                setDetail(data);
+            } catch (err: any) {
+                message.error(err?.response?.data?.error || 'Không tải được đề');
+            } finally {
+                setLoading(false);
+            }
+        })();
+    }, [examId]);
+
+    if (loading) return <Spin tip="Đang tải đề…" />;
+    if (!detail) return <p>Không có dữ liệu đề.</p>;
+
+
 
     const exam: ExamPreviewData = {
         title: "Đề thi giữa kỳ Hóa học",
@@ -213,16 +199,56 @@ export default function ExamDetailPage() {
 
             <div className="exam-detail-page-question-list">
                 <Card title="Danh sách câu hỏi">
-                    <ExamQuestionList
-                        questions={questions}
-                        onChangeQuestion={(question) => {
-                            setChangeQuestion(question);
-                            setOriginalQuestion(question);
-                            setReplacementQuestion(mockReplacementQuestion);
-                        }}
-                        onKeep={handleKeep}
-                        onEdit={(question) => setEditingQuestion(question)}
-                    />
+                    {/* Nhóm câu trắc nghiệm */}
+                    {questions.filter(q => q.optionA && q.optionB && q.optionC && q.optionD).length > 0 && (
+                        <div className="question-group">
+                            <Title level={5} className="question-group-title">Câu trắc nghiệm</Title>
+                            <ExamQuestionList
+                                questions={questions.filter(q => q.optionA && q.optionB && q.optionC && q.optionD)}
+                                onChangeQuestion={(question) => {
+                                    setChangeQuestion(question);
+                                    setOriginalQuestion(question);
+                                    setReplacementQuestion(mockReplacementQuestion);
+                                }}
+                                onKeep={handleKeep}
+                                onEdit={(question) => setEditingQuestion(question)}
+                            />
+                        </div>
+                    )}
+
+                    {/* Nhóm câu đúng/sai */}
+                    {questions.filter(q => q.optionA && q.optionB && !q.optionC && !q.optionD).length > 0 && (
+                        <div className="question-group">
+                            <Title level={5} className="question-group-title">Câu đúng/sai</Title>
+                            <ExamQuestionList
+                                questions={questions.filter(q => q.optionA && q.optionB && !q.optionC && !q.optionD)}
+                                onChangeQuestion={(question) => {
+                                    setChangeQuestion(question);
+                                    setOriginalQuestion(question);
+                                    setReplacementQuestion(mockReplacementQuestion);
+                                }}
+                                onKeep={handleKeep}
+                                onEdit={(question) => setEditingQuestion(question)}
+                            />
+                        </div>
+                    )}
+
+                    {/* Nhóm câu trả lời ngắn */}
+                    {questions.filter(q => !q.optionA && !q.optionB && !q.optionC && !q.optionD).length > 0 && (
+                        <div className="question-group">
+                            <Title level={5} className="question-group-title">Câu trả lời ngắn</Title>
+                            <ExamQuestionList
+                                questions={questions.filter(q => !q.optionA && !q.optionB && !q.optionC && !q.optionD)}
+                                onChangeQuestion={(question) => {
+                                    setChangeQuestion(question);
+                                    setOriginalQuestion(question);
+                                    setReplacementQuestion(mockReplacementQuestion);
+                                }}
+                                onKeep={handleKeep}
+                                onEdit={(question) => setEditingQuestion(question)}
+                            />
+                        </div>
+                    )}
 
                     <ChangeQuestionModal
                         open={changeQuestion !== null}

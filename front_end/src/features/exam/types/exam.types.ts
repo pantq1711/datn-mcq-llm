@@ -108,3 +108,22 @@ export interface GetMyExamsParams {
     size?: number;
     kind?: ExamKind;
 }
+
+export interface ExamCell {
+    id: string;
+    part: number;          // I‑III
+    question: string;
+    answer?: string;
+    solution?: string;
+    needReview?: boolean;  // cờ “cần xem kỹ”
+}
+
+export interface ExamDetail {
+    id: string;
+    name: string;
+    subjectId: number;
+    gradeLevel: number;
+    cells: ExamCell[];
+    createdAt: string;
+    updatedAt: string;
+}

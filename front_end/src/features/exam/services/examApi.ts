@@ -1,5 +1,5 @@
 import axiosInstance from "../../../services/apiClient";
-import type { Subject, GenerateExamPayload, GeneratedExamCode, ExamQuestionItem, ExamListResponse, GetMyExamsParams } from "../types/exam.types";
+import type { Subject, GenerateExamPayload, GeneratedExamCode, ExamQuestionItem, ExamListResponse, GetMyExamsParams, ExamDetail } from "../types/exam.types";
 
 export async function getCatalogSubjects(): Promise<Subject[]> {
     const response = await axiosInstance.get<Subject[]>("/api/catalog/subjects");
@@ -75,3 +75,9 @@ export async function getMyExams(params?: GetMyExamsParams): Promise<ExamListRes
         throw new Error(errMsg);
     }
 }
+
+// Lấy chi tiết đề (câu, đáp án, lời giải, flag "cần xem kỹ")
+export const getExamDetail = async (examId: string) => {
+    const { data } = await axiosInstance.get<ExamDetail>(`/api/exams/${examId}`);
+    return data;   // kiểu ExamDetail định nghĩa trong types
+};
