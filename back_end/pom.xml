@@ -76,6 +76,18 @@
 			<artifactId>pdfbox</artifactId>
 			<version>3.0.8</version>
 		</dependency>
+		<!-- Xuất Word công thức MathType (module mathtype): POIFS ghi file OLE oleObjectN.bin (Apache 2.0). -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi</artifactId>
+			<version>5.4.1</version>
+		</dependency>
+		<!-- Ảnh xem trước của công thức MathType, dựng từ LaTeX. GPL-2.0 kèm Classpath Exception (xem LICENSE trong jar). -->
+		<dependency>
+			<groupId>org.scilab.forge</groupId>
+			<artifactId>jlatexmath</artifactId>
+			<version>1.0.7</version>
+		</dependency>
 
 		<dependency>
 			<groupId>org.postgresql</groupId>

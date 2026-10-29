@@ -62,4 +62,13 @@ class CorsPreflightTest {
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
                         containsString("Content-Disposition")));
     }
+
+    /** Xuất Word dạng MathType: frontend đọc được số công thức phải giữ Equation của Word. */
+    @Test
+    void frontendDocDuocSoCongThucGiuEquation() throws Exception {
+        mockMvc.perform(get("/actuator/health").header(HttpHeaders.ORIGIN, "http://localhost:5173"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                        containsString("X-Equation-Kept-Omml")));
+    }
 }

@@ -1016,6 +1016,8 @@ class ExamBuildTest {
                     disposition);
             String xml = PandocTestSupport.documentXml(response.getContentAsByteArray());
             assertTrue(xml.contains("m:oMath"), "công thức là Equation gốc của Word");
+            assertFalse(xml.contains("Equation.DSMT4"), "mặc định không có đối tượng MathType");
+            assertNull(response.getHeader("X-Equation-Kept-Omml"), "header chỉ có khi xuất MathType");
             for (String part : List.of("PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn", "ĐÁP ÁN", "LỜI GIẢI",
                     "Chưa có câu – cần sinh lại", code)) {
                 assertTrue(xml.contains(part), "docx thiếu: " + part);
@@ -1025,6 +1027,34 @@ class ExamBuildTest {
             assertTrue(response.getContentAsString(StandardCharsets.UTF_8).contains("pandoc"));
         }
         perform(get("/api/exams/999999/export/docx")).andExpect(status().isNotFound());
+    }
+
+    /** ?equation=mathtype: công thức thành đối tượng MathType OLE; header báo số công thức giữ Equation của Word. */
+    @Test
+    void xuatDeRaWordCongThucMathType() throws Exception {
+        int examId = readyExam();
+        progress(examId);
+        var response = perform(get("/api/exams/" + examId + "/export/docx?equation=mathtype")).andReturn()
+                .getResponse();
+        if (PandocTestSupport.find().isPresent()) {
+            assertEquals(200, response.getStatus(), response.getContentAsString(StandardCharsets.UTF_8));
+            String xml = PandocTestSupport.documentXml(response.getContentAsByteArray());
+            assertTrue(xml.contains("ProgID=\"Equation.DSMT4\""), "công thức là đối tượng MathType");
+            String kept = response.getHeader("X-Equation-Kept-Omml");
+            assertNotNull(kept, "header số công thức giữ Equation");
+            assertEquals(xml.split("<m:oMath[ >]", -1).length - 1, Integer.parseInt(kept),
+                    "header khớp số Equation còn lại trong file");
+            assertTrue(xml.contains("PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn") && xml.contains("ĐÁP ÁN"));
+        } else {
+            assertEquals(503, response.getStatus());
+        }
+        // không phân biệt hoa thường
+        perform(get("/api/exams/" + examId + "/export/docx?equation=OMML"))
+                .andExpect(status().is(PandocTestSupport.find().isPresent() ? 200 : 503));
+        var bad = perform(get("/api/exams/" + examId + "/export/docx?equation=abc")).andReturn().getResponse();
+        assertEquals(400, bad.getStatus());
+        assertTrue(bad.getContentAsString(StandardCharsets.UTF_8).contains("omml"), "thông báo nêu giá trị hợp lệ");
+        perform(get("/api/exams/999999/export/docx?equation=mathtype")).andExpect(status().isNotFound());
     }
 
     /** Giữ câu tf có nhãn LLM khác mẫu bắt buộc: ngân hàng lưu nhãn LLM (khớp lời giải), không lấy từ mẫu. */

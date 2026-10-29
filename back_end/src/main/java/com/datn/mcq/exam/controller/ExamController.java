@@ -12,6 +12,7 @@ import com.datn.mcq.exam.dto.ExamViewDtos.ExamPageDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
 import com.datn.mcq.exam.export.ExamExportService;
 import com.datn.mcq.exam.export.ExamExportService.DocxFile;
+import com.datn.mcq.exam.export.EquationFormat;
 import com.datn.mcq.exam.service.ExamActionService;
 import com.datn.mcq.exam.service.ExamBuildService;
 import com.datn.mcq.exam.service.ExamQcTraceService;
@@ -41,6 +42,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/exams")
 public class ExamController {
+
+    /** Header của xuất Word dạng MathType; SecurityConfig mở header này cho frontend đọc (CORS). */
+    public static final String EQUATION_KEPT_HEADER = "X-Equation-Kept-Omml";
 
     private final ExamBuildService examBuildService;
     private final ExamViewService examViewService;
@@ -82,17 +86,26 @@ public class ExamController {
     }
 
     /**
-     * Xuất đề ra Word (.docx, bản cơ bản): đề, rồi trang ĐÁP ÁN và LỜI GIẢI; công thức là Equation gốc của Word. Cần
-     * pandoc trên máy chủ: không có thì 503. Tên file theo mã đề.
+     * Xuất đề ra Word (.docx, bản cơ bản): đề, rồi trang ĐÁP ÁN và LỜI GIẢI. Cần pandoc trên máy chủ: không có thì 503.
+     * Tên file theo mã đề.
+     *
+     * <p>{@code equation}: {@code omml} (mặc định, Equation gốc của Word) hoặc {@code mathtype} (đối tượng MathType,
+     * bấm đúp sửa bằng MathType); giá trị khác 400. Với {@code mathtype}, header {@value #EQUATION_KEPT_HEADER} cho biết số
+     * công thức phải giữ dạng Equation (chưa hỗ trợ, hoặc cả file khi không đổi được).
      */
     @GetMapping("/{examId}/export/docx")
-    public ResponseEntity<byte[]> exportDocx(CurrentUser user, @PathVariable Integer examId) {
-        DocxFile file = examExportService.docx(examId, user.id());
-        return ResponseEntity.ok()
+    public ResponseEntity<byte[]> exportDocx(CurrentUser user, @PathVariable Integer examId,
+                                             @RequestParam(required = false) String equation) {
+        EquationFormat format = EquationFormat.parse(equation);
+        DocxFile file = examExportService.docx(examId, user.id(), format);
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(ExamExportService.DOCX_CONTENT_TYPE))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(file.fileName()).build().toString())
-                .body(file.content());
+                        ContentDisposition.attachment().filename(file.fileName()).build().toString());
+        if (file.equationsKeptOmml() != null) {
+            response.header(EQUATION_KEPT_HEADER, Integer.toString(file.equationsKeptOmml()));
+        }
+        return response.body(file.content());
     }
 
     /** Xem đề (chế độ giáo viên): câu theo phần I-III kèm đáp án, lời giải và cờ "cần xem kỹ". */
