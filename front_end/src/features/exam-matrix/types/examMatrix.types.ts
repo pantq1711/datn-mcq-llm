@@ -3,6 +3,8 @@ export type MatrixQuestionType = "mcq" | "tf" | "sa";
 export type MatrixDifficulty = "easy" | "medium" | "hard";
 
 export interface ExamMatrixCellPayload {
+    id?: number;
+    position?: number;
     part: MatrixPart; // I: mcq, II: tf, III: sa
     questionType: MatrixQuestionType;
     difficulty?: MatrixDifficulty; // bắt buộc cho mcq/sa

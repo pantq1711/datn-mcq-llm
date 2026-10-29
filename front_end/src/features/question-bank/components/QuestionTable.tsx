@@ -2,7 +2,7 @@ import { Button, Space, Table, Tag, Tooltip, Typography, } from "antd";
 import type { TableColumnsType, TablePaginationConfig } from "antd";
 import { EyeOutlined, EyeInvisibleOutlined } from "@ant-design/icons";
 import "./QuestionTable.css";
-import type { QuestionDifficulty, QuestionStatus, QuestionTableItem } from "../types/questionBank.types";
+import type { QuestionDifficulty, QuestionStatus, QuestionTableItem, QuestionType } from "../types/questionBank.types";
 
 const { Text } = Typography;
 
@@ -80,10 +80,39 @@ export default function QuestionTable({
             ),
         },
         {
-            title: "Môn học",
-            dataIndex: "subject",
-            key: "subject",
+            title: "Môn / Khối",
+            key: "subjectAndGrade",
+            width: 140,
+            render: (_, record) => (
+                <Space direction="vertical" size={2}>
+                    <Text strong>{record.subject || "—"}</Text>
+                    {record.gradeLevel && (
+                        <Tag color="geekblue" style={{ fontSize: 11, marginRight: 0 }}>
+                            Khối {record.gradeLevel}
+                        </Tag>
+                    )}
+                </Space>
+            ),
+        },
+        {
+            title: "Dạng câu",
+            dataIndex: "questionType",
+            key: "questionType",
+            width: 130,
+            align: "center",
+            render: (type?: QuestionType) => {
+                if (type === "tf") return <Tag color="cyan">Đúng / Sai</Tag>;
+                if (type === "sa") return <Tag color="purple">Trả lời ngắn</Tag>;
+                return <Tag color="blue">Trắc nghiệm</Tag>;
+            },
+        },
+        {
+            title: "Chủ đề / Bài",
+            dataIndex: "topic",
+            key: "topic",
             width: 160,
+            ellipsis: true,
+            render: (topic?: string) => topic ? <Text type="secondary">{topic}</Text> : "—",
         },
         {
             title: "Độ khó",
@@ -170,7 +199,7 @@ export default function QuestionTable({
                 dataSource={data}
                 loading={loading}
                 pagination={pagination}
-                scroll={{ x: 900 }}
+                scroll={{ x: 1100 }}
             />
         </div>
     );

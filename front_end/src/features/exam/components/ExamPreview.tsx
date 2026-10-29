@@ -66,12 +66,14 @@ export default function ExamPreview({
                                     size={[8, 8]}
                                     className="exam-preview-tags"
                                 >
-                                    <Tag
-                                        icon={<BookOutlined />}
-                                        color="blue"
-                                    >
-                                        {exam.subject}
-                                    </Tag>
+                                    {exam.subject && (
+                                        <Tag
+                                            icon={<BookOutlined />}
+                                            color="blue"
+                                        >
+                                            {exam.subject}
+                                        </Tag>
+                                    )}
 
                                     <Tag
                                         icon={<FileTextOutlined />}
@@ -79,11 +81,13 @@ export default function ExamPreview({
                                         {exam.questionCount} câu
                                     </Tag>
 
-                                    <Tag
-                                        icon={<ClockCircleOutlined />}
-                                    >
-                                        {exam.duration} phút
-                                    </Tag>
+                                    {exam.duration !== undefined && (
+                                        <Tag
+                                            icon={<ClockCircleOutlined />}
+                                        >
+                                            {exam.duration} phút
+                                        </Tag>
+                                    )}
                                 </Space>
                             </Space>
                         </div>

@@ -1,5 +1,6 @@
 import axiosInstance from "../../../services/apiClient";
-import type { Subject, GenerateExamPayload, GeneratedExamCode, ExamQuestionItem, ExamListResponse, GetMyExamsParams, ExamDetail, ExamProgress } from "../types/exam.types";
+import type { Subject, GenerateExamPayload, GeneratedExamCode, ExamItemDto, UpdateSlotQuestionPayload, ExamListResponse, GetMyExamsParams, ExamDetail, ExamProgress, BuildByLessonPayload, BuildResultDto, BuildExamRequest, ReplaceQuestionParams } from "../types/exam.types";
+import type { QcTraceResponse } from "../types/qcTrace.types";
 
 export async function getCatalogSubjects(): Promise<Subject[]> {
     const response = await axiosInstance.get<Subject[]>("/api/catalog/subjects");
@@ -11,51 +12,44 @@ export async function generateExam(payload: GenerateExamPayload): Promise<Genera
     return response.data;
 }
 
+export async function buildByLesson(payload: BuildByLessonPayload): Promise<BuildResultDto> {
+    const response = await axiosInstance.post<BuildResultDto>("/api/exams/build-by-lesson", payload);
+    return response.data;
+}
+
+export async function buildExamByMatrix(payload: BuildExamRequest): Promise<BuildResultDto> {
+    const response = await axiosInstance.post<BuildResultDto>("/api/exams/build", payload);
+    return response.data;
+}
+
 export async function keepQuestion(
     examId: number,
     slotId: number,
-    questionId: number
+    questionId?: number
 ): Promise<{ success: boolean }> {
     const url = `/api/exams/${examId}/slots/${slotId}/keep`;
-    const response = await axiosInstance.post(url, { questionId });
-    if (!response.status.toString().startsWith('2')) {
-        // Thông báo lỗi chi tiết từ backend nếu có
-        const err = response.data?.message ?? 'Lỗi khi giữ câu hỏi';
-        throw new Error(err);
-    }
+    const response = await axiosInstance.post(url, questionId !== undefined ? { questionId } : {});
     return response.data;
 }
 
 export async function replaceQuestion(
-    examId: number,
-    slotId: number,
-    originalQuestionId: number,
-    replacementQuestionId: number
-): Promise<{ success: boolean }> {
+    examId: number | string,
+    slotId: number | string,
+    params?: ReplaceQuestionParams
+): Promise<ExamItemDto> {
     const url = `/api/exams/${examId}/slots/${slotId}/replace`;
-    const response = await axiosInstance.post(url, {
-        originalQuestionId,
-        replacementQuestionId,
-    });
-
-    if (!response.status.toString().startsWith('2')) {
-        const err = response.data?.message ?? 'Lỗi khi thay thế câu hỏi';
-        throw new Error(err);
-    }
+    const response = await axiosInstance.post(url, params || {});
     return response.data;
 }
 
 export async function updateQuestion(
     examId: number,
     slotId: number,
-    question: ExamQuestionItem
-): Promise<ExamQuestionItem> {
+    payload: UpdateSlotQuestionPayload
+): Promise<ExamItemDto> {
     const url = `/api/exams/${examId}/slots/${slotId}/question`;
-    const response = await axiosInstance.put<ExamQuestionItem>(url, question);
-    if (!response.status.toString().startsWith("2")) {
-        const err = response.data?.message ?? "Lỗi khi cập nhật câu hỏi";
-        throw new Error(err);
-    }
+    // Lỗi 400/409 do axios ném ra; nội dung lỗi ở response.data.error, response.data.errors
+    const response = await axiosInstance.put<ExamItemDto>(url, payload);
     return response.data;
 }
 
@@ -82,8 +76,22 @@ export const getExamDetail = async (examId: string) => {
     return data;   // kiểu ExamDetail định nghĩa trong types
 };
 
-// src/features/exam/services/examApi.ts
 export const getExamProgress = async (examId: string) => {
     const { data } = await axiosInstance.get<ExamProgress>(`/api/exams/${examId}/progress`);
     return data; // kiểu ExamProgress cần khai báo trong exam.types.ts
+};
+
+export const getExamExportDocx = async (examId: string): Promise<Blob> => {
+    const resp = await axiosInstance.get(
+        `/api/exams/${examId}/export/docx`,
+        { responseType: 'blob' }   // nhận dữ liệu dạng binary
+    );
+    return resp.data;   // Blob .docx
+};
+
+export const getQcTrace = async (examId: string, slotId: string) => {
+    const { data } = await axiosInstance.get<QcTraceResponse>(
+        `/api/exams/${examId}/slots/${slotId}/qc-trace`
+    );
+    return data;
 };

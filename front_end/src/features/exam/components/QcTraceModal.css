@@ -1,0 +1,479 @@
+/* --- Modal container --- */
+
+.qc-trace-modal {
+    max-width: calc(100vw - 24px);
+}
+
+.qc-trace-modal .ant-modal-content {
+    overflow: hidden;
+    padding: 0;
+    border-radius: 16px;
+    box-shadow: 0 16px 48px rgb(0 0 0 / 14%);
+}
+
+.qc-trace-modal .ant-modal-header {
+    margin: 0;
+    padding: 20px 24px;
+    border-bottom: 1px solid #f0f0f0;
+    background: #ffffff;
+}
+
+.qc-trace-modal .ant-modal-title {
+    line-height: normal;
+}
+
+.qc-trace-modal .ant-modal-close {
+    top: 17px;
+    right: 17px;
+    border-radius: 8px;
+}
+
+.qc-trace-modal .ant-modal-close:hover {
+    background: #f5f5f5;
+}
+
+.qc-trace-modal .ant-modal-body {
+    padding: 22px 24px;
+    background: #ffffff;
+}
+
+.qc-trace-modal .ant-modal-footer {
+    margin: 0;
+    padding: 14px 24px;
+    border-top: 1px solid #f0f0f0;
+    background: #fafafa;
+}
+
+/* --- Modal heading --- */
+
+.qc-trace-modal__title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-right: 28px;
+}
+
+.qc-trace-modal__title-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    border: 1px solid #d6e8ff;
+    border-radius: 12px;
+    background: #eaf4ff;
+    color: #1677ff;
+    font-size: 21px;
+}
+
+.qc-trace-modal__title-content {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+
+.qc-trace-modal__title-text {
+    color: #1f1f1f;
+    font-size: 17px;
+    font-weight: 650;
+    line-height: 1.4;
+}
+
+.qc-trace-modal__subtitle {
+    color: #8c8c8c;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+/* --- Body and question context --- */
+
+.qc-trace-modal__body {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    min-width: 0;
+}
+
+.qc-trace-modal__context {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 14px 16px;
+    border: 1px solid #e6f4ff;
+    border-radius: 12px;
+    background: linear-gradient(110deg, #f5faff 0%, #ffffff 100%);
+}
+
+.qc-trace-modal__context-item {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.qc-trace-modal__context-label {
+    color: #8c8c8c;
+    font-size: 12px;
+}
+
+.qc-trace-modal__context-item .ant-typography {
+    overflow-wrap: anywhere;
+}
+
+.qc-trace-modal__context-divider {
+    align-self: stretch;
+    width: 1px;
+    background: #d9e8f7;
+}
+
+/* --- Timeline section heading --- */
+
+.qc-trace-modal__timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
+}
+
+.qc-trace-modal__section-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.qc-trace-modal__section-heading>div {
+    min-width: 0;
+}
+
+.qc-trace-modal__section-heading .ant-typography {
+    margin: 0;
+}
+
+.qc-trace-modal__section-heading .ant-typography-secondary {
+    display: block;
+    margin-top: 5px;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.qc-trace-modal__section-heading .ant-tag {
+    flex-shrink: 0;
+    margin-inline-end: 0;
+}
+
+/* --- Timeline items --- */
+
+.qc-trace-modal__steps {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.qc-trace-modal__step {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    column-gap: 12px;
+    min-width: 0;
+}
+
+.qc-trace-modal__step-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100%;
+}
+
+.qc-trace-modal__step-marker {
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+    border: 1px solid #d9d9d9;
+    border-radius: 50%;
+    background: #ffffff;
+    color: #8c8c8c;
+    font-size: 15px;
+}
+
+.qc-trace-modal__step-line {
+    flex: 1 1 auto;
+    width: 2px;
+    min-height: 18px;
+    margin: 5px 0;
+    border-radius: 2px;
+    background: #e8e8e8;
+}
+
+.qc-trace-modal__step-card {
+    min-width: 0;
+    margin-bottom: 16px;
+    padding: 15px 16px;
+    border: 1px solid #e8e8e8;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 2%);
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        background-color 0.2s ease;
+}
+
+.qc-trace-modal__step-card:hover {
+    border-color: #d6e4ff;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 5%);
+}
+
+.qc-trace-modal__step:last-child .qc-trace-modal__step-card {
+    margin-bottom: 0;
+}
+
+/* --- Action tones --- */
+
+.qc-trace-modal__step--success .qc-trace-modal__step-marker {
+    border-color: #b7eb8f;
+    background: #f6ffed;
+    color: #389e0d;
+}
+
+.qc-trace-modal__step--success .qc-trace-modal__step-card {
+    border-left: 3px solid #52c41a;
+}
+
+.qc-trace-modal__step--error .qc-trace-modal__step-marker {
+    border-color: #ffccc7;
+    background: #fff2f0;
+    color: #cf1322;
+}
+
+.qc-trace-modal__step--error .qc-trace-modal__step-card {
+    border-left: 3px solid #ff4d4f;
+}
+
+.qc-trace-modal__step--warning .qc-trace-modal__step-marker {
+    border-color: #ffe7ba;
+    background: #fffbe6;
+    color: #d48806;
+}
+
+.qc-trace-modal__step--warning .qc-trace-modal__step-card {
+    border-left: 3px solid #faad14;
+}
+
+.qc-trace-modal__step--default .qc-trace-modal__step-marker {
+    border-color: #d6e4ff;
+    background: #f0f5ff;
+    color: #1677ff;
+}
+
+.qc-trace-modal__step--default .qc-trace-modal__step-card {
+    border-left: 3px solid #91caff;
+}
+
+/* --- Action and timestamp --- */
+
+.qc-trace-modal__step-header {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+.qc-trace-modal__step-heading {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+}
+
+.qc-trace-modal__step-action {
+    color: #262626;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+.qc-trace-modal__step-heading .ant-tag {
+    margin-inline-end: 0;
+    white-space: normal;
+}
+
+.qc-trace-modal__step-time {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    color: #8c8c8c;
+    font-size: 12px;
+}
+
+.qc-trace-modal__step-time .anticon {
+    color: #8c8c8c;
+}
+
+.qc-trace-modal__step-time .ant-typography {
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+/* --- Details --- */
+
+.qc-trace-modal__step-details {
+    margin-top: 12px;
+    padding: 11px 12px;
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+    background: #fafafa;
+    color: #595959;
+    font-size: 13px;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.qc-trace-modal__no-details {
+    display: block;
+    margin-top: 10px;
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* --- Loading, error, empty --- */
+
+.qc-trace-modal__loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    min-height: 220px;
+}
+
+.qc-trace-modal__error {
+    border-radius: 10px;
+}
+
+.qc-trace-modal__empty {
+    padding: 32px 12px;
+}
+
+.qc-trace-modal__empty .ant-empty-description {
+    line-height: 1.6;
+}
+
+/* --- Footer --- */
+
+.qc-trace-modal__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.qc-trace-modal__footer-note {
+    font-size: 12px;
+}
+
+/* --- Responsive --- */
+
+@media (max-width: 575px) {
+    .qc-trace-modal {
+        max-width: calc(100vw - 16px);
+        margin-inline: 8px;
+    }
+
+    .qc-trace-modal .ant-modal-header {
+        padding: 16px;
+    }
+
+    .qc-trace-modal .ant-modal-body {
+        max-height: calc(100dvh - 170px);
+        padding: 16px;
+        overflow-y: auto;
+    }
+
+    .qc-trace-modal .ant-modal-footer {
+        padding: 12px 16px;
+    }
+
+    .qc-trace-modal__title {
+        gap: 10px;
+    }
+
+    .qc-trace-modal__title-icon {
+        flex-basis: 38px;
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        font-size: 18px;
+    }
+
+    .qc-trace-modal__title-text {
+        font-size: 15px;
+    }
+
+    .qc-trace-modal__subtitle {
+        font-size: 11px;
+        line-height: 1.5;
+    }
+
+    .qc-trace-modal__body {
+        gap: 18px;
+    }
+
+    .qc-trace-modal__context {
+        gap: 12px;
+        padding: 12px;
+    }
+
+    .qc-trace-modal__context-item .ant-typography {
+        font-size: 12px;
+    }
+
+    .qc-trace-modal__section-heading {
+        align-items: flex-start;
+    }
+
+    .qc-trace-modal__section-heading .ant-tag {
+        font-size: 11px;
+    }
+
+    .qc-trace-modal__step {
+        grid-template-columns: 28px minmax(0, 1fr);
+        column-gap: 9px;
+    }
+
+    .qc-trace-modal__step-marker {
+        flex-basis: 28px;
+        width: 28px;
+        height: 28px;
+        font-size: 13px;
+    }
+
+    .qc-trace-modal__step-card {
+        padding: 12px;
+        margin-bottom: 14px;
+    }
+
+    .qc-trace-modal__step-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .qc-trace-modal__step-details {
+        padding: 9px 10px;
+        font-size: 12px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .qc-trace-modal__step-card {
+        transition: none;
+    }
+}

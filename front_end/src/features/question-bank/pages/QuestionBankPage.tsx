@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Card, message, Typography } from "antd";
+import { Button, Card, message, Tooltip, Typography } from "antd";
+import { FileWordOutlined } from "@ant-design/icons";
 import QuestionDetail from "../components/QuestionDetail";
 import QuestionFilters from "../components/QuestionFilters";
 import QuestionTable from "../components/QuestionTable";
@@ -12,6 +13,9 @@ const { Title } = Typography;
 const initialFilters: QuestionFilterValues = {
     keyword: "",
     subjectId: null,
+    gradeLevel: null,
+    questionType: null,
+    topic: null,
     difficulty: null,
     status: null,
 };
@@ -64,7 +68,7 @@ export default function QuestionBankPage() {
                 ...currentFilters,
             });
             setQuestions(res.items || []);
-            setTotalQuestions(res.total || 0);
+            setTotalQuestions(res.totalItems ?? res.total ?? 0);
         } catch (error) {
             console.error("Lỗi khi tải danh sách câu hỏi ngân hàng:", error);
             message.error("Không thể tải danh sách câu hỏi.");
@@ -112,7 +116,7 @@ export default function QuestionBankPage() {
                 difficulty: questionItem.difficulty,
                 status: questionItem.status,
                 createdAt: questionItem.createdAt,
-            });
+            } as BankItemDetail);
         } finally {
             setLoadingDetail(false);
         }
@@ -134,6 +138,12 @@ export default function QuestionBankPage() {
                 <Title level={2} className="question-bank-page-title">
                     Ngân hàng câu hỏi
                 </Title>
+                {/* Chỗ giữ sẵn: backend chưa có API nhập câu vào ngân hàng (docs/api: ngân hàng chỉ đọc, origin=import để dành) */}
+                <Tooltip title="Chưa hỗ trợ: cần API nhập câu vào ngân hàng ở backend.">
+                    <Button icon={<FileWordOutlined />} disabled>
+                        Nhập từ Word
+                    </Button>
+                </Tooltip>
             </div>
 
             <div className="question-bank-page-filters">
