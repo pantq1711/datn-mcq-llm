@@ -1,5 +1,5 @@
 import { Menu } from "antd";
-import { FileTextOutlined, HomeOutlined, ReadOutlined, TableOutlined, TeamOutlined } from "@ant-design/icons";
+import { FileTextOutlined, FolderOpenOutlined, HomeOutlined, ReadOutlined, TableOutlined, TeamOutlined } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
 import { useAuth } from "../../../context/AuthContext";
@@ -34,6 +34,11 @@ export default function Sidebar() {
             key: "/exams",
             icon: <FileTextOutlined />,
             label: "Đề thi",
+        },
+        {
+            key: "/materials",
+            icon: <FolderOpenOutlined />,
+            label: "Tài liệu bài học",
         },
         ...(isAdmin
             ? [

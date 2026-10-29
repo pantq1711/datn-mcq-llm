@@ -1,7 +1,13 @@
-import { Button, Col, Form, Input, Row, Select, Space } from "antd";
+import { useEffect, useMemo, useState } from "react";
+import { AutoComplete, Button, Col, Form, Input, Row, Select, Space, Spin, Tag, Typography } from "antd";
 import { FilterOutlined, ReloadOutlined } from "@ant-design/icons";
-import type { SubjectOption, QuestionFilterValues } from "../types/questionBank.types";
+import type { SubjectOption, QuestionFilterValues, BankTopic, QuestionType, QuestionDifficulty } from "../types/questionBank.types";
+import { getBankTopics } from "../services/questionBankApi";
+import { mergeBankTopics, sortBankTopics } from "../../../utils/bankTopic.utils";
+
 import "./QuestionFilters.css";
+
+const { Text } = Typography;
 
 interface QuestionFiltersProps {
     value: QuestionFilterValues;
@@ -9,33 +15,26 @@ interface QuestionFiltersProps {
     onChange: (values: QuestionFilterValues) => void;
     onFilter: () => void;
     onReset: () => void;
-    loadingSubjects?: boolean
+    loadingSubjects?: boolean;
 }
 
-const difficultyOptions = [
-    {
-        label: "Biết",
-        value: "easy",
-    },
-    {
-        label: "Hiểu",
-        value: "medium",
-    },
-    {
-        label: "Vận dụng",
-        value: "hard",
-    },
+const gradeOptions = [
+    { label: "Khối 6", value: 6 },
+    { label: "Khối 7", value: 7 },
+    { label: "Khối 8", value: 8 },
+    { label: "Khối 9", value: 9 },
 ];
 
-const statusOptions = [
-    {
-        label: "Đã duyệt",
-        value: "approved",
-    },
-    {
-        label: "Đã chỉnh sửa",
-        value: "edited",
-    },
+const questionTypeOptions: { label: string; value: QuestionType }[] = [
+    { label: "Trắc nghiệm 4 lựa chọn", value: "mcq" },
+    { label: "Đúng / Sai", value: "tf" },
+    { label: "Trả lời ngắn", value: "sa" },
+];
+
+const difficultyOptions: { label: string; value: QuestionDifficulty }[] = [
+    { label: "Biết", value: "easy" },
+    { label: "Hiểu", value: "medium" },
+    { label: "Vận dụng", value: "hard" },
 ];
 
 export default function QuestionFilters({
@@ -46,9 +45,103 @@ export default function QuestionFilters({
     onReset,
     loadingSubjects = false,
 }: QuestionFiltersProps) {
+    const [bankTopics, setBankTopics] = useState<BankTopic[]>([]);
+    const [loadingTopics, setLoadingTopics] = useState(false);
+    const [topicsError, setTopicsError] = useState(false);
+
+    // Tự động tải danh sách chủ đề theo môn học đã chọn
+    useEffect(() => {
+        let isMounted = true;
+        // Xóa danh sách cũ để không gợi ý chủ đề của môn trước trong lúc tải
+        setBankTopics([]);
+        setTopicsError(false);
+        setLoadingTopics(true);
+
+        getBankTopics(value.subjectId ?? undefined)
+            .then((topics) => {
+                if (isMounted) {
+                    setBankTopics(topics);
+                }
+            })
+            .catch((err) => {
+                console.warn("Không thể tải danh sách chủ đề ngân hàng:", err);
+                if (isMounted) {
+                    setTopicsError(true);
+                }
+            })
+            .finally(() => {
+                if (isMounted) setLoadingTopics(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [value.subjectId]);
+
+    // Lọc bankTopics theo khối lớp trước khi gộp (nếu đã chọn khối)
+    const filteredBankTopics = useMemo(() => {
+        if (!value.gradeLevel) {
+            return bankTopics;
+        }
+        return bankTopics.filter((t) => t.gradeLevel === value.gradeLevel);
+    }, [bankTopics, value.gradeLevel]);
+
+    // Gộp các chủ đề sau khi đã lọc (hoặc toàn bộ nếu chưa chọn khối)
+    const mergedTopics = useMemo(() => {
+        return mergeBankTopics(filteredBankTopics);
+    }, [filteredBankTopics]);
+
+    // Sắp xếp theo số lượng câu giảm dần và tạo danh sách option cho AutoComplete
+    const topicOptions = useMemo(() => {
+        return sortBankTopics(mergedTopics, value.gradeLevel ?? undefined).map((t) => {
+            return {
+                value: t.topic,
+                label: (
+                    <div className="question-filter-topic-option">
+                        <div className="question-filter-topic-main">
+                            <span className="question-filter-topic-text">{t.topic}</span>
+                            {/* Chỉ hiển thị dòng Khối khi chưa chọn khối lọc cụ thể */}
+                            {!value.gradeLevel && t.grades && t.grades.length > 0 && (
+                                <div className="question-filter-topic-sub">
+                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                        Khối {t.grades.join(", ")}
+                                    </Text>
+                                </div>
+                            )}
+                        </div>
+                        <div className="question-filter-topic-right">
+                            <Tag color="blue" style={{ fontSize: 11, marginLeft: 4 }}>
+                                {t.count} câu
+                            </Tag>
+                        </div>
+                    </div>
+                ),
+            };
+        });
+    }, [mergedTopics, value.gradeLevel]);
+
+    // Nội dung dropdown khi không có gợi ý; gõ không khớp chủ đề nào thì không hiện gì
+    const topicNotFound = useMemo(() => {
+        if (loadingTopics) {
+            return (
+                <Space size={8}>
+                    <Spin size="small" />
+                    <Text type="secondary">Đang tải chủ đề…</Text>
+                </Space>
+            );
+        }
+        if (topicsError) {
+            return <Text type="secondary">Không tải được chủ đề</Text>;
+        }
+        if (mergedTopics.length === 0) {
+            return <Text type="secondary">Chưa có chủ đề nào</Text>;
+        }
+        return null;
+    }, [loadingTopics, topicsError, mergedTopics.length]);
+
     const updateField = <K extends keyof QuestionFilterValues>(
         field: K,
-        fieldValue: QuestionFilterValues[K],
+        fieldValue: QuestionFilterValues[K]
     ) => {
         onChange({
             ...value,
@@ -66,48 +159,94 @@ export default function QuestionFilters({
                     onFilter();
                 }}
             >
+                {/* Hàng 1: Từ khóa, Môn học, Khối lớp, Dạng câu hỏi */}
                 <Row gutter={[16, 0]}>
-                    <Col xs={24} lg={7}>
+                    <Col xs={24} sm={12} lg={8}>
                         <Form.Item label="Từ khóa">
                             <Input
                                 value={value.keyword}
                                 onChange={(event) =>
-                                    updateField(
-                                        "keyword",
-                                        event.target.value,
-                                    )
+                                    updateField("keyword", event.target.value)
                                 }
-                                placeholder="Tìm kiếm câu hỏi..."
+                                placeholder="Tìm kiếm nội dung câu hỏi..."
                                 allowClear
+                            />
+                        </Form.Item>
+                    </Col>
+
+                    <Col xs={24} sm={12} lg={6}>
+                        <Form.Item label="Môn học">
+                            <Select
+                                placeholder="Tất cả môn học"
+                                allowClear
+                                showSearch
+                                loading={loadingSubjects}
+                                value={value.subjectId}
+                                onChange={(val) => updateField("subjectId", val ?? null)}
+                                options={subjects}
+                                filterOption={(input, option) =>
+                                    (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+                                }
                             />
                         </Form.Item>
                     </Col>
 
                     <Col xs={24} sm={12} lg={5}>
-                        <Form.Item label="Môn học">
+                        <Form.Item label="Khối lớp">
                             <Select
-                                placeholder="Chọn môn học"
+                                placeholder="Tất cả khối"
                                 allowClear
-                                loading={loadingSubjects}
-                                value={value.subjectId}
-                                onChange={(val) => onChange({ ...value, subjectId: val })}
-                                options={subjects}
+                                value={value.gradeLevel}
+                                onChange={(val) => updateField("gradeLevel", val ?? null)}
+                                options={gradeOptions}
                             />
-
                         </Form.Item>
                     </Col>
 
-                    <Col xs={24} sm={12} lg={4}>
+                    <Col xs={24} sm={12} lg={5}>
+                        <Form.Item label="Dạng câu hỏi">
+                            <Select
+                                placeholder="Tất cả dạng"
+                                allowClear
+                                value={value.questionType}
+                                onChange={(val) => updateField("questionType", val ?? null)}
+                                options={questionTypeOptions}
+                            />
+                        </Form.Item>
+                    </Col>
+                </Row>
+
+                {/* Hàng 2: Bài học/Chủ đề, Mức độ, Thao tác */}
+                <Row gutter={[16, 0]}>
+                    <Col xs={24} sm={12} lg={8}>
+                        <Form.Item
+                            label="Bài học / Chủ đề"
+                            tooltip="Lọc theo tên bài chính xác (không phân biệt hoa thường). Hãy chọn từ gợi ý."
+                        >
+                            <AutoComplete
+                                value={value.topic || ""}
+                                onChange={(val) => updateField("topic", val || null)}
+                                options={topicOptions}
+                                notFoundContent={topicNotFound}
+                                placeholder="Chọn hoặc nhập bài học..."
+                                allowClear
+                                filterOption={(inputValue, option) =>
+                                    String(option?.value ?? "")
+                                        .toLowerCase()
+                                        .includes(inputValue.toLowerCase())
+                                }
+                            />
+                        </Form.Item>
+                    </Col>
+
+                    <Col xs={24} sm={12} lg={6}>
                         <Form.Item label="Độ khó">
                             <Select
                                 value={value.difficulty ?? undefined}
                                 onChange={(difficulty) =>
-                                    updateField(
-                                        "difficulty",
-                                        difficulty ?? null,
-                                    )
+                                    updateField("difficulty", difficulty ?? null)
                                 }
-                                placeholder="Tất cả"
+                                placeholder="Tất cả độ khó"
                                 options={difficultyOptions}
                                 allowClear
                                 className="question-filters-select"
@@ -115,30 +254,7 @@ export default function QuestionFilters({
                         </Form.Item>
                     </Col>
 
-                    <Col xs={24} sm={12} lg={4}>
-                        <Form.Item label="Trạng thái">
-                            <Select
-                                value={value.status ?? undefined}
-                                onChange={(status) =>
-                                    updateField(
-                                        "status",
-                                        status ?? null,
-                                    )
-                                }
-                                placeholder="Tất cả"
-                                options={statusOptions}
-                                allowClear
-                                className="question-filters-select"
-                            />
-                        </Form.Item>
-                    </Col>
-
-                    <Col
-                        xs={24}
-                        sm={12}
-                        lg={4}
-                        className="question-filters-actions-col"
-                    >
+                    <Col xs={24} sm={12} lg={10} className="question-filters-actions-col">
                         <Form.Item label=" ">
                             <Space className="question-filters-actions">
                                 <Button
