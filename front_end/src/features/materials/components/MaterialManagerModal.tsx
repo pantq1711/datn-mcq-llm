@@ -3,10 +3,11 @@ import { Alert, Button, Checkbox, Empty, List, Modal, Popconfirm, Space, Spin, T
 import { DeleteOutlined, EyeOutlined, InboxOutlined, PlusOutlined, WarningOutlined, } from "@ant-design/icons";
 import type { UploadProps } from "antd";
 import type { MaterialDto } from "../types/material.types";
-import { deleteMaterial, getMaterial, listMaterials, uploadMaterial, } from "../services/materialApi";
+import { deleteMaterial, listMaterials, uploadMaterial, } from "../services/materialApi";
 import MaterialPreviewModal from "./MaterialPreviewModal";
 import "./MaterialManagerModal.css";
 import { describeMaterialWarning, formatBytes, renderFileIcon } from "../../../utils/material.utils";
+import { useMaterialPreview } from "../hooks/useMaterialPreview";
 
 const { Text } = Typography;
 const { Dragger } = Upload;
@@ -41,8 +42,6 @@ export default function MaterialManagerModal({
     const [activeTab, setActiveTab] = useState<string>("list");
 
     const [checkedIds, setCheckedIds] = useState<number[]>([]);
-    const [previewMaterial, setPreviewMaterial] = useState<MaterialDto | null>(null);
-    const [previewLoading, setPreviewLoading] = useState(false);
 
     // Lưu lại thông tin tài liệu vừa upload/tái sử dụng để hiển thị cảnh báo trong tab upload
     const [lastUploadedMaterial, setLastUploadedMaterial] = useState<MaterialDto | null>(null);
@@ -54,6 +53,8 @@ export default function MaterialManagerModal({
     // Không có onSelect (trang /materials): modal chỉ để quản lý và tải lên, ẩn mọi phần chọn
     const selectable = onSelect !== undefined;
 
+    const { previewMaterial, previewLoading, openPreview, closePreview } = useMaterialPreview();
+
     useEffect(() => {
         if (open) {
             // Chỉ quản lý / tải lên (trang /materials đã có bảng danh sách): mở thẳng tab tải lên
@@ -61,6 +62,9 @@ export default function MaterialManagerModal({
             setCheckedIds(selectedIdsRef.current);
             setLastUploadedMaterial(null); // Reset cảnh báo cũ khi mở lại modal
             fetchMaterials();
+        } else {
+            // Đảm bảo đóng modal xem trước nếu modal quản lý bị đóng lại để không bị treo
+            closePreview();
         }
     }, [open]);
 
@@ -119,19 +123,6 @@ export default function MaterialManagerModal({
                     ? "Tài liệu này đã được gắn vào đề thi nên không thể xóa."
                     : "Lỗi khi xóa tài liệu");
             message.error(msg);
-        }
-    };
-
-    const handlePreview = async (item: MaterialDto) => {
-        setPreviewLoading(true);
-        setPreviewMaterial(item);
-        try {
-            const detail = await getMaterial(item.id);
-            setPreviewMaterial(detail);
-        } catch (err: any) {
-            message.error("Không tải được chi tiết tài liệu");
-        } finally {
-            setPreviewLoading(false);
         }
     };
 
@@ -313,7 +304,7 @@ export default function MaterialManagerModal({
                                                             <Button
                                                                 type="text"
                                                                 icon={<EyeOutlined />}
-                                                                onClick={() => handlePreview(item)}
+                                                                onClick={() => openPreview(item)}
                                                             />
                                                         </Tooltip>
                                                         <Popconfirm
@@ -394,7 +385,7 @@ export default function MaterialManagerModal({
             <MaterialPreviewModal
                 material={previewMaterial}
                 loading={previewLoading}
-                onClose={() => setPreviewMaterial(null)}
+                onClose={closePreview}
             />
         </Modal>
     );

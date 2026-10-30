@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import { Button, Card, Popconfirm, Space, Table, Tag, Tooltip, Typography, message } from "antd";
 import type { TableColumnsType } from "antd";
 import { DeleteOutlined, EyeOutlined, FolderOpenOutlined, PlusOutlined, ReloadOutlined, WarningOutlined, } from "@ant-design/icons";
-
 import type { MaterialDto } from "../types/material.types";
-import { deleteMaterial, getMaterial, listMaterials } from "../services/materialApi";
+import { deleteMaterial, listMaterials } from "../services/materialApi";
 import MaterialManagerModal from "../components/MaterialManagerModal";
 import MaterialPreviewModal from "../components/MaterialPreviewModal";
 import "./MaterialListPage.css";
 import { describeMaterialWarning, formatBytes, renderFileIcon } from "../../../utils/material.utils";
+import { useMaterialPreview } from "../hooks/useMaterialPreview";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -20,8 +20,8 @@ export default function MaterialListPage() {
     const [total, setTotal] = useState(0);
 
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-    const [previewMaterial, setPreviewMaterial] = useState<MaterialDto | null>(null);
-    const [previewLoading, setPreviewLoading] = useState(false);
+
+    const { previewMaterial, previewLoading, openPreview, closePreview } = useMaterialPreview();
 
     const fetchMaterials = async (currentPage = page, currentPageSize = pageSize) => {
         setLoading(true);
@@ -59,19 +59,6 @@ export default function MaterialListPage() {
                     ? "Tài liệu này đã được gắn vào đề thi nên không thể xóa."
                     : "Lỗi khi xóa tài liệu");
             message.error(msg);
-        }
-    };
-
-    const handlePreview = async (item: MaterialDto) => {
-        setPreviewLoading(true);
-        setPreviewMaterial(item);
-        try {
-            const detail = await getMaterial(item.id);
-            setPreviewMaterial(detail);
-        } catch (err) {
-            message.error("Không tải được chi tiết tài liệu");
-        } finally {
-            setPreviewLoading(false);
         }
     };
 
@@ -153,7 +140,7 @@ export default function MaterialListPage() {
                         <Button
                             type="text"
                             icon={<EyeOutlined />}
-                            onClick={() => handlePreview(record)}
+                            onClick={() => openPreview(record)}
                         />
                     </Tooltip>
                     <Popconfirm
@@ -235,7 +222,7 @@ export default function MaterialListPage() {
             <MaterialPreviewModal
                 material={previewMaterial}
                 loading={previewLoading}
-                onClose={() => setPreviewMaterial(null)}
+                onClose={closePreview}
             />
         </div>
     );
