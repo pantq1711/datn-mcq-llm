@@ -6,9 +6,9 @@ import "./ProfilePage.css";
 const { Title, Text } = Typography;
 
 const roleMap: Record<string, { label: string; color: string }> = {
-    GV: { label: "Giáo viên", color: "blue" },
-    AD: { label: "Quản trị viên", color: "red" },
-    STUDENT: { label: "Học sinh", color: "green" },
+    teacher: { label: "Giáo viên", color: "blue" },
+    admin: { label: "Quản trị viên", color: "red" },
+    researcher: { label: "Nghiên cứu viên", color: "green" },
 };
 
 export default function ProfilePage() {

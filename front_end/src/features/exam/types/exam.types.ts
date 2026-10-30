@@ -59,19 +59,6 @@ export interface ExamQuestionItem {
     originalQuestionId?: number;
 }
 
-export interface ExamGenerationValues {
-    title: string;
-    subjectId?: number;
-    questionCount?: number;
-    duration?: number;
-    examCodeCount?: number;
-    easyCount?: number;
-    mediumCount?: number;
-    hardCount?: number;
-    shuffleQuestions: boolean;
-    shuffleOptions: boolean;
-}
-
 export interface Subject {
     id: number;
     code: string;

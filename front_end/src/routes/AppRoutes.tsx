@@ -22,21 +22,29 @@ import TestKaTeX from "../features/test-katex/pages/TestKaTeX";
 import ExamMatrixFormPage from "../features/exam-matrix/pages/ExamMatrixFormPage";
 import MaterialListPage from "../features/materials/pages/MaterialListPage";
 import { RequireAuth } from "../components/common/RequireAuth/RequireAuth";
+import { GuestOnly } from "../components/common/RequireAuth/GuestOnly";
 import ProfilePage from "../features/auth/pages/ProfilePage";
 import UserManagementPage from "../features/admin/pages/UserManagementPage";
+import NotFoundPage from "../components/common/NotFound/NotFoundPage";
+import { ROLE_ADMIN, ROLE_TEACHER } from "../utils/auth.utils";
 // import JobProcessorPage from "../features/question-generation/pages/JobProcessorPage";
 
 export default function AppRoutes() {
     return (
         <Routes>
             <Route path="auth" element={<AuthLayout />}>
-                <Route path="login" element={<LoginPage />} />
-                <Route path="register" element={<RegisterPage />} />
-                <Route path="forgot-password" element={<ForgotPasswordPage />} />
-                <Route path="profile" element={<ProfilePage />} />
+                <Route element={<GuestOnly />}>
+                    <Route path="login" element={<LoginPage />} />
+                    <Route path="register" element={<RegisterPage />} />
+                    <Route path="forgot-password" element={<ForgotPasswordPage />} />
+                </Route>
+                {/* Mọi vai trò đã đăng nhập đều xem được hồ sơ */}
+                <Route element={<RequireAuth />}>
+                    <Route path="profile" element={<ProfilePage />} />
+                </Route>
             </Route>
 
-            <Route element={<RequireAuth allowedRoles={["GV"]} />}>
+            <Route element={<RequireAuth allowedRoles={[ROLE_TEACHER]} />}>
                 <Route element={<TeacherLayout />}>
                     <Route path="" element={<DashboardPage />} />
                     {/* <Route path="review" element={<ReviewQuestionsPage />} />
@@ -57,11 +65,13 @@ export default function AppRoutes() {
                     <Route path="materials" element={<MaterialListPage />} />
                     <Route path="test-katex" element={<TestKaTeX />} />
                 </Route>
-
-                <Route element={<RequireAuth allowedRoles={["admin", "AD"]} />}>
-                    <Route path="admin/users" element={<UserManagementPage />} />
-                </Route>
             </Route>
+
+            <Route element={<RequireAuth allowedRoles={[ROLE_ADMIN]} />}>
+                <Route path="admin/users" element={<UserManagementPage />} />
+            </Route>
+
+            <Route path="*" element={<NotFoundPage />} />
         </Routes>
     );
 }

@@ -3,6 +3,7 @@ import { FileTextOutlined, FolderOpenOutlined, HomeOutlined, ReadOutlined, Table
 import { useLocation, useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
 import { useAuth } from "../../../context/AuthContext";
+import { ROLE_ADMIN } from "../../../utils/auth.utils";
 import "./Sidebar.css";
 
 type MenuItem = Required<MenuProps>["items"][number];
@@ -12,7 +13,7 @@ export default function Sidebar() {
     const location = useLocation();
     const { user } = useAuth();
 
-    const isAdmin = user?.role === "admin" || user?.role === "AD";
+    const isAdmin = user?.role === ROLE_ADMIN;
 
     const menuItems: MenuItem[] = [
         {
