@@ -43,11 +43,12 @@ export default function Header({
         if (e.key === "logout") {
             try {
                 await logout();                     // gọi API
-                setToken(null);                     // xóa token trong Context
-                navigate("/auth/login");            // chuyển hướng sau logout
             } catch (err) {
                 console.error("Logout failed", err);
-                // Nếu muốn, hiển thị thông báo lỗi cho người dùng
+            } finally {
+                // API lỗi vẫn đăng xuất ở trình duyệt
+                setToken(null);                     // xóa token trong Context
+                navigate("/auth/login");            // chuyển hướng sau logout
             }
         }
         // Các menu khác (profile…) có thể xử lý ở đây

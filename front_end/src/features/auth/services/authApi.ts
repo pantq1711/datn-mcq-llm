@@ -1,4 +1,4 @@
-import axiosInstance from "../../../services/apiClient";
+import axiosInstance, { refreshOnce } from "../../../services/apiClient";
 import type { LoginRequest, LoginResponse, UserInfo } from "../types/auth.types";
 
 /**
@@ -22,18 +22,18 @@ export async function login(payload: LoginRequest): Promise<LoginResponse> {
   }
 }
 
+/** Lấy access token mới từ refresh token (cookie); dùng chung với refresh tự động của apiClient. */
 export async function refresh(): Promise<LoginResponse> {
-  const response = await axiosInstance.post<LoginResponse>("/api/auth/refresh");
-  // Lưu token mới (nếu có)
-  if (response.data.accessToken) {
-    localStorage.setItem("accessToken", response.data.accessToken);
-  }
-  return response.data;
+  return refreshOnce();
 }
 
 export async function logout(): Promise<void> {
-  await axiosInstance.post("/api/auth/logout");
-  localStorage.removeItem("accessToken");
+  try {
+    await axiosInstance.post("/api/auth/logout");
+  } finally {
+    // Gọi API lỗi (mất mạng, phiên đã hết hạn) vẫn phải xóa token ở trình duyệt
+    localStorage.removeItem("accessToken");
+  }
 }
 
 export async function getMe(): Promise<UserInfo> {

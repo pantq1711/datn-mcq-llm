@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Card, Col, Empty, Form, Input, Modal, Row, Select, Space, Spin, Table, Tabs, Tag, Tooltip, Typography, message, } from "antd";
 import type { TableColumnsType } from "antd";
 import { ArrowLeftOutlined, BookOutlined, BulbOutlined, CopyOutlined, EditOutlined, PaperClipOutlined, PlusOutlined, RocketOutlined, SettingOutlined, TableOutlined, } from "@ant-design/icons";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import BuildByLessonForm from "../components/BuildByLessonForm";
 import MaterialManagerModal from "../../materials/components/MaterialManagerModal";
@@ -59,15 +59,20 @@ function removeMaterialFromContext(ctx: CellContextState, removedId: number): Ce
 
 export default function GenerateExamPage() {
     const navigate = useNavigate();
+    // Lối tắt từ màn ma trận: /exams/generate?tab=by-matrix&matrixId=...
+    const [searchParams, setSearchParams] = useSearchParams();
+    const initialMatrixId = searchParams.get("matrixId");
 
-    const [activeTab, setActiveTab] = useState<string>("by-lesson");
+    const [activeTab, setActiveTab] = useState<string>(
+        searchParams.get("tab") === "by-matrix" || initialMatrixId ? "by-matrix" : "by-lesson"
+    );
     const [subjectOptions, setSubjectOptions] = useState<ExamSubjectOption[]>([]);
     const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
 
     // State cho Tab ma trận
     const [matrices, setMatrices] = useState<ExamMatrix[]>([]);
     const [loadingMatrices, setLoadingMatrices] = useState<boolean>(false);
-    const [selectedMatrixId, setSelectedMatrixId] = useState<string | null>(null);
+    const [selectedMatrixId, setSelectedMatrixId] = useState<string | null>(initialMatrixId);
     const [matrixDetail, setMatrixDetail] = useState<ExamMatrixDetail | null>(null);
     const [loadingMatrixDetail, setLoadingMatrixDetail] = useState<boolean>(false);
     const [matrixExamTitle, setMatrixExamTitle] = useState<string>("");
@@ -148,6 +153,13 @@ export default function GenerateExamPage() {
         [globalMaterialIds, cellContexts, activeConfigCell]
     );
 
+    // Tham số URL chỉ đọc một lần lúc mở trang, sau đó xóa để URL không lệch với lựa chọn trên giao diện
+    useEffect(() => {
+        if (searchParams.has("tab") || searchParams.has("matrixId")) {
+            setSearchParams({}, { replace: true });
+        }
+    }, []);
+
     useEffect(() => {
         const fetchSubjects = async () => {
             setLoadingSubjects(true);
@@ -181,8 +193,12 @@ export default function GenerateExamPage() {
         try {
             const data = await listExamMatrices();
             setMatrices(data);
-            if (data.length > 0 && !selectedMatrixId) {
-                setSelectedMatrixId(data[0].id);
+            if (!selectedMatrixId) {
+                if (data.length > 0) setSelectedMatrixId(data[0].id);
+            } else if (!data.some((m) => m.id === selectedMatrixId)) {
+                // Ma trận từ URL đã bị xóa hoặc id sai
+                message.warning("Không tìm thấy ma trận đã chọn, đã chuyển sang ma trận đầu tiên.");
+                setSelectedMatrixId(data[0]?.id ?? null);
             }
         } catch (err) {
             console.error("Lỗi khi tải ma trận:", err);

@@ -54,9 +54,9 @@ export default function LoginForm() {
             if (response.accessToken) {
                 setToken(response.accessToken);
             }
-            // 2️⃣ Chuyển hướng
-            // Bạn có thể điều chỉnh đường dẫn tùy theo flow của dự án
-            navigate("/dashboard");   // hoặc navigate("/") nếu muốn về trang chủ
+            // 2️⃣ Chuyển hướng: lúc này chưa có role (AuthContext tải /me sau khi có token),
+            // nên về "/" và để RequireAuth chuyển admin sang trang của admin
+            navigate("/");
         } catch (err) {
             setErrorMessage(err instanceof Error ? err.message : 'Đăng nhập thất bại');
         }

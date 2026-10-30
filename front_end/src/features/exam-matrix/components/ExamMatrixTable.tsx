@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getSubjectById } from '../services/subjectService';
 import { Button, Empty, Popconfirm, Space, Table, Tooltip, Typography } from 'antd';
 import type { TableColumnsType } from 'antd';
-import { CopyOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { CopyOutlined, DeleteOutlined, EditOutlined, FileAddOutlined } from '@ant-design/icons';
 
 import './ExamMatrixTable.css';
 import type { ExamMatrix } from "../types/examMatrix.types";
@@ -22,6 +22,8 @@ export interface ExamMatrixTableProps {
     onDeleteMatrix?: (matrixId: string) => void;
     /** Nhân bản ma trận. */
     onDuplicateMatrix?: (matrixId: string) => void;
+    /** Tạo đề thi từ ma trận. Nếu bỏ qua, nút tạo đề không hiển thị. */
+    onGenerateExam?: (matrixId: string) => void;
 }
 
 /** Bỏ dấu tiếng Việt để tìm kiếm linh hoạt hơn (ví dụ: "ma tran" tìm được "Ma trận"). */
@@ -59,6 +61,7 @@ export function ExamMatrixTable({
     onEditMatrix,
     onDeleteMatrix,
     onDuplicateMatrix,
+    onGenerateExam,
 }: ExamMatrixTableProps) {
     const [subjectMap, setSubjectMap] = useState<Record<string | number, string>>({});
 
@@ -180,48 +183,64 @@ export function ExamMatrixTable({
             title: 'Thao tác',
             key: 'actions',
             align: 'center',
-            width: onDuplicateMatrix || onDeleteMatrix ? 140 : 100,
-            render: (_value, record) => (
-                <Space size={4} className="exam-matrix-table__actions">
-                    {onDuplicateMatrix && (
-                        <Tooltip title="Nhân bản ma trận">
-                            <Button
-                                type="text"
-                                icon={<CopyOutlined />}
-                                aria-label={`Nhân bản ma trận ${record.name}`}
-                                onClick={() => onDuplicateMatrix(record.id)}
-                            />
-                        </Tooltip>
-                    )}
-                    <Tooltip title="Chỉnh sửa ma trận">
-                        <Button
-                            type="text"
-                            icon={<EditOutlined />}
-                            aria-label={`Chỉnh sửa ma trận ${record.name}`}
-                            onClick={() => onEditMatrix(record.id)}
-                        />
-                    </Tooltip>
-                    {onDeleteMatrix && (
-                        <Popconfirm
-                            title="Xóa ma trận này?"
-                            description="Thao tác này không thể hoàn tác."
-                            okText="Xóa"
-                            cancelText="Hủy"
-                            okButtonProps={{ danger: true }}
-                            onConfirm={() => onDeleteMatrix(record.id)}
-                        >
-                            <Tooltip title="Xóa ma trận">
+            width: 180, // Tăng chiều rộng cột thao tác lên 180px cho 4 nút
+            render: (_value, record) => {
+                const totalQuestions = record.questionCount ?? record.cells?.reduce((sum: number, cell: any) => sum + (cell.questionCount || 0), 0) ?? 0;
+                const isZeroQuestions = totalQuestions === 0;
+
+                return (
+                    <Space size={4} className="exam-matrix-table__actions">
+                        {onGenerateExam && (
+                            <Tooltip title={isZeroQuestions ? "Ma trận chưa có câu nào" : "Tạo đề từ ma trận này"}>
                                 <Button
                                     type="text"
-                                    danger
-                                    icon={<DeleteOutlined />}
-                                    aria-label={`Xóa ma trận ${record.name}`}
+                                    icon={<FileAddOutlined />}
+                                    disabled={isZeroQuestions}
+                                    aria-label={`Tạo đề từ ma trận này ${record.name}`}
+                                    onClick={() => !isZeroQuestions && onGenerateExam(record.id)}
                                 />
                             </Tooltip>
-                        </Popconfirm>
-                    )}
-                </Space>
-            ),
+                        )}
+                        {onDuplicateMatrix && (
+                            <Tooltip title="Nhân bản ma trận">
+                                <Button
+                                    type="text"
+                                    icon={<CopyOutlined />}
+                                    aria-label={`Nhân bản ma trận ${record.name}`}
+                                    onClick={() => onDuplicateMatrix(record.id)}
+                                />
+                            </Tooltip>
+                        )}
+                        <Tooltip title="Chỉnh sửa ma trận">
+                            <Button
+                                type="text"
+                                icon={<EditOutlined />}
+                                aria-label={`Chỉnh sửa ma trận ${record.name}`}
+                                onClick={() => onEditMatrix(record.id)}
+                            />
+                        </Tooltip>
+                        {onDeleteMatrix && (
+                            <Popconfirm
+                                title="Xóa ma trận này?"
+                                description="Thao tác này không thể hoàn tác."
+                                okText="Xóa"
+                                cancelText="Hủy"
+                                okButtonProps={{ danger: true }}
+                                onConfirm={() => onDeleteMatrix(record.id)}
+                            >
+                                <Tooltip title="Xóa ma trận">
+                                    <Button
+                                        type="text"
+                                        danger
+                                        icon={<DeleteOutlined />}
+                                        aria-label={`Xóa ma trận ${record.name}`}
+                                    />
+                                </Tooltip>
+                            </Popconfirm>
+                        )}
+                    </Space>
+                );
+            },
         },
     ];
 

@@ -2,33 +2,45 @@ import { createContext, useContext, useState, type ReactNode, useEffect } from "
 import { refresh } from "../features/auth/services/authApi";
 import { getMe } from "../features/auth/services/authApi";
 import type { UserInfo } from "../features/auth/types/auth.types";
+import { AUTH_LOGOUT_EVENT } from "../services/apiClient";
 
 interface AuthContextProps {
     token: string | null;
     setToken: (token: string | null) => void;
     user: UserInfo | null;
     setUser: (user: UserInfo | null) => void;
+    /** Đang thử refresh lúc mở app (chưa có token lưu sẵn); RequireAuth chờ thay vì chuyển về đăng nhập. */
+    initializing: boolean;
 }
 
 const AuthContext = createContext<AuthContextProps | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    const [token, setToken] = useState<string | null>(null);
+    // Đọc token ngay khi khởi tạo: nếu đọc trong effect, lần render đầu RequireAuth thấy token null
+    // và chuyển về trang đăng nhập trước khi kịp đặt token
+    const [token, setToken] = useState<string | null>(() => localStorage.getItem("accessToken"));
     const [user, setUser] = useState<UserInfo | null>(null);
+    const [initializing, setInitializing] = useState<boolean>(() => !localStorage.getItem("accessToken"));
 
     useEffect(() => {
-        const stored = localStorage.getItem("accessToken");
-        if (stored) {
-            setToken(stored);
-        } else {
-            // Không có token → cố gắng refresh
-            (async () => {
-                try {
-                    const { accessToken } = await refresh();
-                    setToken(accessToken);
-                } catch (_) { }
-            })();
-        }
+        if (!initializing) return;
+        // Không có token → cố gắng refresh bằng cookie
+        (async () => {
+            try {
+                const { accessToken } = await refresh();
+                setToken(accessToken);
+            } catch (_) {
+            } finally {
+                setInitializing(false);
+            }
+        })();
+    }, []);
+
+    // apiClient báo refresh thất bại → xóa token, RequireAuth sẽ chuyển về trang đăng nhập
+    useEffect(() => {
+        const handleLogout = () => setToken(null);
+        window.addEventListener(AUTH_LOGOUT_EVENT, handleLogout);
+        return () => window.removeEventListener(AUTH_LOGOUT_EVENT, handleLogout);
     }, []);
 
     useEffect(() => {
@@ -41,14 +53,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 const data = await getMe();
                 setUser(data);
             } catch (e) {
+                // Không lấy được thông tin người dùng (kể cả lỗi mạng) → đăng xuất, tránh Spin mãi ở RequireAuth
                 console.error("Failed to fetch user info", e);
-                // Nếu 401 → logout tự động (có thể gọi logout())
+                localStorage.removeItem("accessToken");
+                setToken(null);
             }
         })();
     }, [token]);
 
     return (
-        <AuthContext.Provider value={{ token, setToken, user, setUser }}>
+        <AuthContext.Provider value={{ token, setToken, user, setUser, initializing }}>
             {children}
         </AuthContext.Provider>
     );
