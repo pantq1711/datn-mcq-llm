@@ -1,14 +1,9 @@
 import axiosInstance from "../../../services/apiClient";
-import type { Subject, GenerateExamPayload, GeneratedExamCode, ExamItemDto, UpdateSlotQuestionPayload, ExamListResponse, GetMyExamsParams, ExamDetail, ExamProgress, BuildByLessonPayload, BuildResultDto, BuildExamRequest, ReplaceQuestionParams } from "../types/exam.types";
+import type { Subject, ExamItemDto, UpdateSlotQuestionPayload, ExamListResponse, GetMyExamsParams, ExamDetail, ExamProgress, BuildByLessonPayload, BuildResultDto, BuildExamRequest, ReplaceQuestionParams } from "../types/exam.types";
 import type { QcTraceResponse } from "../types/qcTrace.types";
 
 export async function getCatalogSubjects(): Promise<Subject[]> {
     const response = await axiosInstance.get<Subject[]>("/api/catalog/subjects");
-    return response.data;
-}
-
-export async function generateExam(payload: GenerateExamPayload): Promise<GeneratedExamCode[]> {
-    const response = await axiosInstance.post<GeneratedExamCode[]>("/api/exams/build", payload);
     return response.data;
 }
 

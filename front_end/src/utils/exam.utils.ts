@@ -1,4 +1,4 @@
-import type { ExamQuestionDifficulty, ExamQuestionItem, ExamQuestionType } from "../features/exam/types/exam.types";
+import type { ExamKind, ExamQuestionDifficulty, ExamQuestionItem, ExamQuestionType, ExamStatus } from "../features/exam/types/exam.types";
 
 export const difficultyConfig: Record<
     ExamQuestionDifficulty,
@@ -35,6 +35,17 @@ const reviewReasonLabels: Record<string, string> = {
     grounding_unknown: "Tài liệu không đủ để kết luận",
     grounding_pending: "Đang kiểm tra bám tài liệu",
     grounding_failed: "Kiểm tra bám tài liệu bị lỗi",
+};
+
+export const examKindConfig: Record<ExamKind, { label: string; color: string }> = {
+    matrix: { label: "Theo ma trận", color: "blue" },
+    lesson: { label: "Theo bài", color: "purple" },
+    manual: { label: "Đề cũ", color: "default" },
+};
+
+export const examStatusConfig: Record<ExamStatus, { label: string; color: string }> = {
+    draft: { label: "Bản nháp", color: "default" },
+    confirmed: { label: "Đã xác nhận", color: "success" },
 };
 
 export function describeReviewReason(reason: string): string {

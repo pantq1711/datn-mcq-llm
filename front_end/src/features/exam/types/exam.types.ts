@@ -84,16 +84,6 @@ export interface ExamSubjectOption {
     value: number;
 }
 
-export interface GeneratedExamCode {
-    id: string;
-    code: string;
-    title: string;
-    preview: ExamPreviewData;
-    questions: ExamQuestionItem[];
-}
-
-export type GenerateExamPayload = ExamGenerationValues;
-
 export interface ChangeQuestionRequest {
     /** Câu hỏi cần được thay thế. Backend nên xác minh lại câu hỏi này. */
     question: ExamQuestionItem;
