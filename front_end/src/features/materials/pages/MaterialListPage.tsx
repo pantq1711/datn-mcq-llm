@@ -8,7 +8,7 @@ import { deleteMaterial, getMaterial, listMaterials } from "../services/material
 import MaterialManagerModal from "../components/MaterialManagerModal";
 import MaterialPreviewModal from "../components/MaterialPreviewModal";
 import "./MaterialListPage.css";
-import { formatBytes, renderFileIcon } from "../../../utils/material.utils";
+import { describeMaterialWarning, formatBytes, renderFileIcon } from "../../../utils/material.utils";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -68,18 +68,6 @@ export default function MaterialListPage() {
         }
     };
 
-    // Hàm helper chuyển đổi mã cảnh báo sang nhãn tiếng Việt dễ đọc
-    const getWarningLabel = (code?: string) => {
-        switch (code) {
-            case "FORMULA_LOSS_HIGH":
-                return "Mất mát công thức cao";
-            case "PDF_TEXT_QUALITY_LOW":
-                return "Chất lượng chữ PDF thấp";
-            default:
-                return "Lưu ý tài liệu";
-        }
-    };
-
     const columns: TableColumnsType<MaterialDto> = [
         {
             title: "Tài liệu",
@@ -123,11 +111,11 @@ export default function MaterialListPage() {
                 return (
                     <Space size={4} wrap>
                         {record.warnings.map((w, index) => {
-                            const isHighLoss = w.code === "FORMULA_LOSS_HIGH";
+                            const { label, severity } = describeMaterialWarning(w.code);
                             return (
                                 <Tooltip key={index} title={w.message}>
-                                    <Tag color={isHighLoss ? "error" : "warning"} icon={<WarningOutlined />}>
-                                        {getWarningLabel(w.code)}
+                                    <Tag color={severity === "error" ? "error" : "warning"} icon={<WarningOutlined />}>
+                                        {label}
                                     </Tag>
                                 </Tooltip>
                             );
