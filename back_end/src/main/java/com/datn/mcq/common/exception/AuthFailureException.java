@@ -9,6 +9,11 @@ public class AuthFailureException extends RuntimeException {
 
     public static final String INVALID_CREDENTIALS = "INVALID_CREDENTIALS";
     public static final String REFRESH_INVALID = "REFRESH_INVALID";
+    /**
+     * D6: token vừa bị thay bởi chính lần xoay vòng hợp lệ trong cửa sổ ân hạn (tab khác đã refresh trước). Không phải phiên
+     * hỏng: cookie mới đã (hoặc sắp) tới trình duyệt, frontend chờ 1 giây rồi thử refresh lại một lần.
+     */
+    public static final String REFRESH_RACE = "REFRESH_RACE";
 
     private final String code;
 

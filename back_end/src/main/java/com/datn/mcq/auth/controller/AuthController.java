@@ -59,7 +59,10 @@ public class AuthController {
         return withCookie(s);
     }
 
-    /** Đổi refresh token trong cookie lấy cặp token mới (xoay vòng). Không hợp lệ: 401 REFRESH_INVALID, xóa cookie. */
+    /**
+     * Đổi refresh token trong cookie lấy cặp token mới (xoay vòng). Không hợp lệ: 401 REFRESH_INVALID, xóa cookie. Token vừa
+     * bị thay trong cửa sổ ân hạn (tab khác refresh trước): 401 REFRESH_RACE, không xóa cookie, chuỗi không bị thu hồi.
+     */
     @PostMapping("/refresh")
     @SecurityRequirements
     public ResponseEntity<?> refresh(@CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken,
@@ -68,6 +71,11 @@ public class AuthController {
         try {
             return withCookie(authService.refresh(refreshToken, userAgent));
         } catch (AuthFailureException e) {
+            if (AuthFailureException.REFRESH_RACE.equals(e.getCode())) {
+                // D6: không xóa cookie, vì cookie mới do tab kia nhận có thể đã nằm trong trình duyệt.
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", e.getMessage(), "code", e.getCode()));
+            }
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .header(HttpHeaders.SET_COOKIE, clearCookie().toString())
                     .body(Map.of("error", e.getMessage(), "code", e.getCode()));

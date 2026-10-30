@@ -41,6 +41,8 @@ public class AuthService {
     public static final String BAD_CREDENTIALS_MESSAGE = "Email hoặc mật khẩu không đúng";
     public static final String REFRESH_INVALID_MESSAGE =
             "Phiên đăng nhập không hợp lệ hoặc đã hết hạn, hãy đăng nhập lại";
+    public static final String REFRESH_RACE_MESSAGE =
+            "Phiên vừa được làm mới ở một tab khác. Hãy chờ 1 giây rồi thử lại một lần.";
     public static final String WRONG_CURRENT_PASSWORD = "Mật khẩu hiện tại không đúng";
     static final int MIN_PASSWORD_LENGTH = 8;
     static final int MAX_PASSWORD_BYTES = 72;
@@ -52,10 +54,12 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final DaoAuthenticationProvider authenticationProvider;
     private final LoginAttemptLimiter loginAttemptLimiter;
+    private final LoginIpLimiter loginIpLimiter;
 
     public AuthService(UserService userService, RefreshTokenService refreshTokenService,
                        AccessTokenService accessTokenService, PasswordEncoder passwordEncoder,
-                       LoginAttemptLimiter loginAttemptLimiter) {
+                       LoginAttemptLimiter loginAttemptLimiter, LoginIpLimiter loginIpLimiter) {
+        this.loginIpLimiter = loginIpLimiter;
         this.userService = userService;
         this.refreshTokenService = refreshTokenService;
         this.accessTokenService = accessTokenService;
@@ -73,6 +77,8 @@ public class AuthService {
      *                 mật khẩu, tới khi hết thời gian khóa)
      */
     public Session login(String email, String password, String userAgent, String clientIp) {
+        // D3: giới hạn theo IP chạy đầu tiên, trước mọi việc tốn CPU (bcrypt); mọi lần thử đều tính.
+        loginIpLimiter.check(clientIp);
         if (email == null || email.isBlank() || password == null || password.isEmpty()) {
             throw new IllegalArgumentException("email và password không được để trống");
         }
@@ -101,6 +107,9 @@ public class AuthService {
         Rotation rotation = refreshTokenService.rotate(refreshToken, userAgent, this::canLogin);
         if (rotation.issued() == null) {
             log.debug("Refresh bị từ chối: {}", rotation.rejection());
+            if (RefreshTokenService.RACE.equals(rotation.rejection())) {
+                throw new AuthFailureException(AuthFailureException.REFRESH_RACE, REFRESH_RACE_MESSAGE);
+            }
             throw new AuthFailureException(AuthFailureException.REFRESH_INVALID, REFRESH_INVALID_MESSAGE);
         }
         return session(userService.getById(rotation.issued().userId()), rotation.issued());

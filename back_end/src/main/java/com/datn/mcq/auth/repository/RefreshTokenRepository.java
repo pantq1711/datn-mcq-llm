@@ -19,6 +19,14 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Query("SELECT t FROM RefreshToken t WHERE t.tokenHash = :hash")
     Optional<RefreshToken> lockByTokenHash(@Param("hash") String hash);
 
+    /**
+     * D6: số token của chuỗi đã bị thu hồi vì lý do KHÁC {@code rotatedReason} (đăng xuất, đổi mật khẩu, khóa, đã phát hiện
+     * dùng lại...). Lớn hơn 0 nghĩa là chuỗi đã chết, không phải chỉ vừa xoay vòng.
+     */
+    @Query("SELECT count(t) FROM RefreshToken t WHERE t.familyId = :family AND t.revokedAt IS NOT NULL"
+            + " AND t.revokeReason <> :rotatedReason")
+    long countRevokedForOtherReason(@Param("family") UUID family, @Param("rotatedReason") String rotatedReason);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE RefreshToken t SET t.revokedAt = :at, t.revokeReason = :reason"
             + " WHERE t.familyId = :family AND t.revokedAt IS NULL")
