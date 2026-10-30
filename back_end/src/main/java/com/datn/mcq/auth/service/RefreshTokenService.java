@@ -30,6 +30,8 @@ public class RefreshTokenService {
 
     private static final Logger log = LoggerFactory.getLogger(RefreshTokenService.class);
     private static final SecureRandom RANDOM = new SecureRandom();
+    /** {@link Rotation#rejection()} khi token vừa bị thay trong cửa sổ ân hạn (D6). */
+    public static final String RACE = "race";
 
     private final RefreshTokenRepository repository;
     private final SecurityProperties properties;
@@ -45,7 +47,8 @@ public class RefreshTokenService {
     /**
      * Kết quả refresh: {@code issued} khác null khi thành công.
      *
-     * @param rejection lý do từ chối (để log): not_found, reused, expired, user_inactive
+     * @param rejection lý do từ chối (để log): not_found, reused, expired, user_inactive, race (D6: token vừa bị thay trong
+     *                  cửa sổ ân hạn, không thu hồi gì)
      */
     public record Rotation(Issued issued, String rejection) {
         static Rotation rejected(String reason) {
@@ -78,6 +81,12 @@ public class RefreshTokenService {
         }
         RefreshToken current = found.get();
         LocalDateTime now = now();
+        if (current.isRevoked() && isRecentRotation(current, now)) {
+            // D6: tab khác vừa xoay vòng token này; không thu hồi, không cấp token mới.
+            log.debug("Refresh token vừa được thay ở lần xoay vòng trước (user {}, family {}): bỏ qua, chờ cookie mới",
+                    current.getUserId(), current.getFamilyId());
+            return Rotation.rejected(RACE);
+        }
         if (current.isRevoked()) {
             int revoked = repository.revokeFamily(current.getFamilyId(), RefreshToken.REUSE_DETECTED, now);
             log.warn("Refresh token đã thu hồi ({}) được dùng lại: user {}, family {}; thu hồi {} token còn hiệu lực",
@@ -96,6 +105,19 @@ public class RefreshTokenService {
         current.setReplacedById(next.entity().getId());
         repository.save(current);
         return new Rotation(next.issued(), null);
+    }
+
+    /**
+     * Token đã bị thay bởi chính một lần xoay vòng hợp lệ trong cửa sổ ân hạn, và chuỗi chưa bị thu hồi vì lý do nào khác
+     * (đăng xuất, đổi mật khẩu, khóa tài khoản, đã phát hiện dùng lại): lúc đó là tab khác refresh trước, không phải trộm token.
+     */
+    private boolean isRecentRotation(RefreshToken token, LocalDateTime now) {
+        Duration grace = properties.refresh().reuseGrace();
+        if (grace.isZero() || !RefreshToken.ROTATED.equals(token.getRevokeReason()) || token.getReplacedById() == null
+                || token.getRevokedAt().plus(grace).isBefore(now)) {
+            return false;
+        }
+        return repository.countRevokedForOtherReason(token.getFamilyId(), RefreshToken.ROTATED) == 0;
     }
 
     /** Đăng xuất: thu hồi chuỗi của token (nếu có); gọi lại hoặc token lạ thì không làm gì. */

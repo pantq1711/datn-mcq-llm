@@ -1,5 +1,6 @@
 package com.datn.mcq.llm.prompt;
 
+import com.datn.mcq.common.util.CellTextLimits;
 import com.datn.mcq.common.util.PromptData;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.QuestionType;
@@ -151,7 +152,9 @@ public final class MatrixPromptDraftV0 {
         if (instruction == null) {
             return null;
         }
-        String clean = instruction.replace("<<<", "").replace(">>>", "").replaceAll("\\s+", " ").strip();
+        String clean = CellTextLimits.clip(
+                instruction.replace("<<<", "").replace(">>>", "").replaceAll("\\s+", " ").strip(),
+                CellTextLimits.EXTRA_INSTRUCTION_MAX_CHARS);
         return clean.isEmpty() ? null : EXTRA_PREFIX + TEACHER_OPEN + clean + TEACHER_CLOSE;
     }
 
@@ -260,13 +263,16 @@ public final class MatrixPromptDraftV0 {
         }
         sb.append("Chủ đề: ").append(spec.topic()).append("\n");
         if (spec.content() != null && !spec.content().isBlank()) {
-            sb.append("Nội dung: ").append(spec.content()).append("\n");
+            // D2: cắt an toàn cho ô lưu từ trước khi có giới hạn độ dài.
+            sb.append("Nội dung: ").append(CellTextLimits.clip(spec.content(), CellTextLimits.CONTENT_MAX_CHARS))
+                    .append("\n");
         }
         sb.append("Yêu cầu cần đạt:\n");
         for (Difficulty level : Difficulty.values()) {
             String text = spec.learningOutcomes().get(level);
             if (text != null && !text.isBlank()) {
-                sb.append("- ").append(TfPromptDraftV0.levelName(level)).append(": ").append(text).append("\n");
+                sb.append("- ").append(TfPromptDraftV0.levelName(level)).append(": ")
+                        .append(CellTextLimits.clip(text, CellTextLimits.OUTCOME_MAX_CHARS)).append("\n");
             }
         }
         if (type == QuestionType.TF) {
