@@ -1,7 +1,7 @@
 import { Alert, Button, Card, Modal, Space, Spin, Tag, Typography } from "antd";
 import type { MaterialDto } from "../types/material.types";
 import "./MaterialPreviewModal.css";
-import { describeMaterialWarning } from "../../../utils/material.utils";
+import { describeMaterialWarning, formatBytes } from "../../../utils/material.utils";
 
 const { Paragraph } = Typography;
 
@@ -16,14 +16,6 @@ export default function MaterialPreviewModal({
     loading = false,
     onClose,
 }: MaterialPreviewModalProps) {
-    const formatBytes = (bytes?: number) => {
-        if (!bytes) return "0 B";
-        const k = 1024;
-        const sizes = ["B", "KB", "MB"];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-    };
-
     // Kiểm tra nếu có ít nhất một cảnh báo có severity là "error" (ví dụ: FORMULA_LOSS_HIGH)
     const hasErrorWarning = material?.warnings?.some(
         (w) => describeMaterialWarning(w.code).severity === "error"

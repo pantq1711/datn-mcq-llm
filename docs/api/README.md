@@ -748,58 +748,58 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
     để thống kê Đổi sang ngân hàng / sinh mới. `generated_question_id`/`bank_item_id` của dòng là câu BỊ đổi ra.
   - Ghi chú số liệu: `fromBank` ở tiến độ và `source = bank` đếm cả chỗ Đổi bằng câu ngân hàng, không chỉ chỗ lấy lúc tạo đề.
 
-    ### 7.5a. Sửa câu (W1-2)
+### 7.5a. Sửa câu (W1-2)
 
-    ```http
-    PUT /api/exams/12/slots/101/question
-    ```
+```http
+PUT /api/exams/12/slots/101/question
+```
 
-    ```json
-    // mcq
-    {"baseQuestionId": 345, "questionText": "…", "optionA": "…", "optionB": "…", "optionC": "…", "optionD": "…",
-    "correctOption": "B", "explanation": "…"}
-    // sa
-    {"baseQuestionId": 346, "questionText": "…", "saAnswer": "3,5", "explanation": "…"}
-    // tf
-    {"baseQuestionId": 347, "questionText": "…", "explanation": "…",
-    "statements": [{"key": "a", "text": "…", "label": "T"}, {"key": "b", "text": "…", "label": "F"},
-                    {"key": "c", "text": "…", "label": "F"}, {"key": "d", "text": "…", "label": "T"}]}
-    ```
+```json
+// mcq
+{"baseQuestionId": 345, "questionText": "…", "optionA": "…", "optionB": "…", "optionC": "…", "optionD": "…",
+ "correctOption": "B", "explanation": "…"}
+// sa
+{"baseQuestionId": 346, "questionText": "…", "saAnswer": "3,5", "explanation": "…"}
+// tf
+{"baseQuestionId": 347, "questionText": "…", "explanation": "…",
+ "statements": [{"key": "a", "text": "…", "label": "T"}, {"key": "b", "text": "…", "label": "F"},
+                {"key": "c", "text": "…", "label": "F"}, {"key": "d", "text": "…", "label": "T"}]}
+```
 
-    - Chỉ chỗ `ready` có câu hệ thống sinh (chưa Giữ). Gửi đủ nội dung theo dạng câu (thay thế toàn bộ, không sửa mức độ);
-      trường của dạng khác để trống. `baseQuestionId` là `questionId` đang hiển thị lúc bắt đầu sửa.
-    - Mỗi lần sửa tạo một bản mới (`questionId` mới), bản gốc LLM giữ nguyên. Nội dung giống hệt câu hiện tại (sau trim) thì
-      trả câu hiện tại, không ghi gì.
-    - QC chạy ngay: trim, tự đóng `$` quên ở cuối trường (ghi `warning: <trường>: đã tự đóng $`), kiểm định dạng như câu
-      sinh ra (mục 6), dedup (không so với chính câu này và các bản trước của nó).
-    - Đổi đề, phương án/ý hoặc đáp án/đáp số/nhãn: Solver chạy lại qua hàng đợi, request không chờ (`qcState = checking`,
-      `reviewReasons` có `solver_pending`). Theo dõi bằng `GET /api/exams/{id}`. Chỉ đổi lời giải: không gọi Solver, giữ
-      kết quả Solver của bản trước.
-    - Solver lệch: `solver_inconsistent`, đáp án giáo viên giữ nguyên, Giữ được. Solver lỗi hoặc hết lượt thử:
-      `solver_failed`, không bao giờ coi là đạt, Giữ được kèm cờ. Kết quả Solver của bản cũ về muộn không ảnh hưởng bản mới.
-    - Bản sửa trùng câu khác: `qcState = needs_review`, `reviewReasons: ["duplicate: <id>"]`, không Giữ được (sửa tiếp hoặc
-      Đổi câu khác).
-    - Response 200: câu như 7.4, ví dụ:
+- Chỉ chỗ `ready` có câu hệ thống sinh (chưa Giữ). Gửi đủ nội dung theo dạng câu (thay thế toàn bộ, không sửa mức độ);
+  trường của dạng khác để trống. `baseQuestionId` là `questionId` đang hiển thị lúc bắt đầu sửa.
+- Mỗi lần sửa tạo một bản mới (`questionId` mới), bản gốc LLM giữ nguyên. Nội dung giống hệt câu hiện tại (sau trim) thì
+  trả câu hiện tại, không ghi gì.
+- QC chạy ngay: trim, tự đóng `$` quên ở cuối trường (ghi `warning: <trường>: đã tự đóng $`), kiểm định dạng như câu
+  sinh ra (mục 6), dedup (không so với chính câu này và các bản trước của nó).
+- Đổi đề, phương án/ý hoặc đáp án/đáp số/nhãn: Solver chạy lại qua hàng đợi, request không chờ (`qcState = checking`,
+  `reviewReasons` có `solver_pending`). Theo dõi bằng `GET /api/exams/{id}`. Chỉ đổi lời giải: không gọi Solver, giữ
+  kết quả Solver của bản trước.
+- Solver lệch: `solver_inconsistent`, đáp án giáo viên giữ nguyên, Giữ được. Solver lỗi hoặc hết lượt thử:
+  `solver_failed`, không bao giờ coi là đạt, Giữ được kèm cờ. Kết quả Solver của bản cũ về muộn không ảnh hưởng bản mới.
+- Bản sửa trùng câu khác: `qcState = needs_review`, `reviewReasons: ["duplicate: <id>"]`, không Giữ được (sửa tiếp hoặc
+  Đổi câu khác).
+- Response 200: câu như 7.4, ví dụ:
 
-    ```json
-    {"slotId": 101, "state": "ready", "source": "generated", "questionId": 402, "questionText": "…", "correctOption": "B",
-    "explanation": "…", "needsReview": true, "reviewReasons": ["solver_pending", "warning: option_c: đã tự đóng $"],
-    "qcState": "checking", "edited": true, "originalQuestionId": 345}
-    ```
+```json
+{"slotId": 101, "state": "ready", "source": "generated", "questionId": 402, "questionText": "…", "correctOption": "B",
+ "explanation": "…", "needsReview": true, "reviewReasons": ["solver_pending", "warning: option_c: đã tự đóng $"],
+ "qcState": "checking", "edited": true, "originalQuestionId": 345}
+```
 
-    | Mã | `code` | Khi nào |
-    |---|---|---|
-    | 400 | `INVALID_REQUEST` | Thiếu trường (kể cả `baseQuestionId`), gửi trường của dạng khác, `correctOption` ngoài A-D, nhãn ý ngoài T/F, `tf` không đủ 4 ý a-d |
-    | 400 | `FORMAT_INVALID` | Bản sửa không qua kiểm tra định dạng; `errors` liệt kê từng lỗi, ví dụ `["option_a: nội dung trống"]` |
-    | 404 | — | Đề không có hoặc của giáo viên khác; chỗ không thuộc đề |
-    | 409 | `SLOT_KEPT` | Chỗ đã Giữ (sửa câu ngân hàng chưa hỗ trợ) |
-    | 409 | `SLOT_NOT_READY` | Chỗ đang sinh hoặc hỏng |
-    | 409 | `SLOT_FROM_BANK` | Chỗ lấy câu từ ngân hàng |
-    | 409 | `VERSION_CONFLICT` | `baseQuestionId` khác câu hiện tại (đã có người sửa hoặc Đổi, hoặc trang đã cũ): tải lại rồi sửa tiếp |
+| Mã | `code` | Khi nào |
+|---|---|---|
+| 400 | `INVALID_REQUEST` | Thiếu trường (kể cả `baseQuestionId`), gửi trường của dạng khác, `correctOption` ngoài A-D, nhãn ý ngoài T/F, `tf` không đủ 4 ý a-d |
+| 400 | `FORMAT_INVALID` | Bản sửa không qua kiểm tra định dạng; `errors` liệt kê từng lỗi, ví dụ `["option_a: nội dung trống"]` |
+| 404 | — | Đề không có hoặc của giáo viên khác; chỗ không thuộc đề |
+| 409 | `SLOT_KEPT` | Chỗ đã Giữ (sửa câu ngân hàng chưa hỗ trợ) |
+| 409 | `SLOT_NOT_READY` | Chỗ đang sinh hoặc hỏng |
+| 409 | `SLOT_FROM_BANK` | Chỗ lấy câu từ ngân hàng |
+| 409 | `VERSION_CONFLICT` | `baseQuestionId` khác câu hiện tại (đã có người sửa hoặc Đổi, hoặc trang đã cũ): tải lại rồi sửa tiếp |
 
-    - Mỗi lần sửa ghi `exam_slot_action` `edit`: bản mới, người sửa, thời điểm, `changed_fields`, `edit_distance` (so với bản
-      trước; không tính lời giải). Thống kê về đầu ra LLM phải lọc `generated_question.edited_from_question_id IS NULL`
-      (`enums.md` mục 3).
+- Mỗi lần sửa ghi `exam_slot_action` `edit`: bản mới, người sửa, thời điểm, `changed_fields`, `edit_distance` (so với bản
+  trước; không tính lời giải). Thống kê về đầu ra LLM phải lọc `generated_question.edited_from_question_id IS NULL`
+  (`enums.md` mục 3).
 
 ### 7.6. Xuất đề ra Word
 
