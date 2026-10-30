@@ -4,7 +4,8 @@ import { EyeOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
 import "./ExamTable.css";
-import type { ExamListItem, ExamStatus } from "../types/exam.types";
+import type { ExamKind, ExamListItem, ExamStatus } from "../types/exam.types";
+import { examKindConfig, examStatusConfig } from "../../../utils/exam.utils";
 
 const { Text } = Typography;
 
@@ -18,21 +19,6 @@ interface ExamTableProps {
     onView?: (exam: ExamListItem) => void;
 }
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-    draft: { label: "Bản nháp", color: "default" },
-    confirmed: { label: "Đã xác nhận", color: "success" },
-    DRAFT: { label: "Bản nháp", color: "default" },
-    PUBLISHED: { label: "Đã phát hành", color: "success" },
-    ARCHIVED: { label: "Lưu trữ", color: "warning" },
-};
-
-const kindConfig: Record<string, { label: string; color: string }> = {
-    matrix: { label: "Ma trận", color: "blue" },
-    lesson: { label: "Theo bài", color: "purple" },
-    manual: { label: "Thủ công", color: "default" },
-    MATRIX: { label: "Ma trận", color: "blue" },
-    BY_TOPIC: { label: "Theo bài", color: "purple" },
-};
 
 export default function ExamTable({
     data,
@@ -71,8 +57,9 @@ export default function ExamTable({
             key: "kind",
             width: 110,
             align: "center",
-            render: (kind: string) => {
-                const config = kindConfig[kind] || { label: kind, color: "default" };
+            render: (kind: ExamKind) => {
+                // Giá trị lạ (backend thêm loại mới) thì hiện nguyên giá trị
+                const config = examKindConfig[kind] ?? { label: kind, color: "default" };
                 return <Tag color={config.color}>{config.label}</Tag>;
             },
         },
@@ -149,7 +136,7 @@ export default function ExamTable({
             width: 130,
             align: "center",
             render: (status: ExamStatus) => {
-                const config = statusConfig[status] || { label: status, color: "default" };
+                const config = examStatusConfig[status] ?? { label: status, color: "default" };
                 return <Tag color={config.color}>{config.label}</Tag>;
             },
         },

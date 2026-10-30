@@ -4,7 +4,8 @@ import { ArrowLeftOutlined, FileWordOutlined, LineChartOutlined, WarningOutlined
 
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
-import type { ExamPreviewData, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto, ExamKind } from "../types/exam.types";
+import type { ExamPreviewData, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
+import { examKindConfig, examStatusConfig } from "../../../utils/exam.utils";
 import { keepQuestion, replaceQuestion, getExamDetail, getExamExportDocx, getCatalogSubjects } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
 
@@ -24,12 +25,6 @@ const partTitles: Record<string, string> = {
     I: "Phần I. Trắc nghiệm nhiều phương án",
     II: "Phần II. Trắc nghiệm đúng sai",
     III: "Phần III. Trả lời ngắn",
-};
-
-const kindLabels: Record<ExamKind, string> = {
-    matrix: "Theo ma trận",
-    lesson: "Theo bài",
-    manual: "Đề cũ",
 };
 
 /** Chuyển một chỗ của đề (ExamItemDto) sang dạng câu hiển thị trong danh sách. */
@@ -322,10 +317,14 @@ export default function ExamDetailPage() {
                         </Title>
 
                         <Space size={8} wrap className="exam-detail-page-meta">
-                            {detail.status === "confirmed"
-                                ? <Tag color="success">Đã chốt</Tag>
-                                : <Tag>Bản nháp</Tag>}
-                            {detail.kind && <Tag color="blue">{kindLabels[detail.kind] ?? detail.kind}</Tag>}
+                            <Tag color={examStatusConfig[detail.status]?.color ?? "default"}>
+                                {examStatusConfig[detail.status]?.label ?? detail.status}
+                            </Tag>
+                            {detail.kind && (
+                                <Tag color={examKindConfig[detail.kind]?.color ?? "default"}>
+                                    {examKindConfig[detail.kind]?.label ?? detail.kind}
+                                </Tag>
+                            )}
                             {detail.needsReviewCount > 0 && (
                                 <Tag color="volcano" icon={<WarningOutlined />}>
                                     {detail.needsReviewCount} câu cần xem kỹ
