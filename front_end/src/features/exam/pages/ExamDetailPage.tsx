@@ -247,10 +247,24 @@ export default function ExamDetailPage() {
             setChangeQuestion(null);
             await loadDetail();
         } catch (err: any) {
-            // Hết câu ngân hàng (docs/api mục 7.5): chỗ giữ nguyên, modal đề nghị giáo viên sinh câu mới
+            // Hết câu ngân hàng (docs/api mục 7.5): đặt lên trước để modal vẫn chuyển sang "Sinh câu mới"
             if (err?.response?.data?.code === "BANK_EXHAUSTED") {
                 return "bank_exhausted";
             }
+
+            // Xử lý các lỗi 409 còn lại
+            if (err?.response?.status === 409) {
+                const backendMsg =
+                    err?.response?.data?.error ||
+                    err?.response?.data?.message ||
+                    err?.message ||
+                    "Đã xảy ra xung đột dữ liệu.";
+                message.warning(`${backendMsg} Đã tải lại đề.`);
+                setChangeQuestion(null);
+                await loadDetail();
+                return;
+            }
+
             const errMsg =
                 err?.response?.data?.error ||
                 err?.response?.data?.message ||

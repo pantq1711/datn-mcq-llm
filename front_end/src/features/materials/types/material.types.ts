@@ -1,5 +1,9 @@
 export type MaterialKind = "docx" | "pdf" | "txt";
 
+/** Mã cảnh báo trích xuất (docs/api mục 9). */
+export type MaterialWarningCode =
+    "MATHTYPE_FORMULAS_DROPPED" | "FORMULA_LOSS_HIGH" | "FORMULA_IMAGES_NOT_READ" | "PDF_TEXT_QUALITY_LOW";
+
 export interface MaterialWarning {
     code: string;
     message: string;

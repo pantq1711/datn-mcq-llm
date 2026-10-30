@@ -1,6 +1,7 @@
 import { Alert, Button, Card, Modal, Space, Spin, Tag, Typography } from "antd";
 import type { MaterialDto } from "../types/material.types";
 import "./MaterialPreviewModal.css";
+import { describeMaterialWarning } from "../../../utils/material.utils";
 
 const { Paragraph } = Typography;
 
@@ -22,6 +23,11 @@ export default function MaterialPreviewModal({
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
     };
+
+    // Kiểm tra nếu có ít nhất một cảnh báo có severity là "error" (ví dụ: FORMULA_LOSS_HIGH)
+    const hasErrorWarning = material?.warnings?.some(
+        (w) => describeMaterialWarning(w.code).severity === "error"
+    );
 
     return (
         <Modal
@@ -52,12 +58,17 @@ export default function MaterialPreviewModal({
 
                     {material.warnings && material.warnings.length > 0 && (
                         <Alert
-                            type="warning"
+                            type={hasErrorWarning ? "error" : "warning"}
                             showIcon
                             message="Cảnh báo trích xuất"
-                            description={material.warnings.map((w, i) => (
-                                <div key={i}>{w.message}</div>
-                            ))}
+                            description={material.warnings.map((w, i) => {
+                                const { label } = describeMaterialWarning(w.code);
+                                return (
+                                    <div key={i}>
+                                        <strong>{label}:</strong> {w.message}
+                                    </div>
+                                );
+                            })}
                             className="material-preview-alert"
                         />
                     )}

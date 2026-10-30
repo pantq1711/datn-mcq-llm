@@ -6,10 +6,12 @@ import type { MaterialDto } from "../types/material.types";
 import { deleteMaterial, getMaterial, listMaterials, uploadMaterial, } from "../services/materialApi";
 import MaterialPreviewModal from "./MaterialPreviewModal";
 import "./MaterialManagerModal.css";
-import { formatBytes, renderFileIcon } from "../../../utils/material.utils";
+import { describeMaterialWarning, formatBytes, renderFileIcon } from "../../../utils/material.utils";
 
 const { Text } = Typography;
 const { Dragger } = Upload;
+// Khớp giới hạn mặc định của backend (docs/api mục 9, spring.servlet.multipart.max-file-size)
+const MAX_FILE_SIZE_MB = 10;
 
 export interface MaterialManagerModalProps {
     open: boolean;
@@ -130,6 +132,13 @@ export default function MaterialManagerModal({
         name: "file",
         multiple: false,
         accept: ".docx,.pdf,.txt",
+        beforeUpload: (file) => {
+            if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+                message.error(`File "${file.name}" có dung lượng ${formatBytes(file.size)}, vượt quá giới hạn ${MAX_FILE_SIZE_MB} MB.`);
+                return Upload.LIST_IGNORE;
+            }
+            return true;
+        },
         customRequest: async ({ file, onSuccess, onError }) => {
             try {
                 const { material: uploaded, created } = await uploadMaterial(file as File);
@@ -154,24 +163,12 @@ export default function MaterialManagerModal({
                 const msg =
                     err?.response?.data?.error ||
                     err?.response?.data?.message ||
-                    "Tải lên thất bại. Vui lòng kiểm tra định dạng hoặc dung lượng (tối đa 10 MB).";
+                    `Tải lên thất bại. Vui lòng kiểm tra định dạng hoặc dung lượng (tối đa ${MAX_FILE_SIZE_MB} MB).`;
                 message.error(msg);
                 onError?.(err);
             }
         },
         showUploadList: false,
-    };
-
-    // Hàm helper chuyển đổi mã cảnh báo sang nhãn tiếng Việt dễ đọc
-    const getWarningLabel = (code?: string) => {
-        switch (code) {
-            case "FORMULA_LOSS_HIGH":
-                return "Mất mát công thức cao";
-            case "PDF_TEXT_QUALITY_LOW":
-                return "Chất lượng chữ PDF thấp";
-            default:
-                return "Lưu ý tài liệu";
-        }
     };
 
     return (
@@ -272,11 +269,11 @@ export default function MaterialManagerModal({
                                                                 )}
                                                                 {item.warnings && item.warnings.length > 0 && (
                                                                     item.warnings.map((w, wIndex) => {
-                                                                        const isHighLoss = w.code === "FORMULA_LOSS_HIGH";
+                                                                        const { label, severity } = describeMaterialWarning(w.code);
                                                                         return (
                                                                             <Tooltip key={wIndex} title={w.message}>
-                                                                                <Tag color={isHighLoss ? "error" : "warning"} icon={<WarningOutlined />}>
-                                                                                    {getWarningLabel(w.code)}
+                                                                                <Tag color={severity} icon={<WarningOutlined />}>
+                                                                                    {label}
                                                                                 </Tag>
                                                                             </Tooltip>
                                                                         );
@@ -334,7 +331,7 @@ export default function MaterialManagerModal({
                                     type="info"
                                     showIcon
                                     message="Quy định tải tài liệu bài học (W2-3)"
-                                    description="Chấp nhận file .docx, .pdf hoặc .txt UTF-8, tối đa 10 MB. Hệ thống sẽ tự động trích xuất nội dung văn bản để cung cấp ngữ cảnh chuẩn xác cho mô hình AI sinh câu hỏi."
+                                    description={`Chấp nhận file .docx, .pdf hoặc .txt UTF-8, tối đa ${MAX_FILE_SIZE_MB} MB. Hệ thống sẽ tự động trích xuất nội dung văn bản để cung cấp ngữ cảnh chuẩn xác cho mô hình AI sinh câu hỏi.`}
                                     style={{ marginBottom: 16 }}
                                 />
 
@@ -342,13 +339,13 @@ export default function MaterialManagerModal({
                                 {lastUploadedMaterial?.warnings && lastUploadedMaterial.warnings.length > 0 && (
                                     <div style={{ marginBottom: 16 }}>
                                         {lastUploadedMaterial.warnings.map((w, index) => {
-                                            const isHighLoss = w.code === "FORMULA_LOSS_HIGH";
+                                            const { label, severity } = describeMaterialWarning(w.code);
                                             return (
                                                 <Alert
                                                     key={index}
-                                                    type={isHighLoss ? "error" : "warning"}
+                                                    type={severity}
                                                     showIcon
-                                                    message={isHighLoss ? "Cảnh báo mất mát công thức nghiêm trọng" : "Lưu ý trích xuất tài liệu"}
+                                                    message={label}
                                                     description={w.message}
                                                     style={{ marginBottom: 8 }}
                                                 />
