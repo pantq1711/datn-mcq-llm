@@ -27,6 +27,13 @@ export default function MaterialListPage() {
         setLoading(true);
         try {
             const data = await listMaterials(currentPage - 1, currentPageSize);
+
+            // Trang hiện tại đã rỗng (vừa xóa mục cuối, kể cả xóa trong modal) mà vẫn còn tài liệu: lùi về trang cuối có dữ liệu
+            if ((data.items?.length ?? 0) === 0 && currentPage > 1 && (data.totalItems ?? 0) > 0) {
+                setPage(Math.max(1, data.totalPages ?? 1));
+                return;
+            }
+
             setMaterials(data.items || []);
             setTotal(data.totalItems || 0);
         } catch (err: any) {
@@ -114,7 +121,7 @@ export default function MaterialListPage() {
                             const { label, severity } = describeMaterialWarning(w.code);
                             return (
                                 <Tooltip key={index} title={w.message}>
-                                    <Tag color={severity === "error" ? "error" : "warning"} icon={<WarningOutlined />}>
+                                    <Tag color={severity} icon={<WarningOutlined />}>
                                         {label}
                                     </Tag>
                                 </Tooltip>
@@ -204,6 +211,7 @@ export default function MaterialListPage() {
                         pageSize,
                         total,
                         showSizeChanger: true,
+                        pageSizeOptions: [10, 20, 50],
                         showTotal: (totalItems, range) =>
                             `${range[0]}-${range[1]} trong tổng số ${totalItems} tài liệu`,
                         onChange: (p, ps) => {

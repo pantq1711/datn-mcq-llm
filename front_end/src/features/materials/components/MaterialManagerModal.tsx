@@ -17,6 +17,7 @@ export interface MaterialManagerModalProps {
     open: boolean;
     selectedIds?: number[];
     onClose: () => void;
+    /** Bỏ qua thì modal chỉ quản lý / tải lên, không có phần chọn. */
     onSelect?: (selectedMaterials: MaterialDto[]) => void;
     onRemoved?: (removedId: number) => void;
     maxSelect?: number;
@@ -50,8 +51,13 @@ export default function MaterialManagerModal({
     const selectedIdsRef = useRef(selectedIds);
     selectedIdsRef.current = selectedIds;
 
+    // Không có onSelect (trang /materials): modal chỉ để quản lý và tải lên, ẩn mọi phần chọn
+    const selectable = onSelect !== undefined;
+
     useEffect(() => {
         if (open) {
+            // Chỉ quản lý / tải lên (trang /materials đã có bảng danh sách): mở thẳng tab tải lên
+            setActiveTab(selectable ? "list" : "upload");
             setCheckedIds(selectedIdsRef.current);
             setLastUploadedMaterial(null); // Reset cảnh báo cũ khi mở lại modal
             fetchMaterials();
@@ -75,6 +81,7 @@ export default function MaterialManagerModal({
     const canAdd = (ids: number[], id: number) => countDistinct([...ids, id]) <= maxSelect;
 
     const handleToggleCheck = (id: number) => {
+        if (!selectable) return;
         if (checkedIds.includes(id)) {
             setCheckedIds((prev) => prev.filter((item) => item !== id));
         } else {
@@ -155,10 +162,13 @@ export default function MaterialManagerModal({
                 onSuccess?.(uploaded);
                 // Refresh list
                 await fetchMaterials();
-                // Tự động chọn tài liệu vừa tải/tái sử dụng nếu còn chỗ và chưa được chọn trước đó
-                setCheckedIds((prev) =>
-                    !prev.includes(uploaded.id) && canAdd(prev, uploaded.id) ? [...prev, uploaded.id] : prev
-                );
+
+                // Chỉ tự động chọn tài liệu vừa tải/tái sử dụng khi modal có hỗ trợ chọn (selectable)
+                if (selectable) {
+                    setCheckedIds((prev) =>
+                        !prev.includes(uploaded.id) && canAdd(prev, uploaded.id) ? [...prev, uploaded.id] : prev
+                    );
+                }
             } catch (err: any) {
                 const msg =
                     err?.response?.data?.error ||
@@ -180,34 +190,40 @@ export default function MaterialManagerModal({
             destroyOnClose
             className="material-manager-modal"
             footer={
-                <div className="material-modal-footer">
-                    <div>
-                        {reservedIds ? (
-                            <>
-                                <Text strong>Tổng cả lần tạo đề: </Text>
-                                <Tag color={countDistinct(checkedIds) > 0 ? "blue" : "default"}>
-                                    {countDistinct(checkedIds)} / {maxSelect} tài liệu
-                                </Tag>
-                            </>
-                        ) : (
-                            <>
-                                <Text strong>Đã chọn: </Text>
-                                <Tag color={checkedIds.length > 0 ? "blue" : "default"}>
-                                    {checkedIds.length} / {maxSelect} tài liệu
-                                </Tag>
-                            </>
-                        )}
+                selectable ? (
+                    <div className="material-modal-footer">
+                        <div>
+                            {reservedIds ? (
+                                <>
+                                    <Text strong>Tổng cả lần tạo đề: </Text>
+                                    <Tag color={countDistinct(checkedIds) > 0 ? "blue" : "default"}>
+                                        {countDistinct(checkedIds)} / {maxSelect} tài liệu
+                                    </Tag>
+                                </>
+                            ) : (
+                                <>
+                                    <Text strong>Đã chọn: </Text>
+                                    <Tag color={checkedIds.length > 0 ? "blue" : "default"}>
+                                        {checkedIds.length} / {maxSelect} tài liệu
+                                    </Tag>
+                                </>
+                            )}
+                        </div>
+                        <Space>
+                            <Button onClick={onClose}>Đóng</Button>
+                            <Button
+                                type="primary"
+                                onClick={handleConfirmSelection}
+                            >
+                                Xác nhận chọn ({checkedIds.length})
+                            </Button>
+                        </Space>
                     </div>
-                    <Space>
+                ) : (
+                    <div className="material-modal-footer" style={{ justifyContent: "flex-end" }}>
                         <Button onClick={onClose}>Đóng</Button>
-                        <Button
-                            type="primary"
-                            onClick={handleConfirmSelection}
-                        >
-                            Xác nhận chọn ({checkedIds.length})
-                        </Button>
-                    </Space>
-                </div>
+                    </div>
+                )
             }
         >
             <Tabs
@@ -243,17 +259,20 @@ export default function MaterialManagerModal({
                                             const isChecked = checkedIds.includes(item.id);
                                             return (
                                                 <List.Item
-                                                    className={`material-list-item ${isChecked ? "is-selected" : ""}`}
-                                                    onClick={() => handleToggleCheck(item.id)}
+                                                    className={`material-list-item ${selectable && isChecked ? "is-selected" : ""}`}
+                                                    onClick={() => selectable && handleToggleCheck(item.id)}
+                                                    style={{ cursor: selectable ? "pointer" : "default" }}
                                                 >
                                                     <div className="material-item-left">
-                                                        <Checkbox
-                                                            checked={isChecked}
-                                                            onChange={(e) => {
-                                                                e.stopPropagation();
-                                                                handleToggleCheck(item.id);
-                                                            }}
-                                                        />
+                                                        {selectable && (
+                                                            <Checkbox
+                                                                checked={isChecked}
+                                                                onChange={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleToggleCheck(item.id);
+                                                                }}
+                                                            />
+                                                        )}
                                                         <div className="material-icon-box">
                                                             {renderFileIcon(item.kind, 24)}
                                                         </div>
@@ -262,7 +281,7 @@ export default function MaterialManagerModal({
                                                                 <Text strong className="material-item-filename">
                                                                     {item.fileName}
                                                                 </Text>
-                                                                {reservedIds?.includes(item.id) && (
+                                                                {selectable && reservedIds?.includes(item.id) && (
                                                                     <Tooltip title="Đã tính vào giới hạn; chọn thêm ở đây không tốn suất">
                                                                         <Tag color="default">Đã dùng ở chỗ khác</Tag>
                                                                     </Tooltip>
