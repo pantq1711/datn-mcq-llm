@@ -265,6 +265,80 @@ class LlmOutputRepairTest {
                 p.parseWarnings().toString());
     }
 
+    // ---------- ký hiệu độ bị viết thành ^\bullet / ^\triangle (31/10: thẩm định nội dung, câu 40, 42, 44, 47, 55, 57) ----------
+
+    @Test
+    void kyHieuDoBulletHoacTriangleSauChuSoThanhCirc() {
+        Object[][] cases = {
+                {"$75^\\bullet$", "$75^{\\circ}$", 1},
+                {"$85^{\\triangle}$", "$85^{\\circ}$", 1},
+                {"$360 ^ \\bullet$", "$360^{\\circ}$", 1},
+                {"$90^{\\bullet}$", "$90^{\\circ}$", 1},
+                {"$\\widehat{A} = 60^ { \\triangle }$", "$\\widehat{A} = 60^{\\circ}$", 1},
+                {"$x^{2}$ và $(x+10)^{\\circ}$ và $95^\\bullet$", "$x^{2}$ và $(x+10)^{\\circ}$ và $95^{\\circ}$", 1},
+                {"Góc $A = 75^\\bullet$, góc $B = 85^{\\triangle}$.", "Góc $A = 75^{\\circ}$, góc $B = 85^{\\circ}$.", 2},
+                {"$$30^\\bullet$$", "$$30^{\\circ}$$", 1},
+        };
+        for (Object[] c : cases) {
+            LlmOutputRepair.DegreeRepair r = LlmOutputRepair.fixDegreeSymbol((String) c[0]);
+            assertEquals(c[1], r.text(), (String) c[0]);
+            assertEquals(c[2], r.fixed(), (String) c[0]);
+        }
+    }
+
+    @Test
+    void bulletTriangleNgoaiNguCanhDoGiuNguyen() {
+        for (String keep : List.of(
+                "$\\triangle ABC$",
+                "$a^\\bullet$",
+                "$a^{\\triangle}$",
+                "$(2x)^\\bullet$",
+                "$2x^\\bullet$ sai chữ cái",
+                "$75^\\bulletx$",
+                "$75^{\\circ}$",
+                "$75^\\triangleq 1$",
+                "75^\\bullet",
+                "Giá \\$5, góc 75^\\bullet và $x$.",
+                "$75 \\bullet 2$",
+                "$\\triangle ABC$ có góc $A = 75^{\\circ}$")) {
+            LlmOutputRepair.DegreeRepair r = LlmOutputRepair.fixDegreeSymbol(keep);
+            assertEquals(keep, r.text(), keep);
+            assertEquals(0, r.fixed(), keep);
+        }
+        assertNull(LlmOutputRepair.fixDegreeSymbol(null).text());
+    }
+
+    @Test
+    void textFieldSuaKyHieuDoVaGhiCanhBao() {
+        List<String> warnings = new ArrayList<>();
+        assertEquals("Biết $\\widehat{A} = 75^{\\circ}$ và $\\triangle ABC$ cân.",
+                LlmOutputRepair.textField("question_text", "Biết $\\widehat{A} = 75^\\bullet$ và $\\triangle ABC$ cân.",
+                        true, true, warnings));
+        assertEquals(List.of("json: đã sửa 1 ký hiệu độ (^\\bullet, ^\\triangle thành ^{\\circ}) ở question_text"),
+                warnings);
+
+        List<String> strictWarnings = new ArrayList<>();
+        assertEquals("$75^\\bullet$", LlmOutputRepair.textField("option_a", "$75^\\bullet$", false, true, strictWarnings));
+        assertEquals(List.of(), strictWarnings, "giải mã chặt không sửa");
+    }
+
+    @Test
+    void cauMcqKyHieuDoSaiDuocSuaKhiParseOCheDoSua() {
+        String raw = "{\"question_text\": \"Cho hình thang cân $EFGH$, góc $E$ bằng $75^\\\\bullet$.\","
+                + " \"option_a\": \"$75^\\\\bullet$\", \"option_b\": \"$105^{\\\\triangle}$\", \"option_c\": \"$90^\\\\circ$\","
+                + " \"option_d\": \"$120^\\\\circ$\", \"correct_option\": \"A\", \"explanation\": \"Góc bằng $75^\\\\bullet$.\"}";
+        ParsedMcqDto strict = McqJsonParser.parse(raw);
+        assertEquals("$75^\\bullet$", strict.optionA(), "giải mã chặt giữ nguyên");
+        ParsedMcqDto p = McqJsonParser.parse(raw, true);
+        assertTrue(p.parseSuccess(), p.parseError());
+        assertEquals("Cho hình thang cân $EFGH$, góc $E$ bằng $75^{\\circ}$.", p.questionText());
+        assertEquals("$75^{\\circ}$", p.optionA());
+        assertEquals("$105^{\\circ}$", p.optionB());
+        assertEquals("Góc bằng $75^{\\circ}$.", p.explanation());
+        assertTrue(p.parseWarnings().contains("json: đã sửa 1 ký hiệu độ (^\\bullet, ^\\triangle thành ^{\\circ}) ở option_b"),
+                p.parseWarnings().toString());
+    }
+
     @Test
     void goVoTextOMoiTruongCuaSaVaTf() {
         ParsedSaDto sa = SaJsonParser.parse("{\"question_text\": \"Tính quãng đường.\","

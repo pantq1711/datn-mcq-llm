@@ -472,6 +472,12 @@ public class QuestionEditService {
                 repairs.add(LlmOutputRepair.dollarWarning(field));
                 s = d.text();
             }
+            // 31/10: như parser sinh câu, "75^\bullet" / "85^{\triangle}" trong công thức thành "^{\circ}".
+            LlmOutputRepair.DegreeRepair g = LlmOutputRepair.fixDegreeSymbol(s);
+            if (g.fixed() > 0) {
+                repairs.add(LlmOutputRepair.degreeWarning(field, g.fixed()));
+                s = g.text();
+            }
             return s;
         }
 

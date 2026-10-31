@@ -19,8 +19,11 @@ class HardeningW24aItem5Test {
 
     @Test
     void solverPrompt_phienBanVaHangSoCoMat() {
-        assertEquals("solver-v2-delimited", PromptBuilder.SOLVER_PROMPT_VERSION);
-        assertEquals("solver-v2-delimited", AnswerSolverChecker.SOLVER_PROMPT_VERSION);
+        // Thẩm định 31/10: mặc định là v4 (xét từng phương án, đọc đúng chữ của đề); v2, v3 vẫn giữ để đo lại.
+        assertEquals("solver-v4-literal-reading", PromptBuilder.SOLVER_PROMPT_VERSION);
+        assertEquals("solver-v4-literal-reading", AnswerSolverChecker.SOLVER_PROMPT_VERSION);
+        assertEquals("solver-v3-option-check", PromptBuilder.SOLVER_PROMPT_VERSION_V3);
+        assertEquals("solver-v2-delimited", PromptBuilder.SOLVER_PROMPT_VERSION_V2);
     }
 
     @Test
@@ -55,7 +58,8 @@ class HardeningW24aItem5Test {
         assertEquals(1, countMatches(prompt, ">>>"));
 
         // Yêu cầu đầu ra JSON ở cuối prompt
-        assertTrue(prompt.trim().endsWith("Trả về DUY NHẤT một đối tượng JSON có 2 trường: \"reasoning\" và \"judge_answer\"."));
+        assertTrue(prompt.trim().endsWith("Trả về DUY NHẤT một đối tượng JSON có 4 trường theo thứ tự: \"reasoning\", "
+                + "\"options_verdict\", \"correct_count\", \"judge_answer\"."));
     }
 
     @Test

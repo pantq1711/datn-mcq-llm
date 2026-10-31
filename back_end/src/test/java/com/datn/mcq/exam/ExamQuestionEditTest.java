@@ -72,6 +72,11 @@ class ExamQuestionEditTest {
     /** Solver giả: mcq trả {@code mcqJudge}, sa {@code saJudge}, tf {@code tfJudges}; có thể lỗi hoặc chạy một móc. */
     static final class EditSolver extends LlmClient {
         String mcqJudge = "B";
+        /**
+         * Solver v3 (xét từng phương án): các chữ cái Solver cho là đúng, nối bằng dấu phẩy ("" là không có phương án nào
+         * đúng). null: trả JSON kiểu Solver cũ chỉ có judge_answer = {@code mcqJudge}.
+         */
+        String mcqOptions;
         String saJudge = "5";
         /** Lời giải thích Solver trả cho mcq và sa (W1-3: được lưu ở quality_check_result.solver_reasoning). */
         String reasoning = "r";
@@ -115,10 +120,26 @@ class ExamQuestionEditTest {
                         + " \"judge_d\": \"" + j[3] + "\"}";
             } else if (SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON.equals(schema)) {
                 body = "{\"reasoning\": \"" + reasoning + "\", \"judge_answer\": \"" + saJudge + "\"}";
+            } else if (mcqOptions != null) {
+                body = optionCheckJson(reasoning, mcqOptions);
             } else {
                 body = "{\"reasoning\": \"" + reasoning + "\", \"judge_answer\": \"" + mcqJudge + "\"}";
             }
             return new LlmCallResult(body, 10, 1.0, 0.0, modelName);
+        }
+
+        /** JSON Solver v3: options_verdict cho A-D, correct_count và judge_answer suy từ các chữ cái đúng. */
+        static String optionCheckJson(String reasoning, String correctLetters) {
+            List<String> correct = correctLetters.isBlank() ? List.of() : List.of(correctLetters.split(","));
+            StringBuilder items = new StringBuilder();
+            for (String opt : List.of("A", "B", "C", "D")) {
+                items.append(items.length() > 0 ? ", " : "").append("{\"option\": \"").append(opt)
+                        .append("\", \"correct\": ").append(correct.contains(opt))
+                        .append(", \"reason\": \"kiểm ").append(opt).append("\"}");
+            }
+            String judge = correct.size() == 1 ? correct.get(0) : correct.isEmpty() ? "none" : "multiple";
+            return "{\"reasoning\": \"" + reasoning + "\", \"options_verdict\": [" + items + "], \"correct_count\": "
+                    + correct.size() + ", \"judge_answer\": \"" + judge + "\"}";
         }
     }
 
@@ -542,6 +563,27 @@ class ExamQuestionEditTest {
         assertTrue(format.contains("ngoài $ (đã gỡ vỏ) ở option_a"), format);
         assertTrue(texts(item.get("reviewReasons")).stream().noneMatch(t -> t.contains("đã gỡ vỏ")),
                 "gỡ vỏ không đổi nghĩa nên không bật cần xem kỹ: " + item);
+    }
+
+    /** 31/10: ký hiệu độ viết ^\bullet / ^{\triangle} trong bản giáo viên sửa được đổi thành ^{\circ}, \triangle ABC giữ nguyên. */
+    @Test
+    void banSuaCoKyHieuDoBulletTriangleDuocDoiThanhCirc() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int base = questionOf(slot);
+        JsonNode item = json(putQuestion(examId, slot, mcqBody(base)
+                .put("questionText", "Cho $\\triangle ABC$ có góc $A = 75^\\bullet$. Tính góc $B$?")
+                .put("optionA", "$85^{\\triangle}$"))
+                .andExpect(status().isOk()));
+        int version = item.get("questionId").asInt();
+        assertEquals("Cho $\\triangle ABC$ có góc $A = 75^{\\circ}$. Tính góc $B$?", question(version).get("question_text"));
+        assertEquals("$85^{\\circ}$", question(version).get("option_a"));
+        String format = jdbc.queryForObject("SELECT passed || ' ' || warnings::text FROM quality_check_result"
+                + " WHERE question_id = ? AND check_type = 'format'", String.class, version);
+        assertTrue(format.startsWith("true "), format);
+        assertTrue(format.contains("ký hiệu độ"), format);
+        assertTrue(texts(item.get("reviewReasons")).stream().noneMatch(t -> t.contains("ký hiệu độ")),
+                "đổi ký hiệu độ là tự sửa, không bật cần xem kỹ: " + item);
     }
 
     /** 27/10: đáp án sa giáo viên nhập "2.75" được lưu "2,75". */

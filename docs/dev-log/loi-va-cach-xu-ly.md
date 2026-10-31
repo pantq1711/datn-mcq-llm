@@ -67,6 +67,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-51 | Model viết đơn vị đo `\text{km/h}` ngoài `$...$`, cả ô mcq mức vừa bị loại 18/18 lượt sinh (bổ sung 27/10) | LLM & parse | Cao | Đã sửa |
 | L-52 | W2-4b: hàng đợi, bộ điều tiết Gemini, worker liên tục (bổ sung 28/10) | Hàng đợi/đồng thời | Cao | Đã sửa |
 | L-53 | Dedup: `similarity` null do chốt chặn số liệu; câu fallback của ô đang sinh lại không là ứng viên (bổ sung 31/10) | QC | Trung bình | Đã sửa |
+| L-54 | Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (thẩm định 31/10) | QC | Cao | Đã sửa (v4 bắt 7/9 và 5/9, không báo nhầm) |
 
 **Thống kê theo nhóm** (53 mục):
 
@@ -821,6 +822,79 @@ Theo mức độ: Cao 13, Trung bình 26, Thấp 14.
 - Backlog (không làm): hai worker xử lý hai câu giống nhau cùng lúc có thể cùng bị `duplicate`; chấp nhận vì hiếm và chỉ tốn một lượt sinh lại. Nếu cần tránh thì tuần tự hóa dedup theo đề bằng `pg_advisory_xact_lock` (chưa dự án nào dùng advisory lock, `grep advisory` trong `src` không có kết quả).
 - Bài học: `similarity = NULL` không phải bằng chứng ứng viên rỗng; trước khi kết luận lỗi phạm vi ứng viên phải tách "không có ứng viên" khỏi "ứng viên bị chốt chặn loại". Test dedup trong đề phải đi qua đường chỗ kia đang sinh, không chỉ đặt sẵn câu vào chỗ đã `ready`.
 - Trạng thái: Đã sửa (phần fallback). Phần "câu cùng khuôn" chuyển sang việc đa dạng trong đề.
+
+### L-54 Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (bổ sung 31/10)
+- Nhóm: QC
+- Triệu chứng: thẩm định 31/10 trên DB `datn_mcq_e2e` thấy 9 câu mcq có từ 2 phương án đúng trở lên mà Solver vẫn cho qua:
+  - câu 7, 8, 37, 39, 52, 53: phân tích nhân tử, nhiều phương án nhân lại đều bằng đa thức gốc. Ví dụ câu 37 "Phân tích
+    $2x^3 - 6x^2$ thành nhân tử" có cả 4 phương án bằng đa thức gốc;
+  - câu 15, 61: tính chất hình thang cân thiếu chữ "luôn";
+  - câu 25: bản giáo viên sửa có 2 đáp án.
+- Nguyên nhân gốc: prompt `solver-v2-delimited` đã cho phép ghi `multiple`/`none`, nhưng chỉ có một trường kết luận và không bắt
+  xét từng phương án. Solver giải ra một kết quả, gặp phương án đầu tiên khớp thì dừng, ghi chữ cái đó.
+- Đo "trước" (bước 1): công cụ `SolverProbeRunner` (chạy thủ công, không ghi DB, CSV ra ngoài repo). Lệnh đúng có
+  `--server.port=0 --app.worker.enabled=false`; lệnh ban đầu có `--spring.main.web-application-type=none` làm app không khởi
+  động được (SecurityConfig cần ngữ cảnh web), lần thử đó không gọi Gemini.
+- Cách sửa (bước 2):
+  - Prompt `solver-v3-option-check`: Solver giải bài rồi xét TỪNG phương án A–D (đúng/sai, lý do một dòng: khai triển/rút gọn,
+    thay số, đối chiếu điều kiện; khẳng định không "luôn" đúng là sai), trả thêm `options_verdict` và `correct_count`, vẫn giữ
+    `reasoning` và `judge_answer`.
+  - `AnswerSolverChecker` đếm lại từ `options_verdict`, không tin `correct_count`/`judge_answer` khi chúng lệch: 2 trở lên là
+    `multiple`, 0 là `none`. Cả hai là `INCONSISTENT`, nên đi đúng đường Q-2 có sẵn (sinh lại 1 lần, vẫn lỗi thì giữ kèm cờ).
+  - Lý do mới `solver_multiple_correct` / `solver_no_correct`. Kết quả từng phương án ghi vào đầu `solver_reasoning` (V14), không
+    thêm migration.
+  - Phản hồi thiếu hoặc hỏng `options_verdict` được xử lý như Solver cũ và ghi cảnh báo vào log.
+  - v2 vẫn giữ (`app.llm.solver-prompt-version`) để đo lại số "trước".
+- Chống tái phát: `McqSolverOptionCheckTest`, `SolverOptionCheckPromptTest`, `QcSummaryReviewReasonsTest`, `SolverProbeToolTest`,
+  `ExamReconcileErrorSeparationTest` (2 phương án đúng → sinh lại 1 lần → giữ kèm `solver_multiple_correct`; 0 phương án đúng →
+  `solver_no_correct`; 1 đúng khớp → `qc_passed`; 1 đúng khác đáp án → `solver_inconsistent`).
+- Hạn chế: mỗi lượt Solver mcq dài hơn (4 lý do một dòng), nên tốn thêm token; số token đo ở cột `token_count` của công cụ đo.
+  Việc tách lý do dựa vào dòng đầu của ghi chú Solver, nên ai sửa định dạng ghi chú phải sửa cùng `QcSummaryService`.
+- Lần thử 1 (`solver-v3-option-check`, commit `366b4b0`, DB `datn_mcq_e2e`, 29 câu, mỗi phiên bản chạy 2 lần, 31/10):
+  - Bắt được trên 9 câu lỗi: v2 0/9 và 0/9; v3 0/9 và 0/9.
+  - Báo nhầm trên 20 câu tốt: v2 0/19 (câu 27 lỗi 429, vượt 15 lượt/phút) và 0/20; v3 1/20 (câu 35 `multiple`) và 2/20
+    (câu 35 `multiple`, câu 32 `none`). Cả hai là Solver tính sai.
+  - Token trung bình mỗi câu: v2 687 và 684; v3 1206 và 1203. Độ trễ trung bình: v2 1179 và 1087 ms; v3 1640 và 1712 ms.
+  - Ổn định giữa 2 lần: v2 28/28 câu cùng kết luận; v3 28/29 (câu 32 đổi).
+  - Lý do 0/9 (đọc đề trong DB, các id đúng là câu đã thẩm định): Solver hiểu "đúng" hẹp.
+    - 6 câu phân tích nhân tử: Solver chỉ nhận cách phân tích triệt để, vì prompt v3 có cụm "đúng dạng đề yêu cầu".
+    - Câu 15, 61: chính prompt v3 dặn "khẳng định không luôn đúng là sai".
+    - Câu 25: Solver coi "$6$ km" không phải đơn thức vì có đơn vị.
+- Quy tắc nghiệp vụ chốt 31/10: phương án ĐÚNG nếu học sinh bảo vệ được nó là đáp án theo đúng chữ của đề, không thêm yêu cầu
+  đề không nêu.
+  - Phân tích nhân tử: mọi tích nhân lại bằng đa thức đã cho đều đúng, trừ khi đề ghi "triệt để" hoặc "đặt nhân tử chung lớn
+    nhất".
+  - Khẳng định hình học: đề không có "luôn" thì phương án đúng trong ít nhất một trường hợp hợp lệ là đúng.
+  - Đề mơ hồ thì `correct_count` từ 2. Mục tiêu là phát hiện đề mơ hồ, không đoán ý người ra đề.
+- Lần thử 2: prompt `solver-v4-literal-reading` (mặc định) = v3 + quy tắc trên + 2 ví dụ ($2x(x^2 - 3x)$ là phân tích đúng của
+  $2x^3 - 6x^2$; "hai đường chéo vuông góc" của hình thang cân là đúng khi đề không ghi "luôn"). Bỏ hai cụm gây hiểu hẹp của v3.
+  Cùng JSON và cách kết luận với v3. v2, v3 giữ nguyên từng chữ (`SolverPromptFrozenTextTest` ghim SHA-256 của prompt) để đo lại.
+- Kết quả lần thử 2 (`solver-v4-literal-reading`, commit `9c514eb`, cùng DB và 29 câu, chạy 2 lần, 31/10):
+  - Bắt được trên 9 câu lỗi: 7/9 và 5/9.
+    - Câu 37, 39 (4 phương án đúng), 7 (A, B), 8 (A, B, C), 15 (A, B): bắt được ở cả 2 lần. Các phương án Solver cho là đúng
+      khớp với đọc đề.
+    - Câu 52, 53: bắt được ở lần 1, bỏ sót ở lần 2. Lần 1 câu 52 cũng chỉ thấy A, B, bỏ qua D $x(7x - 14y)$ dù D nhân lại bằng
+      đa thức đã cho.
+    - Câu 61, 25: bỏ sót ở cả 2 lần. Đọc đề không thấy phương án thứ hai bảo vệ được ở câu 61; câu 25 Solver vẫn coi "$6$ km"
+      không phải đơn thức. Nếu chỉ tính 7 câu lỗi rõ ràng: 7/7 và 5/7.
+  - Báo nhầm trên 20 câu tốt: 0/19 (câu 27 lỗi 429) và 0/20. Hai lần báo nhầm của v3 (câu 32, 35) không còn.
+  - Token trung bình mỗi câu: 1622 và 1604 (khoảng 2,4 lần v2). Độ trễ trung bình: 1853 và 2133 ms.
+  - Ổn định giữa 2 lần: 26/28 câu cùng kết luận (khác ở câu 52, 53; câu 27 không tính).
+- Bảng TN1 (bắt được trên 9 / báo nhầm trên 20 / token trung bình / ổn định):
+
+  | Phiên bản | Bắt được | Báo nhầm | Token | Ổn định |
+  |---|---|---|---|---|
+  | v2 `solver-v2-delimited` | 0/9, 0/9 | 0/19, 0/20 | 687, 684 | 28/28 |
+  | v3 `solver-v3-option-check` | 0/9, 0/9 | 1/20, 2/20 | 1206, 1203 | 28/29 |
+  | v4 `solver-v4-literal-reading` | 7/9, 5/9 | 0/19, 0/20 | 1622, 1604 | 26/28 |
+
+- Hạn chế còn lại: v4 chưa ổn định với câu phân tích nhân tử có 2 phương án đúng (52, 53). Mỗi tập chỉ có 29 câu, mỗi phiên bản
+  chạy 2 lần, nên các tỉ lệ chỉ mang tính chỉ báo. Hạn mức 15 lượt/phút của gói miễn phí làm 1 lượt mỗi lần đo có thể lỗi 429.
+  - Nhãn "câu lỗi"/"câu tốt" của 29 câu do AI gán trong buổi thẩm định nội dung 31/10, CHƯA được người xác nhận; hai câu 61 và
+    25 còn tranh cãi (vì vậy có cả cách tính trên 7 câu). Số liệu chỉ dùng làm kết quả chính thức sau khi người xác nhận nhãn.
+  - Solver và mô hình sinh câu là cùng một model (`gemini-3.5-flash-lite`): mô hình tự kiểm tra đầu ra của chính nó; chưa thử
+    Solver bằng model khác.
+- Trạng thái: Đã sửa. v4 là mặc định; đã đo trước/sau.
 
 ## Hàng đợi/đồng thời
 

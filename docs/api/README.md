@@ -711,7 +711,8 @@ khác để sinh lại).
   Chỗ chưa có câu chỉ có phần định danh và `state` (`generating`, `failed`).
 - `source`: `bank` (lấy từ ngân hàng) hoặc `generated`. Câu từ ngân hàng và câu đã Giữ hiển thị bản trong ngân hàng,
   không gắn cờ.
-- `reviewReasons`: `solver_inconsistent` (Solver lệch), `solver_ambiguous`, `solver_unparseable` (`sa`),
+- `reviewReasons`: `solver_inconsistent` (Solver lệch), `solver_multiple_correct` và `solver_no_correct` (`mcq`, Solver xét từng
+  phương án thấy từ 2 phương án đúng / không phương án nào đúng; xem `docs/contract/enums.md` mục 4.6), `solver_ambiguous`, `solver_unparseable` (`sa`),
   `statement_undecidable` (`tf`), `solver_not_run` (Solver chưa chạy hoặc lỗi), `dedup_not_run`, và
   `warning: <cảnh báo format>` (ví dụ `warning: label: 4 ý cùng nhãn T`, `warning: option_a: đã tự đóng $`,
   `warning: label: khác mẫu mục tiêu T,F,F,T (nhận T,T,F,F)`; dữ liệu trước 26/10 ghi `khác mẫu bắt buộc`). Cảnh báo `json: đã sửa ... escape LaTeX` không phải lý

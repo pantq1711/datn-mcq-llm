@@ -3,6 +3,8 @@ package com.datn.mcq.generation.parser;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Sửa các lỗi lặp lại của đầu ra LLM trước/sau khi giải mã JSON (ngày 23/10, dùng chung cho parser mcq/sa/tf, chỉ ở chế
@@ -11,6 +13,7 @@ import java.util.List;
  *   <li>{@link #repairLatexEscapes}: dấu "\" của lệnh LaTeX chưa nhân đôi trong chuỗi JSON (ví dụ "$75^\circ$").</li>
  *   <li>{@link #closeTrailingDollar}: công thức mở bằng "$" ở cuối trường mà quên "$" đóng.</li>
  *   <li>{@link #stripTextOutsideMath} (27/10): vỏ {@code \text{...}} của đơn vị đo viết ngoài $ ("$40$ \text{km/h}").</li>
+ *   <li>{@link #fixDegreeSymbol} (31/10): ký hiệu độ viết {@code ^\bullet}/{@code ^\triangle} thay cho {@code ^{\circ}}.</li>
  * </ol>
  */
 public final class LlmOutputRepair {
@@ -283,6 +286,90 @@ public final class LlmOutputRepair {
         return ESCAPE_WARNING_PREFIX + removed + " \\text{} ngoài $ (đã gỡ vỏ) ở " + field;
     }
 
+    /** @param text văn bản sau khi sửa; {@code fixed} là số ký hiệu độ đã đổi thành {@code ^{\circ}} */
+    public record DegreeRepair(String text, int fixed) {}
+
+    private static final String DEGREE = "^{\\circ}";
+
+    /** Chữ số hoặc "}" rồi "^" rồi {@code \bullet}/{@code \triangle}, có hoặc không có {...} và khoảng trắng. */
+    private static final Pattern WRONG_DEGREE = Pattern.compile(
+            "([0-9}])\\s*\\^\\s*(?:\\\\(?:bullet|triangle)(?![A-Za-z])|\\{\\s*\\\\(?:bullet|triangle)\\s*\\})");
+
+    /**
+     * Đổi ký hiệu độ viết sai thành {@code ^{\circ}} (31/10, thẩm định nội dung: "75•", "85△" ở 6 câu). CHỈ bên trong cặp
+     * $...$ và chỉ khi ngay sau một chữ số hoặc "}" là {@code ^\bullet}, {@code ^{\bullet}}, {@code ^\triangle} hoặc
+     * {@code ^{\triangle}} (cho phép khoảng trắng quanh "^"): "$75^\bullet$" thành "$75^{\circ}$". Ngoài ngữ cảnh đó giữ
+     * nguyên ({@code \triangle ABC}, {@code a^\bullet}, {@code \bullet} ngoài công thức). Cách xác định trong/ngoài $ như
+     * {@link #stripTextOutsideMath}; công thức không có "$" đóng thì không đụng tới.
+     */
+    public static DegreeRepair fixDegreeSymbol(String text) {
+        if (text == null || !(text.contains("\\bullet") || text.contains("\\triangle"))) {
+            return new DegreeRepair(text, 0);
+        }
+        StringBuilder sb = new StringBuilder(text.length());
+        int fixed = 0;
+        int n = text.length();
+        int i = 0;
+        while (i < n) {
+            char c = text.charAt(i);
+            if (c == '\\') {
+                sb.append(c);
+                if (i + 1 < n) {
+                    sb.append(text.charAt(i + 1));
+                }
+                i += 2;
+                continue;
+            }
+            if (c != '$') {
+                sb.append(c);
+                i++;
+                continue;
+            }
+            boolean display = i + 1 < n && text.charAt(i + 1) == '$';
+            int open = display ? 2 : 1;
+            int close = findMathClose(text, i + open);
+            if (close < 0) {
+                sb.append(text, i, n);
+                break;
+            }
+            String inner = text.substring(i + open, close);
+            Matcher m = WRONG_DEGREE.matcher(inner);
+            StringBuilder math = new StringBuilder();
+            int last = 0;
+            while (m.find()) {
+                math.append(inner, last, m.start()).append(m.group(1)).append(DEGREE);
+                last = m.end();
+                fixed++;
+            }
+            math.append(inner, last, inner.length());
+            boolean two = display && close + 1 < n && text.charAt(close + 1) == '$';
+            sb.append(display ? "$$" : "$").append(math).append(two ? "$$" : "$");
+            i = close + (two ? 2 : 1);
+        }
+        return fixed == 0 ? new DegreeRepair(text, 0) : new DegreeRepair(sb.toString(), fixed);
+    }
+
+    /** Vị trí "$" đóng đầu tiên từ {@code from} (bỏ qua "\" cùng ký tự đi sau nó); -1 khi không có. */
+    private static int findMathClose(String text, int from) {
+        for (int k = from; k < text.length(); k++) {
+            char c = text.charAt(k);
+            if (c == '\\') {
+                k++;
+            } else if (c == '$') {
+                return k;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Cảnh báo khi đã đổi ký hiệu độ. Cùng tiền tố với cảnh báo sửa escape nên lưu ở warnings, hiện trong vết QC như một
+     * lần tự sửa và không bật "cần xem kỹ" (ý định luôn là độ, không phải khối lượng hay hình tam giác).
+     */
+    public static String degreeWarning(String field, int fixed) {
+        return ESCAPE_WARNING_PREFIX + fixed + " ký hiệu độ (^\\bullet, ^\\triangle thành ^{\\circ}) ở " + field;
+    }
+
     /** Chế độ sửa: sửa escape LaTeX trong chuỗi JSON trước khi giải mã, ghi cảnh báo nếu có sửa. */
     static String repairJson(String json, boolean repair, List<String> warnings) {
         if (!repair) {
@@ -314,6 +401,11 @@ public final class LlmOutputRepair {
             if (d.closed()) {
                 warnings.add(dollarWarning(field));
                 s = d.text();
+            }
+            DegreeRepair g = fixDegreeSymbol(s);
+            if (g.fixed() > 0) {
+                warnings.add(degreeWarning(field, g.fixed()));
+                s = g.text();
             }
         }
         return (newlines ? McqJsonParser.normalizeLiteralNewlines(s) : s).trim();

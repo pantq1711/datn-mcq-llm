@@ -1,5 +1,6 @@
 package com.datn.mcq.qc.service;
 
+import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.qc.dto.GroundingVerdict;
 import com.datn.mcq.qc.service.QcSummaryService.QcSummary;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,29 @@ class QcSummaryReviewReasonsTest {
         assertEquals(List.of(), reasonsWith(GroundingVerdict.SUPPORTED));
         assertEquals(List.of("grounding_not_supported"), reasonsWith(GroundingVerdict.NOT_SUPPORTED));
         assertEquals(List.of("grounding_unknown"), reasonsWith(GroundingVerdict.UNKNOWN));
+    }
+
+    private static List<String> solverReasons(AnswerChoice judge, boolean optionCheck) {
+        return new QcSummary(true, false, null, false, List.of(), null, null, judge, optionCheck).reviewReasons();
+    }
+
+    /** Thẩm định 31/10: Solver v3 xét từng phương án tách lý do "nhiều phương án đúng" và "không có phương án đúng". */
+    @Test
+    void solverXetTungPhuongAnTachLyDoNhieuPhuongAnDungVaKhongCoPhuongAnDung() {
+        assertEquals(List.of("solver_multiple_correct"), solverReasons(AnswerChoice.MULTIPLE, true));
+        assertEquals(List.of("solver_no_correct"), solverReasons(AnswerChoice.NONE, true));
+        assertEquals(List.of("solver_inconsistent"), solverReasons(AnswerChoice.C, true),
+                "một phương án đúng nhưng khác đáp án: như cũ");
+        assertEquals(List.of(), new QcSummary(true, true, null, false, List.of(), null, null, AnswerChoice.B, true)
+                .reviewReasons());
+    }
+
+    /** Kết quả không có khối xét từng phương án (Solver cũ, dòng lưu trước v3): giữ lý do cũ, không gắn cờ mới. */
+    @Test
+    void solverCuKhongXetTungPhuongAnGiuLyDoSolverInconsistent() {
+        assertEquals(List.of("solver_inconsistent"), solverReasons(AnswerChoice.MULTIPLE, false));
+        assertEquals(List.of("solver_inconsistent"), solverReasons(AnswerChoice.NONE, false));
+        assertEquals(List.of("solver_inconsistent"), new QcSummary(true, false, null, false, List.of()).reviewReasons());
     }
 
     @Test
