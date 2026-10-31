@@ -4,7 +4,7 @@ import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.generation.service.StoredQcInput;
 import com.datn.mcq.llm.client.QuotaExhaustedException;
-import com.datn.mcq.qc.checker.AnswerSolverChecker;
+import com.datn.mcq.llm.prompt.PromptBuilder;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.dto.SolverVerdict;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
@@ -40,8 +40,10 @@ import java.util.Set;
  *   <li>KHÔNG ghi DB: không lưu dòng answer_check, không đổi trạng thái câu. Lượt gọi của công cụ vì thế không được
  *       bộ điều tiết đếm lại khi app khởi động lần sau (đếm theo dòng answer_check).</li>
  *   <li>Chỉ đọc câu đã lưu (generated_question và 4 ý tf); Solver chỉ thấy đề và phương án/ý như trong pipeline.</li>
- *   <li>{@code app.solver-probe.prompt-version} phải bằng phiên bản prompt Solver đang có trong code; khác thì dừng trước
- *       khi gọi lượt nào.</li>
+ *   <li>{@code app.solver-probe.prompt-version} chọn phiên bản prompt Solver mcq cần đo (một giá trị trong
+ *       {@link PromptBuilder#SOLVER_PROMPT_VERSIONS}, ví dụ {@code solver-v2-delimited} cho số "trước",
+ *       {@code solver-v3-option-check} cho số "sau"); Solver của lần chạy lấy đúng phiên bản này. Không có trong code
+ *       hoặc khác phiên bản Solver đang chạy thì dừng trước khi gọi lượt nào.</li>
  * </ul>
  *
  * Chạy xong thì đóng app (không mở cổng HTTP nếu chạy với {@code --spring.main.web-application-type=none}).
@@ -78,7 +80,7 @@ public class SolverProbeRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws IOException {
         // Kiểm tra mọi tham số trước lượt gọi đầu tiên.
-        checkPromptVersion(promptVersion);
+        checkPromptVersion(promptVersion, qcOrchestrator.solverPromptVersion());
         Path out = resolveOutDir(outDir, Path.of("").toAbsolutePath());
         List<Integer> ids = parseIds(Files.readString(Path.of(idsFile.trim()), StandardCharsets.UTF_8));
         if (ids.isEmpty()) {
@@ -138,15 +140,23 @@ public class SolverProbeRunner implements ApplicationRunner {
         w.flush(); // giữ được kết quả đã có nếu dừng giữa chừng
     }
 
-    /** Phiên bản yêu cầu phải bằng phiên bản prompt Solver đang có trong code. */
-    static void checkPromptVersion(String requested) {
+    /**
+     * Phiên bản yêu cầu phải có trong code và bằng phiên bản Solver đang chạy ({@code active}). Bình thường hai giá trị
+     * trùng nhau vì Solver lấy mặc định từ {@code app.solver-probe.prompt-version}; khác nhau khi đặt thêm
+     * {@code app.llm.solver-prompt-version} khác đi.
+     */
+    static void checkPromptVersion(String requested, String active) {
+        String known = String.join(", ", PromptBuilder.SOLVER_PROMPT_VERSIONS);
         if (requested == null || requested.isBlank()) {
-            throw new IllegalStateException("Thiếu app.solver-probe.prompt-version (phiên bản hiện có: "
-                    + AnswerSolverChecker.SOLVER_PROMPT_VERSION + ")");
+            throw new IllegalStateException("Thiếu app.solver-probe.prompt-version (có: " + known + ")");
         }
-        if (!AnswerSolverChecker.SOLVER_PROMPT_VERSION.equals(requested.trim())) {
-            throw new IllegalStateException("Phiên bản prompt Solver '" + requested + "' không có trong code (hiện có: "
-                    + AnswerSolverChecker.SOLVER_PROMPT_VERSION + ")");
+        if (!PromptBuilder.SOLVER_PROMPT_VERSIONS.contains(requested.trim())) {
+            throw new IllegalStateException("Phiên bản prompt Solver '" + requested + "' không có trong code (có: "
+                    + known + ")");
+        }
+        if (!requested.trim().equals(active)) {
+            throw new IllegalStateException("Solver đang chạy prompt '" + active + "', khác phiên bản cần đo '"
+                    + requested + "' (bỏ hoặc sửa app.llm.solver-prompt-version)");
         }
     }
 

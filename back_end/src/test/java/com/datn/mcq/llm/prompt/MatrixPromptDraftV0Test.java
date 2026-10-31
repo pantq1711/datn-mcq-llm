@@ -136,7 +136,7 @@ class MatrixPromptDraftV0Test {
         assertFalse(TfPromptDraftV0.buildSolverPrompt("Cho $x = 1$.", List.of("a", "b", "c", "d")).contains(unit));
         assertFalse(SaPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, "Giải $2x - 6 = 0$.",
                 Difficulty.EASY).contains(unit), "prompt sinh lẻ của công cụ thí nghiệm không đổi");
-        assertEquals("solver-v2-delimited", PromptBuilder.SOLVER_PROMPT_VERSION);
+        assertEquals("solver-v3-option-check", PromptBuilder.SOLVER_PROMPT_VERSION);
         for (QuestionType type : QuestionType.values()) {
             assertTrue(MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Chuyển động", null)).contains(unit), type.name());
         }

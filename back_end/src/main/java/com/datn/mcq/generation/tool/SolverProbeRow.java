@@ -14,7 +14,9 @@ import java.util.stream.Collectors;
  *
  * @param verdict           consistent, inconsistent hoặc error
  * @param multipleFlag      mcq: "1" khi Solver báo có từ 2 phương án đúng, "0" khi không; rỗng với tf/sa và khi lỗi
- * @param solverCorrectCount mcq: số phương án Solver cho là đúng ("0", "1", "2+" khi chỉ biết là nhiều); rỗng khi không có
+ * @param solverCorrectCount mcq: số phương án Solver cho là đúng; Solver v3 đếm chính xác từ options_verdict, Solver cũ
+ *                           (hoặc phản hồi thiếu options_verdict) chỉ biết "0", "1" hay "2+"; rỗng khi không có
+ * @param optionsVerdict    mcq Solver v3: kết luận từng phương án dạng "A:1|B:0|C:1|D:0" (1 là đúng); rỗng khi không có
  */
 public record SolverProbeRow(
         Integer questionId,
@@ -25,6 +27,7 @@ public record SolverProbeRow(
         String verdict,
         String multipleFlag,
         String solverCorrectCount,
+        String optionsVerdict,
         Integer tokenCount,
         Double latencyMs,
         String solverModel,
@@ -32,7 +35,10 @@ public record SolverProbeRow(
 ) {
 
     public static final String HEADER = "question_id,prompt_version,question_type,question_answer,solver_answer,"
-            + "verdict,multiple_correct_flag,solver_correct_count,token_count,latency_ms,solver_model,error";
+            + "verdict,multiple_correct_flag,solver_correct_count,options_verdict,token_count,latency_ms,solver_model,"
+            + "error";
+
+    private static final List<String> LETTERS = List.of("A", "B", "C", "D");
 
     static final int MAX_ERROR_CHARS = 300;
 
@@ -42,6 +48,7 @@ public record SolverProbeRow(
         String solverAnswer;
         String multiple = "";
         String count = "";
+        String options = "";
         switch (type) {
             case TF -> solverAnswer = v.tfLabels() == null ? ""
                     : v.tfLabels().stream().map(TruthChoice::getDbValue).collect(Collectors.joining("|"));
@@ -51,13 +58,24 @@ public record SolverProbeRow(
                 AnswerChoice j = v.judgeAnswer();
                 solverAnswer = j != null ? j.getDbValue() : "";
                 multiple = j == AnswerChoice.MULTIPLE ? "1" : "0";
-                count = j == null ? "" : j == AnswerChoice.MULTIPLE ? "2+" : j == AnswerChoice.NONE ? "0" : "1";
+                List<Boolean> perOption = v.mcqOptionCorrect();
+                if (perOption != null) {
+                    count = String.valueOf(perOption.stream().filter(Boolean::booleanValue).count());
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < perOption.size() && i < LETTERS.size(); i++) {
+                        sb.append(i > 0 ? "|" : "").append(LETTERS.get(i)).append(':')
+                                .append(perOption.get(i) ? '1' : '0');
+                    }
+                    options = sb.toString();
+                } else {
+                    count = j == null ? "" : j == AnswerChoice.MULTIPLE ? "2+" : j == AnswerChoice.NONE ? "0" : "1";
+                }
             }
         }
         Integer tokens = v.usage() != null ? v.usage().tokenCount() : null;
         Double latency = v.usage() != null ? v.usage().latencyMs() : null;
         return new SolverProbeRow(input.questionId(), promptVersion, type.getDbValue(), questionAnswer(input),
-                solverAnswer, v.passed() ? "consistent" : "inconsistent", multiple, count, tokens, latency,
+                solverAnswer, v.passed() ? "consistent" : "inconsistent", multiple, count, options, tokens, latency,
                 v.judgeModel(), "");
     }
 
@@ -68,7 +86,7 @@ public record SolverProbeRow(
                                        String message) {
         return new SolverProbeRow(questionId, promptVersion,
                 input != null ? input.questionType().getDbValue() : "",
-                input != null ? questionAnswer(input) : "", "", "error", "", "", null, null, "",
+                input != null ? questionAnswer(input) : "", "", "error", "", "", "", null, null, "",
                 clipOneLine(message));
     }
 
@@ -84,8 +102,8 @@ public record SolverProbeRow(
     public String toCsvLine() {
         return List.of(
                 str(questionId), promptVersion, questionType, questionAnswer, solverAnswer, verdict, multipleFlag,
-                solverCorrectCount, str(tokenCount), latencyMs == null ? "" : String.valueOf(Math.round(latencyMs)),
-                solverModel, error
+                solverCorrectCount, optionsVerdict, str(tokenCount),
+                latencyMs == null ? "" : String.valueOf(Math.round(latencyMs)), solverModel, error
         ).stream().map(SolverProbeRow::csv).collect(Collectors.joining(","));
     }
 

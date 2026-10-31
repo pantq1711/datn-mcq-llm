@@ -27,7 +27,8 @@ public final class ExamViewDtos {
      *
      * @param source        "bank" (lấy từ ngân hàng) hoặc "generated" (hệ thống sinh)
      * @param difficulty    mức của câu mcq/sa; tf ghi mức ở từng ý
-     * @param reviewReasons lý do "cần xem kỹ": solver_inconsistent, solver_not_run, solver_ambiguous,
+     * @param reviewReasons lý do "cần xem kỹ": solver_inconsistent, solver_multiple_correct, solver_no_correct (mcq,
+     *                      Solver xét từng phương án, thẩm định 31/10), solver_not_run, solver_ambiguous,
      *                      solver_unparseable, statement_undecidable, dedup_not_run, "warning: ..." (cảnh báo format);
      *                      W1-2 thêm solver_pending (Solver đang kiểm lại bản sửa), solver_failed (job kiểm lại thất
      *                      bại), "duplicate: &lt;id&gt;" (bản sửa trùng câu khác)

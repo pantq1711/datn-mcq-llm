@@ -72,6 +72,11 @@ class ExamQuestionEditTest {
     /** Solver giả: mcq trả {@code mcqJudge}, sa {@code saJudge}, tf {@code tfJudges}; có thể lỗi hoặc chạy một móc. */
     static final class EditSolver extends LlmClient {
         String mcqJudge = "B";
+        /**
+         * Solver v3 (xét từng phương án): các chữ cái Solver cho là đúng, nối bằng dấu phẩy ("" là không có phương án nào
+         * đúng). null: trả JSON kiểu Solver cũ chỉ có judge_answer = {@code mcqJudge}.
+         */
+        String mcqOptions;
         String saJudge = "5";
         /** Lời giải thích Solver trả cho mcq và sa (W1-3: được lưu ở quality_check_result.solver_reasoning). */
         String reasoning = "r";
@@ -115,10 +120,26 @@ class ExamQuestionEditTest {
                         + " \"judge_d\": \"" + j[3] + "\"}";
             } else if (SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON.equals(schema)) {
                 body = "{\"reasoning\": \"" + reasoning + "\", \"judge_answer\": \"" + saJudge + "\"}";
+            } else if (mcqOptions != null) {
+                body = optionCheckJson(reasoning, mcqOptions);
             } else {
                 body = "{\"reasoning\": \"" + reasoning + "\", \"judge_answer\": \"" + mcqJudge + "\"}";
             }
             return new LlmCallResult(body, 10, 1.0, 0.0, modelName);
+        }
+
+        /** JSON Solver v3: options_verdict cho A-D, correct_count và judge_answer suy từ các chữ cái đúng. */
+        static String optionCheckJson(String reasoning, String correctLetters) {
+            List<String> correct = correctLetters.isBlank() ? List.of() : List.of(correctLetters.split(","));
+            StringBuilder items = new StringBuilder();
+            for (String opt : List.of("A", "B", "C", "D")) {
+                items.append(items.length() > 0 ? ", " : "").append("{\"option\": \"").append(opt)
+                        .append("\", \"correct\": ").append(correct.contains(opt))
+                        .append(", \"reason\": \"kiểm ").append(opt).append("\"}");
+            }
+            String judge = correct.size() == 1 ? correct.get(0) : correct.isEmpty() ? "none" : "multiple";
+            return "{\"reasoning\": \"" + reasoning + "\", \"options_verdict\": [" + items + "], \"correct_count\": "
+                    + correct.size() + ", \"judge_answer\": \"" + judge + "\"}";
         }
     }
 

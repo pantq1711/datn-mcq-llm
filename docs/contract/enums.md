@@ -337,6 +337,11 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     Không có cột tiền: `LlmClient` không tính giá (`cost_usd` luôn 0). Tổng hợp: `docs/thong-ke/06-chi-phi.sql`. Không đưa ra API.
   - Lý do "cần xem kỹ" thêm (W2-3): `grounding_not_supported`, `grounding_unknown` (từ kết quả), `grounding_pending`, `grounding_failed`
     (từ trạng thái job).
+  - Lý do "cần xem kỹ" thêm (thẩm định 31/10, câu `mcq`, Solver `solver-v3-option-check`): `solver_multiple_correct` (Solver xét từng
+    phương án thấy từ 2 phương án đúng, `judge_answer = 'multiple'`), `solver_no_correct` (không phương án nào đúng,
+    `judge_answer = 'none'`). Thay cho `solver_inconsistent` ở hai trường hợp này; chỉ áp cho kết quả có khối xét từng phương án
+    (mục 4.6). Chuỗi hiển thị đề xuất cho frontend: "Có thể có hơn một phương án đúng, thầy/cô kiểm tra lại" và "Hệ thống không tìm
+    được phương án đúng, thầy/cô kiểm tra lại".
   - `lesson_material.extracted_text`: văn bản thường (docx đã làm sạch markdown, giữ `$...$`); xem `docs/api/README.md` mục 9.3.
   - `bank_item.visible_to_user_id` (V19): NULL là câu dùng chung (mọi câu cũ); khác NULL thì chỉ người dùng đó thấy và dùng
     lại. Đặt khi Giữ câu sinh từ đề có tài liệu đính kèm. Không xóa dây chuyền theo `users`.
@@ -492,5 +497,53 @@ Solver chỉ thấy đề dẫn và 4 ý, không thấy nhãn và lời giải c
   "judge_c": "F",
   "reasoning_d": "$1 + \\frac{1}{x}$ nguyên khi $x = \\pm 1$, loại $x = 1$, còn một giá trị.",
   "judge_d": "F"
+}
+```
+
+### 4.6. Solver câu `mcq` (4 trường, `solver-v3-option-check`, thẩm định 31/10)
+
+Solver chỉ thấy đề và 4 phương án, không thấy đáp án và lời giải của câu. Solver giải bài rồi xét **từng** phương án A–D,
+không dừng ở phương án đầu tiên khớp. Thứ tự: `reasoning`, `options_verdict`, `correct_count`, `judge_answer`. Phiên bản
+cũ `solver-v2-delimited` (2 trường `reasoning`, `judge_answer`) vẫn có trong code để đo lại, chọn bằng
+`app.llm.solver-prompt-version`; mặc định là v3.
+
+| Trường | Kiểu | Ý nghĩa |
+|---|---|---|
+| `reasoning` | chuỗi | Lời giải của Solver |
+| `options_verdict` | mảng 4 đối tượng `{option, correct, reason}` | `option` là `A`..`D` (mỗi chữ cái một lần, không cần đúng thứ tự, trim, không phân biệt hoa thường); `correct` là `true`/`false`; `reason` là lý do một dòng |
+| `correct_count` | số nguyên | Số phương án đúng do Solver tự đếm (chỉ để đối chiếu) |
+| `judge_answer` | chuỗi `A`..`D`, `multiple`, `none` | Kết luận do Solver ghi (chỉ để đối chiếu khi có `options_verdict` hợp lệ) |
+
+Backend đếm số phương án đúng từ chính `options_verdict`. `correct_count` hoặc `judge_answer` lệch thì ghi cảnh báo vào
+log và vẫn theo `options_verdict`.
+
+| Số phương án đúng | `quality_check_result.judge_answer` | `answerCheckStatus` | `reviewReasons` |
+|---|---|---|---|
+| 1, trùng đáp án câu | chữ cái đó | `CONSISTENT` | không có |
+| 1, khác đáp án câu | chữ cái đó | `INCONSISTENT` | `solver_inconsistent` |
+| từ 2 trở lên | `multiple` | `INCONSISTENT` | `solver_multiple_correct` |
+| 0 | `none` | `INCONSISTENT` | `solver_no_correct` |
+| thiếu hoặc hỏng `options_verdict` (không phải mảng 4 phần tử, thiếu/trùng chữ cái, `correct` không phải true/false) | theo `judge_answer` như Solver cũ | như Solver cũ | `solver_inconsistent` khi lệch (kể cả `multiple`/`none`), không gắn lý do mới |
+| JSON hỏng, khóa trùng, lỗi gọi; hoặc thiếu `options_verdict` hợp lệ mà `judge_answer` thiếu/sai | không ghi dòng | `ERROR` | `solver_failed`/`solver_pending` như cũ |
+
+- `MULTIPLE_CORRECT` (`multiple`) và `NO_CORRECT` (`none`) là kết luận `INCONSISTENT`, đi đúng đường Q-2: câu mới sinh được
+  giữ làm câu dự phòng và sinh lại 1 lần; vẫn lỗi thì giữ câu kèm cờ. Không thêm giá trị `AnswerCheckStatus`, không thêm cột.
+- Kết quả từng phương án không có cột riêng: được ghi vào đầu `quality_check_result.solver_reasoning` (V14), dòng đầu là
+  `[Xét từng phương án] <số>/4 phương án đúng`, mỗi phương án một dòng `A: đúng – <lý do>`, rồi một dòng trống và
+  `reasoning`. `QcSummaryService` chỉ tách `solver_multiple_correct`/`solver_no_correct` khi ghi chú bắt đầu bằng
+  `[Xét từng phương án]`; dòng lưu trước v3 có `multiple`/`none` vẫn là `solver_inconsistent`. Ghi chú bị cắt ở 4000 ký tự
+  từ cuối, nên dòng đầu luôn còn; khi chép kết quả Solver sang bản sửa chỉ đổi lời giải, ghi chú được chép nguyên.
+
+```json
+{
+  "reasoning": "$2x^3 - 6x^2 = 2x^2(x - 3)$.",
+  "options_verdict": [
+    {"option": "A", "correct": true, "reason": "Khai triển $2x^2(x-3) = 2x^3 - 6x^2$."},
+    {"option": "B", "correct": true, "reason": "Khai triển $2x(x^2 - 3x) = 2x^3 - 6x^2$."},
+    {"option": "C", "correct": false, "reason": "Khai triển $x^2(2x + 6) = 2x^3 + 6x^2$, khác đề."},
+    {"option": "D", "correct": false, "reason": "$2(x^3 - 6x)$ khai triển ra $2x^3 - 12x$, khác đề."}
+  ],
+  "correct_count": 2,
+  "judge_answer": "multiple"
 }
 ```

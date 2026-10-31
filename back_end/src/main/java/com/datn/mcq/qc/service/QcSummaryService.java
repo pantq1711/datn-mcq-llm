@@ -8,6 +8,7 @@ import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.generation.parser.LlmOutputRepair;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
+import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.dto.GroundingVerdict;
 import com.datn.mcq.qc.dto.TfJudgement;
 import com.datn.mcq.qc.entity.QualityCheckResult;
@@ -33,6 +34,10 @@ public class QcSummaryService {
     public static final String SOLVER_INCONSISTENT = "solver_inconsistent";
     public static final String SOLVER_AMBIGUOUS = "solver_ambiguous";
     public static final String SOLVER_UNPARSEABLE = "solver_unparseable";
+    /** Thẩm định 31/10: Solver xét từng phương án thấy từ 2 phương án đúng trở lên (mcq, judge_answer = multiple). */
+    public static final String SOLVER_MULTIPLE_CORRECT = "solver_multiple_correct";
+    /** Thẩm định 31/10: Solver xét từng phương án không thấy phương án nào đúng (mcq, judge_answer = none). */
+    public static final String SOLVER_NO_CORRECT = "solver_no_correct";
     public static final String STATEMENT_UNDECIDABLE = "statement_undecidable";
     public static final String DEDUP_NOT_RUN = "dedup_not_run";
     public static final String WARNING_PREFIX = "warning: ";
@@ -49,10 +54,20 @@ public class QcSummaryService {
      * @param duplicateOf       (W1-2) câu bị trùng khi dòng dedup không qua; null khi không trùng
      * @param grounding         (W2-3) kết luận "bám tài liệu"; null khi câu không có kết quả (không dùng tài liệu, chưa chấm
      *                          hoặc chấm lỗi)
+     * @param judgeAnswer       mcq: đáp án Solver đã lưu (A-D, multiple, none); null với dạng khác hoặc khi chưa có dòng
+     * @param solverOptionCheck true khi ghi chú Solver có khối xét từng phương án (Solver v3); chỉ khi đó multiple/none mới
+     *                          tách thành lý do riêng, kết quả Solver cũ giữ {@code solver_inconsistent}
      */
     public record QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
                             boolean hasUndecidable, List<String> warnings, Integer duplicateOf,
-                            GroundingVerdict grounding) {
+                            GroundingVerdict grounding, AnswerChoice judgeAnswer, boolean solverOptionCheck) {
+
+        public QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
+                         boolean hasUndecidable, List<String> warnings, Integer duplicateOf,
+                         GroundingVerdict grounding) {
+            this(dedupRan, answerCheckPassed, judgeSaKind, hasUndecidable, warnings, duplicateOf, grounding, null,
+                    false);
+        }
 
         public QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
                          boolean hasUndecidable, List<String> warnings, Integer duplicateOf) {
@@ -77,6 +92,10 @@ public class QcSummaryService {
                     reasons.add(SOLVER_AMBIGUOUS);
                 } else if (judgeSaKind == SaJudgeKind.UNPARSEABLE) {
                     reasons.add(SOLVER_UNPARSEABLE);
+                } else if (solverOptionCheck && judgeAnswer == AnswerChoice.MULTIPLE) {
+                    reasons.add(SOLVER_MULTIPLE_CORRECT);
+                } else if (solverOptionCheck && judgeAnswer == AnswerChoice.NONE) {
+                    reasons.add(SOLVER_NO_CORRECT);
                 } else {
                     reasons.add(SOLVER_INCONSISTENT);
                 }
@@ -190,6 +209,9 @@ public class QcSummaryService {
                 dedup.filter(d -> Boolean.FALSE.equals(d.getPassed()))
                         .map(QualityCheckResult::getComparedToQuestionId).orElse(null),
                 groundingRepository.findByQuestionId(questionId).map(g -> GroundingVerdict.fromDb(g.getVerdict()))
-                        .orElse(null));
+                        .orElse(null),
+                answer.map(QualityCheckResult::getJudgeAnswer).orElse(null),
+                answer.map(QualityCheckResult::getSolverReasoning)
+                        .filter(r -> r.startsWith(AnswerSolverChecker.OPTIONS_VERDICT_PREFIX)).isPresent());
     }
 }
