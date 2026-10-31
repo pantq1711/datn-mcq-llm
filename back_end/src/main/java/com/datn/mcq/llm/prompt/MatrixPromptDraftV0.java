@@ -71,13 +71,16 @@ public final class MatrixPromptDraftV0 {
      * 10: 18/18 lượt sinh ô mcq mức vừa bị loại vì viết "\text{km/h}" ngoài $): thêm {@link #UNIT_RULE} (ví dụ đơn vị đo
      * viết ngoài $; {@code ESCAPE_HINT} không đổi). sa v3 (ngày 27/10, sau đo exam 9 ô 23: câu 145, 147, 148 bị loại vì đáp án "\frac{11}{4}",
      * "$3\frac{1}{4}$", "4\frac{1}{3}"): {@link #SA_ANSWER_RULES} thay quy tắc đáp số chung, đáp án chỉ là số nguyên hoặc
-     * thập phân tối đa 4 ký tự (phiếu trả lời Bộ GD&ĐT 2025, Phần III). Run cũ là v0 (tf: v0, v1, v2, v3; mcq: v1; sa: v1, v2).
+     * thập phân tối đa 4 ký tự (phiếu trả lời Bộ GD&ĐT 2025, Phần III). mcq v3, sa v4, tf v5 (ngày 31/10, thẩm định nội dung
+     * 4 đề: 0 câu sai đáp án nhưng nhiều phương án sai vẫn đúng, câu thiếu "luôn", câu "Biết" đòi 2 bước, ô phân tích nhân tử ra
+     * bài tìm x): thêm {@link #CONTENT_RULES} cho cả 3 dạng, {@link #MCQ_OPTION_RULES} cho mcq, {@link #FACTORING_CELL_RULE}
+     * cho sa và tf. Run cũ là v0 (tf: v0, v1, v2, v3, v4; mcq: v1, v2; sa: v1, v2, v3).
      */
     public static String promptVersion(QuestionType type) {
         String version = switch (type) {
-            case TF -> "-v4-draft";
-            case SA -> "-v3-draft";
-            case MCQ -> "-v2-draft";
+            case TF -> "-v5-draft";
+            case SA -> "-v4-draft";
+            case MCQ -> "-v3-draft";
         };
         return VERSION_PREFIX + type.getDbValue() + version;
     }
@@ -95,6 +98,37 @@ public final class MatrixPromptDraftV0 {
     static final String MCQ_DISTRACTOR_RULE = "- Mỗi phương án nhiễu phải SAI về giá trị, không được là biểu thức "
             + "tương đương với đáp án đúng (ví dụ với phân tích nhân tử, không dùng dạng phân tích chưa triệt để như "
             + "$3(x^2 - 4x)$ khi đáp án là $3x(x - 4)$).";
+
+    /**
+     * Quy tắc phương án của câu mcq (31/10, thẩm định nội dung 4 đề: phương án sai vẫn bằng đa thức gốc ở câu 7, 8, 37,
+     * 39, 52, 53; phương án độn "giá trị khác" ở câu 64). Đặt sau {@link #MCQ_DISTRACTOR_RULE}.
+     */
+    static final String MCQ_OPTION_RULES = "- Đúng MỘT phương án đúng. Mọi phương án sai phải SAI THẬT: không được là một "
+            + "cách viết tương đương đúng của đáp án hoặc của biểu thức đề cho; kiểm bằng cách khai triển hoặc rút gọn "
+            + "từng phương án trước khi chọn.\n"
+            + "- Không dùng phương án độn như \"giá trị khác\", \"tất cả đều sai\", \"không xác định\" (trừ khi đó là "
+            + "đáp án đúng và có lý do toán học).";
+
+    /**
+     * Quy tắc nội dung chung của cả 3 dạng (31/10, thẩm định nội dung: câu 15 và 61 thiếu "luôn", câu 42 "Biết" đòi 2 bước,
+     * câu 36 hỏi kiến thức Toán 7, câu 26, 46, 58 "thỏa mãn biểu thức"). Mỗi dòng là một gạch đầu dòng. Hằng riêng của
+     * prompt ma trận: {@link PromptBuilder#ESCAPE_HINT}, prompt Solver và prompt sinh lẻ không chứa.
+     */
+    static final String CONTENT_RULES = """
+            - Câu yêu cầu biến đổi hoặc phân tích phải nêu rõ dạng kết quả cần có (ví dụ "đặt nhân tử chung lớn nhất", \
+            "phân tích triệt để", "thu gọn hoàn toàn").
+            - Câu hỏi về tính chất hình học dùng "luôn" ("... luôn bằng nhau") để loại trường hợp đặc biệt của riêng một \
+            hình cụ thể.
+            - Câu mức Biết chỉ cần MỘT bước suy luận hoặc tính; câu cần từ 2 bước trở lên thuộc mức Hiểu hoặc Vận dụng.
+            - Chỉ dùng kiến thức trọng tâm của lớp và bài trong ô; không lấy khái niệm lớp dưới làm trọng tâm.
+            - Câu chữ: viết "thỏa mãn đẳng thức" (không viết "thỏa mãn biểu thức"); không lặp từ (cụm "sau đây" chỉ dùng \
+            một lần trong câu).
+            """;
+
+    /** Ô phân tích đa thức của câu sa và đúng/sai (31/10, câu 46 và 58 ra bài tìm x chỉ cần khai căn). */
+    static final String FACTORING_CELL_RULE = "- Nếu chủ đề hoặc nội dung của ô là phân tích đa thức thành nhân tử thì "
+            + "câu phải hỏi phân tích (hoặc dùng phân tích làm bước chính để giải); không chuyển thành bài tìm x chỉ cần "
+            + "khai căn.";
 
     /** Dòng của {@link TfPromptDraftV0#STATEMENT_RULES} bị bỏ khi ghi chú của job có mẫu nhãn mục tiêu. */
     static final String TF_FREE_COUNT_LINE = "- Không bắt buộc số ý Đúng hay số ý Sai.";
@@ -308,6 +342,7 @@ public final class MatrixPromptDraftV0 {
                         - Viết lời giải ngắn trong "explanation" và kiểm tra "correct_option" khớp với lời giải.
                         """);
                 sb.append(MCQ_DISTRACTOR_RULE).append("\n");
+                sb.append(MCQ_OPTION_RULES).append("\n").append(CONTENT_RULES);
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append("""
                         Trả về DUY NHẤT một đối tượng JSON có đủ 7 trường:
@@ -325,11 +360,13 @@ public final class MatrixPromptDraftV0 {
                 if (levels != null && levels.size() == 4 && levels.get(3) == Difficulty.HARD) {
                     sb.append(TF_D_RULE).append("\n");
                 }
+                sb.append(CONTENT_RULES).append(FACTORING_CELL_RULE).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(TfPromptDraftV0.OUTPUT_INSTRUCTION);
             }
             case SA -> {
                 sb.append(SA_ANSWER_RULES);
+                sb.append("\nQuy tắc nội dung:\n").append(CONTENT_RULES).append(FACTORING_CELL_RULE).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(SaPromptDraftV0.OUTPUT_INSTRUCTION);
             }

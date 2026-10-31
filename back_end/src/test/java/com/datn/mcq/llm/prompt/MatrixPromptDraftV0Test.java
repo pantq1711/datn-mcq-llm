@@ -101,9 +101,9 @@ class MatrixPromptDraftV0Test {
 
     @Test
     void phienBanVaThongSoOLuuDuoc() {
-        assertEquals("matrix-mcq-v2-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
-        assertEquals("matrix-tf-v4-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
-        assertEquals("matrix-sa-v3-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
+        assertEquals("matrix-mcq-v3-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
+        assertEquals("matrix-tf-v5-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-sa-v4-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion("sa-v1-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion(null));
@@ -151,6 +151,74 @@ class MatrixPromptDraftV0Test {
         assertTrue(p.contains("$3(x^2 - 4x)$ khi đáp án là $3x(x - 4)$"), p);
         assertFalse(MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.SA, "Tứ giác", null))
                 .contains("phương án nhiễu"));
+    }
+
+    /** Quy tắc nội dung chung của cả 3 dạng (31/10, thẩm định nội dung: dạng kết quả, "luôn", số bước, kiến thức, câu chữ). */
+    @Test
+    void quyTacNoiDungChungCoTrongPromptMaTranCaBaDang() {
+        for (QuestionType type : QuestionType.values()) {
+            String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Phân tích đa thức thành nhân tử", null));
+            for (String part : List.of("phải nêu rõ dạng kết quả", "\"đặt nhân tử chung lớn nhất\"",
+                    "\"phân tích triệt để\"", "\"thu gọn hoàn toàn\"",
+                    "dùng \"luôn\" (\"... luôn bằng nhau\") để loại trường hợp đặc biệt",
+                    "mức Biết chỉ cần MỘT bước suy luận hoặc tính", "từ 2 bước trở lên thuộc mức Hiểu hoặc Vận dụng",
+                    "Chỉ dùng kiến thức trọng tâm của lớp và bài trong ô", "không lấy khái niệm lớp dưới làm trọng tâm",
+                    "viết \"thỏa mãn đẳng thức\" (không viết \"thỏa mãn biểu thức\")",
+                    "cụm \"sau đây\" chỉ dùng một lần")) {
+                assertTrue(p.contains(part), type + " thiếu: " + part);
+            }
+        }
+    }
+
+    /** Hai quy tắc phương án (31/10) chỉ có nghĩa với câu mcq. */
+    @Test
+    void quyTacPhuongAnChiCoTrongPromptMcq() {
+        String mcq = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.MCQ, "Phân tích", null));
+        for (String part : List.of("Đúng MỘT phương án đúng", "Mọi phương án sai phải SAI THẬT",
+                "không được là một cách viết tương đương đúng của đáp án hoặc của biểu thức đề cho",
+                "khai triển hoặc rút gọn từng phương án",
+                "Không dùng phương án độn như \"giá trị khác\", \"tất cả đều sai\", \"không xác định\"",
+                "trừ khi đó là đáp án đúng và có lý do toán học")) {
+            assertTrue(mcq.contains(part), "mcq thiếu: " + part);
+        }
+        for (QuestionType type : List.of(QuestionType.SA, QuestionType.TF)) {
+            String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Phân tích", null));
+            assertFalse(p.contains("SAI THẬT") || p.contains("phương án độn"), type.name());
+        }
+    }
+
+    /** Ô phân tích đa thức của câu sa và đúng/sai phải hỏi phân tích, không biến thành bài tìm x (46, 58). */
+    @Test
+    void oPhanTichNhanTuCuaSaVaTfPhaiHoiPhanTich() {
+        for (QuestionType type : List.of(QuestionType.SA, QuestionType.TF)) {
+            String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Phân tích đa thức thành nhân tử", null));
+            assertTrue(p.contains("phân tích đa thức thành nhân tử thì câu phải hỏi phân tích"), type + ": " + p);
+            assertTrue(p.contains("không chuyển thành bài tìm x chỉ cần khai căn"), type + ": " + p);
+        }
+        assertFalse(MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.MCQ, "Phân tích", null))
+                .contains("không chuyển thành bài tìm x"));
+    }
+
+    /** Quy tắc mới là hằng riêng của prompt ma trận: prompt Solver, ESCAPE_HINT và prompt sinh lẻ không chứa. */
+    @Test
+    void quyTacNoiDungMoiKhongNamTrongSolver() {
+        List<String> markers = List.of("SAI THẬT", "phải nêu rõ dạng kết quả", "thỏa mãn đẳng thức", "MỘT bước suy luận",
+                "phương án độn", "khái niệm lớp dưới", "không chuyển thành bài tìm x", "luôn bằng nhau");
+        List<String> prompts = List.of(
+                PromptBuilder.ESCAPE_HINT,
+                new PromptBuilder().buildSolverPrompt("Tính $1 + 1$.", "$1$", "$2$", "$3$", "$4$"),
+                SaPromptDraftV0.buildSolverPrompt("Tính $1 + 1$."),
+                TfPromptDraftV0.buildSolverPrompt("Cho $x = 1$.", List.of("a", "b", "c", "d")),
+                SaPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, "Giải $2x - 6 = 0$.", Difficulty.EASY));
+        for (String prompt : prompts) {
+            for (String marker : markers) {
+                assertFalse(prompt.contains(marker), marker + " lọt vào: " + prompt);
+            }
+        }
+        for (QuestionType type : QuestionType.values()) {
+            assertTrue(MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Đa thức", null)).contains("MỘT bước suy luận"),
+                    type.name());
+        }
     }
 
     /** Ngày 23/10 (mục 6): phần TF của prompt ma trận dùng chung quy tắc ý với TfPromptDraftV0. */
