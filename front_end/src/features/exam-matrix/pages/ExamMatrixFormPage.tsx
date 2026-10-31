@@ -1,12 +1,12 @@
 import { Button, Card, Space, Typography, message, Form, Spin } from 'antd';
 import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
 import { ExamMatrixBasicInfoForm } from '../components/ExamMatrixBasicInfoForm';
 import { ExamMatrixDistributionTable, createEmptyExamMatrixCounts, type ExamMatrixCounts, type ExamMatrixQuestionType, type ExamMatrixCognitiveLevel } from '../components/ExamMatrixDistributionTable';
 import { ExamMatrixTotalSummary } from '../components/ExamMatrixTotalSummary';
-import { createExamMatrix, updateExamMatrix, getExamMatrix, getExamMatrixTemplate } from '../services/examMatrixService';
+import { createExamMatrix, updateExamMatrix, getExamMatrix } from '../services/examMatrixService';
 import './ExamMatrixFormPage.css';
 
 const { Title, Text } = Typography;
@@ -17,11 +17,7 @@ const { Title, Text } = Typography;
 export default function ExamMatrixFormPage() {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
-    const [searchParams] = useSearchParams();
-
-    const templateId = searchParams.get('templateId');
     const isEditMode = Boolean(id);
-    const isTemplateMode = !isEditMode && Boolean(templateId);
 
     const [basicForm] = Form.useForm();
     const [saving, setSaving] = useState(false);
@@ -29,11 +25,7 @@ export default function ExamMatrixFormPage() {
     // Khởi tạo state đúng chuẩn ExamMatrixCounts thay vì mảng any[]
     const [matrixCounts, setMatrixCounts] = useState<ExamMatrixCounts>(createEmptyExamMatrixCounts);
 
-    const pageTitle = isEditMode
-        ? 'Chỉnh sửa ma trận'
-        : isTemplateMode
-            ? 'Tạo ma trận từ mẫu'
-            : 'Tạo ma trận';
+    const pageTitle = isEditMode ? 'Chỉnh sửa ma trận' : 'Tạo ma trận';
 
     const handleCancel = () => {
         navigate('/exam-matrices');
@@ -199,54 +191,13 @@ export default function ExamMatrixFormPage() {
         })();
     }, [isEditMode, id, basicForm]);
 
-    useEffect(() => {
-        if (!isTemplateMode) return;
-        setSaving(true);                    // reuse same spinner state
-        (async () => {
-            try {
-                const tmpl = await getExamMatrixTemplate(templateId!);
-                // ---- Basic form -------------------------------------------------
-                basicForm.setFieldsValue({
-                    name: tmpl.name ?? '',
-                    subjectId: tmpl.subjectId ?? '',
-                    gradeLevel: tmpl.gradeLevel ?? '',
-                    description: tmpl.description ?? '',
-                });
-
-                // ---- matrixCounts ------------------------------------------------
-                const initCounts = createEmptyExamMatrixCounts();
-                tmpl.cells?.forEach(cell => {
-                    const { questionType, difficulty, questionCount } = cell;
-                    const qType = (
-                        questionType === 'mcq' ? 'MULTIPLE_CHOICE' :
-                            questionType === 'tf' ? 'TRUE_FALSE' : 'SHORT_ANSWER'
-                    ) as ExamMatrixQuestionType;
-                    const cLevel = (
-                        questionType === 'tf'
-                            ? 'KNOW'
-                            : (difficulty?.toUpperCase() as ExamMatrixCognitiveLevel) || 'KNOW'
-                    );
-                    if (initCounts[qType] && cLevel) {
-                        initCounts[qType][cLevel] = questionCount;
-                    }
-                });
-                setMatrixCounts(initCounts);
-            } catch (err: any) {
-                const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message;
-                message.error(msg ?? 'Không thể tải mẫu ma trận. Vui lòng thử lại.');
-            } finally {
-                setSaving(false);
-            }
-        })();
-    }, [isTemplateMode, templateId, basicForm]);
-
     return (
         <main className="exam-matrix-form-page">
-            {(isEditMode || isTemplateMode) && saving ? (
+            {isEditMode && saving ? (
                 <div className="profile-loading" style={{ textAlign: 'center', padding: '80px 0' }}>
                     <Spin size="large" />
                     <p className="profile-loading-text" style={{ marginTop: '16px' }}>
-                        {isEditMode ? 'Đang tải ma trận…' : 'Đang tải mẫu ma trận…'}
+                        Đang tải ma trận…
                     </p>
                 </div>
             ) : (

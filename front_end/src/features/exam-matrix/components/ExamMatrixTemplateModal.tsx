@@ -1,26 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Empty, Input, List, Modal, Select, Space, Spin, Typography, message } from 'antd';
+import { Button, Empty, Input, List, Modal, Space, Spin, Tag, Typography, message } from 'antd';
 import { CopyOutlined, SearchOutlined } from '@ant-design/icons';
 
 import { listExamMatrixSamples } from '../services/examMatrixService';
-import { getSubjectById } from '../services/subjectService';
-import type { ExamMatrixTemplate } from '../types/examMatrix.types';
+import type { ExamMatrixSample } from '../types/examMatrix.types';
 import './ExamMatrixTemplateModal.css';
 
-const { Text } = Typography;
-const ALL_SUBJECTS = '__all_subjects__';
+const { Text, Paragraph } = Typography;
 
 interface ExamMatrixTemplateModalProps {
     open: boolean;
     onCancel: () => void;
-    onSelectTemplate: (templateId: string) => void;
-    onCreateFromSample?: (sampleKey: string) => void;
+    onCreateFromSample: (sampleKey: string) => void;
 }
 
 function normalizeSearchValue(value: string): string {
     return value
         .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[̀-ͯ]/g, '')
         .replace(/đ/g, 'd')
         .replace(/Đ/g, 'D')
         .toLocaleLowerCase('vi-VN')
@@ -28,29 +25,25 @@ function normalizeSearchValue(value: string): string {
 }
 
 /**
- * Modal for choosing an existing matrix template.
- * It fetches templates internally when opened and resolves subject names dynamically.
+ * Modal chọn mẫu ma trận có sẵn (GET /api/exam-matrices/samples).
+ * Mẫu chỉ có key, tên, khối, nguồn, ghi chú; không có danh sách ô nên chỉ tạo được ma trận từ mẫu rồi sửa sau.
  */
 export function ExamMatrixTemplateModal({
     open,
     onCancel,
-    onSelectTemplate,
     onCreateFromSample,
 }: ExamMatrixTemplateModalProps) {
     const [searchText, setSearchText] = useState('');
-    const [subjectFilter, setSubjectFilter] = useState(ALL_SUBJECTS);
-
-    const [templates, setTemplates] = useState<ExamMatrixTemplate[]>([]);
+    const [samples, setSamples] = useState<ExamMatrixSample[]>([]);
     const [loading, setLoading] = useState(false);
-    const [subjectMap, setSubjectMap] = useState<Record<string | number, string>>({});
 
     useEffect(() => {
         if (!open) return;          // Chỉ chạy khi modal thực sự được mở
-        const fetchTemplates = async () => {
+        const fetchSamples = async () => {
             setLoading(true);
             try {
                 const data = await listExamMatrixSamples();
-                setTemplates(data);
+                setSamples(data);
             } catch (err: any) {
                 const msg =
                     err?.response?.data?.error ||
@@ -62,88 +55,28 @@ export function ExamMatrixTemplateModal({
             }
         };
 
-        fetchTemplates();
+        fetchSamples();
     }, [open]);
 
-    useEffect(() => {
-        const missingIds = Array.from(
-            new Set(
-                templates
-                    .map(t => t.subjectId)
-                    .filter((id): id is number => id !== undefined && id !== null)
-            )
-        ).filter(id => !(id in subjectMap));
-
-        if (missingIds.length === 0) return;
-
-        (async () => {
-            try {
-                const results = await Promise.all(
-                    missingIds.map(id => getSubjectById(id))
-                );
-                setSubjectMap(prev => {
-                    const next = { ...prev };
-                    results.forEach(sub => {
-                        if (sub?.id != null && sub?.name) {
-                            next[sub.id] = sub.name;
-                        }
-                    });
-                    return next;
-                });
-            } catch (err: any) {
-                console.error('Failed to load subject names for templates:', err);
-            }
-        })();
-    }, [templates, subjectMap]);
-
-    const templatesWithName = useMemo(() => {
-        return templates.map(t => {
-            const subId = t.subjectId;
-            const resolvedSubjectName = subId != null ? subjectMap[subId] : undefined;
-            return {
-                ...t,
-                subjectName: t.subjectName || resolvedSubjectName || String(subId ?? ''),
-            };
-        });
-    }, [templates, subjectMap]);
-
-    const subjectOptions = useMemo(() => {
-        const subjectNames = Array.from(
-            new Set(templatesWithName.map((template) => template.subjectName?.trim()).filter(Boolean)),
-        ).sort((a, b) => a.localeCompare(b, 'vi'));
-
-        return [
-            { label: 'Tất cả môn học', value: ALL_SUBJECTS },
-            ...subjectNames.map((subjectName) => ({
-                label: subjectName,
-                value: subjectName,
-            })),
-        ];
-    }, [templatesWithName]);
-
-    const filteredTemplates = useMemo(() => {
+    const filteredSamples = useMemo(() => {
         const keyword = normalizeSearchValue(searchText);
+        if (!keyword) return samples;
 
-        return templatesWithName.filter((template) => {
-            const matchesSubject =
-                subjectFilter === ALL_SUBJECTS || template.subjectName === subjectFilter;
-            const searchableText = normalizeSearchValue(
+        return samples.filter((sample) =>
+            normalizeSearchValue(
                 [
-                    template.name,
-                    template.subjectName,
-                    template.gradeLevel == null ? '' : String(template.gradeLevel),
-                    template.description ?? '',
+                    sample.name,
+                    sample.gradeLevel == null ? '' : `khoi ${sample.gradeLevel}`,
+                    sample.source ?? '',
+                    ...(sample.notes ?? []),
                 ].join(' '),
-            );
-            const matchesSearch = !keyword || searchableText.includes(keyword);
+            ).includes(keyword),
+        );
+    }, [samples, searchText]);
 
-            return matchesSubject && matchesSearch;
-        });
-    }, [templatesWithName, searchText, subjectFilter]);
-
-    const emptyDescription = templates.length === 0
-        ? 'Chưa có mẫu ma trận. Hãy tạo hoặc cấu hình mẫu trước khi sử dụng chức năng này.'
-        : 'Không tìm thấy mẫu phù hợp với từ khóa hoặc môn học đã chọn.';
+    const emptyDescription = samples.length === 0
+        ? 'Chưa có mẫu ma trận nào.'
+        : 'Không tìm thấy mẫu phù hợp với từ khóa.';
 
     return (
         <Modal
@@ -151,7 +84,7 @@ export function ExamMatrixTemplateModal({
             title={
                 <Space size={10}>
                     <CopyOutlined />
-                    <span>Chọn mẫu ma trận</span>
+                    <span>Tạo ma trận từ mẫu</span>
                 </Space>
             }
             open={open}
@@ -162,69 +95,66 @@ export function ExamMatrixTemplateModal({
             destroyOnClose
         >
             <div className="exam-matrix-template-modal__content">
-                <div className="exam-matrix-template-modal__intro" style={{ marginBottom: 16 }}>
+                <div className="exam-matrix-template-modal__intro">
                     <Text type="secondary">
-                        Chọn một mẫu để khởi tạo biểu mẫu ma trận mới. Bạn có thể điều chỉnh lại thông tin sau khi chọn.
+                        Chọn một mẫu để tạo ma trận mới (môn mặc định: Toán). Sau khi tạo, bạn có thể chỉnh sửa ma trận như bình thường.
                     </Text>
                 </div>
 
-                <div className="exam-matrix-template-modal__filters" style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-                    <Input
-                        allowClear
-                        value={searchText}
-                        onChange={(event) => setSearchText(event.target.value)}
-                        placeholder="Tìm theo tên mẫu, môn học..."
-                        prefix={<SearchOutlined />}
-                        style={{ flex: 1 }}
-                    />
-                    <Select
-                        value={subjectFilter}
-                        onChange={setSubjectFilter}
-                        options={subjectOptions}
-                        style={{ width: 200 }}
-                    />
-                </div>
+                <Input
+                    allowClear
+                    value={searchText}
+                    onChange={(event) => setSearchText(event.target.value)}
+                    placeholder="Tìm theo tên mẫu, khối, nguồn, ghi chú..."
+                    prefix={<SearchOutlined />}
+                />
 
                 {loading ? (
                     <div style={{ textAlign: 'center', padding: '40px 0' }}>
                         <Spin size="large" />
                         <p style={{ marginTop: 12 }}>Đang tải mẫu…</p>
                     </div>
-                ) : filteredTemplates.length > 0 ? (
+                ) : filteredSamples.length > 0 ? (
                     <List
-                        dataSource={filteredTemplates}
-                        pagination={{ pageSize: 5 }}
+                        dataSource={filteredSamples}
+                        pagination={{ pageSize: 5, hideOnSinglePage: true }}
                         renderItem={(item) => (
                             <List.Item
                                 actions={[
                                     <Button
-                                        key="use"
+                                        key="create"
                                         type="primary"
-                                        onClick={() => {
-                                            // Truyền id về component cha → chuyển hướng
-                                            onSelectTemplate(item.id);
-                                        }}
+                                        onClick={() => onCreateFromSample(item.key)}
                                     >
-                                        Sử dụng mẫu này
+                                        Tạo từ mẫu
                                     </Button>,
-                                    onCreateFromSample ? (
-                                        <Button
-                                            key="sample"
-                                            type="link"
-                                            onClick={() => onCreateFromSample(item.id)}
-                                        >
-                                            Tạo từ mẫu
-                                        </Button>
-                                    ) : null,
-                                ].filter(Boolean)}
+                                ]}
                             >
                                 <List.Item.Meta
-                                    title={item.name}
+                                    title={
+                                        <Space size={8} wrap>
+                                            <span>{item.name}</span>
+                                            {item.gradeLevel != null && (
+                                                <Tag color="geekblue">Khối {item.gradeLevel}</Tag>
+                                            )}
+                                        </Space>
+                                    }
                                     description={
                                         <>
-                                            <Text strong>Môn học:</Text> {item.subjectName}
-                                            <br />
-                                            <Text strong>Số ô cấu trúc:</Text> {item.cells?.length ?? 0}
+                                            {item.source && (
+                                                <div>
+                                                    <Text strong>Nguồn:</Text> {item.source}
+                                                </div>
+                                            )}
+                                            {item.notes && item.notes.length > 0 && (
+                                                <Paragraph
+                                                    type="secondary"
+                                                    style={{ marginBottom: 0, whiteSpace: 'pre-line' }}
+                                                    ellipsis={{ rows: 2, expandable: true, symbol: 'Xem thêm' }}
+                                                >
+                                                    {item.notes.join('\n')}
+                                                </Paragraph>
+                                            )}
                                         </>
                                     }
                                 />

@@ -41,16 +41,15 @@ export interface ExamMatrixDetail extends ExamMatrix {
     cells: ExamMatrixCellPayload[];
 }
 
-export interface ExamMatrixTemplate {
-    id: string;
-    name: string;
-    subjectId?: number;
-    subjectName?: string;
-    gradeLevel?: number;
-    description?: string;
-    cells: ExamMatrixCellPayload[];
-}
-
 export interface DeleteResponse {
     success: boolean;
+}
+
+/** Mẫu ma trận có sẵn (GET /api/exam-matrices/samples, SampleDto ở backend). */
+export interface ExamMatrixSample {
+    key: string;
+    name: string;
+    gradeLevel: number | null;
+    source: string | null;
+    notes: string[] | null;
 }

@@ -20,6 +20,10 @@ export interface ExamPreviewData {
     easyCount: number;
     mediumCount: number;
     hardCount: number;
+    /** Câu đúng/sai: mức nằm ở từng ý a-d nên đếm riêng, không vào Biết/Hiểu/Vận dụng. */
+    tfCount: number;
+    /** Chỗ chưa có câu (đang sinh, sinh lỗi). */
+    missingCount?: number;
     instructions?: string;
 }
 

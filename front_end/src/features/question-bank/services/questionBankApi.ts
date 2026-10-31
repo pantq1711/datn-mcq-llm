@@ -26,8 +26,11 @@ export async function getBankItems(params?: BankItemParams): Promise<BankItemsRe
             questionType: params?.questionType ?? undefined,
             topic: params?.topic?.trim() || undefined,
             difficulty: params?.difficulty ?? undefined,
-            status: params?.status ?? undefined,
             sort: params?.sort || undefined,
+            usage: params?.usage ?? undefined,
+            content: params?.content?.trim() || undefined,
+            // Chỉ gửi khi là tf và đủ 4 mức, tránh 400
+            levels: params?.questionType === "tf" && params.levels?.every(Boolean) ? params.levels.join(",") : undefined,
         },
     });
 

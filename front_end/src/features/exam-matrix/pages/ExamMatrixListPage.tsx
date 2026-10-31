@@ -58,11 +58,6 @@ export default function ExamMatrixListPage() {
         }
     };
 
-    const handleSelectTemplate = (templateId: string) => {
-        setIsTemplateModalOpen(false);
-        navigate(`/exam-matrices/new?templateId=${encodeURIComponent(templateId)}`);
-    };
-
     const handleDuplicateMatrix = async (matrixId: string) => {
         try {
             const newMatrix = await duplicateExamMatrix(matrixId);
@@ -161,7 +156,6 @@ export default function ExamMatrixListPage() {
             <ExamMatrixTemplateModal
                 open={isTemplateModalOpen}
                 onCancel={() => setIsTemplateModalOpen(false)}
-                onSelectTemplate={handleSelectTemplate}
                 onCreateFromSample={handleCreateFromSample}
             />
         </div>

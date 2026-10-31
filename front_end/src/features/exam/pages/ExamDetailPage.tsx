@@ -5,7 +5,7 @@ import { ArrowLeftOutlined, FileWordOutlined, LineChartOutlined, WarningOutlined
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
 import type { ExamPreviewData, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
-import { examKindConfig, examStatusConfig } from "../../../utils/exam.utils";
+import { examKindConfig, examStatusConfig, resolveQuestionType } from "../../../utils/exam.utils";
 import { keepQuestion, replaceQuestion, getExamDetail, getExamExportDocx, getCatalogSubjects } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
 
@@ -222,13 +222,18 @@ export default function ExamDetailPage() {
     if (!detail) return <p>Không có dữ liệu đề.</p>;
 
     const allQuestions = parts.flatMap((p) => p.questions);
+    // Câu tf có difficulty null (mức ở từng ý) nên đếm riêng để các dòng cộng đủ tổng
+    const leveledQuestions = allQuestions.filter((q) => resolveQuestionType(q) !== "tf");
+    const questionCount = parts.reduce((sum, p) => sum + p.required, 0);
     const exam: ExamPreviewData = {
         title: detail.title,
         subject: subjectName,
-        questionCount: parts.reduce((sum, p) => sum + p.required, 0),
-        easyCount: allQuestions.filter((q) => q.difficulty === "easy").length,
-        mediumCount: allQuestions.filter((q) => q.difficulty === "medium").length,
-        hardCount: allQuestions.filter((q) => q.difficulty === "hard").length,
+        questionCount,
+        easyCount: leveledQuestions.filter((q) => q.difficulty === "easy").length,
+        mediumCount: leveledQuestions.filter((q) => q.difficulty === "medium").length,
+        hardCount: leveledQuestions.filter((q) => q.difficulty === "hard").length,
+        tfCount: allQuestions.length - leveledQuestions.length,
+        missingCount: Math.max(0, questionCount - allQuestions.length),
     };
 
     const handleGenerateReplacement = async (request: ChangeQuestionRequest): Promise<ChangeQuestionResult> => {

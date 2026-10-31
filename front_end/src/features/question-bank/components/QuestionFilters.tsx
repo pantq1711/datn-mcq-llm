@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { AutoComplete, Button, Col, Form, Input, Row, Select, Space, Spin, Tag, Typography } from "antd";
+import { AutoComplete, Button, Col, Form, Input, Row, Select, Space, Spin, Tag, Typography, message } from "antd";
 import { FilterOutlined, ReloadOutlined } from "@ant-design/icons";
-import type { SubjectOption, QuestionFilterValues, BankTopic, QuestionType, QuestionDifficulty } from "../types/questionBank.types";
+import type { SubjectOption, QuestionFilterValues, BankTopic, BankUsage, QuestionType, QuestionDifficulty } from "../types/questionBank.types";
 import { getBankTopics } from "../services/questionBankApi";
 import { mergeBankTopics, sortBankTopics } from "../../../utils/bankTopic.utils";
 
@@ -37,6 +37,11 @@ const difficultyOptions: { label: string; value: QuestionDifficulty }[] = [
     { label: "Vận dụng", value: "hard" },
 ];
 
+const usageOptions: { label: string; value: BankUsage }[] = [
+    { label: "Đã dùng trong đề", value: "used" },
+    { label: "Chưa dùng", value: "unused" },
+];
+
 export default function QuestionFilters({
     value,
     subjects = [],
@@ -52,7 +57,6 @@ export default function QuestionFilters({
     // Tự động tải danh sách chủ đề theo môn học đã chọn
     useEffect(() => {
         let isMounted = true;
-        // Xóa danh sách cũ để không gợi ý chủ đề của môn trước trong lúc tải
         setBankTopics([]);
         setTopicsError(false);
         setLoadingTopics(true);
@@ -86,7 +90,7 @@ export default function QuestionFilters({
         return bankTopics.filter((t) => t.gradeLevel === value.gradeLevel);
     }, [bankTopics, value.gradeLevel]);
 
-    // Gộp các chủ đề sau khi đã lọc (hoặc toàn bộ nếu chưa chọn khối)
+    // Gộp các chủ đề sau khi đã lọc
     const mergedTopics = useMemo(() => {
         return mergeBankTopics(filteredBankTopics);
     }, [filteredBankTopics]);
@@ -100,7 +104,6 @@ export default function QuestionFilters({
                     <div className="question-filter-topic-option">
                         <div className="question-filter-topic-main">
                             <span className="question-filter-topic-text">{t.topic}</span>
-                            {/* Chỉ hiển thị dòng Khối khi chưa chọn khối lọc cụ thể */}
                             {!value.gradeLevel && t.grades && t.grades.length > 0 && (
                                 <div className="question-filter-topic-sub">
                                     <Text type="secondary" style={{ fontSize: 11 }}>
@@ -120,7 +123,6 @@ export default function QuestionFilters({
         });
     }, [mergedTopics, value.gradeLevel]);
 
-    // Nội dung dropdown khi không có gợi ý; gõ không khớp chủ đề nào thì không hiện gì
     const topicNotFound = useMemo(() => {
         if (loadingTopics) {
             return (
@@ -143,10 +145,35 @@ export default function QuestionFilters({
         field: K,
         fieldValue: QuestionFilterValues[K]
     ) => {
-        onChange({
+        const nextValue: QuestionFilterValues = {
             ...value,
             [field]: fieldValue,
-        });
+        };
+
+        // Nếu đổi Dạng câu sang loại khác "tf", tự động đặt levels: null
+        if (field === "questionType" && fieldValue !== "tf") {
+            nextValue.levels = null;
+        }
+
+        onChange(nextValue);
+    };
+
+    const handleLevelChange = (index: number, diff: QuestionDifficulty | null) => {
+        const currentLevels = [...(value.levels || [null, null, null, null])];
+        currentLevels[index] = diff;
+        updateField("levels", currentLevels);
+    };
+
+    const handleFilterClick = () => {
+        // Kiểm tra logic mức từng ý (a–d) khi dạng câu là "tf"
+        if (value.questionType === "tf" && value.levels && Array.isArray(value.levels)) {
+            const filledCount = value.levels.filter((l) => l !== null && l !== undefined).length;
+            if (filledCount > 0 && filledCount < 4) {
+                message.warning("Chọn đủ mức cho 4 ý a–d hoặc bỏ trống cả 4");
+                return;
+            }
+        }
+        onFilter();
     };
 
     return (
@@ -156,7 +183,7 @@ export default function QuestionFilters({
                 component={false}
                 onSubmitCapture={(event) => {
                     event.preventDefault();
-                    onFilter();
+                    handleFilterClick();
                 }}
             >
                 {/* Hàng 1: Từ khóa, Môn học, Khối lớp, Dạng câu hỏi */}
@@ -216,7 +243,7 @@ export default function QuestionFilters({
                     </Col>
                 </Row>
 
-                {/* Hàng 2: Bài học/Chủ đề, Mức độ, Thao tác */}
+                {/* Hàng 2: Bài học/Chủ đề, Độ khó, Mức dùng */}
                 <Row gutter={[16, 0]}>
                     <Col xs={24} sm={12} lg={8}>
                         <Form.Item
@@ -254,13 +281,71 @@ export default function QuestionFilters({
                         </Form.Item>
                     </Col>
 
-                    <Col xs={24} sm={12} lg={10} className="question-filters-actions-col">
+                    <Col xs={24} sm={12} lg={10}>
+                        <Form.Item label="Mức dùng">
+                            <Select
+                                value={value.usage ?? undefined}
+                                onChange={(val) => updateField("usage", val ?? null)}
+                                placeholder="Tất cả trạng thái dùng"
+                                options={usageOptions}
+                                allowClear
+                                className="question-filters-select"
+                            />
+                        </Form.Item>
+                    </Col>
+                </Row>
+
+                {/* Hàng 3: Nội dung ô ma trận, Mức từng ý (nếu tf), Cụm nút Lọc/Đặt lại */}
+                <Row gutter={[16, 0]}>
+                    <Col xs={24} sm={12} lg={8}>
+                        <Form.Item
+                            label="Nội dung ô ma trận"
+                            tooltip="So khớp đúng nguyên văn nội dung ô (không phân biệt hoa thường)"
+                        >
+                            <Input
+                                value={value.content || ""}
+                                onChange={(event) =>
+                                    updateField("content", event.target.value || null)
+                                }
+                                placeholder="Nhập nội dung ô ma trận..."
+                                allowClear
+                            />
+                        </Form.Item>
+                    </Col>
+
+                    {value.questionType === "tf" ? (
+                        <Col xs={24} sm={12} lg={10}>
+                            <Form.Item label="Mức từng ý (a–d)">
+                                <Row gutter={6}>
+                                    {[0, 1, 2, 3].map((idx) => (
+                                        <Col span={6} key={idx}>
+                                            <Select
+                                                size="middle"
+                                                placeholder={`Ý ${String.fromCharCode(97 + idx)}`}
+                                                value={value.levels?.[idx] ?? undefined}
+                                                onChange={(diff) => handleLevelChange(idx, diff ?? null)}
+                                                options={difficultyOptions}
+                                                allowClear
+                                                style={{ width: "100%" }}
+                                            />
+                                        </Col>
+                                    ))}
+                                </Row>
+                            </Form.Item>
+                        </Col>
+                    ) : (
+                        <Col xs={24} sm={12} lg={10}>
+                            {/* Ô trống giữ bố cục khi không phải dạng Đúng/Sai */}
+                        </Col>
+                    )}
+
+                    <Col xs={24} sm={12} lg={6} className="question-filters-actions-col">
                         <Form.Item label=" ">
                             <Space className="question-filters-actions">
                                 <Button
                                     type="primary"
                                     icon={<FilterOutlined />}
-                                    onClick={onFilter}
+                                    onClick={handleFilterClick}
                                 >
                                     Lọc
                                 </Button>
