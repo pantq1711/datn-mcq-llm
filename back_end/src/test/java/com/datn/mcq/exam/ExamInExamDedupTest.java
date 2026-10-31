@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -124,6 +125,66 @@ class ExamInExamDedupTest extends ExamFlowTestBase {
         int source = count("SELECT source_question_id FROM bank_item WHERE id = ?", item);
         assertEquals(source, dedupRow((Integer) q.get("id")).get("compared_to_question_id"),
                 "trỏ về câu nguồn của câu ngân hàng (khóa ngoại tới generated_question)");
+    }
+
+    /** Xử lý đúng MỘT job đến hạn (không đối soát giữa hai job), như hai worker xử lý lần lượt. */
+    private void processOne() {
+        jdbc.update("UPDATE generation_job SET next_run_at = now() - interval '1 minute' WHERE status = 'pending'");
+        assertTrue(poller().processNextJob(true).processed());
+    }
+
+    // ---------- đường thực tế: chỗ kia đang sinh, chưa đối soát ----------
+
+    @Test
+    void sinhTrungCauODaKhacDangSinhChiThayQuaJobMoiNhatThiBiDedup() throws Exception {
+        // Solver lệch: câu thứ nhất ở trạng thái generated (không qc_passed), mà mỗi ô có run riêng nên truy vấn theo run
+        // không thấy nó; chỉ ExamSlotSiblings (job mới nhất của chỗ đang sinh) đưa nó vào ứng viên.
+        SOLVER.mcqJudge = "C";
+        examId = build(matrixId).get("examId").asInt();
+        int slot1 = slotId(examId, cell1, 1);
+        int slot2 = slotId(examId, cell2, 1);
+
+        processOne();
+        Map<String, Object> first = firstJobQuestion(slot1);
+        assertEquals("generated", first.get("status"));
+        assertEquals("generating", slotState(slot1), "chưa đối soát: chỗ 1 vẫn đang sinh");
+        int run2 = count("SELECT run_id FROM exam_slot WHERE id = ?", slot2);
+        assertTrue(dedupScopeResolver.resolveForSlot(run2, slot2).extraCandidates().stream()
+                .anyMatch(c -> c.questionId().equals(first.get("id"))), "câu của job mới nhất phải là ứng viên");
+
+        processOne();
+
+        Map<String, Object> second = firstJobQuestion(slot2);
+        assertEquals("duplicate", second.get("status"));
+        Map<String, Object> dedup = dedupRow((Integer) second.get("id"));
+        assertEquals(false, dedup.get("passed"));
+        assertEquals(first.get("id"), dedup.get("compared_to_question_id"));
+        assertEquals(1.0, ((Number) dedup.get("similarity_score")).doubleValue(), 1e-9);
+    }
+
+    @Test
+    void cauLechSolverCuaChoKhacDangSinhLaiVanLaUngVien() throws Exception {
+        // Đối soát thấy câu thứ nhất lệch Solver: nó thành fallback của chỗ 1 và chỗ 1 có job sinh lại mới (chưa có
+        // question_id). Câu cũ chưa vào chỗ nhưng vẫn có thể được dùng làm fallback, nên câu cùng đề sinh sau nó phải
+        // bị so với nó.
+        SOLVER.mcqJudge = "C";
+        examId = build(matrixId).get("examId").asInt();
+        int slot1 = slotId(examId, cell1, 1);
+        int slot2 = slotId(examId, cell2, 1);
+
+        processOne();
+        int first = (Integer) firstJobQuestion(slot1).get("id");
+        progress(examId);
+        assertEquals(first, count("SELECT fallback_question_id FROM exam_slot WHERE id = ?", slot1));
+        assertEquals("generating", slotState(slot1));
+        assertNull(jdbc.queryForObject("SELECT question_id FROM generation_job WHERE exam_slot_id = ?"
+                + " ORDER BY id DESC LIMIT 1", Integer.class, slot1), "job sinh lại mới chưa có câu");
+
+        processOne();
+
+        Map<String, Object> second = firstJobQuestion(slot2);
+        assertEquals("duplicate", second.get("status"), "câu fallback của chỗ 1 phải là ứng viên");
+        assertEquals(first, dedupRow((Integer) second.get("id")).get("compared_to_question_id"));
     }
 
     @Test
