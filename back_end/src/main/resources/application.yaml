@@ -126,6 +126,8 @@ app:
     pandoc-heap-mb: ${MATERIAL_PANDOC_HEAP_MB:256}
   # Bảng điểm cho phần tạo đề sau này (V4); luồng sinh câu không dùng. Giá trị mặc định nằm ở ExamScoringProperties.
   exam:
+    # Thẩm định 31/10: độ giống 3-gram (sau khi che số và tên điểm) từ mức này thì xem đề gắn lý do similar_in_exam. Trong (0, 1].
+    similar-threshold: ${EXAM_SIMILAR_THRESHOLD:0.82}
     scoring:
       mcq-per-question: 0.25                      # 12 câu MCQ = 3 điểm
       sa-per-question: 0.5

@@ -5,6 +5,7 @@ import com.datn.mcq.common.util.PromptData;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.QuestionType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -74,13 +75,15 @@ public final class MatrixPromptDraftV0 {
      * thập phân tối đa 4 ký tự (phiếu trả lời Bộ GD&ĐT 2025, Phần III). mcq v3, sa v4, tf v5 (ngày 31/10, thẩm định nội dung
      * 4 đề: 0 câu sai đáp án nhưng nhiều phương án sai vẫn đúng, câu thiếu "luôn", câu "Biết" đòi 2 bước, ô phân tích nhân tử ra
      * bài tìm x): thêm {@link #CONTENT_RULES} cho cả 3 dạng, {@link #MCQ_OPTION_RULES} cho mcq, {@link #FACTORING_CELL_RULE}
-     * cho sa và tf. Run cũ là v0 (tf: v0, v1, v2, v3, v4; mcq: v1, v2; sa: v1, v2, v3).
+     * cho sa và tf. mcq v4, sa v5, tf v6 (ngày 31/10, thẩm định nội dung: nhiều câu cùng khuôn chỉ khác số hoặc tên đỉnh
+     * trong một đề): khối {@link #SAME_CELL_HEADER} (các câu đã có trong ô, cùng đề) và dòng "câu thứ k/n" giao khía cạnh
+     * ({@link #slotLine(int, int, List)}). Run cũ là v0 (tf: v0, v1, v2, v3, v4, v5; mcq: v1, v2, v3; sa: v1, v2, v3, v4).
      */
     public static String promptVersion(QuestionType type) {
         String version = switch (type) {
-            case TF -> "-v5-draft";
-            case SA -> "-v4-draft";
-            case MCQ -> "-v3-draft";
+            case TF -> "-v6-draft";
+            case SA -> "-v5-draft";
+            case MCQ -> "-v4-draft";
         };
         return VERSION_PREFIX + type.getDbValue() + version;
     }
@@ -236,6 +239,77 @@ public final class MatrixPromptDraftV0 {
                 + "số liệu); nếu yêu cầu cần đạt có nhiều ý, mỗi câu kiểm tra một ý khác.";
     }
 
+    /** Dòng mở đầu khối "câu đã có trong ô này" (cùng đề). */
+    public static final String SAME_CELL_HEADER = "Các câu đã có trong ô này (cùng đề, câu dẫn cắt gọn):";
+    /** Dòng yêu cầu ngay sau khối "câu đã có trong ô này". */
+    public static final String SAME_CELL_RULE = "Chọn dạng bài hoặc khía cạnh khác các câu trên; không lặp lại khuôn câu "
+            + "chỉ đổi số liệu hay tên điểm.";
+    /** Số câu tối đa của khối "câu đã có trong ô này". */
+    public static final int SAME_CELL_MAX_ITEMS = 6;
+    /** Thêm vào dòng "câu thứ k/n" khi ô không có đủ khía cạnh để mỗi câu một khía cạnh riêng (m = 0 hoặc m &lt; n). */
+    public static final String SAME_FORM_HINT = "Dùng hình thức hỏi khác các câu cùng ô (ví dụ: tính toán, nhận biết khái "
+            + "niệm, chọn khẳng định đúng).";
+
+    /**
+     * Dòng "câu thứ k/n" kèm phân công khía cạnh theo thứ tự chỗ: với m mức có yêu cầu cần đạt ({@code outcomeLevels},
+     * theo thứ tự hiển thị trong prompt), chỗ k được ưu tiên khía cạnh thứ ((k-1) mod m)+1. Hai chỗ có thể cùng khía cạnh
+     * khi m &lt; n, và khi m = 0 không có khía cạnh nào để giao, nên thêm {@link #SAME_FORM_HINT}. Null khi ô chỉ có 1 câu.
+     * Chỉ đặt vào ghi chú lúc xếp job: hai worker chạy song song nên các chỗ đầu có thể chưa thấy nhau, phân công này không
+     * phụ thuộc thứ tự sinh.
+     */
+    public static String slotLine(int k, int n, List<Difficulty> outcomeLevels) {
+        String base = slotLine(k, n);
+        if (base == null) {
+            return null;
+        }
+        int m = outcomeLevels == null ? 0 : outcomeLevels.size();
+        StringBuilder sb = new StringBuilder(base);
+        if (m > 0) {
+            int j = Math.floorMod(k - 1, m) + 1;
+            sb.append(" Ưu tiên khía cạnh thứ ").append(j).append("/").append(m)
+                    .append(" trong danh sách yêu cầu cần đạt (").append(TfPromptDraftV0.levelName(outcomeLevels.get(j - 1)))
+                    .append(").");
+        }
+        if (m == 0 || m < n) {
+            sb.append(" ").append(SAME_FORM_HINT);
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Như {@link #buildGenerationPrompt(MatrixCellSpec, List, String, String)}, kèm {@code sameCellQuestions}: câu dẫn của
+     * các câu khác đang có trong cùng ô của cùng đề (tối đa {@value #SAME_CELL_MAX_ITEMS} câu, mỗi câu cắt như
+     * {@link PreviousQuestion#MAX_CHARS} ký tự), đặt sau danh sách câu đã sinh của ô và trước ghi chú của job. Null hoặc
+     * không có câu nào thì giống prompt không có khối này.
+     */
+    public static String buildGenerationPrompt(MatrixCellSpec spec, List<PreviousQuestion> previous, String note,
+                                               String materialContext, List<String> sameCellQuestions) {
+        return build(spec, previous, note, materialContext, sameCellQuestions);
+    }
+
+    private static String sameCellSection(List<String> questions) {
+        if (questions == null) {
+            return "";
+        }
+        List<String> lines = new ArrayList<>();
+        for (String q : questions) {
+            if (q != null && !q.isBlank()) {
+                lines.add(PreviousQuestion.clip(q));
+                if (lines.size() == SAME_CELL_MAX_ITEMS) {
+                    break;
+                }
+            }
+        }
+        if (lines.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(SAME_CELL_HEADER).append("\n");
+        for (int i = 0; i < lines.size(); i++) {
+            sb.append(i + 1).append(". ").append(lines.get(i)).append("\n");
+        }
+        return sb.append(SAME_CELL_RULE).append("\n").toString();
+    }
+
     /**
      * Dòng lý do lần sinh trước bị loại (ngày 23/10, mục 5), tối đa {@value #RETRY_HINT_MAX} ký tự (cắt phần lý do, giữ
      * câu dặn ở cuối); null khi không có lỗi.
@@ -279,6 +353,11 @@ public final class MatrixPromptDraftV0 {
 
     private static String build(MatrixCellSpec spec, List<PreviousQuestion> previous, String fullNote,
                                 String materialContext) {
+        return build(spec, previous, fullNote, materialContext, null);
+    }
+
+    private static String build(MatrixCellSpec spec, List<PreviousQuestion> previous, String fullNote,
+                                String materialContext, List<String> sameCellQuestions) {
         // Khối yêu cầu của giáo viên (nếu có) tách khỏi ghi chú hệ thống và đặt ở cuối prompt.
         String note = systemPart(fullNote);
         String teacher = note == null || note.length() == fullNote.length() ? null
@@ -326,6 +405,7 @@ public final class MatrixPromptDraftV0 {
             sb.append(NO_FIGURE_RULE).append("\n");
         }
         sb.append(PreviousQuestion.section(previous, type == QuestionType.TF));
+        sb.append(sameCellSection(sameCellQuestions));
         if (note != null && !note.isBlank()) {
             sb.append(note.strip()).append("\n");
         }

@@ -72,6 +72,27 @@ public class ExamSlotSiblings implements SlotDedupContext {
         return out;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> sameCellQuestionTexts(Integer examSlotId) {
+        ExamSlot self = slotRepository.findById(examSlotId).orElse(null);
+        if (self == null) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (ExamSlot other : slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(self.getExamId())) {
+            if (other.getId().equals(self.getId()) || !other.getCellId().equals(self.getCellId())) {
+                continue;
+            }
+            for (DedupCandidate candidate : of(other)) {
+                if (candidate != null && candidate.hasContent()) {
+                    out.add(candidate.questionText());
+                }
+            }
+        }
+        return out;
+    }
+
     private List<DedupCandidate> of(ExamSlot slot) {
         if (ExamBuildService.hasQuestion(slot)) {
             if (slot.getBankItemId() != null) {

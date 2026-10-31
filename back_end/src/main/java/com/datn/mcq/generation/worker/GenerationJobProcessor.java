@@ -17,6 +17,7 @@ import com.datn.mcq.generation.dto.ParsedSaDto;
 import com.datn.mcq.generation.dto.ParsedTfDto;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.generation.service.PreviousQuestionLookup;
+import com.datn.mcq.generation.service.SlotDedupContext;
 import com.datn.mcq.generation.service.TrueFalseQuestionStore;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
@@ -39,6 +40,7 @@ import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import com.datn.mcq.qc.service.GroundingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -129,6 +131,13 @@ public class GenerationJobProcessor {
     @Autowired
     private GroundingService groundingService;
 
+    /**
+     * Lớp 1 chống câu cùng khuôn: nguồn "câu khác cùng ô" của đề. Bean cài đặt nằm ở module exam, phụ thuộc ngược lại
+     * generation nên lấy muộn (như {@link DedupScopeResolver}); nạp bằng field để không đổi constructor.
+     */
+    @Autowired
+    private ObjectProvider<SlotDedupContext> slotContext;
+
     public GenerationJobProcessor(
             GenerationJobRepository generationJobRepository,
             GeneratedQuestionRepository generatedQuestionRepository,
@@ -214,7 +223,7 @@ public class GenerationJobProcessor {
         String prompt = matrix
                 ? MatrixPromptDraftV0.buildGenerationPrompt(MatrixCellSpec.fromJson(run.getHyperparams()),
                         previousQuestionLookup.recentForMatrix(tpl.getId(), questionType), job.getPromptNote(),
-                        job.getMaterialContext())
+                        job.getMaterialContext(), sameCellQuestions(job.getExamSlotId()))
                 : questionType == QuestionType.TF
                 ? TfPromptDraftV0.buildGenerationPrompt(
                         subject.getName(),
@@ -262,6 +271,16 @@ public class GenerationJobProcessor {
             job.getExamSlotId(),
             claimSeq
         ));
+    }
+
+    /**
+     * Thẩm định 31/10 (lớp 1): câu dẫn của các câu khác cùng ô trong cùng đề của chỗ {@code examSlotId}, đưa vào prompt để
+     * model chọn dạng bài khác. Đọc lúc worker nhận job (không phải lúc xếp job) để thấy cả câu mà worker khác vừa sinh.
+     * Job không thuộc chỗ nào (sinh lẻ) hoặc không có nguồn ứng viên thì rỗng.
+     */
+    private List<String> sameCellQuestions(Integer examSlotId) {
+        SlotDedupContext context = examSlotId == null || slotContext == null ? null : slotContext.getIfAvailable();
+        return context == null ? List.of() : context.sameCellQuestionTexts(examSlotId);
     }
 
     // ---------- hàng rào claim (W2-4b, A) ----------

@@ -720,6 +720,11 @@ khác để sinh lại).
   cũng không phải lý do (vẫn lưu trong `warnings` và hiện trong vết QC), ví dụ ở trên chỉ còn các cảnh báo khác. `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
   `solver_pending` (Solver đang kiểm lại, thay `solver_not_run`), `solver_failed` (kiểm lại thất bại) và
   `duplicate: <id>` (bản sửa trùng câu khác).
+- `similar_in_exam: <n>` (thẩm định 31/10): câu hệ thống sinh cùng khuôn (chỉ khác số hoặc tên điểm/hình) với câu thứ `n` của
+  chính đề này, hoặc câu trắc nghiệm làm lộ đáp án một ý của câu đúng/sai. `n` đếm từ 1 theo thứ tự hiển thị (phần I, II,
+  III, mỗi chỗ một số kể cả chỗ chưa có câu). Mỗi câu kia một lý do. Tính lúc xem đề, không lưu, không đổi trạng thái câu;
+  câu ngân hàng và câu đã Giữ/Sửa không bị gắn. `qcState` về `needs_review`. Chỉ `GET /api/exams/{id}` có lý do này;
+  `needsReviewSlots` của `GET /api/exams` chưa tính. Chuỗi hiển thị đề xuất: "Gần giống câu {n} trong đề, nên đổi một trong hai câu".
 - W2-3, câu sinh từ đề có tài liệu bài học (mục 7.2, 9) có thêm lý do của QC "bám tài liệu" (mục 7.7a):
   `grounding_not_supported` (judge cho là đáp án, lời giải hoặc câu hỏi không khớp tài liệu), `grounding_unknown` (đoạn tài
   liệu không đủ để kết luận, hoặc judge nói "bám tài liệu" mà trích dẫn không kiểm chứng được), `grounding_pending` (đang chờ
