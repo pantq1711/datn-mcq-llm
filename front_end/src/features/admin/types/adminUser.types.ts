@@ -3,7 +3,7 @@ export type AdminRole = "teacher" | "admin" | "researcher";
 export interface AdminUserItem {
     id: number;
     name: string;
-    email: string;
+    email: string | null; // tài khoản cũ có thể chưa có email
     role: AdminRole;
     enabled: boolean;
     hasPassword: boolean;

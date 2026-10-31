@@ -1,4 +1,4 @@
-import { Modal, Form, Input, message } from "antd";
+import { Modal, Form, Input, Typography, message } from "antd";
 import { useState } from "react";
 import { resetUserPassword } from "../services/adminUserApi";
 import type { AdminUserItem, ResetPasswordPayload } from "../types/adminUser.types";
@@ -54,9 +54,9 @@ export default function ResetPasswordModal({
             cancelText="Hủy"
             destroyOnClose
         >
-            <p style={{ color: "#8c8c8c", marginBottom: 16 }}>
+            <Typography.Paragraph type="secondary">
                 Lưu ý: Đặt lại mật khẩu sẽ thu hồi tất cả các phiên đăng nhập hiện tại của người dùng này.
-            </p>
+            </Typography.Paragraph>
             <Form form={form} layout="vertical" preserve={false}>
                 <Form.Item
                     label="Mật khẩu mới"

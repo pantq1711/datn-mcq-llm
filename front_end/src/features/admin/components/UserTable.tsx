@@ -1,6 +1,6 @@
 import { Table, Tag, Switch, Button, Space, Tooltip, Popconfirm, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { KeyOutlined } from "@ant-design/icons";
+import { EditOutlined, KeyOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { AdminRole, AdminUserItem } from "../types/adminUser.types";
 
@@ -11,6 +11,9 @@ interface UserTableProps {
     loading: boolean;
     onToggleStatus: (user: AdminUserItem, nextEnabled: boolean) => void;
     onResetPassword: (user: AdminUserItem) => void;
+    onEdit: (user: AdminUserItem) => void;
+    currentUserId?: number;
+    togglingId?: number | null;
 }
 
 const roleConfig: Record<AdminRole, { label: string; color: string }> = {
@@ -24,6 +27,9 @@ export default function UserTable({
     loading,
     onToggleStatus,
     onResetPassword,
+    onEdit,
+    currentUserId,
+    togglingId,
 }: UserTableProps) {
     const columns: ColumnsType<AdminUserItem> = [
         {
@@ -45,7 +51,7 @@ export default function UserTable({
             dataIndex: "email",
             key: "email",
             width: 220,
-            render: (email: string) => email || <Text type="secondary">(Chưa có)</Text>,
+            render: (email: string | null) => email || <Text type="secondary">(Chưa có)</Text>,
         },
         {
             title: "Vai trò",
@@ -85,38 +91,64 @@ export default function UserTable({
             key: "enabled",
             width: 130,
             align: "center",
-            render: (enabled: boolean, record) => (
-                <Popconfirm
-                    title={enabled ? "Khóa tài khoản này?" : "Mở khóa tài khoản này?"}
-                    description={
-                        enabled
-                            ? "Khóa tài khoản sẽ thu hồi phiên đăng nhập hiện tại của người dùng."
-                            : "Mở khóa cho phép người dùng tiếp tục đăng nhập."
-                    }
-                    onConfirm={() => onToggleStatus(record, !enabled)}
-                    okText="Đồng ý"
-                    cancelText="Hủy"
-                >
-                    <Switch
-                        checked={enabled}
-                        checkedChildren="Bật"
-                        unCheckedChildren="Khóa"
-                    />
-                </Popconfirm>
-            ),
+            render: (enabled: boolean, record) => {
+                // Backend chặn tự khóa (409); tắt sẵn công tắc ở dòng của chính mình
+                const isSelf = record.id === currentUserId;
+                return (
+                    <Tooltip title={isSelf ? "Không thể tự khóa tài khoản của mình" : undefined}>
+                        <span>
+                            <Popconfirm
+                                title={enabled ? "Khóa tài khoản này?" : "Mở khóa tài khoản này?"}
+                                description={
+                                    enabled
+                                        ? "Người dùng không làm mới được phiên và sẽ bị đăng xuất trong tối đa 15 phút."
+                                        : "Mở khóa cho phép người dùng đăng nhập lại."
+                                }
+                                onConfirm={() => onToggleStatus(record, !enabled)}
+                                okText="Đồng ý"
+                                cancelText="Hủy"
+                                disabled={isSelf}
+                            >
+                                <Switch
+                                    checked={enabled}
+                                    checkedChildren="Bật"
+                                    unCheckedChildren="Khóa"
+                                    disabled={isSelf}
+                                    loading={togglingId === record.id}
+                                />
+                            </Popconfirm>
+                        </span>
+                    </Tooltip>
+                );
+            },
         },
         {
             title: "Thao tác",
             key: "actions",
-            width: 100,
+            width: 110,
             align: "center",
             fixed: "right",
             render: (_, record) => (
                 <Space size={4}>
-                    <Tooltip title="Đặt lại mật khẩu">
+                    <Tooltip title="Sửa tài khoản">
+                        <Button
+                            type="text"
+                            icon={<EditOutlined />}
+                            onClick={() => onEdit(record)}
+                        />
+                    </Tooltip>
+                    {/* Chưa có email thì backend trả 400 khi đặt mật khẩu: phải thêm email trước */}
+                    <Tooltip
+                        title={
+                            record.email
+                                ? "Đặt lại mật khẩu"
+                                : "Chưa có email: hãy Sửa tài khoản để thêm email trước"
+                        }
+                    >
                         <Button
                             type="text"
                             icon={<KeyOutlined />}
+                            disabled={!record.email}
                             onClick={() => onResetPassword(record)}
                         />
                     </Tooltip>

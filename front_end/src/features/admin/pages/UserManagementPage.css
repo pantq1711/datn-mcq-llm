@@ -9,6 +9,11 @@
     margin-bottom: 24px;
 }
 
+.user-management-actions {
+    display: flex;
+    gap: 8px;
+}
+
 .user-management-title {
     margin: 0 !important;
 }
