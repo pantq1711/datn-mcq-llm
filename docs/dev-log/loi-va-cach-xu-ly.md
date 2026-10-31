@@ -66,8 +66,9 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-50 | Đáp án câu Trả lời ngắn là phân số, hỗn số, vượt quy ước phiếu trả lời Bộ GD&ĐT (bổ sung 27/10) | LLM & parse | Trung bình | Đã sửa |
 | L-51 | Model viết đơn vị đo `\text{km/h}` ngoài `$...$`, cả ô mcq mức vừa bị loại 18/18 lượt sinh (bổ sung 27/10) | LLM & parse | Cao | Đã sửa |
 | L-52 | W2-4b: hàng đợi, bộ điều tiết Gemini, worker liên tục (bổ sung 28/10) | Hàng đợi/đồng thời | Cao | Đã sửa |
+| L-53 | Dedup: `similarity` null do chốt chặn số liệu; câu fallback của ô đang sinh lại không là ứng viên (bổ sung 31/10) | QC | Trung bình | Đã sửa |
 
-**Thống kê theo nhóm** (52 mục):
+**Thống kê theo nhóm** (53 mục):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
@@ -75,12 +76,12 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | Dữ liệu/DB | 5 | 5 | 0 | 0 |
 | Quy trình git | 2 | 2 | 0 | 0 |
 | LLM & parse | 14 | 13 | 0 | 1 |
-| QC | 11 | 10 | 0 | 1 |
+| QC | 12 | 11 | 0 | 1 |
 | Hàng đợi/đồng thời | 8 | 7 | 0 | 1 |
 | Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **52** | **49** | **0** | **3** |
+| **Tổng** | **53** | **50** | **0** | **3** |
 
-Theo mức độ: Cao 13, Trung bình 25, Thấp 14.
+Theo mức độ: Cao 13, Trung bình 26, Thấp 14.
 
 ---
 
@@ -805,6 +806,21 @@ Theo mức độ: Cao 13, Trung bình 25, Thấp 14.
 - Chống tái phát: `HardeningW24aItem5Test` (kiểm tra ranh giới, câu dặn, sanitize injection và bảo toàn công thức toán cho cả 3 dạng; thử đột biến chứng minh bắt được việc thiếu neutralize).
 - Bài học: Mọi đầu vào do người dùng hoặc model ngoài sinh ra khi đưa vào LLM khác (kể cả judge / solver nội bộ) đều phải được bọc ranh giới dữ liệu và trung hòa ký tự ranh giới để chống prompt injection.
 - Trạng thái: Đã sửa.
+
+### L-53 Dedup: `similarity` null ở mọi câu, câu cùng khuôn lọt qua; câu fallback của ô đang sinh lại không là ứng viên (bổ sung 31/10)
+- Nhóm: QC
+- Triệu chứng: trên DB `datn_mcq_e2e`, khi tạo đề mọi dòng dedup có `similarity_score = NULL`; ở đề 2 (tạo theo bài) câu 20 và 21 gần trùng nhau (cùng hỏi hiệu hai bình phương) mà cả hai qua dedup. Đề chạy 2 worker song song (W2-4b).
+- Chẩn đoán (suy luận từ đọc code, chưa đối chiếu dữ liệu thật của đề 2). Ba giả thuyết ban đầu đều sai hoặc thiếu:
+  1. "Câu cùng đề đang sinh không bao giờ là ứng viên": SAI. `ExamSlotSiblings.of` đã đưa vào `DedupScope.extraCandidates` câu của job mới nhất ở chỗ `generating` (câu và `generation_job.question_id` được ghi cùng transaction, trước khi dedup chạy). Test mới đi đúng đường này (chỗ kia `generating`, không `placeGenerated`, Solver lệch để câu 1 ở trạng thái `generated` và khác run với câu 2) đã PASS trên code chưa sửa.
+  2. "Hai worker song song không câu nào thấy câu kia": SAI. Câu lưu sau luôn thấy câu lưu trước vì `question_id` của job đã commit trước khi resolve ứng viên. Race chỉ làm CẢ HAI cùng bị `duplicate` (đánh dư, tốn thêm một lượt sinh lại), không làm lọt cả hai. Không thêm advisory lock; ghi vào backlog.
+  3. "`similarity = NULL` nghĩa là tập ứng viên rỗng": SAI. `DedupChecker.check` chỉ cập nhật `nearestScore`/`nearestId` cho ứng viên qua cả hai chốt chặn (cùng chữ ký số liệu/công thức và cùng phủ định); ứng viên bị chốt chặn loại không được ghi điểm (thiết kế có chủ đích: điểm lưu luôn nhỏ hơn ngưỡng). Câu toán trong cùng bài thường khác số liệu nên hầu hết dòng dedup có `similarity` NULL dù tập ứng viên không rỗng.
+- Nguyên nhân gốc của "câu 20 và 21 lọt": quy tắc "chỉ khác số liệu không tính là trùng" (hoặc cosine dưới ngưỡng 0,90 nếu cùng số liệu nhưng diễn đạt khác). Đây là thiết kế, không phải lỗi phạm vi ứng viên. Quyết định ngày 31/10: giữ nguyên chốt chặn số liệu, giữ nguyên hợp đồng `similarity` (null khi không có ứng viên qua chốt chặn; không đổi javadoc hay `enums.md`). Câu cùng khuôn khác số trong một đề chuyển sang việc riêng "đa dạng trong đề", không xử lý bằng dedup.
+- Lỗ hổng thật tìm thấy khi kiểm giả thuyết: câu lệch Solver ở ô A được đối soát thành `fallback_question_id` của chỗ và chỗ được xếp job sinh lại mới (chưa có `question_id`). Lúc đó `ExamSlotSiblings.of` trả null cho chỗ này (chỗ `generating`, job mới nhất chưa có câu), còn truy vấn SQL cũng không thấy câu fallback (status `generated`, và mỗi ô có run riêng nên nhánh "cùng run" không áp dụng). Câu cùng đề sinh ở ô B trong khoảng đó không bị so với câu fallback, dù nếu lần sinh lại hỏng thì câu fallback vẫn được đưa vào đề (`ExamBuildService.failOrUseFallback`). Test `cauLechSolverCuaChoKhacDangSinhLaiVanLaUngVien` FAIL trước khi sửa (`expected: <duplicate> but was: <generated>`).
+- Cách sửa: `ExamSlotSiblings.of` trả danh sách; với chỗ `generating`, ngoài câu của job mới nhất còn thêm câu `fallback_question_id` (nếu khác câu của job). Vẫn bỏ câu `duplicate`/`format_failed`/`rejected`; không đụng chốt chặn, ngưỡng, hợp đồng `similarity`, truy vấn SQL.
+- Chống tái phát: `ExamInExamDedupTest` (`sinhTrungCauODaKhacDangSinhChiThayQuaJobMoiNhatThiBiDedup` khóa đường `latestJobForSlot` của chỗ đang sinh; `cauLechSolverCuaChoKhacDangSinhLaiVanLaUngVien` khóa ứng viên fallback).
+- Backlog (không làm): hai worker xử lý hai câu giống nhau cùng lúc có thể cùng bị `duplicate`; chấp nhận vì hiếm và chỉ tốn một lượt sinh lại. Nếu cần tránh thì tuần tự hóa dedup theo đề bằng `pg_advisory_xact_lock` (chưa dự án nào dùng advisory lock, `grep advisory` trong `src` không có kết quả).
+- Bài học: `similarity = NULL` không phải bằng chứng ứng viên rỗng; trước khi kết luận lỗi phạm vi ứng viên phải tách "không có ứng viên" khỏi "ứng viên bị chốt chặn loại". Test dedup trong đề phải đi qua đường chỗ kia đang sinh, không chỉ đặt sẵn câu vào chỗ đã `ready`.
+- Trạng thái: Đã sửa (phần fallback). Phần "câu cùng khuôn" chuyển sang việc đa dạng trong đề.
 
 ## Hàng đợi/đồng thời
 
