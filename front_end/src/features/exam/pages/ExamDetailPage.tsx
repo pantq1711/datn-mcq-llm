@@ -279,12 +279,11 @@ export default function ExamDetailPage() {
         }
     };
 
-    const handleKeep = async (question: ExamQuestionItem, index: number) => {
+    const handleKeep = async (question: ExamQuestionItem) => {
         if (!examId || question.slotId === undefined) return;
         try {
             await keepQuestion(Number(examId), question.slotId);
             message.success('Đã giữ câu hỏi thành công');
-            console.log(`Đã giữ câu hỏi số ${index + 1} – slot: ${question.slotId}`);
             await loadDetail();
         } catch (e: any) {
             console.error(e);

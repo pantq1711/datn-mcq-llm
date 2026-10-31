@@ -8,9 +8,7 @@
 
 .login-form-options {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
+    justify-content: flex-end;
     margin-bottom: 24px;
 }
 
@@ -18,7 +16,7 @@
     margin-top: 4px;
 }
 
-.login-form-register {
+.login-form-note {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -31,12 +29,4 @@
     color: #ff4d4f;
     margin-bottom: 12px;
     font-weight: 500;
-}
-
-@media (max-width: 576px) {
-    .login-form-options {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 8px;
-    }
 }

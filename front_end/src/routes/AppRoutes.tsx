@@ -6,7 +6,6 @@ import AppLayout from "../layouts/AppLayout";
 import DashboardPage from "../features/dashboard/pages/DashboardPage";
 import AuthLayout from "../layouts/AuthLayout";
 import LoginPage from "../features/auth/pages/LoginPage";
-import RegisterPage from "../features/auth/pages/RegisterPage";
 import ForgotPasswordPage from "../features/auth/pages/ForgotPasswordPage";
 import QuestionBankPage from "../features/question-bank/pages/QuestionBankPage";
 import GenerateExamPage from "../features/exam/pages/GenerateExamPage";
@@ -35,7 +34,6 @@ export default function AppRoutes() {
             <Route path="auth" element={<AuthLayout />}>
                 <Route element={<GuestOnly />}>
                     <Route path="login" element={<LoginPage />} />
-                    <Route path="register" element={<RegisterPage />} />
                     <Route path="forgot-password" element={<ForgotPasswordPage />} />
                 </Route>
             </Route>
