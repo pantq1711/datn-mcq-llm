@@ -9,6 +9,7 @@ import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.generation.parser.LlmOutputRepair;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
+import com.datn.mcq.qc.checker.ExplanationDraftLeak;
 import com.datn.mcq.qc.dto.GroundingVerdict;
 import com.datn.mcq.qc.dto.TfJudgement;
 import com.datn.mcq.qc.entity.QualityCheckResult;
@@ -41,6 +42,8 @@ public class QcSummaryService {
     public static final String STATEMENT_UNDECIDABLE = "statement_undecidable";
     public static final String DEDUP_NOT_RUN = "dedup_not_run";
     public static final String WARNING_PREFIX = "warning: ";
+    /** Thẩm định 31/10: lời giải có "tính lại", "làm lại" hoặc "sửa lại" (không chặn, vì cũng gặp trong lời giải bình thường). */
+    public static final String EXPLANATION_DRAFT_SUSPECT = "explanation_draft_suspect";
     /** W1-2: dedup báo trùng (bản giáo viên sửa), dạng "duplicate: &lt;id câu bị trùng&gt;". */
     public static final String DUPLICATE_PREFIX = "duplicate: ";
     /** W2-3: QC "bám tài liệu" kết luận đáp án/lời giải/câu hỏi không khớp tài liệu (chỉ cảnh báo, câu giữ nguyên trạng thái). */
@@ -114,7 +117,10 @@ public class QcSummaryService {
             for (String w : warnings) {
                 // Ngày 23/10: cảnh báo đã sửa escape LaTeX không bật cờ; "đã tự đóng $" và các cảnh báo khác vẫn bật.
                 // Từ 26/10: nhãn tf lệch mẫu mục tiêu là hợp lệ, cũng không bật cờ (vẫn lưu ở warnings và hiện trong vết QC).
-                if (!w.startsWith(LlmOutputRepair.ESCAPE_WARNING_PREFIX) && !TfLabelPattern.isDeviationWarning(w)) {
+                // Từ 31/10: lời giải có "tính lại"/"làm lại"/"sửa lại" bật mã riêng thay vì "warning: ...".
+                if (ExplanationDraftLeak.SUSPECT_WARNING.equals(w)) {
+                    reasons.add(EXPLANATION_DRAFT_SUSPECT);
+                } else if (!w.startsWith(LlmOutputRepair.ESCAPE_WARNING_PREFIX) && !TfLabelPattern.isDeviationWarning(w)) {
                     reasons.add(WARNING_PREFIX + w);
                 }
             }

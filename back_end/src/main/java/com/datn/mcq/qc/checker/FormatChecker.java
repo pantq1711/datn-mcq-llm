@@ -64,6 +64,7 @@ public class FormatChecker {
                 errors.add("4 phương án A, B, C, D có nội dung trùng lặp nhau");
             }
         }
+        checkExplanationDraft(input, errors, warnings);
 
         if (input.validateLatex()) {
             validateFieldLatex("question_text", input.questionText(), errors, warnings);
@@ -116,6 +117,7 @@ public class FormatChecker {
                 answerWarnings.add("answer: " + w);
             }
         }
+        checkExplanationDraft(input, errors, warnings);
         if (input.validateLatex()) {
             validateFieldLatex("question_text", input.questionText(), errors, warnings);
             // Đáp án đã bị loại vì sai dạng thì không báo thêm "LaTeX ngoài $": ghi chú sinh lại chỉ nói đúng cách sửa.
@@ -159,6 +161,7 @@ public class FormatChecker {
             // Đo 26/10: lời giải tự thú nhận gán nhãn theo mẫu hoặc tự sửa đề; chỉ áp cho đầu ra LLM, không áp chữ giáo viên.
             errors.addAll(TfExplanationLeak.errors(input.explanation()));
         }
+        checkExplanationDraft(input, errors, warnings);
         for (int i = 0; i < TF_KEYS.size(); i++) {
             String raw = i < input.statementLabels().size() ? input.statementLabels().get(i) : null;
             String field = "label_" + TF_KEYS.get(i);
@@ -195,6 +198,26 @@ public class FormatChecker {
             validateFieldLatex("explanation", input.explanation(), warnings, warnings);
         }
         return new FormatCheckOutcome(errors.isEmpty(), errors, warnings, answerWarnings);
+    }
+
+    /**
+     * Lời giải còn phần nháp hoặc tự sửa (31/10, cả 3 dạng). Cụm chắc chắn là nháp ({@link ExplanationDraftLeak#detect}):
+     * đầu ra của LLM là lỗi chặn, để ghi chú sinh lại nói đúng cách sửa; chữ giáo viên viết hoặc sửa (và chạy lại QC câu đã
+     * lưu) chỉ là cảnh báo. Câu tf mà {@link TfExplanationLeak} đã báo tự sửa thì không báo thêm lần nữa. Cụm đáng nghi
+     * ({@link ExplanationDraftLeak#suspect}: "tính lại", "làm lại", "sửa lại"): không chặn ở mọi nguồn, chỉ cảnh báo; lý do
+     * "cần xem kỹ" {@code explanation_draft_suspect} do QcSummaryService suy từ cảnh báo này.
+     */
+    private void checkExplanationDraft(QuestionQcInput input, List<String> errors, List<String> warnings) {
+        if (ExplanationDraftLeak.detect(input.explanation())) {
+            if (!input.llmOutput()) {
+                warnings.add(ExplanationDraftLeak.MESSAGE);
+            } else if (input.questionType() != QuestionType.TF
+                    || !TfExplanationLeak.detect(input.explanation()).contains(TfExplanationLeak.Kind.SELF_REVISION)) {
+                errors.add(ExplanationDraftLeak.MESSAGE);
+            }
+        } else if (ExplanationDraftLeak.suspect(input.explanation())) {
+            warnings.add(ExplanationDraftLeak.SUSPECT_WARNING);
+        }
     }
 
     private void checkNonBlank(String fieldName, String value, List<String> errors) {

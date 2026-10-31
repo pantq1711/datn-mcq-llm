@@ -77,13 +77,17 @@ public final class MatrixPromptDraftV0 {
      * bài tìm x): thêm {@link #CONTENT_RULES} cho cả 3 dạng, {@link #MCQ_OPTION_RULES} cho mcq, {@link #FACTORING_CELL_RULE}
      * cho sa và tf. mcq v4, sa v5, tf v6 (ngày 31/10, thẩm định nội dung: nhiều câu cùng khuôn chỉ khác số hoặc tên đỉnh
      * trong một đề): khối {@link #SAME_CELL_HEADER} (các câu đã có trong ô, cùng đề) và dòng "câu thứ k/n" giao khía cạnh
-     * ({@link #slotLine(int, int, List)}). Run cũ là v0 (tf: v0, v1, v2, v3, v4, v5; mcq: v1, v2, v3; sa: v1, v2, v3, v4).
+     * ({@link #slotLine(int, int, List)}). mcq v5, sa v6, tf v7 (ngày 31/10, thẩm định đề 5-7: lời giải sai tăng từ 1 lên 4
+     * câu, câu 82 tự viết "Xin lỗi, tính lại…"; ô C17 cả 3 đề vẫn ra bài tìm x): thêm {@link #EXPLANATION_RULE} cho cả 3
+     * dạng, thay {@link #FACTORING_CELL_RULE} (sa) bằng dạng tính nhanh giá trị biểu thức và thay quy tắc của tf bằng
+     * {@link #FACTORING_CELL_RULE_TF} (ý là khẳng định về kết quả phân tích hoặc tính nhanh). Run cũ là v0 (tf: v0, v1,
+     * v2, v3, v4, v5, v6; mcq: v1, v2, v3, v4; sa: v1, v2, v3, v4, v5).
      */
     public static String promptVersion(QuestionType type) {
         String version = switch (type) {
-            case TF -> "-v6-draft";
-            case SA -> "-v5-draft";
-            case MCQ -> "-v4-draft";
+            case TF -> "-v7-draft";
+            case SA -> "-v6-draft";
+            case MCQ -> "-v5-draft";
         };
         return VERSION_PREFIX + type.getDbValue() + version;
     }
@@ -128,10 +132,30 @@ public final class MatrixPromptDraftV0 {
             một lần trong câu).
             """;
 
-    /** Ô phân tích đa thức của câu sa và đúng/sai (31/10, câu 46 và 58 ra bài tìm x chỉ cần khai căn). */
-    static final String FACTORING_CELL_RULE = "- Nếu chủ đề hoặc nội dung của ô là phân tích đa thức thành nhân tử thì "
-            + "câu phải hỏi phân tích (hoặc dùng phân tích làm bước chính để giải); không chuyển thành bài tìm x chỉ cần "
-            + "khai căn.";
+    /**
+     * Ô phân tích đa thức của câu sa (31/10, câu 46 và 58 ra bài tìm x chỉ cần khai căn; thẩm định đề 5-7: ô C17 cả 3 đề vẫn
+     * ra "tìm x từ lập phương = số"). Thay quy tắc "phải hỏi phân tích": đáp án trả lời ngắn là một số nên ra dạng tính nhanh
+     * giá trị biểu thức bằng cách phân tích. Câu đúng/sai dùng {@link #FACTORING_CELL_RULE_TF}.
+     */
+    static final String FACTORING_CELL_RULE = "- Đáp án trả lời ngắn phải là một số, nên với ô có chủ đề hoặc nội dung là "
+            + "phân tích đa thức thành nhân tử, hãy ra dạng TÍNH NHANH GIÁ TRỊ biểu thức bằng cách phân tích hoặc dùng "
+            + "hằng đẳng thức (ví dụ: tính nhanh $x^2 - 2x + 1$ tại $x = 21$, đáp số 400); chọn số liệu để đáp án gọn trong "
+            + "4 ký tự. KHÔNG ra bài tìm x chỉ cần khai căn.";
+
+    /**
+     * Ô phân tích đa thức của câu đúng/sai (31/10): đúng/sai không có đáp số, nên không dùng câu "đáp án là một số" của
+     * {@link #FACTORING_CELL_RULE}; các ý là khẳng định về kết quả phân tích hoặc kết quả tính nhanh.
+     */
+    static final String FACTORING_CELL_RULE_TF = "- Nếu chủ đề hoặc nội dung của ô là phân tích đa thức thành nhân tử thì "
+            + "các ý đúng/sai là khẳng định về KẾT QUẢ PHÂN TÍCH (ví dụ \"$x^2 - 9 = (x - 3)(x + 3)$\") hoặc về kết quả "
+            + "TÍNH NHANH giá trị bằng phân tích hoặc hằng đẳng thức; không biến thành bài tìm x chỉ cần khai căn.";
+
+    /**
+     * Lời giải chỉ ghi bản cuối của cả 3 dạng (31/10, thẩm định đề 5-7: câu 82 tự viết "Xin lỗi, tính lại…" rồi đổi dữ kiện).
+     * Hằng riêng của prompt ma trận, đi cùng quy tắc chặn ở FormatChecker; prompt Solver và prompt sinh lẻ không chứa.
+     */
+    static final String EXPLANATION_RULE = "- Lời giải chỉ trình bày bản cuối cùng, mạch lạc; không ghi quá trình nháp, "
+            + "không xin lỗi, không \"tính lại\", không đổi dữ kiện của đề.";
 
     /** Dòng của {@link TfPromptDraftV0#STATEMENT_RULES} bị bỏ khi ghi chú của job có mẫu nhãn mục tiêu. */
     static final String TF_FREE_COUNT_LINE = "- Không bắt buộc số ý Đúng hay số ý Sai.";
@@ -422,7 +446,7 @@ public final class MatrixPromptDraftV0 {
                         - Viết lời giải ngắn trong "explanation" và kiểm tra "correct_option" khớp với lời giải.
                         """);
                 sb.append(MCQ_DISTRACTOR_RULE).append("\n");
-                sb.append(MCQ_OPTION_RULES).append("\n").append(CONTENT_RULES);
+                sb.append(MCQ_OPTION_RULES).append("\n").append(CONTENT_RULES).append(EXPLANATION_RULE).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append("""
                         Trả về DUY NHẤT một đối tượng JSON có đủ 7 trường:
@@ -440,13 +464,14 @@ public final class MatrixPromptDraftV0 {
                 if (levels != null && levels.size() == 4 && levels.get(3) == Difficulty.HARD) {
                     sb.append(TF_D_RULE).append("\n");
                 }
-                sb.append(CONTENT_RULES).append(FACTORING_CELL_RULE).append("\n");
+                sb.append(CONTENT_RULES).append(EXPLANATION_RULE).append("\n").append(FACTORING_CELL_RULE_TF).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(TfPromptDraftV0.OUTPUT_INSTRUCTION);
             }
             case SA -> {
                 sb.append(SA_ANSWER_RULES);
-                sb.append("\nQuy tắc nội dung:\n").append(CONTENT_RULES).append(FACTORING_CELL_RULE).append("\n");
+                sb.append("\nQuy tắc nội dung:\n").append(CONTENT_RULES).append(EXPLANATION_RULE).append("\n")
+                        .append(FACTORING_CELL_RULE).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(SaPromptDraftV0.OUTPUT_INSTRUCTION);
             }
