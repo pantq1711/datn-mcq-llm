@@ -11,6 +11,7 @@ import { buildByLesson } from "../services/examApi";
 import type { BankTopic } from "../../question-bank/types/questionBank.types";
 import { getBankTopics } from "../../question-bank/services/questionBankApi";
 import { mergeBankTopics, sortBankTopics } from "../../../utils/bankTopic.utils";
+import { showApiError } from "../../../utils/apiError";
 import "./BuildByLessonForm.css";
 
 const { Title, Text, Paragraph } = Typography;
@@ -340,13 +341,8 @@ export default function BuildByLessonForm({
             } else {
                 navigate(`/exams/${result.examId}`);
             }
-        } catch (err: any) {
-            const errMsg =
-                err?.response?.data?.error ||
-                err?.response?.data?.message ||
-                err?.message ||
-                "Có lỗi xảy ra khi tạo đề thi.";
-            message.error(errMsg);
+        } catch (err: unknown) {
+            showApiError(err, "Không tạo được đề thi.");
         } finally {
             setSubmitting(false);
         }

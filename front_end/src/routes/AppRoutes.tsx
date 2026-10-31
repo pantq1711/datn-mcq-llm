@@ -1,21 +1,13 @@
 import { Routes, Route } from "react-router-dom";
 
 import AppLayout from "../layouts/AppLayout";
-// import ReviewQuestionDetailPage from "../features/teacher-review/pages/ReviewQuestionDetailPage";
-// import ReviewQuestionsPage from "../features/teacher-review/pages/ReviewQuestionsPage";
 import DashboardPage from "../features/dashboard/pages/DashboardPage";
 import AuthLayout from "../layouts/AuthLayout";
 import LoginPage from "../features/auth/pages/LoginPage";
-import ForgotPasswordPage from "../features/auth/pages/ForgotPasswordPage";
 import QuestionBankPage from "../features/question-bank/pages/QuestionBankPage";
 import GenerateExamPage from "../features/exam/pages/GenerateExamPage";
 import ExamListPage from "../features/exam/pages/ExamListPage";
 import ExamDetailPage from "../features/exam/pages/ExamDetailPage";
-// import ExperimentListPage from "../features/experiment/pages/ExperimentListPage";
-// import ExperimentDetailPage from "../features/experiment/pages/ExperimentDetailPage";
-// import ExperimentComparisonPage from "../features/experiment/pages/ExperimentComparisonPage";
-// import GenerateQuestionPage from "../features/question-generation/pages/GenerateQuestionPage";
-// import GenerationHistoryPage from "../features/question-generation/pages/GenerationHistoryPage";
 import ExamMatrixListPage from "../features/exam-matrix/pages/ExamMatrixListPage";
 import TestKaTeX from "../features/test-katex/pages/TestKaTeX";
 import ExamMatrixFormPage from "../features/exam-matrix/pages/ExamMatrixFormPage";
@@ -26,7 +18,6 @@ import ProfilePage from "../features/auth/pages/ProfilePage";
 import UserManagementPage from "../features/admin/pages/UserManagementPage";
 import NotFoundPage from "../components/common/NotFound/NotFoundPage";
 import { ROLE_ADMIN, ROLE_TEACHER } from "../utils/auth.utils";
-// import JobProcessorPage from "../features/question-generation/pages/JobProcessorPage";
 
 export default function AppRoutes() {
     return (
@@ -34,25 +25,16 @@ export default function AppRoutes() {
             <Route path="auth" element={<AuthLayout />}>
                 <Route element={<GuestOnly />}>
                     <Route path="login" element={<LoginPage />} />
-                    <Route path="forgot-password" element={<ForgotPasswordPage />} />
                 </Route>
             </Route>
 
             <Route element={<RequireAuth allowedRoles={[ROLE_TEACHER]} />}>
                 <Route element={<AppLayout />}>
                     <Route path="" element={<DashboardPage />} />
-                    {/* <Route path="review" element={<ReviewQuestionsPage />} />
-                    <Route path="review/:id" element={<ReviewQuestionDetailPage />} /> */}
                     <Route path="question-bank" element={<QuestionBankPage />} />
                     <Route path="exams" element={<ExamListPage />} />
                     <Route path="exams/generate" element={<GenerateExamPage />} />
                     <Route path="exams/:id" element={<ExamDetailPage />} />
-                    {/* <Route path="experiments" element={<ExperimentListPage />} />
-                    <Route path="experiments/:id" element={<ExperimentDetailPage />} />
-                    <Route path="experiments/comparison" element={<ExperimentComparisonPage />} />
-                    <Route path="generate" element={<GenerateQuestionPage />} />
-                    <Route path="generation-history" element={<GenerationHistoryPage />} />
-                    <Route path="job-processor" element={<JobProcessorPage />} /> */}
                     <Route path="exam-matrices" element={<ExamMatrixListPage />} />
                     <Route path="exam-matrices/new" element={<ExamMatrixFormPage />} />
                     <Route path="exam-matrices/:id/edit" element={<ExamMatrixFormPage />} />

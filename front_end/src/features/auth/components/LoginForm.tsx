@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button, Form, Input, Typography, } from "antd";
+import { Alert, Button, Form, Input, Typography, } from "antd";
 import { Controller, useForm } from "react-hook-form";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "../../../context/AuthContext";
 import { login } from '../services/authApi';
@@ -59,7 +59,10 @@ export default function LoginForm() {
             onSubmit={handleSubmit(onSubmit)}
             noValidate
         >
-            {errorMessage && <p className="error-msg">{errorMessage}</p>}
+            {/* Nguyên câu tiếng Việt của backend: sai mật khẩu, bị khóa do sai nhiều lần, quá nhiều lần từ một địa chỉ mạng */}
+            {errorMessage && (
+                <Alert type="error" showIcon message={errorMessage} className="login-form-error" />
+            )}
 
             <Form layout="vertical" component={false}>
                 <Form.Item
@@ -108,12 +111,6 @@ export default function LoginForm() {
                     />
                 </Form.Item>
 
-                <div className="login-form-options">
-                    <Link to="/auth/forgot-password">
-                        Quên mật khẩu?
-                    </Link>
-                </div>
-
                 <Button
                     type="primary"
                     htmlType="submit"
@@ -127,7 +124,7 @@ export default function LoginForm() {
 
                 <div className="login-form-note">
                     <Text type="secondary">
-                        Tài khoản do quản trị viên cấp.
+                        Chưa có tài khoản hoặc quên mật khẩu? Liên hệ quản trị viên.
                     </Text>
                 </div>
             </Form>

@@ -8,6 +8,7 @@ import type { ExamPreviewData, ExamQuestionItem, ChangeQuestionRequest, ExamDeta
 import { examKindConfig, examStatusConfig, resolveQuestionType } from "../../../utils/exam.utils";
 import { keepQuestion, replaceQuestion, getExamDetail, getExamExportDocx, getCatalogSubjects } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
+import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
 
 import "./ExamDetailPage.css";
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
@@ -54,6 +55,7 @@ function toQuestionItem(item: ExamItemDto): ExamQuestionItem {
         qcState: item.qcState,
         edited: item.edited,
         originalQuestionId: item.originalQuestionId,
+        failureReason: item.failureReason,
     };
 }
 
@@ -225,15 +227,20 @@ export default function ExamDetailPage() {
     // Câu tf có difficulty null (mức ở từng ý) nên đếm riêng để các dòng cộng đủ tổng
     const leveledQuestions = allQuestions.filter((q) => resolveQuestionType(q) !== "tf");
     const questionCount = parts.reduce((sum, p) => sum + p.required, 0);
+    const easyCount = leveledQuestions.filter((q) => q.difficulty === "easy").length;
+    const mediumCount = leveledQuestions.filter((q) => q.difficulty === "medium").length;
+    const hardCount = leveledQuestions.filter((q) => q.difficulty === "hard").length;
+    const tfCount = allQuestions.length - leveledQuestions.length;
     const exam: ExamPreviewData = {
         title: detail.title,
         subject: subjectName,
         questionCount,
-        easyCount: leveledQuestions.filter((q) => q.difficulty === "easy").length,
-        mediumCount: leveledQuestions.filter((q) => q.difficulty === "medium").length,
-        hardCount: leveledQuestions.filter((q) => q.difficulty === "hard").length,
-        tfCount: allQuestions.length - leveledQuestions.length,
-        missingCount: Math.max(0, questionCount - allQuestions.length),
+        easyCount,
+        mediumCount,
+        hardCount,
+        tfCount,
+        // Mọi chỗ còn lại (chưa có câu, đang soạn, lỗi) để các dòng luôn cộng đủ tổng
+        missingCount: Math.max(0, questionCount - easyCount - mediumCount - hardCount - tfCount),
     };
 
     const handleGenerateReplacement = async (request: ChangeQuestionRequest): Promise<ChangeQuestionResult> => {
@@ -259,23 +266,14 @@ export default function ExamDetailPage() {
 
             // Xử lý các lỗi 409 còn lại
             if (err?.response?.status === 409) {
-                const backendMsg =
-                    err?.response?.data?.error ||
-                    err?.response?.data?.message ||
-                    err?.message ||
-                    "Đã xảy ra xung đột dữ liệu.";
-                message.warning(`${backendMsg} Đã tải lại đề.`);
+                message.warning(`${getApiErrorMessage(err, "Đã xảy ra xung đột dữ liệu.")} Đã tải lại đề.`);
                 setChangeQuestion(null);
                 await loadDetail();
                 return;
             }
 
-            const errMsg =
-                err?.response?.data?.error ||
-                err?.response?.data?.message ||
-                err?.message ||
-                "Lỗi khi đổi câu hỏi";
-            message.error(errMsg);
+            // Chạm giới hạn soạn câu (429): hiện nổi bật, không tự thử lại
+            showApiError(err, "Không đổi được câu hỏi.");
         }
     };
 

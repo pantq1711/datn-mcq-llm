@@ -26,20 +26,36 @@ export const AUTH_LOGOUT_EVENT = "auth:logout";
 // phải chờ chung một lần refresh; gọi song song thì lần sau bị REFRESH_INVALID.
 let refreshPromise: Promise<LoginResponse> | null = null;
 
+// Hai tab cùng làm mới: tab chậm hơn nhận 401 REFRESH_RACE; chờ 1 giây rồi thử lại đúng một lần (docs/api mục 8)
+const REFRESH_RACE_WAIT_MS = 1000;
+
+function isRefreshRace(error: unknown): boolean {
+    const response = (error as { response?: { status?: number; data?: { code?: string } } })?.response;
+    return response?.status === 401 && response.data?.code === "REFRESH_RACE";
+}
+
+async function requestRefresh(): Promise<LoginResponse> {
+    let response;
+    try {
+        response = await refreshClient.post<LoginResponse>("/api/auth/refresh");
+    } catch (error) {
+        if (!isRefreshRace(error)) throw error;
+        await new Promise((resolve) => setTimeout(resolve, REFRESH_RACE_WAIT_MS));
+        // Lần này vẫn lỗi (kể cả REFRESH_RACE) thì lỗi được ném ra và phiên bị xóa như REFRESH_INVALID
+        response = await refreshClient.post<LoginResponse>("/api/auth/refresh");
+    }
+    if (response.data.accessToken) {
+        localStorage.setItem("accessToken", response.data.accessToken);
+    }
+    return response.data;
+}
+
 /** Đổi refresh token (cookie) lấy access token mới và lưu lại; các lời gọi đồng thời dùng chung một request. */
 export function refreshOnce(): Promise<LoginResponse> {
     if (!refreshPromise) {
-        refreshPromise = refreshClient
-            .post<LoginResponse>("/api/auth/refresh")
-            .then((response) => {
-                if (response.data.accessToken) {
-                    localStorage.setItem("accessToken", response.data.accessToken);
-                }
-                return response.data;
-            })
-            .finally(() => {
-                refreshPromise = null;
-            });
+        refreshPromise = requestRefresh().finally(() => {
+            refreshPromise = null;
+        });
     }
     return refreshPromise;
 }

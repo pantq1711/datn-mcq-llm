@@ -6,10 +6,8 @@
     margin-bottom: 20px;
 }
 
-.login-form-options {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 24px;
+.login-form-error {
+    margin-bottom: 16px;
 }
 
 .login-form-submit {
@@ -23,10 +21,4 @@
     width: 100%;
     margin-top: 20px;
     text-align: center;
-}
-
-.error-msg {
-    color: #ff4d4f;
-    margin-bottom: 12px;
-    font-weight: 500;
 }
