@@ -67,7 +67,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-51 | Model viết đơn vị đo `\text{km/h}` ngoài `$...$`, cả ô mcq mức vừa bị loại 18/18 lượt sinh (bổ sung 27/10) | LLM & parse | Cao | Đã sửa |
 | L-52 | W2-4b: hàng đợi, bộ điều tiết Gemini, worker liên tục (bổ sung 28/10) | Hàng đợi/đồng thời | Cao | Đã sửa |
 | L-53 | Dedup: `similarity` null do chốt chặn số liệu; câu fallback của ô đang sinh lại không là ứng viên (bổ sung 31/10) | QC | Trung bình | Đã sửa |
-| L-54 | Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (thẩm định 31/10) | QC | Cao | v3 đo 0/9; v4 chờ đo |
+| L-54 | Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (thẩm định 31/10) | QC | Cao | Đã sửa (v4 bắt 7/9 và 5/9, không báo nhầm) |
 
 **Thống kê theo nhóm** (53 mục):
 
@@ -869,7 +869,32 @@ Theo mức độ: Cao 13, Trung bình 26, Thấp 14.
 - Lần thử 2: prompt `solver-v4-literal-reading` (mặc định) = v3 + quy tắc trên + 2 ví dụ ($2x(x^2 - 3x)$ là phân tích đúng của
   $2x^3 - 6x^2$; "hai đường chéo vuông góc" của hình thang cân là đúng khi đề không ghi "luôn"). Bỏ hai cụm gây hiểu hẹp của v3.
   Cùng JSON và cách kết luận với v3. v2, v3 giữ nguyên từng chữ (`SolverPromptFrozenTextTest` ghim SHA-256 của prompt) để đo lại.
-- Trạng thái: Đã sửa, chờ đo v4 trên cùng 29 câu.
+- Kết quả lần thử 2 (`solver-v4-literal-reading`, commit `9c514eb`, cùng DB và 29 câu, chạy 2 lần, 31/10):
+  - Bắt được trên 9 câu lỗi: 7/9 và 5/9.
+    - Câu 37, 39 (4 phương án đúng), 7 (A, B), 8 (A, B, C), 15 (A, B): bắt được ở cả 2 lần. Các phương án Solver cho là đúng
+      khớp với đọc đề.
+    - Câu 52, 53: bắt được ở lần 1, bỏ sót ở lần 2. Lần 1 câu 52 cũng chỉ thấy A, B, bỏ qua D $x(7x - 14y)$ dù D nhân lại bằng
+      đa thức đã cho.
+    - Câu 61, 25: bỏ sót ở cả 2 lần. Đọc đề không thấy phương án thứ hai bảo vệ được ở câu 61; câu 25 Solver vẫn coi "$6$ km"
+      không phải đơn thức. Nếu chỉ tính 7 câu lỗi rõ ràng: 7/7 và 5/7.
+  - Báo nhầm trên 20 câu tốt: 0/19 (câu 27 lỗi 429) và 0/20. Hai lần báo nhầm của v3 (câu 32, 35) không còn.
+  - Token trung bình mỗi câu: 1622 và 1604 (khoảng 2,4 lần v2). Độ trễ trung bình: 1853 và 2133 ms.
+  - Ổn định giữa 2 lần: 26/28 câu cùng kết luận (khác ở câu 52, 53; câu 27 không tính).
+- Bảng TN1 (bắt được trên 9 / báo nhầm trên 20 / token trung bình / ổn định):
+
+  | Phiên bản | Bắt được | Báo nhầm | Token | Ổn định |
+  |---|---|---|---|---|
+  | v2 `solver-v2-delimited` | 0/9, 0/9 | 0/19, 0/20 | 687, 684 | 28/28 |
+  | v3 `solver-v3-option-check` | 0/9, 0/9 | 1/20, 2/20 | 1206, 1203 | 28/29 |
+  | v4 `solver-v4-literal-reading` | 7/9, 5/9 | 0/19, 0/20 | 1622, 1604 | 26/28 |
+
+- Hạn chế còn lại: v4 chưa ổn định với câu phân tích nhân tử có 2 phương án đúng (52, 53). Mỗi tập chỉ có 29 câu, mỗi phiên bản
+  chạy 2 lần, nên các tỉ lệ chỉ mang tính chỉ báo. Hạn mức 15 lượt/phút của gói miễn phí làm 1 lượt mỗi lần đo có thể lỗi 429.
+  - Nhãn "câu lỗi"/"câu tốt" của 29 câu do AI gán trong buổi thẩm định nội dung 31/10, CHƯA được người xác nhận; hai câu 61 và
+    25 còn tranh cãi (vì vậy có cả cách tính trên 7 câu). Số liệu chỉ dùng làm kết quả chính thức sau khi người xác nhận nhãn.
+  - Solver và mô hình sinh câu là cùng một model (`gemini-3.5-flash-lite`): mô hình tự kiểm tra đầu ra của chính nó; chưa thử
+    Solver bằng model khác.
+- Trạng thái: Đã sửa. v4 là mặc định; đã đo trước/sau.
 
 ## Hàng đợi/đồng thời
 
