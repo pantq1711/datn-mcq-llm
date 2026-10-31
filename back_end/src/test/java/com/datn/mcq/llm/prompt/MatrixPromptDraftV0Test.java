@@ -101,9 +101,9 @@ class MatrixPromptDraftV0Test {
 
     @Test
     void phienBanVaThongSoOLuuDuoc() {
-        assertEquals("matrix-mcq-v4-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
-        assertEquals("matrix-tf-v6-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
-        assertEquals("matrix-sa-v5-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
+        assertEquals("matrix-mcq-v5-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
+        assertEquals("matrix-tf-v7-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-sa-v6-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion("sa-v1-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion(null));
@@ -187,23 +187,57 @@ class MatrixPromptDraftV0Test {
         }
     }
 
-    /** Ô phân tích đa thức của câu sa và đúng/sai phải hỏi phân tích, không biến thành bài tìm x (46, 58). */
+    /**
+     * Ô phân tích đa thức của câu sa và đúng/sai (31/10, thẩm định đề 5-7: ô C17 cả 3 đề ra "tìm x từ lập phương = số"): đáp
+     * án là số, nên ra dạng tính nhanh giá trị biểu thức bằng cách phân tích, không ra bài tìm x chỉ cần khai căn.
+     */
     @Test
-    void oPhanTichNhanTuCuaSaVaTfPhaiHoiPhanTich() {
-        for (QuestionType type : List.of(QuestionType.SA, QuestionType.TF)) {
-            String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Phân tích đa thức thành nhân tử", null));
-            assertTrue(p.contains("phân tích đa thức thành nhân tử thì câu phải hỏi phân tích"), type + ": " + p);
-            assertTrue(p.contains("không chuyển thành bài tìm x chỉ cần khai căn"), type + ": " + p);
+    void oPhanTichNhanTuCuaSaRaDangTinhNhanhGiaTri() {
+        String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.SA, "Phân tích đa thức thành nhân tử", null));
+        for (String part : List.of("Đáp án trả lời ngắn phải là một số",
+                "phân tích đa thức thành nhân tử, hãy ra dạng TÍNH NHANH GIÁ TRỊ biểu thức",
+                "bằng cách phân tích hoặc dùng hằng đẳng thức",
+                "tính nhanh $x^2 - 2x + 1$ tại $x = 21$, đáp số 400",
+                "chọn số liệu để đáp án gọn trong 4 ký tự", "KHÔNG ra bài tìm x chỉ cần khai căn")) {
+            assertTrue(p.contains(part), "sa thiếu: " + part);
         }
+        assertFalse(p.contains("không chuyển thành bài tìm x"), "quy tắc cũ đã được thay");
+        assertFalse(p.contains("KẾT QUẢ PHÂN TÍCH"), "quy tắc của tf không lẫn vào sa");
         assertFalse(MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.MCQ, "Phân tích", null))
-                .contains("không chuyển thành bài tìm x"));
+                .contains("TÍNH NHANH GIÁ TRỊ"));
+    }
+
+    /** Ô phân tích nhân tử của câu đúng/sai: ý là khẳng định về kết quả phân tích hoặc tính nhanh; không có câu "đáp án là một số". */
+    @Test
+    void oPhanTichNhanTuCuaTfLaKhangDinhVeKetQuaPhanTich() {
+        String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.TF, "Phân tích đa thức thành nhân tử", null));
+        for (String part : List.of("phân tích đa thức thành nhân tử thì các ý đúng/sai là khẳng định về KẾT QUẢ PHÂN TÍCH",
+                "$x^2 - 9 = (x - 3)(x + 3)$", "hoặc về kết quả TÍNH NHANH giá trị bằng phân tích hoặc hằng đẳng thức",
+                "không biến thành bài tìm x chỉ cần khai căn")) {
+            assertTrue(p.contains(part), "tf thiếu: " + part);
+        }
+        for (String banned : List.of("Đáp án trả lời ngắn phải là một số", "đáp án gọn trong 4 ký tự",
+                "TÍNH NHANH GIÁ TRỊ biểu thức bằng cách", "không chuyển thành bài tìm x")) {
+            assertFalse(p.contains(banned), "tf không được chứa: " + banned);
+        }
+    }
+
+    /** Lời giải chỉ ghi bản cuối cùng (31/10, thẩm định đề 5-7: câu 82 tự viết "Xin lỗi, tính lại…" rồi đổi dữ kiện). */
+    @Test
+    void loiGiaiChiGhiBanCuoiCoTrongPromptMaTranCaBaDang() {
+        for (QuestionType type : QuestionType.values()) {
+            String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Đa thức", null));
+            assertTrue(p.contains("Lời giải chỉ trình bày bản cuối cùng, mạch lạc; không ghi quá trình nháp, không xin lỗi, "
+                    + "không \"tính lại\", không đổi dữ kiện của đề."), type + ": " + p);
+        }
     }
 
     /** Quy tắc mới là hằng riêng của prompt ma trận: prompt Solver, ESCAPE_HINT và prompt sinh lẻ không chứa. */
     @Test
     void quyTacNoiDungMoiKhongNamTrongSolver() {
         List<String> markers = List.of("SAI THẬT", "phải nêu rõ dạng kết quả", "thỏa mãn đẳng thức", "MỘT bước suy luận",
-                "phương án độn", "khái niệm lớp dưới", "không chuyển thành bài tìm x", "luôn bằng nhau");
+                "phương án độn", "khái niệm lớp dưới", "TÍNH NHANH GIÁ TRỊ", "KHÔNG ra bài tìm x", "KẾT QUẢ PHÂN TÍCH", "luôn bằng nhau",
+                "chỉ trình bày bản cuối cùng");
         List<String> prompts = List.of(
                 PromptBuilder.ESCAPE_HINT,
                 new PromptBuilder().buildSolverPrompt("Tính $1 + 1$.", "$1$", "$2$", "$3$", "$4$"),

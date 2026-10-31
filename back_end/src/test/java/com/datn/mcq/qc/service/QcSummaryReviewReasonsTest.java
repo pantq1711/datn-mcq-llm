@@ -57,6 +57,17 @@ class QcSummaryReviewReasonsTest {
         assertEquals(List.of("solver_inconsistent"), new QcSummary(true, false, null, false, List.of()).reviewReasons());
     }
 
+    /** Lời giải có "tính lại"/"làm lại"/"sửa lại": mã riêng, không phải "warning: ..." (cảnh báo vẫn lưu ở warnings). */
+    @Test
+    void loiGiaiCoTheConNhapBatMaRiengKhongPhaiWarning() {
+        assertEquals(List.of("explanation_draft_suspect"),
+                reasons("explanation: lời giải có thể còn phần nháp (tính lại, làm lại, sửa lại)"));
+        assertEquals(List.of("explanation_draft_suspect", "warning: statement_b: đã tự đóng $"),
+                reasons("explanation: lời giải có thể còn phần nháp (tính lại, làm lại, sửa lại)",
+                        "statement_b: đã tự đóng $"));
+        assertEquals("explanation_draft_suspect", QcSummaryService.EXPLANATION_DRAFT_SUSPECT);
+    }
+
     @Test
     void canhBaoTuDongDongDoLaVanBatCanXemKy() {
         assertEquals(List.of("warning: statement_b: đã tự đóng $"),
