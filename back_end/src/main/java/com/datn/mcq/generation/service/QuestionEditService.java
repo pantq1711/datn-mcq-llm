@@ -3,6 +3,7 @@ package com.datn.mcq.generation.service;
 import com.datn.mcq.catalog.entity.QuestionTemplate;
 import com.datn.mcq.catalog.service.CatalogService;
 import com.datn.mcq.common.exception.ApiErrorException;
+import com.datn.mcq.common.util.ShortAnswerValue;
 import com.datn.mcq.common.util.TextDistanceUtils;
 import com.datn.mcq.enums.DbEnum;
 import com.datn.mcq.enums.Difficulty;
@@ -356,6 +357,9 @@ public class QuestionEditService {
                     forbid(in.statements(), "statements", type);
                     // Như parser sa: đáp số chỉ trim, vẫn tự đóng "$" (ví dụ "$3\sqrt{2}").
                     c.saAnswer = text("answer", required(in.saAnswer(), "saAnswer"), repairs);
+                    // 27/10: đáp án đạt STRICT được lưu ở dạng chuẩn hóa; không đạt thì giữ nguyên để FormatChecker báo 400.
+                    String normalized = ShortAnswerValue.normalizedStrictAnswer(c.saAnswer);
+                    c.saAnswer = normalized != null ? normalized : c.saAnswer;
                 }
                 case TF -> {
                     forbidOptions(in, type);
@@ -457,10 +461,22 @@ public class QuestionEditService {
 
         private static String text(String field, String value, List<String> repairs) {
             String s = value.strip();
+            // Như parser sinh câu: gỡ vỏ \text{...} ngoài $ rồi mới tự đóng $ (27/10, đơn vị đo viết ngoài công thức).
+            LlmOutputRepair.TextRepair t = LlmOutputRepair.stripTextOutsideMath(s);
+            if (t.removed() > 0) {
+                repairs.add(LlmOutputRepair.textWarning(field, t.removed()));
+                s = t.text();
+            }
             LlmOutputRepair.DollarRepair d = LlmOutputRepair.closeTrailingDollar(s);
             if (d.closed()) {
                 repairs.add(LlmOutputRepair.dollarWarning(field));
                 s = d.text();
+            }
+            // 31/10: như parser sinh câu, "75^\bullet" / "85^{\triangle}" trong công thức thành "^{\circ}".
+            LlmOutputRepair.DegreeRepair g = LlmOutputRepair.fixDegreeSymbol(s);
+            if (g.fixed() > 0) {
+                repairs.add(LlmOutputRepair.degreeWarning(field, g.fixed()));
+                s = g.text();
             }
             return s;
         }

@@ -115,7 +115,7 @@ class GenerationJobQueueTest {
 
     private Map<String, Object> row(int id) {
         return jdbc.queryForMap("SELECT status, attempt, last_error, started_at, abs(extract(epoch FROM"
-                + " (next_run_at - now()))) AS due_in FROM generation_job WHERE id = ?", id);
+                + " (next_run_at - updated_at))) AS due_in FROM generation_job WHERE id = ?", id);
     }
 
     // ---------- 1. job kẹt RUNNING ----------
@@ -170,19 +170,32 @@ class GenerationJobQueueTest {
                 Integer.class));
     }
 
+    /**
+     * W2-4b (A): lỗi xảy ra SAU khi câu đã lưu không được làm sinh câu mới (mỗi lần thử lại là một lượt gọi LLM và một câu
+     * mồ côi). Job kết thúc done, câu giữ generated và ghi lỗi; phần kiểm còn thiếu do bước kiểm lại xử lý.
+     */
     @Test
-    void loiKhiChayQcSauLoiGoiLlmKhongDeJobKetRunning() {
+    void loiKhiChayQcSauKhiDaLuuCauKhongSinhCauMoiJobDoneCauGiuGenerated() {
         int id = pendingJob();
         QcOrchestrator broken = mock(QcOrchestrator.class);
         when(broken.evaluateAndSave(any(), any())).thenThrow(new IllegalStateException("QC hỏng"));
         GenerationJobPoller poller = new GenerationJobPoller(processor, new FixedLlm(VALID_MCQ), broken,
                 dedupScopeResolver, 3);
         GenerationJobPoller.ProcessedJobSummary summary = poller.processNextJob(false);
-        assertEquals("pending", summary.jobStatus());
+        assertEquals("done", summary.jobStatus());
+        assertEquals("generated", summary.questionStatus());
         assertTrue(summary.error().contains("QC hỏng"), summary.error());
         Map<String, Object> r = row(id);
-        assertEquals("pending", r.get("status"), "thử lại theo đường hiện có");
+        assertEquals("done", r.get("status"), "không thử lại: câu đã lưu");
         assertTrue(((String) r.get("last_error")).contains("QC hỏng"));
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM generated_question", Integer.class));
+        Map<String, Object> q = jdbc.queryForMap("SELECT status, solver_error FROM generated_question");
+        assertEquals("generated", q.get("status"));
+        assertTrue(((String) q.get("solver_error")).contains("QC hỏng"));
+
+        jdbc.update("UPDATE generation_job SET next_run_at = now() - interval '1 minute' WHERE id = ?", id);
+        assertTrue(!poller.processNextJob(false).processed(), "job done không chạy lại");
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM generated_question", Integer.class));
     }
 
     // ---------- 1b. job mcq cũ theo chiến lược few-shot (async-queue-v1) ----------

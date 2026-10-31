@@ -235,7 +235,7 @@ class ExamQcTraceTest extends ExamFlowTestBase {
         JsonNode solver = version.get("qc").get("answerCheck");
         assertEquals("error", solver.get("state").asText(), "lỗi, không phải chưa chạy");
         assertTrue(solver.get("error").asText().contains("Solver giả: hết thời gian chờ"));
-        assertTrue(texts(version.get("reviewReasons")).contains("solver_not_run"));
+        assertTrue(texts(version.get("reviewReasons")).contains("solver_failed"));
         assertEquals("generated", version.get("status").asText());
         assertTrue(version.get("qc").get("dedup").get("passed").asBoolean(), "dedup đã chạy xong trước Solver");
     }

@@ -1,9 +1,11 @@
 package com.datn.mcq.llm.prompt;
 
+import com.datn.mcq.common.util.CellTextLimits;
 import com.datn.mcq.common.util.PromptData;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.QuestionType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -31,16 +33,63 @@ public final class MatrixPromptDraftV0 {
     static final String NEW_PROBLEM_RULE = "Tự đặt một bài toán MỚI với số liệu, biểu thức hoặc ngữ cảnh riêng; không "
             + "chép nguyên văn bài tập quen thuộc trong sách giáo khoa.";
 
+    /**
+     * Quy tắc đáp án câu sa của prompt ma trận (27/10): theo phiếu trả lời trắc nghiệm Bộ GD&ĐT 2025, Phần III (tối đa 4
+     * cột). Riêng cho prompt ma trận; {@link SaPromptDraftV0#ANSWER_RULES} (prompt sinh lẻ và Solver) giữ nguyên. Mở đầu
+     * bằng một dòng trống như {@code ANSWER_RULES}.
+     */
+    static final String SA_ANSWER_RULES = """
+
+            Quy tắc đáp án (theo phiếu trả lời trắc nghiệm của Bộ GD&ĐT, Phần III):
+            - Đáp án là MỘT số nguyên hoặc MỘT số thập phân viết bằng dấu phẩy, tối đa 4 ký tự tính cả dấu "-" (chỉ ở \
+            đầu) và dấu phẩy, ví dụ "2,75", "-12", "0,5". Viết trần, không bọc trong $...$.
+            - Không phân số, hỗn số, căn, đơn vị; không viết "x =".
+            - Nếu kết quả tính ra không gọn trong 4 ký tự (số vô tỉ, phân số không viết gọn được bằng số thập phân hữu \
+            hạn, số quá dài) thì đề bài phải yêu cầu làm tròn rõ ràng (ví dụ "làm tròn đến hàng phần mười") và đáp án \
+            là giá trị đã làm tròn đúng yêu cầu đó.
+            - Nếu kết quả là số lớn hơn 4 ký tự (ví dụ tiền, dân số, khối lượng) thì đề bài phải đổi đơn vị cho đáp án \
+            gọn trong 4 ký tự (ví dụ "tính theo nghìn đồng", "đơn vị: triệu người", "đơn vị: tấn"). Ví dụ: \
+            10000 đồng thì đề hỏi theo nghìn đồng và đáp án "10".
+            - Không viết chữ số 0 thừa ở đầu (viết 5, không viết 05); không viết -0.
+            - Đề chỉ có một cách hiểu và một đáp án duy nhất.
+            """;
+
+    /**
+     * Câu dặn đơn vị đo của prompt ma trận (27/10, sau đo exam 10: 18/18 lượt sinh ô mcq mức vừa viết "\text{km/h}" ngoài
+     * $). Hằng riêng, đặt ngay sau {@link PromptBuilder#ESCAPE_HINT} trong prompt mcq, sa, tf; {@code ESCAPE_HINT} và các
+     * prompt Solver (cùng dùng {@code ESCAPE_HINT}) không đổi.
+     */
+    static final String UNIT_RULE = "- Đơn vị đo (km, km/h, cm, giờ, phút...) viết bằng chữ thường NGOÀI cặp $...$, chỉ "
+            + "phần số nằm trong cặp: \"$40$ km/h\", \"$2{,}5$ giờ\". Không dùng \\text{...} ngoài cặp $...$.";
+
     private MatrixPromptDraftV0() {}
 
     /**
      * prompt_version của run, ví dụ "matrix-mcq-v1-draft". v1 (ngày 23/10): ghi chú câu thứ k/n và lý do lần sinh trước
      * bị loại, quy tắc phương án nhiễu (mcq), quy tắc ý bám đề dẫn và đóng "$" (tf). tf v2 (ngày 23/10, đợt 2): mẫu nhãn
      * bắt buộc ({@link TfLabelPattern}) và quy tắc ý d Vận dụng. tf v3 (ngày 26/10, sau đo 20 chỗ tf): mẫu nhãn là mục tiêu,
-     * nhãn phải theo đúng/sai thật, được lệch mẫu, lời giải không nhắc tới mẫu. Run cũ là v0 (tf: v0, v1, v2).
+     * nhãn phải theo đúng/sai thật, được lệch mẫu, lời giải không nhắc tới mẫu. mcq/sa v2 và tf v4 (ngày 27/10, sau đo exam
+     * 10: 18/18 lượt sinh ô mcq mức vừa bị loại vì viết "\text{km/h}" ngoài $): thêm {@link #UNIT_RULE} (ví dụ đơn vị đo
+     * viết ngoài $; {@code ESCAPE_HINT} không đổi). sa v3 (ngày 27/10, sau đo exam 9 ô 23: câu 145, 147, 148 bị loại vì đáp án "\frac{11}{4}",
+     * "$3\frac{1}{4}$", "4\frac{1}{3}"): {@link #SA_ANSWER_RULES} thay quy tắc đáp số chung, đáp án chỉ là số nguyên hoặc
+     * thập phân tối đa 4 ký tự (phiếu trả lời Bộ GD&ĐT 2025, Phần III). mcq v3, sa v4, tf v5 (ngày 31/10, thẩm định nội dung
+     * 4 đề: 0 câu sai đáp án nhưng nhiều phương án sai vẫn đúng, câu thiếu "luôn", câu "Biết" đòi 2 bước, ô phân tích nhân tử ra
+     * bài tìm x): thêm {@link #CONTENT_RULES} cho cả 3 dạng, {@link #MCQ_OPTION_RULES} cho mcq, {@link #FACTORING_CELL_RULE}
+     * cho sa và tf. mcq v4, sa v5, tf v6 (ngày 31/10, thẩm định nội dung: nhiều câu cùng khuôn chỉ khác số hoặc tên đỉnh
+     * trong một đề): khối {@link #SAME_CELL_HEADER} (các câu đã có trong ô, cùng đề) và dòng "câu thứ k/n" giao khía cạnh
+     * ({@link #slotLine(int, int, List)}). mcq v5, sa v6, tf v7 (ngày 31/10, thẩm định đề 5-7: lời giải sai tăng từ 1 lên 4
+     * câu, câu 82 tự viết "Xin lỗi, tính lại…"; ô C17 cả 3 đề vẫn ra bài tìm x): thêm {@link #EXPLANATION_RULE} cho cả 3
+     * dạng, thay {@link #FACTORING_CELL_RULE} (sa) bằng dạng tính nhanh giá trị biểu thức và thay quy tắc của tf bằng
+     * {@link #FACTORING_CELL_RULE_TF} (ý là khẳng định về kết quả phân tích hoặc tính nhanh). Run cũ là v0 (tf: v0, v1,
+     * v2, v3, v4, v5, v6; mcq: v1, v2, v3, v4; sa: v1, v2, v3, v4, v5).
      */
     public static String promptVersion(QuestionType type) {
-        return VERSION_PREFIX + type.getDbValue() + (type == QuestionType.TF ? "-v3-draft" : "-v1-draft");
+        String version = switch (type) {
+            case TF -> "-v7-draft";
+            case SA -> "-v6-draft";
+            case MCQ -> "-v5-draft";
+        };
+        return VERSION_PREFIX + type.getDbValue() + version;
     }
 
     public static boolean isMatrixVersion(String promptVersion) {
@@ -56,6 +105,57 @@ public final class MatrixPromptDraftV0 {
     static final String MCQ_DISTRACTOR_RULE = "- Mỗi phương án nhiễu phải SAI về giá trị, không được là biểu thức "
             + "tương đương với đáp án đúng (ví dụ với phân tích nhân tử, không dùng dạng phân tích chưa triệt để như "
             + "$3(x^2 - 4x)$ khi đáp án là $3x(x - 4)$).";
+
+    /**
+     * Quy tắc phương án của câu mcq (31/10, thẩm định nội dung 4 đề: phương án sai vẫn bằng đa thức gốc ở câu 7, 8, 37,
+     * 39, 52, 53; phương án độn "giá trị khác" ở câu 64). Đặt sau {@link #MCQ_DISTRACTOR_RULE}.
+     */
+    static final String MCQ_OPTION_RULES = "- Đúng MỘT phương án đúng. Mọi phương án sai phải SAI THẬT: không được là một "
+            + "cách viết tương đương đúng của đáp án hoặc của biểu thức đề cho; kiểm bằng cách khai triển hoặc rút gọn "
+            + "từng phương án trước khi chọn.\n"
+            + "- Không dùng phương án độn như \"giá trị khác\", \"tất cả đều sai\", \"không xác định\" (trừ khi đó là "
+            + "đáp án đúng và có lý do toán học).";
+
+    /**
+     * Quy tắc nội dung chung của cả 3 dạng (31/10, thẩm định nội dung: câu 15 và 61 thiếu "luôn", câu 42 "Biết" đòi 2 bước,
+     * câu 36 hỏi kiến thức Toán 7, câu 26, 46, 58 "thỏa mãn biểu thức"). Mỗi dòng là một gạch đầu dòng. Hằng riêng của
+     * prompt ma trận: {@link PromptBuilder#ESCAPE_HINT}, prompt Solver và prompt sinh lẻ không chứa.
+     */
+    static final String CONTENT_RULES = """
+            - Câu yêu cầu biến đổi hoặc phân tích phải nêu rõ dạng kết quả cần có (ví dụ "đặt nhân tử chung lớn nhất", \
+            "phân tích triệt để", "thu gọn hoàn toàn").
+            - Câu hỏi về tính chất hình học dùng "luôn" ("... luôn bằng nhau") để loại trường hợp đặc biệt của riêng một \
+            hình cụ thể.
+            - Câu mức Biết chỉ cần MỘT bước suy luận hoặc tính; câu cần từ 2 bước trở lên thuộc mức Hiểu hoặc Vận dụng.
+            - Chỉ dùng kiến thức trọng tâm của lớp và bài trong ô; không lấy khái niệm lớp dưới làm trọng tâm.
+            - Câu chữ: viết "thỏa mãn đẳng thức" (không viết "thỏa mãn biểu thức"); không lặp từ (cụm "sau đây" chỉ dùng \
+            một lần trong câu).
+            """;
+
+    /**
+     * Ô phân tích đa thức của câu sa (31/10, câu 46 và 58 ra bài tìm x chỉ cần khai căn; thẩm định đề 5-7: ô C17 cả 3 đề vẫn
+     * ra "tìm x từ lập phương = số"). Thay quy tắc "phải hỏi phân tích": đáp án trả lời ngắn là một số nên ra dạng tính nhanh
+     * giá trị biểu thức bằng cách phân tích. Câu đúng/sai dùng {@link #FACTORING_CELL_RULE_TF}.
+     */
+    static final String FACTORING_CELL_RULE = "- Đáp án trả lời ngắn phải là một số, nên với ô có chủ đề hoặc nội dung là "
+            + "phân tích đa thức thành nhân tử, hãy ra dạng TÍNH NHANH GIÁ TRỊ biểu thức bằng cách phân tích hoặc dùng "
+            + "hằng đẳng thức (ví dụ: tính nhanh $x^2 - 2x + 1$ tại $x = 21$, đáp số 400); chọn số liệu để đáp án gọn trong "
+            + "4 ký tự. KHÔNG ra bài tìm x chỉ cần khai căn.";
+
+    /**
+     * Ô phân tích đa thức của câu đúng/sai (31/10): đúng/sai không có đáp số, nên không dùng câu "đáp án là một số" của
+     * {@link #FACTORING_CELL_RULE}; các ý là khẳng định về kết quả phân tích hoặc kết quả tính nhanh.
+     */
+    static final String FACTORING_CELL_RULE_TF = "- Nếu chủ đề hoặc nội dung của ô là phân tích đa thức thành nhân tử thì "
+            + "các ý đúng/sai là khẳng định về KẾT QUẢ PHÂN TÍCH (ví dụ \"$x^2 - 9 = (x - 3)(x + 3)$\") hoặc về kết quả "
+            + "TÍNH NHANH giá trị bằng phân tích hoặc hằng đẳng thức; không biến thành bài tìm x chỉ cần khai căn.";
+
+    /**
+     * Lời giải chỉ ghi bản cuối của cả 3 dạng (31/10, thẩm định đề 5-7: câu 82 tự viết "Xin lỗi, tính lại…" rồi đổi dữ kiện).
+     * Hằng riêng của prompt ma trận, đi cùng quy tắc chặn ở FormatChecker; prompt Solver và prompt sinh lẻ không chứa.
+     */
+    static final String EXPLANATION_RULE = "- Lời giải chỉ trình bày bản cuối cùng, mạch lạc; không ghi quá trình nháp, "
+            + "không xin lỗi, không \"tính lại\", không đổi dữ kiện của đề.";
 
     /** Dòng của {@link TfPromptDraftV0#STATEMENT_RULES} bị bỏ khi ghi chú của job có mẫu nhãn mục tiêu. */
     static final String TF_FREE_COUNT_LINE = "- Không bắt buộc số ý Đúng hay số ý Sai.";
@@ -113,7 +213,9 @@ public final class MatrixPromptDraftV0 {
         if (instruction == null) {
             return null;
         }
-        String clean = instruction.replace("<<<", "").replace(">>>", "").replaceAll("\\s+", " ").strip();
+        String clean = CellTextLimits.clip(
+                instruction.replace("<<<", "").replace(">>>", "").replaceAll("\\s+", " ").strip(),
+                CellTextLimits.EXTRA_INSTRUCTION_MAX_CHARS);
         return clean.isEmpty() ? null : EXTRA_PREFIX + TEACHER_OPEN + clean + TEACHER_CLOSE;
     }
 
@@ -161,6 +263,77 @@ public final class MatrixPromptDraftV0 {
                 + "số liệu); nếu yêu cầu cần đạt có nhiều ý, mỗi câu kiểm tra một ý khác.";
     }
 
+    /** Dòng mở đầu khối "câu đã có trong ô này" (cùng đề). */
+    public static final String SAME_CELL_HEADER = "Các câu đã có trong ô này (cùng đề, câu dẫn cắt gọn):";
+    /** Dòng yêu cầu ngay sau khối "câu đã có trong ô này". */
+    public static final String SAME_CELL_RULE = "Chọn dạng bài hoặc khía cạnh khác các câu trên; không lặp lại khuôn câu "
+            + "chỉ đổi số liệu hay tên điểm.";
+    /** Số câu tối đa của khối "câu đã có trong ô này". */
+    public static final int SAME_CELL_MAX_ITEMS = 6;
+    /** Thêm vào dòng "câu thứ k/n" khi ô không có đủ khía cạnh để mỗi câu một khía cạnh riêng (m = 0 hoặc m &lt; n). */
+    public static final String SAME_FORM_HINT = "Dùng hình thức hỏi khác các câu cùng ô (ví dụ: tính toán, nhận biết khái "
+            + "niệm, chọn khẳng định đúng).";
+
+    /**
+     * Dòng "câu thứ k/n" kèm phân công khía cạnh theo thứ tự chỗ: với m mức có yêu cầu cần đạt ({@code outcomeLevels},
+     * theo thứ tự hiển thị trong prompt), chỗ k được ưu tiên khía cạnh thứ ((k-1) mod m)+1. Hai chỗ có thể cùng khía cạnh
+     * khi m &lt; n, và khi m = 0 không có khía cạnh nào để giao, nên thêm {@link #SAME_FORM_HINT}. Null khi ô chỉ có 1 câu.
+     * Chỉ đặt vào ghi chú lúc xếp job: hai worker chạy song song nên các chỗ đầu có thể chưa thấy nhau, phân công này không
+     * phụ thuộc thứ tự sinh.
+     */
+    public static String slotLine(int k, int n, List<Difficulty> outcomeLevels) {
+        String base = slotLine(k, n);
+        if (base == null) {
+            return null;
+        }
+        int m = outcomeLevels == null ? 0 : outcomeLevels.size();
+        StringBuilder sb = new StringBuilder(base);
+        if (m > 0) {
+            int j = Math.floorMod(k - 1, m) + 1;
+            sb.append(" Ưu tiên khía cạnh thứ ").append(j).append("/").append(m)
+                    .append(" trong danh sách yêu cầu cần đạt (").append(TfPromptDraftV0.levelName(outcomeLevels.get(j - 1)))
+                    .append(").");
+        }
+        if (m == 0 || m < n) {
+            sb.append(" ").append(SAME_FORM_HINT);
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Như {@link #buildGenerationPrompt(MatrixCellSpec, List, String, String)}, kèm {@code sameCellQuestions}: câu dẫn của
+     * các câu khác đang có trong cùng ô của cùng đề (tối đa {@value #SAME_CELL_MAX_ITEMS} câu, mỗi câu cắt như
+     * {@link PreviousQuestion#MAX_CHARS} ký tự), đặt sau danh sách câu đã sinh của ô và trước ghi chú của job. Null hoặc
+     * không có câu nào thì giống prompt không có khối này.
+     */
+    public static String buildGenerationPrompt(MatrixCellSpec spec, List<PreviousQuestion> previous, String note,
+                                               String materialContext, List<String> sameCellQuestions) {
+        return build(spec, previous, note, materialContext, sameCellQuestions);
+    }
+
+    private static String sameCellSection(List<String> questions) {
+        if (questions == null) {
+            return "";
+        }
+        List<String> lines = new ArrayList<>();
+        for (String q : questions) {
+            if (q != null && !q.isBlank()) {
+                lines.add(PreviousQuestion.clip(q));
+                if (lines.size() == SAME_CELL_MAX_ITEMS) {
+                    break;
+                }
+            }
+        }
+        if (lines.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(SAME_CELL_HEADER).append("\n");
+        for (int i = 0; i < lines.size(); i++) {
+            sb.append(i + 1).append(". ").append(lines.get(i)).append("\n");
+        }
+        return sb.append(SAME_CELL_RULE).append("\n").toString();
+    }
+
     /**
      * Dòng lý do lần sinh trước bị loại (ngày 23/10, mục 5), tối đa {@value #RETRY_HINT_MAX} ký tự (cắt phần lý do, giữ
      * câu dặn ở cuối); null khi không có lỗi.
@@ -204,6 +377,11 @@ public final class MatrixPromptDraftV0 {
 
     private static String build(MatrixCellSpec spec, List<PreviousQuestion> previous, String fullNote,
                                 String materialContext) {
+        return build(spec, previous, fullNote, materialContext, null);
+    }
+
+    private static String build(MatrixCellSpec spec, List<PreviousQuestion> previous, String fullNote,
+                                String materialContext, List<String> sameCellQuestions) {
         // Khối yêu cầu của giáo viên (nếu có) tách khỏi ghi chú hệ thống và đặt ở cuối prompt.
         String note = systemPart(fullNote);
         String teacher = note == null || note.length() == fullNote.length() ? null
@@ -222,13 +400,16 @@ public final class MatrixPromptDraftV0 {
         }
         sb.append("Chủ đề: ").append(spec.topic()).append("\n");
         if (spec.content() != null && !spec.content().isBlank()) {
-            sb.append("Nội dung: ").append(spec.content()).append("\n");
+            // D2: cắt an toàn cho ô lưu từ trước khi có giới hạn độ dài.
+            sb.append("Nội dung: ").append(CellTextLimits.clip(spec.content(), CellTextLimits.CONTENT_MAX_CHARS))
+                    .append("\n");
         }
         sb.append("Yêu cầu cần đạt:\n");
         for (Difficulty level : Difficulty.values()) {
             String text = spec.learningOutcomes().get(level);
             if (text != null && !text.isBlank()) {
-                sb.append("- ").append(TfPromptDraftV0.levelName(level)).append(": ").append(text).append("\n");
+                sb.append("- ").append(TfPromptDraftV0.levelName(level)).append(": ")
+                        .append(CellTextLimits.clip(text, CellTextLimits.OUTCOME_MAX_CHARS)).append("\n");
             }
         }
         if (type == QuestionType.TF) {
@@ -248,6 +429,7 @@ public final class MatrixPromptDraftV0 {
             sb.append(NO_FIGURE_RULE).append("\n");
         }
         sb.append(PreviousQuestion.section(previous, type == QuestionType.TF));
+        sb.append(sameCellSection(sameCellQuestions));
         if (note != null && !note.isBlank()) {
             sb.append(note.strip()).append("\n");
         }
@@ -264,7 +446,8 @@ public final class MatrixPromptDraftV0 {
                         - Viết lời giải ngắn trong "explanation" và kiểm tra "correct_option" khớp với lời giải.
                         """);
                 sb.append(MCQ_DISTRACTOR_RULE).append("\n");
-                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append("\n");
+                sb.append(MCQ_OPTION_RULES).append("\n").append(CONTENT_RULES).append(EXPLANATION_RULE).append("\n");
+                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append("""
                         Trả về DUY NHẤT một đối tượng JSON có đủ 7 trường:
                         "question_text", "option_a", "option_b", "option_c", "option_d", "correct_option" (A/B/C/D), \
@@ -281,12 +464,15 @@ public final class MatrixPromptDraftV0 {
                 if (levels != null && levels.size() == 4 && levels.get(3) == Difficulty.HARD) {
                     sb.append(TF_D_RULE).append("\n");
                 }
-                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append("\n");
+                sb.append(CONTENT_RULES).append(EXPLANATION_RULE).append("\n").append(FACTORING_CELL_RULE_TF).append("\n");
+                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(TfPromptDraftV0.OUTPUT_INSTRUCTION);
             }
             case SA -> {
-                sb.append(SaPromptDraftV0.ANSWER_RULES);
-                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append("\n");
+                sb.append(SA_ANSWER_RULES);
+                sb.append("\nQuy tắc nội dung:\n").append(CONTENT_RULES).append(EXPLANATION_RULE).append("\n")
+                        .append(FACTORING_CELL_RULE).append("\n");
+                sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(SaPromptDraftV0.OUTPUT_INSTRUCTION);
             }
         }

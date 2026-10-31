@@ -30,11 +30,11 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 | Mã | Khi nào |
 |---|---|
 | 400 | Dữ liệu không hợp lệ, ví dụ thiếu trường bắt buộc, gửi trường không áp dụng cho dạng câu, hoặc bản sửa còn lỗi LaTeX fatal |
-| 401 | Chưa đăng nhập (`UNAUTHENTICATED`), token hết hạn (`TOKEN_EXPIRED`), token sai (`TOKEN_INVALID`), đăng nhập sai (`INVALID_CREDENTIALS`), refresh không hợp lệ (`REFRESH_INVALID`) |
+| 401 | Chưa đăng nhập (`UNAUTHENTICATED`), token hết hạn (`TOKEN_EXPIRED`), token sai (`TOKEN_INVALID`), đăng nhập sai (`INVALID_CREDENTIALS`), refresh không hợp lệ (`REFRESH_INVALID`), refresh bị tab khác vượt trước (`REFRESH_RACE`: chờ 1 giây, thử lại một lần; mục 8) |
 | 403 | Sai vai trò (`FORBIDDEN`), ví dụ giáo viên gọi API quản trị, admin gọi API của giáo viên |
 | 404 | Không tìm thấy bản ghi, ví dụ `subjectId` hoặc `templateId` không tồn tại. Ma trận, đề của giáo viên khác cũng trả 404 (giống id không tồn tại) |
 | 409 | Xung đột trạng thái, ví dụ nộp đánh giá cho câu `duplicate` hoặc nộp lại câu experiment. Có mã máy đọc được ở một số luồng: `MATRIX_IN_USE`, `BANK_EXHAUSTED`, `SLOT_*`, `VERSION_CONFLICT`, `QC_CHECKING`. W1-4 (K-5): hai thao tác đồng thời làm vi phạm khóa ngoại hoặc khóa duy nhất trả 409 `FOREIGN_KEY_CONFLICT` / `UNIQUE_CONFLICT` ("hãy tải lại rồi thử lại"), không lộ tên ràng buộc |
-| 429 | Gemini đang giới hạn tần suất gọi; chờ khoảng một phút rồi thử lại. Hoặc đăng nhập sai quá nhiều lần (`TOO_MANY_ATTEMPTS`, header `Retry-After`, mục 8.2) |
+| 429 | Gemini đang giới hạn tần suất gọi; chờ khoảng một phút rồi thử lại. Hoặc đăng nhập sai quá nhiều lần (`TOO_MANY_ATTEMPTS`, header `Retry-After`, mục 8.2). Hoặc chạm hạn mức ngày của Gemini (`LLM_DAILY_QUOTA_EXHAUSTED`, header `Retry-After`) |
 | 503 | Gemini tạm thời quá tải hoặc bảo trì |
 | 500 | Lỗi khác chưa được phân loại, body theo định dạng mặc định của Spring. Lỗi toàn vẹn dữ liệu khác (CHECK, NOT NULL: lỗi của chương trình) có `{"code": "DATA_INTEGRITY"}` |
 
@@ -142,7 +142,7 @@ Công cụ thí nghiệm: chỉ có khi `app.experiment.enabled=true` (xem mục
   là `null` với `sa` và `tf`.
 - `qcReport`: `resultingStatus, formatPassed, formatErrors, answerCheckPassed, judgeAnswer, judgeModel, solverReasoning,
   answerCheckStatus, dedupStatus, dedup`, cộng các trường chỉ có khi khác rỗng:
-  - `answerWarnings` (`sa`, `tf`): cảnh báo không chặn, ví dụ `answer: phân số chưa tối giản`, `label: 4 ý cùng nhãn T`,
+  - `answerWarnings` (`sa`, `tf`): cảnh báo không chặn, ví dụ `label: 4 ý cùng nhãn T`,
     `statement_a: đã bỏ tiền tố "a)" ở đầu ý` (quy tắc bỏ tiền tố ở mục 4.3 của `enums.md`; dạng `a.` chỉ bỏ khi ký tự
     ngay sau dấu chấm không phải chữ cái, nên `a.b = 0` giữ nguyên còn `a. Điều kiện` thì bỏ). Từ V5 cảnh báo được
     lưu ở `quality_check_result.warnings` (dòng `format`), cả luồng job, và `answerWarnings` đọc lại từ cột đó;
@@ -370,12 +370,14 @@ thì nhập `1500` hoặc `1 500`; muốn viết 1,125 thì nhập `1,125`. Dấ
 
 **Hai chế độ:**
 
-| Chế độ | Áp dụng cho | Chặn thêm |
+| Chế độ | Áp dụng cho | Nhận |
 |---|---|---|
-| Chặt (STRICT) | `answer` do LLM sinh (bước format) | Chữ số 0 thừa ở đầu (`05`, `-007,5`, `\frac{05}{2}`, `\sqrt{012}`) và số 0 mang dấu âm (`-0`, `-0,0`, `-\frac{0}{3}`) |
-| Rộng (LENIENT) | `judge_answer` của Solver; so khớp đáp số khi dedup | Chỉ cần phân tích được |
+| Chặt (STRICT) | `answer` của câu `sa` (bước format, kể cả bản giáo viên sửa) | Từ 27/10 chỉ số nguyên hoặc thập phân dùng dấu phẩy, tối đa 4 ký tự tính cả `-` và `,` (`5`, `-12`, `2,75`, `0,5`, `1234`); `2.75` được đổi thành `2,75`. Từ chối phân số, hỗn số, căn, đơn vị, quá 4 ký tự, `05`, `-0`, `3,`. Xem quy tắc đáp án `sa` ở `docs/contract/enums.md` mục 4.2 (nguồn: phiếu trả lời Bộ GD&ĐT 2025, Phần III, tối đa 4 cột) |
+| Rộng (LENIENT) | `judge_answer` của Solver; so khớp đáp số khi dedup | Chỉ cần phân tích được theo ngữ pháp ở trên (vẫn nhận phân số và căn) |
 
-- Đáp số LLM sinh có chữ số 0 thừa hoặc không phân tích được là lỗi format: câu thành `format_failed`.
+Các bảng ví dụ ở trên (phân số, căn, dấu chấm hàng nghìn...) mô tả chế độ rộng LENIENT.
+
+- Đáp số LLM sinh sai dạng ở chế độ chặt là lỗi format: câu thành `format_failed`; giáo viên sửa tay sai dạng thì 400 `FORMAT_INVALID`.
 - `reviewerSaAnswer`, `finalSaAnswer` và so khớp `answerCorrect` thuộc form chấm mù đã gỡ (25/10).
 
 ## 5. Form chấm mù (đã gỡ)
@@ -481,8 +483,14 @@ POST /api/exam-matrices
 ```
 
 - Phần I chỉ chứa `mcq`, phần II chỉ `tf`, phần III chỉ `sa` (DB cũng kiểm). `mcq`/`sa` cần `difficulty`; `tf` cần
-  `statementDifficulties` gồm đúng 4 mức (ý a-d) và không có `difficulty`. `questionCount` từ 1 đến 50.
+  `statementDifficulties` gồm đúng 4 mức (ý a-d) và không có `difficulty`. `questionCount` từ 1 đến 50 mỗi ô; **tổng
+  `questionCount` của cả ma trận tối đa 60** (D1, xem 7.2b), vượt thì 400 `Một ma trận tối đa 60 câu (hiện N)` khi tạo hoặc sửa.
 - `learningOutcomes` chỉ nhận khóa `easy`, `medium`, `hard` và phải có yêu cầu cần đạt cho mọi mức ô dùng.
+- **Độ dài trường ô (D2, vì các trường này đi vào prompt):** `content` tối đa 1000 ký tự; mỗi yêu cầu cần đạt tối đa 500 ký
+  tự; `learningOutcomes` tối đa 10 mục (đo theo ký tự sau trim). Vượt thì 400, ví dụ `Ô 2: content dài tối đa 1000 ký tự
+  (hiện 1203)`, `Ô 1: yêu cầu cần đạt mức easy dài tối đa 500 ký tự (hiện 640)`, `Ô 1: learningOutcomes tối đa 10 mục (hiện 11)`.
+  Áp cho tạo/sửa ma trận và sinh theo bài (`content`, `learningOutcomes` của body). Ô lưu từ trước vẫn đọc được; khi dựng
+  prompt các trường vẫn bị cắt theo đúng ba trần này. "Yêu cầu thêm cho AI" giữ trần 1000 ký tự (`INSTRUCTION_TOO_LONG`).
 - Mỗi ô tạo một `question_template` (`templateId`) để dùng lại pipeline sinh câu.
 - `totals.commandsByLevel` đếm lệnh hỏi: mỗi câu `mcq`/`sa` một lệnh hỏi, mỗi câu `tf` 4 lệnh hỏi theo mức của 4 ý.
 - Lỗi dữ liệu trả 400 nêu số ô, ví dụ `Ô 2: câu đúng/sai phải có statementDifficulties gồm đúng 4 mức`; `subjectId`
@@ -626,8 +634,8 @@ POST /api/exams/build-by-lesson
   (phạm vi trong bài), `title` (trống thì lấy tên bài, tối đa 255), `learningOutcomes` (khóa `easy`, `medium`, `hard`).
 - `cells`: mỗi phần tử là một nhóm câu cùng dạng và mức: `mcq`/`sa` cần `difficulty`; `tf` dùng `statementDifficulties`
   (4 mức ý a-d) và KHÔNG có `difficulty`; `tf` bỏ trống `statementDifficulties` thì mặc định dễ, dễ, vừa, khó. Phần I/II/III
-  suy từ dạng câu. `questionCount` 1-50 mỗi nhóm. **Tổng số câu tối đa 50 mỗi lần**; vượt thì 400 (`Một lần sinh theo bài
-  tối đa 50 câu (hiện N)`).
+  suy từ dạng câu. `questionCount` 1-50 mỗi nhóm. **Tổng số câu tối đa 60 mỗi lần** (D1; trước đây 50; cấu hình
+  `GENERATION_MAX_QUESTIONS_PER_EXAM`, xem 7.2b); vượt thì 400 (`Một lần sinh theo bài tối đa 60 câu (hiện N)`).
 - Tùy chọn (W2-3): `materialIds` (tài liệu bài học của chính người gọi, mục 9, tối đa 5 khác nhau) và `extraInstruction`
   ("yêu cầu thêm cho AI", tối đa 1000 ký tự). Áp cho CẢ lần sinh (mọi nhóm câu). Có tài liệu hoặc yêu cầu thì bỏ qua ngân
   hàng, sinh mọi chỗ qua hàng đợi; quy tắc, lỗi và cách đưa vào prompt như mục 7.2 (khối "yêu cầu thêm" là DỮ LIỆU, không
@@ -649,6 +657,29 @@ POST /api/exams/build-by-lesson
   giữ nguyên nghĩa nên API cũ không vỡ; chỗ lấy tên bài là `MatrixService.resolveLesson`. Tên bài vẫn là chủ đề khớp ngân
   hàng, nên câu cũ sinh theo chuỗi vẫn dùng lại được nếu tên trùng danh mục. "Yêu cầu thêm cho AI" đã nằm ở `MatrixCellSpec`
   (JSON ở `experiment_run.hyperparams`, khóa `extraInstruction`; run cũ không có khóa này).
+
+### 7.2b. Giới hạn theo từng giáo viên (D1)
+
+Để một giáo viên không làm tắc hàng đợi sinh câu dùng chung và không cạn quota Gemini của cả hệ thống. Chỉ câu hệ thống
+phải **sinh mới** bị tính; câu lấy từ ngân hàng (lúc tạo đề, hoặc Đổi bằng `source = "bank"`) không tính. Ngưỡng đặt bằng biến
+môi trường (`app.generation-limits.*`, xem `docs/deploy/README.md`):
+
+| Giới hạn | Mặc định | Biến | Lỗi |
+|---|---|---|---|
+| Tổng số câu của một ma trận hoặc một đề sinh theo bài | 60 | `GENERATION_MAX_QUESTIONS_PER_EXAM` | 400 (không `code`), `Một ma trận tối đa 60 câu (hiện N)` / `Một lần sinh theo bài tối đa 60 câu (hiện N)`; kiểm khi tạo, sửa ma trận và `build-by-lesson` |
+| Job sinh câu đang chờ hoặc đang chạy của giáo viên (đếm qua `exam_slot` → `exam.created_by`) | 60 | `GENERATION_MAX_PENDING_JOBS` | **429** `GENERATION_QUEUE_LIMIT` |
+| Số câu yêu cầu sinh mỗi ngày (giờ Việt Nam, UTC+7), tính cả Đổi câu bằng sinh mới | 120 | `GENERATION_MAX_DAILY_QUESTIONS` | **429** `DAILY_GENERATION_LIMIT` kèm header `Retry-After` (giây tới 0 giờ giờ Việt Nam kế tiếp) |
+
+- Áp ở `POST /api/exams/build`, `POST /api/exams/build-by-lesson` và `POST /api/exams/{id}/slots/{slotId}/replace` (mặc định
+  hoặc `source = "generate"`). Yêu cầu bị chặn không để lại gì (không đề, không ma trận ẩn, không job, chỗ giữ nguyên).
+  Tạo đề cần N câu sinh mới thì kiểm "đang chờ + N" và "đã dùng hôm nay + N" so với trần.
+- Thử lại tự động của hệ thống (job lỗi, câu lệch Solver) và việc sửa câu (job Solver) không tính vào hai trần này.
+- `GENERATION_QUEUE_LIMIT`: `error` = "Thầy/cô đang có quá nhiều câu chờ soạn. Vui lòng đợi các đề hiện tại soạn xong rồi tạo
+  tiếp." Không có `Retry-After`: frontend hiện thông báo, cho thử lại sau khi đề đang soạn xong.
+- `DAILY_GENERATION_LIMIT`: `error` nêu trần, số đã dùng, số còn lại, số câu yêu cầu cần và thời điểm được tạo tiếp (từ 0
+  giờ ngày hôm sau, giờ Việt Nam); khi trần ngày đã hết, kiểm trần ngày trước trần hàng đợi.
+- Hai request song song của cùng giáo viên được tuần tự hóa (khóa dòng `generation_quota` của giáo viên trong transaction
+  tạo job), nên không thể cùng lọt trần. Hạn chế: bộ đếm ngày chỉ ghi khi tạo job; không hoàn lại khi job sau đó lỗi.
 
 ### 7.3. Tiến độ
 
@@ -680,14 +711,22 @@ khác để sinh lại).
   Chỗ chưa có câu chỉ có phần định danh và `state` (`generating`, `failed`).
 - `source`: `bank` (lấy từ ngân hàng) hoặc `generated`. Câu từ ngân hàng và câu đã Giữ hiển thị bản trong ngân hàng,
   không gắn cờ.
-- `reviewReasons`: `solver_inconsistent` (Solver lệch), `solver_ambiguous`, `solver_unparseable` (`sa`),
-  `statement_undecidable` (`tf`), `solver_not_run` (Solver chưa chạy hoặc lỗi), `dedup_not_run`, và
+- `reviewReasons`: `solver_inconsistent` (Solver lệch), `solver_multiple_correct` và `solver_no_correct` (`mcq`, Solver xét từng
+  phương án thấy từ 2 phương án đúng / không phương án nào đúng; xem `docs/contract/enums.md` mục 4.6), `solver_ambiguous`, `solver_unparseable` (`sa`),
+  `statement_undecidable` (`tf`), `solver_not_run` (Solver chưa chạy hoặc lỗi), `dedup_not_run`,
+  `explanation_draft_suspect` (lời giải có "tính lại", "làm lại" hoặc "sửa lại", không chặn câu; chuỗi hiển thị đề xuất:
+  "Lời giải có thể còn phần nháp, thầy/cô xem lại lời giải"; xem `docs/contract/enums.md`), và
   `warning: <cảnh báo format>` (ví dụ `warning: label: 4 ý cùng nhãn T`, `warning: option_a: đã tự đóng $`,
   `warning: label: khác mẫu mục tiêu T,F,F,T (nhận T,T,F,F)`; dữ liệu trước 26/10 ghi `khác mẫu bắt buộc`). Cảnh báo `json: đã sửa ... escape LaTeX` không phải lý
   do (vẫn lưu trong `warnings`). Từ 26/10 cảnh báo `label: khác mẫu mục tiêu ...` (mẫu nhãn tf là mục tiêu, lệch vì tính đúng là hợp lệ)
   cũng không phải lý do (vẫn lưu trong `warnings` và hiện trong vết QC), ví dụ ở trên chỉ còn các cảnh báo khác. `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
   `solver_pending` (Solver đang kiểm lại, thay `solver_not_run`), `solver_failed` (kiểm lại thất bại) và
   `duplicate: <id>` (bản sửa trùng câu khác).
+- `similar_in_exam: <n>` (thẩm định 31/10): câu hệ thống sinh cùng khuôn (chỉ khác số hoặc tên điểm/hình) với câu thứ `n` của
+  chính đề này, hoặc câu trắc nghiệm làm lộ đáp án một ý của câu đúng/sai. `n` đếm từ 1 theo thứ tự hiển thị (phần I, II,
+  III, mỗi chỗ một số kể cả chỗ chưa có câu). Mỗi câu kia một lý do. Tính lúc xem đề, không lưu, không đổi trạng thái câu;
+  câu ngân hàng và câu đã Giữ/Sửa không bị gắn. `qcState` về `needs_review`. Chỉ `GET /api/exams/{id}` có lý do này;
+  `needsReviewSlots` của `GET /api/exams` chưa tính. Chuỗi hiển thị đề xuất: "Gần giống câu {n} trong đề, nên đổi một trong hai câu".
 - W2-3, câu sinh từ đề có tài liệu bài học (mục 7.2, 9) có thêm lý do của QC "bám tài liệu" (mục 7.7a):
   `grounding_not_supported` (judge cho là đáp án, lời giải hoặc câu hỏi không khớp tài liệu), `grounding_unknown` (đoạn tài
   liệu không đủ để kết luận, hoặc judge nói "bám tài liệu" mà trích dẫn không kiểm chứng được), `grounding_pending` (đang chờ
@@ -815,9 +854,14 @@ GET /api/exams/12/export/docx   → 200, file MT2610231200001.docx (Content-Disp
 - Chỉ xuất nội dung các chỗ đã có câu (`ready`, `kept`, `edited`); chỗ `failed` ghi "[Chưa có câu – cần sinh lại]",
   chỗ đang sinh ghi "[Chưa có câu – đang sinh]"; ở ĐÁP ÁN và LỜI GIẢI các chỗ này ghi "—". Xuất đề cũng đối soát như
   xem đề (7.4).
-- Cách làm: dựng Markdown từ dữ liệu xem đề rồi gọi `pandoc -f markdown+tex_math_dollars -t docx
+- Cách làm: dựng Markdown từ dữ liệu xem đề rồi gọi `pandoc --sandbox -f markdown+tex_math_dollars -t docx
   --reference-doc=reference.docx` (thư mục tạm riêng, tối đa 30 giây, xóa khi xong). Công thức `$...$` thành Equation
   gốc của Word (OMML), sửa được trong Word.
+- **Phòng thủ (D4):** `--sandbox` (cần pandoc từ 2.15, cùng yêu cầu với đọc docx tài liệu) để pandoc chỉ đọc các file nêu
+  trong dòng lệnh, nên nội dung câu hỏi chứa `![](/etc/passwd)` hay chỉ thị include không lấy được file của máy chủ. Ngoài công
+  thức, `ExamMarkdownBuilder` thoát mọi ký tự đặc biệt của Markdown gồm `\` và `` ` ``, nên `` ` ``, `` `{=openxml}` `` hay khối
+  ```` ```{=openxml} ```` trong nội dung không tạo code span hay raw block (ngắt trang giữa đề và đáp án là raw block do chính
+  builder chèn). Công thức trong `$...$` giữ nguyên, không thoát; có test so `document.xml` có và không `--sandbox`.
 - File mẫu `back_end/src/main/resources/export/reference.docx` (chép ra thư mục tạm mỗi lần xuất): là `reference.docx`
   mặc định của pandoc (`pandoc -o reference.docx --print-default-data-file reference.docx`), thêm vào `word/settings.xml`
   khai báo `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word"
@@ -996,6 +1040,8 @@ Set-Cookie: refresh_token=<opaque>; Path=/api/auth; Max-Age=604800; Secure; Http
 POST /api/auth/refresh        (không body; trình duyệt gửi cookie)
 200 → cùng dạng như login, kèm cookie mới
 401 → {"error": "Phiên đăng nhập không hợp lệ hoặc đã hết hạn, hãy đăng nhập lại", "code": "REFRESH_INVALID"}, xóa cookie
+401 → {"error": "Phiên vừa được làm mới ở một tab khác. Hãy chờ 1 giây rồi thử lại một lần.", "code": "REFRESH_RACE"},
+      KHÔNG xóa cookie, không thu hồi gì (D6, xem bên dưới)
 
 POST /api/auth/logout         → 204, xóa cookie (gọi lại hoặc không có cookie vẫn 204)
 GET  /api/auth/me             → {"id": 7, "name": "...", "email": "...", "role": "teacher"}
@@ -1019,6 +1065,14 @@ Lỗi xác thực từ filter: `401 {"error": "Chưa đăng nhập", "code": "UN
    gửi lại request gốc đúng một lần với token mới. Refresh lỗi → xóa store, chuyển về trang đăng nhập. Không gộp như vậy
    thì hai lần refresh song song sẽ bị coi là dùng lại token và cả phiên bị đăng xuất.
 4. **403** → báo "không có quyền", không gọi refresh. **404** với đề, ma trận → "không tìm thấy" (có thể là của người khác).
+   **Hai tab cùng làm mới phiên (D6):** single-flight chỉ gộp được trong MỘT tab. Tab 2 vẫn giữ cookie cũ nếu gửi refresh
+   trước khi nhận cookie mới do tab 1 vừa xoay vòng. Trước D6 việc này bị coi là dùng lại token và đăng xuất cả hai tab. Nay,
+   trong 30 giây kể từ lúc token bị thay bởi một lần xoay vòng hợp lệ (cấu hình `REFRESH_REUSE_GRACE`, `0` là tắt), gửi lại
+   token cũ trả **401 `REFRESH_RACE`**: không cấp token mới, không thu hồi chuỗi, **không xóa cookie** (cookie mới của tab 1
+   đã nằm trong trình duyệt dùng chung). **Khi nhận `REFRESH_RACE`: chờ 1 giây rồi gọi lại `POST /api/auth/refresh` MỘT lần**
+   (trình duyệt gửi cookie mới); không đăng xuất, không xóa store. Lần thử lại vẫn lỗi (kể cả `REFRESH_RACE` lần nữa) thì xử
+   lý như `REFRESH_INVALID`. Ngoài cửa sổ 30 giây, hoặc khi chuỗi đã bị thu hồi vì đăng xuất, đổi mật khẩu, khóa tài khoản
+   hay đã phát hiện dùng lại, gửi token cũ vẫn là `REFRESH_INVALID` và thu hồi cả chuỗi như trước.
 5. Khi tải lại trang: gọi `/api/auth/refresh` để lấy access token mới (cookie còn hạn thì vẫn đăng nhập).
 6. **Tải file Word**: không dùng `window.open`/`<a href>` (không gắn được header). Dùng
    `apiClient.get(url, {responseType: 'blob'})`, lấy tên file từ header `Content-Disposition` (đã cho phép đọc qua CORS).
@@ -1075,6 +1129,14 @@ Retry-After: 873
 - Sau nginx phải đặt `FORWARD_HEADERS_STRATEGY=native` (nginx gửi `X-Forwarded-For`), nếu không mọi người dùng chung IP
   của nginx và giới hạn thành theo email.
 - Cấu hình: `LOGIN_MAX_FAILURES` (5), `LOGIN_FAILURE_WINDOW` (`15m`), `LOGIN_LOCK_DURATION` (`15m`).
+- **Giới hạn theo IP (D3):** ngoài khóa email + IP, mỗi IP chỉ được gọi `POST /api/auth/login` tối đa **20 lần mỗi phút**
+  (cửa sổ trượt), tính cả lần đúng lẫn sai và cả email không tồn tại. Kiểm tra chạy TRƯỚC khi so mật khẩu (bcrypt) nên một IP
+  thử nhiều email khác nhau cũng không bắt máy chủ tính bcrypt không giới hạn. IPv6 gom theo tiền tố /64. Vượt thì 429, cùng
+  `code` `TOO_MANY_ATTEMPTS` kèm `Retry-After` (giây, tối đa 60):
+  `{"error": "Có quá nhiều lần đăng nhập từ địa chỉ mạng này. Thử lại sau 37 giây.", "code": "TOO_MANY_ATTEMPTS"}`. Lần bị
+  chặn không được tính thêm vào bộ đếm. Cấu hình: `LOGIN_IP_MAX_ATTEMPTS` (20), `LOGIN_IP_WINDOW` (`1m`). Nhiều giáo viên
+  dùng chung một IP (trường học, NAT) dùng chung hạn mức này: nếu 20 lần/phút không đủ cho giờ cao điểm thì tăng
+  `LOGIN_IP_MAX_ATTEMPTS`.
 - Frontend: 429 thì hiện thông báo trong `error`, không gọi refresh.
 
 **Ghi chú cho sau này (chưa làm):** nếu thêm SSE để đẩy tiến độ tạo đề, KHÔNG dùng `EventSource` vì không gửi được header
@@ -1171,7 +1233,7 @@ Mã lỗi (body `{"error", "code"}`):
   `-XX:+ExitOnOutOfMemoryError` nên khi đó tiến trình thoát và container khởi động lại. Chỉ xử lý triệt để bằng cách trích PDF
   ngoài tiến trình (chưa làm).
 - **Bộ nhớ của pandoc:** mỗi lần đọc docx bị giới hạn heap `MATERIAL_PANDOC_HEAP_MB` (768 MB) và 30 giây. `mem_limit` của
-  `app` là 1 GB và heap JVM chiếm 55%, nên trần này là giới hạn trên, chưa đo với tài liệu lớn: nếu container bị `OOMKilled`
+  `app` là 1536m (VPS 4 GB; 1 GB trên VPS 2 GB) và heap JVM chiếm 55%, nên trần này là giới hạn trên, chưa đo với tài liệu lớn: nếu container bị `OOMKilled`
   khi tải docx lớn, hạ `MATERIAL_PANDOC_HEAP_MB` hoặc tăng `mem_limit`.
 - **qc-trace và câu riêng tư:** đã khắc phục ở W2-4a (xem mục 7.7 và 8).
 - **Tính bất biến của ngữ cảnh đề:** `exam_generation_context` chỉ được tạo lúc sinh đề, không có API nào cho phép sửa hay gỡ sau khi tạo (chỉ xóa cascade theo đề). Do đó `ExamActionService.keep` dùng ngữ cảnh tài liệu của đề để gắn `bank_item.visible_to_user_id` là hoàn toàn đúng và an toàn.

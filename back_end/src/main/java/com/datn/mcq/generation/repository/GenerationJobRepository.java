@@ -75,4 +75,28 @@ public interface GenerationJobRepository extends JpaRepository<GenerationJob, In
             WHERE status = 'running' AND COALESCE(started_at, updated_at) < :cutoff
             """, nativeQuery = true)
     int resetStaleRunning(@Param("now") LocalDateTime now, @Param("cutoff") LocalDateTime cutoff);
+
+    /**
+     * W2-4b (A): hàng rào claim. Chỉ trả 1 khi job còn {@code running} VÀ {@code claim_seq} vẫn là giá trị worker đã nhận
+     * (job chưa bị trả về pending và nhận lại bởi worker khác); khi đó đồng thời gia hạn {@code started_at} để job đang
+     * sống không bị {@link #resetStaleRunning} trả về. Lệnh UPDATE giữ khóa dòng tới hết transaction của nơi gọi, nên
+     * trong transaction đó job không thể bị trả về hay nhận lại. Trả 0: worker không còn là chủ job, kết quả phải bị bỏ.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = """
+            UPDATE generation_job SET started_at = :now, updated_at = :now
+            WHERE id = :id AND status = 'running' AND claim_seq = :claimSeq
+            """, nativeQuery = true)
+    int renewClaim(@Param("id") Integer id, @Param("claimSeq") int claimSeq, @Param("now") LocalDateTime now);
+
+    /**
+     * W2-4b (A): gỡ liên kết {@code question_id} của job tới một câu sắp bị xóa (câu mồ côi của claim cũ). Không đụng job
+     * đã done (done bắt buộc có câu).
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = """
+            UPDATE generation_job SET question_id = NULL
+            WHERE id = :id AND question_id = :questionId AND status <> 'done'
+            """, nativeQuery = true)
+    int clearQuestionLink(@Param("id") Integer id, @Param("questionId") Integer questionId);
 }

@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 /**
- * Chuyển Markdown sang docx bằng pandoc ("-f markdown+tex_math_dollars -t docx --reference-doc"), để công thức $...$
+ * Chuyển Markdown sang docx bằng pandoc ("--sandbox -f markdown+tex_math_dollars -t docx --reference-doc"), để công thức $...$
  * thành Equation gốc của Word (OMML). Chạy trong một thư mục tạm riêng, giới hạn {@value #TIMEOUT_SECONDS} giây, xóa thư mục khi xong.
  * Giới hạn bộ nhớ pandoc qua cờ +RTS -M<heap>m -RTS và dùng chung Semaphore với trích tài liệu để chống OOM (W2-4a Mục 1).
  * Không cài pandoc; máy chủ không có pandoc thì ném {@link DocumentExportException} 503.
@@ -84,7 +84,8 @@ public class PandocRunner {
             int heapMb = limiter != null ? limiter.getPandocHeapMb() : 256;
             Process process;
             try {
-                process = new ProcessBuilder(pandocPath, "+RTS", "-M" + heapMb + "m", "-RTS",
+                // D4: --sandbox, pandoc chỉ đọc các file nêu trong dòng lệnh (không lấy được file máy chủ qua ảnh, include...).
+                process = new ProcessBuilder(pandocPath, "+RTS", "-M" + heapMb + "m", "-RTS", "--sandbox",
                         "exam.md", "-f", "markdown+tex_math_dollars", "-t", "docx",
                         "--reference-doc=reference.docx", "-o", "exam.docx")
                         .directory(dir.toFile())

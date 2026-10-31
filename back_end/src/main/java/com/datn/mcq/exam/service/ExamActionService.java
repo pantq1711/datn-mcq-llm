@@ -57,12 +57,15 @@ public class ExamActionService {
     private final ExamSlotSiblings siblings;
     private final ExamContextService contextService;
     private final BankService bankService;
+    private final GenerationQuotaService generationQuota;
 
     public ExamActionService(ExamSlotRepository slotRepository, ExamSlotActionRepository actionRepository,
                              ExamBuildService buildService, ExamViewService viewService, MatrixService matrixService,
                              AssistedKeepService assistedKeepService, QuestionEditService questionEditService,
                              GenerationService generationService, ExamSlotSiblings siblings,
-                             ExamContextService contextService, BankService bankService) {
+                             ExamContextService contextService, BankService bankService,
+                             GenerationQuotaService generationQuota) {
+        this.generationQuota = generationQuota;
         this.siblings = siblings;
         this.slotRepository = slotRepository;
         this.actionRepository = actionRepository;
@@ -138,6 +141,11 @@ public class ExamActionService {
         if (ExamSlot.GENERATING.equals(slot.getState()) || ExamSlot.PENDING.equals(slot.getState())) {
             throw new IllegalStateException(GENERATING_MESSAGE);
         }
+        // D1: Đổi bằng sinh mới tốn một lượt sinh nên phải qua trần theo giáo viên. Kiểm TRƯỚC mọi thay đổi chỗ (truy vấn
+        // native ở đây tự ghi các thay đổi đang chờ); Đổi bằng câu ngân hàng không tính.
+        if (!ExamSlotAction.SOURCE_BANK.equals(replaceSource)) {
+            generationQuota.reserve(actorId, 1);
+        }
         // Chọn câu ngân hàng TRƯỚC mọi thay đổi: hết câu thì chỗ giữ nguyên, không nhật ký. Truy vấn native tự ghi các
         // thay đổi đang chờ xuống DB, nên không được đã bỏ câu khỏi chỗ (chk_es_ready, L-33).
         Integer newBankItemId = null;
@@ -158,6 +166,7 @@ public class ExamActionService {
         slot.setBankItemId(newBankItemId);
         slot.setGeneratedQuestionId(null);
         slot.setFallbackQuestionId(null);
+        slot.setFailureReason(null);
         slot.setAttempts(0);
         slot.setSolverRetries(0);
         if (newBankItemId != null) {

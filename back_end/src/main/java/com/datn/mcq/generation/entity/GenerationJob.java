@@ -119,6 +119,22 @@ public class GenerationJob {
     @Column(name = "job_type", nullable = false, length = 20, updatable = false)
     private String jobType = TYPE_GENERATE;
 
+    /**
+     * V22 (W2-4b): tăng mỗi lần worker nhận job, không bao giờ giảm (khác {@code attempt}, bị hoàn lại khi trả job kẹt).
+     * Hàng rào cho mọi ghi kết quả của worker; không đưa ra API.
+     */
+    @JsonIgnore
+    @Column(name = "claim_seq", nullable = false)
+    private Integer claimSeq = 0;
+
+    public Integer getClaimSeq() {
+        return claimSeq;
+    }
+
+    public void setClaimSeq(Integer claimSeq) {
+        this.claimSeq = claimSeq;
+    }
+
     public GenerationJob() {}
 
     public String getMaterialContext() {

@@ -27,10 +27,13 @@ public final class ExamViewDtos {
      *
      * @param source        "bank" (lấy từ ngân hàng) hoặc "generated" (hệ thống sinh)
      * @param difficulty    mức của câu mcq/sa; tf ghi mức ở từng ý
-     * @param reviewReasons lý do "cần xem kỹ": solver_inconsistent, solver_not_run, solver_ambiguous,
-     *                      solver_unparseable, statement_undecidable, dedup_not_run, "warning: ..." (cảnh báo format);
+     * @param reviewReasons lý do "cần xem kỹ": solver_inconsistent, solver_multiple_correct, solver_no_correct (mcq,
+     *                      Solver xét từng phương án, thẩm định 31/10), solver_not_run, solver_ambiguous,
+     *                      solver_unparseable, statement_undecidable, dedup_not_run, explanation_draft_suspect (lời giải có
+     *                      "tính lại", "làm lại" hoặc "sửa lại", thẩm định 31/10), "warning: ..." (cảnh báo format);
      *                      W1-2 thêm solver_pending (Solver đang kiểm lại bản sửa), solver_failed (job kiểm lại thất
-     *                      bại), "duplicate: &lt;id&gt;" (bản sửa trùng câu khác)
+     *                      bại), "duplicate: &lt;id&gt;" (bản sửa trùng câu khác); "similar_in_exam: &lt;n&gt;" (câu hệ
+     *                      thống sinh cùng khuôn với câu thứ n trong đề, tính lúc xem đề, thẩm định 31/10)
      * @param qcState       (W1-2) chỉ với câu hệ thống sinh chưa Giữ: "checking" (Solver đang kiểm lại), "passed" (không
      *                      còn lý do cần xem kỹ), "needs_review" (có lý do); bỏ khỏi JSON với chỗ khác
      * @param edited        (W1-2) câu hiện tại của chỗ là bản giáo viên sửa (kể cả khi đã Giữ)
@@ -61,11 +64,37 @@ public final class ExamViewDtos {
             List<String> reviewReasons,
             @JsonInclude(JsonInclude.Include.NON_NULL) String qcState,
             boolean edited,
-            @JsonInclude(JsonInclude.Include.NON_NULL) Integer originalQuestionId
+            @JsonInclude(JsonInclude.Include.NON_NULL) Integer originalQuestionId,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String failureReason
     ) {
         public static final String QC_CHECKING = "checking";
         public static final String QC_PASSED = "passed";
         public static final String QC_NEEDS_REVIEW = "needs_review";
+
+        /**
+         * Bản sao có thêm lý do "cần xem kỹ" {@code extra} (tính lúc xem đề, không lưu): {@code needsReview} thành true,
+         * {@code qcState} thành "needs_review" trừ khi Solver đang kiểm lại ("checking" giữ nguyên).
+         */
+        public ExamItemDto withExtraReasons(List<String> extra) {
+            List<String> all = new java.util.ArrayList<>(reviewReasons);
+            all.addAll(extra);
+            return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
+                    questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
+                    difficulty, true, all, QC_CHECKING.equals(qcState) ? qcState : QC_NEEDS_REVIEW, edited,
+                    originalQuestionId, failureReason);
+        }
+
+        /** Chữ ký trước W2-4b (chỗ đã có câu, không có failureReason). */
+        public ExamItemDto(Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
+                           QuestionType questionType, String state, String source, Integer bankItemId,
+                           Integer questionId, String questionText, String optionA, String optionB, String optionC,
+                           String optionD, Option correctOption, String saAnswer, List<ItemStatementDto> statements,
+                           String explanation, Difficulty difficulty, boolean needsReview, List<String> reviewReasons,
+                           String qcState, boolean edited, Integer originalQuestionId) {
+            this(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId, questionText,
+                    optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation, difficulty,
+                    needsReview, reviewReasons, qcState, edited, originalQuestionId, null);
+        }
 
         /** Chữ ký trước W1-2 (câu chưa sửa, không có trạng thái QC). */
         public ExamItemDto(Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
@@ -75,7 +104,7 @@ public final class ExamViewDtos {
                            String explanation, Difficulty difficulty, boolean needsReview, List<String> reviewReasons) {
             this(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId, questionText,
                     optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation, difficulty,
-                    needsReview, reviewReasons, null, false, null);
+                    needsReview, reviewReasons, null, false, null, null);
         }
     }
 

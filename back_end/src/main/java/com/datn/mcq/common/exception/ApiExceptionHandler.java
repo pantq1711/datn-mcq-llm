@@ -19,6 +19,9 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
+import com.datn.mcq.llm.client.QuotaExhaustedException;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -68,7 +71,11 @@ public class ApiExceptionHandler {
         if (!ex.getErrors().isEmpty()) {
             body.put("errors", ex.getErrors());
         }
-        return ResponseEntity.status(ex.getStatus()).body(body);
+        var builder = ResponseEntity.status(ex.getStatus());
+        if (ex.getRetryAfterSeconds() != null && ex.getRetryAfterSeconds() > 0) {
+            builder.header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        return builder.body(body);
     }
 
     /** SQLState của khóa ngoại bị vi phạm (PostgreSQL 23503). */
@@ -185,6 +192,25 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, String>> handleMultipart(MultipartException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
                 "error", "Yêu cầu tải file không hợp lệ.", "code", "INVALID_MULTIPART"));
+    }
+
+
+    /** W2-4b (C): chạm hạn mức ngày của Gemini: 429 kèm Retry-After (giây) và mã LLM_DAILY_QUOTA_EXHAUSTED. */
+    @ExceptionHandler(QuotaExhaustedException.class)
+    public ResponseEntity<Map<String, String>> handleQuotaExhausted(QuotaExhaustedException ex) {
+        long retryAfterSeconds = 0;
+        if (ex.getResetAt() != null) {
+            long sec = Duration.between(LocalDateTime.now(), ex.getResetAt()).toSeconds();
+            retryAfterSeconds = Math.max(1, sec);
+        }
+        var builder = ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS);
+        if (retryAfterSeconds > 0) {
+            builder.header(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSeconds));
+        }
+        return builder.body(Map.of(
+                "error", ex.getMessage() != null ? ex.getMessage() : "Đã chạm hạn mức gọi Gemini trong ngày",
+                "code", "LLM_DAILY_QUOTA_EXHAUSTED"
+        ));
     }
 
     /** Gemini trả 429 hoặc 503: trả lại đúng mã đó thay vì 500. */

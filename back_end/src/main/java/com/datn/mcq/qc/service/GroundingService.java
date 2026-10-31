@@ -56,4 +56,10 @@ public class GroundingService {
     public Optional<QuestionGrounding> find(Integer questionId) {
         return repository.findByQuestionId(questionId);
     }
+
+    /** W2-4b (C): đếm số lượt gọi judge "bám tài liệu" đã lưu kết quả có {@code token_count} từ mốc {@code since}. */
+    @Transactional(readOnly = true)
+    public int countCallsSince(LocalDateTime since) {
+        return repository.countGroundingCallsSince(since);
+    }
 }

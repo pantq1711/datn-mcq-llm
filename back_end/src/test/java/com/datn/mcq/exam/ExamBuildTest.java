@@ -358,7 +358,7 @@ class ExamBuildTest {
                 + " AND bank_item_id IS NOT NULL", Integer.class, examId));
         List<Map<String, Object>> runs = jdbc.queryForList("SELECT * FROM experiment_run WHERE prompt_version LIKE"
                 + " 'matrix-%' ORDER BY id");
-        assertEquals(List.of("matrix-mcq-v1-draft", "matrix-tf-v3-draft", "matrix-sa-v1-draft"),
+        assertEquals(List.of("matrix-mcq-v5-draft", "matrix-tf-v7-draft", "matrix-sa-v6-draft"),
                 runs.stream().map(r -> r.get("prompt_version")).toList());
         for (Map<String, Object> run : runs) {
             assertEquals("production", run.get("purpose"));
@@ -877,7 +877,9 @@ class ExamBuildTest {
         assertEquals("ready", tf.get("state").asText(), "không loại câu");
         assertFalse(tf.get("needsReview").asBoolean(), "lệch mẫu mục tiêu không bật cờ");
         assertEquals(List.of(), texts(tf.get("reviewReasons")));
-        assertEquals(0, view.get("needsReviewCount").asInt());
+        // Hai câu mcq cùng ô của FakeGenerator cùng khuôn nên bị gắn similar_in_exam (ExamSimilarInExamTest): chỉ xét phần II.
+        assertEquals(0, view.get("parts").get(1).get("items").findValues("needsReview").stream()
+                .filter(JsonNode::asBoolean).count());
         assertEquals(0, json(perform(get("/api/exams")).andExpect(status().isOk())).get("items").get(0)
                 .get("needsReviewSlots").asInt(), "danh sách đề cũng không đếm");
         assertEquals("qc_passed", jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
@@ -975,7 +977,8 @@ class ExamBuildTest {
         int examId = readyExam();
         int slot = slotId(examId, "mcq", 2);
         json(replaceWith(examId, slot, "   ").andExpect(status().isOk()));
-        assertEquals(MatrixPromptDraftV0.slotLine(2, 2), latestNote(slot), "rỗng thì như cũ");
+        assertEquals(MatrixPromptDraftV0.slotLine(2, 2, List.of(com.datn.mcq.enums.Difficulty.EASY)), latestNote(slot),
+                "rỗng thì như cũ (ô mcq có một yêu cầu cần đạt)");
         assertEquals(null, lastInstruction(slot));
         processAll();
         assertFalse(generator.mcqPrompts.get(generator.mcqPrompts.size() - 1).contains("Yêu cầu bổ sung"));
@@ -1088,16 +1091,18 @@ class ExamBuildTest {
         for (JsonNode item : items) {
             String warnings = jdbc.queryForObject("SELECT warnings::text FROM quality_check_result WHERE question_id = ?"
                     + " AND check_type = 'format'", String.class, item.get("questionId").asInt());
+            // Hai câu mcq của FakeGenerator trong cùng một ô cùng khuôn sau khi che số (lớp 2 chống câu cùng khuôn gắn
+            // similar_in_exam, ExamSimilarInExamTest); test này chỉ xét lý do của bước format.
+            List<String> reasons = texts(item.get("reviewReasons")).stream()
+                    .filter(r -> !r.startsWith("similar_in_exam: ")).toList();
             if (warnings != null && warnings.contains("json: đã sửa 1 escape LaTeX (")) {
                 assertTrue(item.get("explanation").asText().contains("$90^\\circ$"), "giữ nghĩa LaTeX");
-                assertFalse(item.get("needsReview").asBoolean(), "sửa escape không bật cần xem kỹ");
-                assertEquals("[]", item.get("reviewReasons").toString(), "vẫn lưu cảnh báo nhưng không là lý do");
+                assertEquals(List.of(), reasons, "sửa escape không bật cần xem kỹ, vẫn lưu cảnh báo nhưng không là lý do");
                 checked++;
             } else if (warnings != null && warnings.contains("option_a: đã tự đóng $")) {
                 assertEquals("$" + item.get("optionB").asText().replace("$", "").transform(s -> Integer.parseInt(s) + 1)
                         + "$", item.get("optionA").asText());
-                assertTrue(item.get("needsReview").asBoolean(), "tự đóng $ vẫn bật cần xem kỹ");
-                assertEquals(List.of("warning: option_a: đã tự đóng $"), texts(item.get("reviewReasons")));
+                assertEquals(List.of("warning: option_a: đã tự đóng $"), reasons, "tự đóng $ vẫn bật cần xem kỹ");
                 checked++;
             }
         }

@@ -53,6 +53,10 @@ app:
     solver-model: ${LLM_SOLVER_MODEL:gemini-3.5-flash-lite}
     # Chỉ đặt khi kiểm chứng bằng Gemini giả (W1-5); để trống thì gọi https://generativelanguage.googleapis.com/v1beta/models/
     base-url: ${LLM_BASE_URL:}
+    # W2-4b (C): bộ điều tiết lượt gọi Gemini dùng chung (15 RPM / 500 RPD free tier, có biên an toàn).
+    min-spacing-ms: ${LLM_MIN_SPACING_MS:4200}
+    daily-quota: ${LLM_DAILY_QUOTA:480}
+    rate-limit-cooldown-ms: ${LLM_RATE_LIMIT_COOLDOWN_MS:60000}
   embedding:
     model: ${EMBEDDING_MODEL:}
   # Công cụ thí nghiệm (quyết định 25/10): /api/generation/* và /api/catalog/templates chỉ tồn tại khi bật. Mặc định tắt;
@@ -62,6 +66,8 @@ app:
   worker:
     enabled: ${WORKER_ENABLED:false}
     poll-delay-ms: ${WORKER_POLL_DELAY_MS:15000}
+    concurrency: ${WORKER_CONCURRENCY:2}
+    idle-delay-ms: ${WORKER_IDLE_DELAY_MS:2000}
     max-attempts: ${WORKER_MAX_ATTEMPTS:3}
     # Job running quá ngưỡng này (giây) được trả về pending khi khởi động và mỗi stale-check-ms (chỉ khi worker bật).
     stale-after-seconds: ${WORKER_STALE_AFTER_SECONDS:300}
@@ -75,6 +81,8 @@ app:
     refresh:
       ttl: ${REFRESH_TTL:7d}
       absolute-ttl: ${REFRESH_ABSOLUTE_TTL:30d}
+      # D6: gửi lại token vừa bị thay trong khoảng này (tab thứ hai) trả 401 REFRESH_RACE, không thu hồi chuỗi; 0 là tắt.
+      reuse-grace: ${REFRESH_REUSE_GRACE:30s}
     cookie-secure: ${COOKIE_SECURE:true}
     cors:
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
@@ -87,6 +95,20 @@ app:
       max-failures: ${LOGIN_MAX_FAILURES:5}
       window: ${LOGIN_FAILURE_WINDOW:15m}
       lock: ${LOGIN_LOCK_DURATION:15m}
+    # D3: giới hạn số lần đăng nhập theo IP (IPv6 gom theo /64), mọi lần thử đều tính, chạy trước bcrypt; độc lập với khóa trên.
+    login-ip-limit:
+      max-attempts: ${LOGIN_IP_MAX_ATTEMPTS:20}
+      window: ${LOGIN_IP_WINDOW:1m}
+  # D1: giới hạn theo từng giáo viên, để một người không làm tắc hàng đợi sinh câu và không cạn quota Gemini dùng chung.
+  # Chỉ câu hệ thống phải sinh mới bị tính, câu lấy từ ngân hàng thì không. Mặc định ở GenerationLimitProperties.
+  generation-limits:
+    max-questions-per-exam: ${GENERATION_MAX_QUESTIONS_PER_EXAM:60}   # tổng số câu của một ma trận / một đề sinh theo bài (400)
+    max-pending-jobs: ${GENERATION_MAX_PENDING_JOBS:60}               # job sinh câu đang chờ/chạy của một giáo viên (429 GENERATION_QUEUE_LIMIT)
+    max-daily-questions: ${GENERATION_MAX_DAILY_QUESTIONS:120}        # câu yêu cầu sinh mỗi ngày, giờ Việt Nam (429 DAILY_GENERATION_LIMIT)
+    # D2: độ dài các trường của ô ma trận đi vào prompt (ký tự). Không được vượt trần cứng 1000/500/10 của prompt (CellTextLimits).
+    cell-content-max-chars: ${GENERATION_CELL_CONTENT_MAX_CHARS:1000}
+    cell-outcome-max-chars: ${GENERATION_CELL_OUTCOME_MAX_CHARS:500}
+    cell-outcomes-max-items: ${GENERATION_CELL_OUTCOMES_MAX_ITEMS:10}
   # Xuất đề ra Word (GET /api/exams/{id}/export/docx) cần pandoc; mặc định tìm "pandoc" trên PATH.
   export:
     pandoc-path: ${PANDOC_PATH:pandoc}
@@ -104,6 +126,8 @@ app:
     pandoc-heap-mb: ${MATERIAL_PANDOC_HEAP_MB:256}
   # Bảng điểm cho phần tạo đề sau này (V4); luồng sinh câu không dùng. Giá trị mặc định nằm ở ExamScoringProperties.
   exam:
+    # Thẩm định 31/10: độ giống 3-gram (sau khi che số và tên điểm) từ mức này thì xem đề gắn lý do similar_in_exam. Trong (0, 1].
+    similar-threshold: ${EXAM_SIMILAR_THRESHOLD:0.82}
     scoring:
       mcq-per-question: 0.25                      # 12 câu MCQ = 3 điểm
       sa-per-question: 0.5

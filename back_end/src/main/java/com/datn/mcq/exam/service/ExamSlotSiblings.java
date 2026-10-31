@@ -63,31 +63,62 @@ public class ExamSlotSiblings implements SlotDedupContext {
             if (other.getId().equals(excludeSlotId) || other.getQuestionType() != type) {
                 continue;
             }
-            DedupCandidate candidate = of(other);
-            if (candidate != null && candidate.hasContent()) {
-                out.add(candidate);
+            for (DedupCandidate candidate : of(other)) {
+                if (candidate != null && candidate.hasContent()) {
+                    out.add(candidate);
+                }
             }
         }
         return out;
     }
 
-    private DedupCandidate of(ExamSlot slot) {
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> sameCellQuestionTexts(Integer examSlotId) {
+        ExamSlot self = slotRepository.findById(examSlotId).orElse(null);
+        if (self == null) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (ExamSlot other : slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(self.getExamId())) {
+            if (other.getId().equals(self.getId()) || !other.getCellId().equals(self.getCellId())) {
+                continue;
+            }
+            for (DedupCandidate candidate : of(other)) {
+                if (candidate != null && candidate.hasContent()) {
+                    out.add(candidate.questionText());
+                }
+            }
+        }
+        return out;
+    }
+
+    private List<DedupCandidate> of(ExamSlot slot) {
         if (ExamBuildService.hasQuestion(slot)) {
             if (slot.getBankItemId() != null) {
                 // Câu ngân hàng (lấy từ ngân hàng hoặc đã Giữ): văn bản đang hiển thị trong đề là bản ngân hàng.
                 BankItemDto bank = bankService.getItem(slot.getBankItemId());
-                return fromBank(bank);
+                return List.of(fromBank(bank));
             }
-            return slot.getGeneratedQuestionId() == null ? null : fromGenerated(slot.getGeneratedQuestionId());
+            return slot.getGeneratedQuestionId() == null ? List.of()
+                    : java.util.Collections.singletonList(fromGenerated(slot.getGeneratedQuestionId()));
         }
+        List<DedupCandidate> out = new ArrayList<>();
         if (ExamSlot.GENERATING.equals(slot.getState())) {
             // Chỗ đang sinh: câu vừa sinh của job mới nhất (đã tới bước QC) cũng đã nằm trong đề.
             Optional<GenerationJob> job = generationService.latestJobForSlot(slot.getId());
-            if (job.isPresent() && job.get().getQuestionId() != null) {
-                return fromGenerated(job.get().getQuestionId());
+            Integer latest = job.map(GenerationJob::getQuestionId).orElse(null);
+            if (latest != null) {
+                out.add(fromGenerated(latest));
+            }
+            // Câu lệch Solver đang được sinh lại là fallback của chỗ: job sinh lại mới chưa có câu, nhưng nếu lần sinh lại
+            // hỏng thì câu này vẫn được dùng vào đề (ExamBuildService.failOrUseFallback).
+            Integer fallback = slot.getFallbackQuestionId();
+            if (fallback != null && !fallback.equals(latest)) {
+                out.add(fromGenerated(fallback));
             }
         }
-        return null;
+        return out;
     }
 
     private static DedupCandidate fromBank(BankItemDto b) {

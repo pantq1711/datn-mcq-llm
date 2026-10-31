@@ -291,20 +291,9 @@ public class GenerationService {
         boolean validateLatex = GenerationJobProcessor.isMathSubject(subject.getName());
         boolean runAnswerCheck = req.runAnswerCheck() != null ? req.runAnswerCheck() : true;
 
-        QcPipelineReport qcReport = qcOrchestrator.evaluateAndSave(new QuestionQcInput(
-                saved.getId(),
-                parsed.parseSuccess(),
-                parsed.questionText(),
-                parsed.optionA(),
-                parsed.optionB(),
-                parsed.optionC(),
-                parsed.optionD(),
-                parsed.correctOption(),
-                parsed.explanation(),
-                validateLatex,
-                runAnswerCheck,
-                parsed.parseError()
-        ).withParseWarnings(parsed.parseWarnings()), dedupScopeResolver.resolve(run.getId()));
+        QcPipelineReport qcReport = qcOrchestrator.evaluateAndSave(
+                mcqQcInput(saved.getId(), parsed, validateLatex, runAnswerCheck),
+                dedupScopeResolver.resolve(run.getId()));
         GeneratedQuestion updated = updateStatusAndDifficulty(saved.getId(), qcReport.resultingStatus(), null);
         return new SyncGenerationResponse(GeneratedQuestionSummaryDto.fromEntity(updated), qcReport);
     }
@@ -459,6 +448,25 @@ public class GenerationService {
         statementRepository.saveAll(statements);
     }
 
+    /** Đầu vào QC của câu mcq vừa giải mã (dùng chung cho generate-sync và worker). */
+    public static QuestionQcInput mcqQcInput(
+            Integer questionId, ParsedMcqDto parsed, boolean validateLatex, boolean runAnswerCheck) {
+        return new QuestionQcInput(
+                questionId,
+                parsed.parseSuccess(),
+                parsed.questionText(),
+                parsed.optionA(),
+                parsed.optionB(),
+                parsed.optionC(),
+                parsed.optionD(),
+                parsed.correctOption(),
+                parsed.explanation(),
+                validateLatex,
+                runAnswerCheck,
+                parsed.parseError()
+        ).withParseWarnings(parsed.parseWarnings()).withLlmOutput(true);
+    }
+
     /** Đầu vào QC của câu sa vừa giải mã (dùng chung cho generate-sync và worker). */
     public static QuestionQcInput shortAnswerQcInput(
             Integer questionId, ParsedSaDto parsed, boolean validateLatex, boolean runAnswerCheck) {
@@ -472,7 +480,7 @@ public class GenerationService {
                 validateLatex,
                 runAnswerCheck,
                 parsed.parseError()
-        ).withParseWarnings(parsed.parseWarnings());
+        ).withParseWarnings(parsed.parseWarnings()).withLlmOutput(true);
     }
 
     /**
@@ -714,8 +722,8 @@ public class GenerationService {
             job.setTargetStatementDifficulties(trueFalse ? joinLevels(targetStatementDifficulties) : null);
             job.setStatus(JobStatus.PENDING);
             job.setAttempt(0);
-            // Giãn cách mỗi job 13 giây để tránh đụng trần 5 RPM trên Free Tier
-            job.setNextRunAt(now.plusSeconds(13L * i));
+            // W2-4b (C): bộ điều tiết Gemini dùng chung lo giãn cách giữa các lượt gọi; job xếp hàng chạy ngay.
+            job.setNextRunAt(now);
             job.setCreatedAt(now);
             job.setUpdatedAt(now);
             created.add(generationJobRepository.save(job));

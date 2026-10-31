@@ -248,10 +248,11 @@ class LessonBuildTest extends ExamFlowTestBase {
     }
 
     @Test
-    void tranTongNamMuoiCauMoiLanSinhTheoBai() throws Exception {
-        assertRejected(lessonBody(LESSON, null, mcq("easy", 30), mcq("medium", 21)), 400, "50");
-        JsonNode ok = buildLesson(lessonBody(LESSON, null, mcq("easy", 30), mcq("medium", 20)));
-        assertEquals(50, ok.get("slots").asInt());
+    void tranTongSauMuoiCauMoiLanSinhTheoBai() throws Exception {
+        // D1: trần mặc định 60 (app.generation-limits.max-questions-per-exam), trước đây cố định 50.
+        assertRejected(lessonBody(LESSON, null, mcq("easy", 30), mcq("medium", 31)), 400, "60");
+        JsonNode ok = buildLesson(lessonBody(LESSON, null, mcq("easy", 30), mcq("medium", 30)));
+        assertEquals(60, ok.get("slots").asInt());
     }
 
     // ---------- quyền sở hữu ----------
