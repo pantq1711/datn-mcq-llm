@@ -205,7 +205,8 @@ public class ExamBuildService {
                     slot.setAttempts(1);
                     slot.setState(ExamSlot.GENERATING);
                     List<String> note = new ArrayList<>();
-                    addLine(note, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount()));
+                    addLine(note, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount(),
+                            outcomeLevels(cell)));
                     if (cell.getQuestionType() == QuestionType.TF) {
                         lastTfPattern = TfLabelPattern.choose(lastTfPattern, ThreadLocalRandom.current());
                         note.add(TfLabelPattern.promptLine(lastTfPattern));
@@ -433,6 +434,24 @@ public class ExamBuildService {
                 : new GenerationService.MaterialSnapshot(selection.context(), selection.refsJson());
     }
 
+    /**
+     * Các mức có yêu cầu cần đạt mà prompt của ô liệt kê (mcq/sa: mức của câu; tf: mức của 4 ý), theo thứ tự trong prompt
+     * ({@link Difficulty#values()}). Số mức này là m trong phân công khía cạnh của {@link MatrixPromptDraftV0#slotLine}.
+     */
+    static List<Difficulty> outcomeLevels(ExamMatrixCell cell) {
+        List<Difficulty> used = cell.getQuestionType() == QuestionType.TF
+                ? MatrixService.statementLevels(cell)
+                : List.of(cell.getDifficulty());
+        List<Difficulty> out = new ArrayList<>();
+        for (Difficulty level : Difficulty.values()) {
+            String text = cell.learningOutcome(level);
+            if (used.contains(level) && text != null && !text.isBlank()) {
+                out.add(level);
+            }
+        }
+        return out;
+    }
+
     /** Nội dung và yêu cầu cần đạt của ô, để khớp đoạn tài liệu (cùng với tên bài/chủ đề của ô). */
     static String selectionDetails(MatrixCellSpec spec) {
         List<String> parts = new ArrayList<>();
@@ -451,7 +470,7 @@ public class ExamBuildService {
      */
     String promptNote(ExamSlot slot, ExamMatrixCell cell, String instruction) {
         List<String> lines = new ArrayList<>();
-        addLine(lines, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount()));
+        addLine(lines, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount(), outcomeLevels(cell)));
         if (cell.getQuestionType() == QuestionType.TF) {
             lines.add(TfLabelPattern.promptLine(
                     TfLabelPattern.choose(latestTfPattern(slot), ThreadLocalRandom.current())));

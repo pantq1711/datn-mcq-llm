@@ -343,6 +343,14 @@ class ExamQuestionEditTest {
         return out;
     }
 
+    /**
+     * Lý do của bước QC, không tính {@code similar_in_exam} (tính lúc xem đề, ExamSimilarInExamTest): hai câu mcq của
+     * FakeGenerator trong cùng một ô cùng khuôn sau khi che số nên luôn bị gắn cờ này.
+     */
+    private static List<String> qcReasons(JsonNode item) {
+        return texts(item.get("reviewReasons")).stream().filter(r -> !r.startsWith("similar_in_exam: ")).toList();
+    }
+
     /** Dấu vết ghi DB của luồng sửa: số câu, số job, số dòng nhật ký, số dòng QC. */
     private List<Integer> footprint() {
         return List.of(count("SELECT count(*) FROM generated_question"), count("SELECT count(*) FROM generation_job"),
@@ -683,8 +691,7 @@ class ExamQuestionEditTest {
         assertEquals(calls + 1, SOLVER.calls);
         assertEquals("qc_passed", statusOf(version));
         JsonNode item = viewItem(examId, slot);
-        assertEquals("passed", item.get("qcState").asText());
-        assertEquals("[]", item.get("reviewReasons").toString());
+        assertEquals(List.of(), qcReasons(item), "Solver đồng ý: không còn lý do QC nào");
         assertEquals("done", jdbc.queryForObject("SELECT status FROM generation_job WHERE question_id = ?"
                 + " AND job_type = 'answer_check'", String.class, version));
     }
@@ -701,7 +708,7 @@ class ExamQuestionEditTest {
         JsonNode item = viewItem(examId, slot);
         assertEquals("C", item.get("correctOption").asText());
         assertEquals("needs_review", item.get("qcState").asText());
-        assertEquals(List.of("solver_inconsistent"), texts(item.get("reviewReasons")));
+        assertEquals(List.of("solver_inconsistent"), qcReasons(item));
         assertTrue(item.get("needsReview").asBoolean());
         assertEquals("edited", json(keep(examId, slot).andExpect(status().isOk())).get("state").asText(),
                 "giáo viên vẫn Giữ được sau khi thấy cờ");
@@ -727,7 +734,7 @@ class ExamQuestionEditTest {
                 + " AND check_type = 'answer_check'", version));
         JsonNode item = viewItem(examId, slot);
         assertEquals("needs_review", item.get("qcState").asText());
-        assertEquals(List.of("solver_failed"), texts(item.get("reviewReasons")));
+        assertEquals(List.of("solver_failed"), qcReasons(item));
 
         JsonNode kept = json(keep(examId, slot).andExpect(status().isOk()));
         assertEquals("edited", kept.get("state").asText());
@@ -784,7 +791,7 @@ class ExamQuestionEditTest {
 
         processAll();
         assertEquals("generated", statusOf(v2[0]));
-        assertEquals(List.of("solver_inconsistent"), texts(viewItem(examId, slot).get("reviewReasons")));
+        assertEquals(List.of("solver_inconsistent"), qcReasons(viewItem(examId, slot)));
     }
 
     @Test

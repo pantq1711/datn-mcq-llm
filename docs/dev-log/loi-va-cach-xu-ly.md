@@ -68,6 +68,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-52 | W2-4b: hàng đợi, bộ điều tiết Gemini, worker liên tục (bổ sung 28/10) | Hàng đợi/đồng thời | Cao | Đã sửa |
 | L-53 | Dedup: `similarity` null do chốt chặn số liệu; câu fallback của ô đang sinh lại không là ứng viên (bổ sung 31/10) | QC | Trung bình | Đã sửa |
 | L-54 | Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (thẩm định 31/10) | QC | Cao | Đã sửa (v4 bắt 7/9 và 5/9, không báo nhầm) |
+| L-55 | Nhiều câu cùng khuôn (chỉ khác số, tên đỉnh) trong một đề; mcq lộ đáp án ý đúng/sai (thẩm định 31/10) | QC | Cao | Đã sửa (chờ đối chiếu dữ liệu thật) |
 
 **Thống kê theo nhóm** (53 mục):
 
@@ -895,6 +896,57 @@ Theo mức độ: Cao 13, Trung bình 26, Thấp 14.
   - Solver và mô hình sinh câu là cùng một model (`gemini-3.5-flash-lite`): mô hình tự kiểm tra đầu ra của chính nó; chưa thử
     Solver bằng model khác.
 - Trạng thái: Đã sửa. v4 là mặc định; đã đo trước/sau.
+
+### L-55 Nhiều câu cùng khuôn (chỉ khác số hoặc tên đỉnh) trong một đề; câu mcq lộ đáp án của ý đúng/sai (bổ sung 31/10)
+- Nhóm: QC
+- Triệu chứng: thẩm định 31/10 trên 4 đề của `datn_mcq_e2e` thấy 7 cặp câu cùng khuôn trong cùng một đề, dedup không bắt: câu 57 và 55 (hình thang cân, cùng 75°, cùng nhiễu 105°), 49 và 48 (cùng hỏi bậc, cùng đáp số 5), 34 và 33, 29 và 27, 21 và 17, 62 và BI1 (câu ngân hàng); câu mcq 60 có cùng biểu thức $(4x - 1)^2$ với ý a của câu đúng/sai 56 và phương án C chính là ý a, nên lộ đáp án.
+- Nguyên nhân gốc: không phải lỗi dedup. Quy tắc "câu chỉ khác số liệu không tính là trùng" (chốt chặn số liệu của `DedupChecker`) là ĐÚNG cho ngân hàng và cho câu sinh (L-53), phải giữ. Thiếu một lớp riêng cho phạm vi MỘT đề, nơi hai câu cùng khuôn là lỗi dù khác số; và prompt sinh câu của các chỗ cùng ô không biết các chỗ kia đã có câu gì (hai worker chạy song song, ghi chú "câu thứ k/n" chỉ dặn chung chung).
+- Cách sửa (hai lớp, không migration, không đổi `DedupChecker`):
+  - Lớp 1, phòng lúc sinh: prompt ma trận mcq v4, sa v5, tf v6. Worker nhận job (không phải lúc xếp job, để thấy cả câu worker khác vừa sinh) lấy qua `SlotDedupContext.sameCellQuestionTexts` câu dẫn của các chỗ khác cùng ô trong cùng đề (cùng định nghĩa "câu đang có" với `ExamSlotSiblings.of`: câu hiện tại, câu ngân hàng đang dùng, câu mới nhất và fallback của chỗ đang sinh), đưa vào khối "Các câu đã có trong ô này" (tối đa 6 câu, mỗi câu 200 ký tự) kèm yêu cầu chọn dạng bài hoặc khía cạnh khác, không lặp khuôn chỉ đổi số liệu hay tên điểm. Đổi câu dùng cùng đường nên câu đang bị thay (chính chỗ đó) tự không có trong danh sách. Dòng "câu thứ k/N" thêm phân công cố định: chỗ k được ưu tiên khía cạnh thứ ((k−1) mod m)+1 trong m mức có yêu cầu cần đạt; m = 0 hoặc m < N thì dặn thêm dùng hình thức hỏi khác (đặt trong ghi chú lúc xếp job, `ExamBuildService.outcomeLevels`).
+  - Lớp 2, lưới an toàn: `ExamQuestionSimilarity` (hàm thuần) tính lúc xem đề trong `ExamViewService.view`. Che số bằng `#`, tên điểm/hình 2–5 chữ in hoa bằng `@`, bỏ `$`, chữ thường; cosine 3-gram, ngưỡng `app.exam.similar-threshold` (mặc định 0,82, xem hạn chế (1)). So mcq với mcq (thân câu và phương án) và mcq với từng ý đúng/sai (thân câu, và thân câu ghép từng phương án vì ý thường chứa sẵn biểu thức kết quả). Vượt ngưỡng: câu hệ thống sinh trong cặp thêm lý do `similar_in_exam: <n>` (n là số thứ tự câu kia trong đề); không loại câu, không đổi `generated_question.status`, không ghi DB; câu ngân hàng và câu đã Giữ/Sửa được so nhưng không bị gắn. Chuỗi hiển thị đề xuất: "Gần giống câu {n} trong đề, nên đổi một trong hai câu".
+- Chống tái phát: `ExamQuestionSimilarityTest` (câu 57/55 dựng lại với tên đỉnh và số khác, cặp bậc 49/48, 60/56a lộ đáp án, cặp cùng chủ đề khác dạng hỏi không bị gắn, không so đúng/sai với đúng/sai, ngưỡng, số thứ tự), `MatrixPromptSameCellTest` (khối câu đã có, giới hạn 6×200, công thức khía cạnh), `ExamSimilarInExamTest` (prompt thật qua worker giả: chỗ sau thấy chỗ trước chưa đối soát, không thấy ô khác, Đổi câu loại câu bị thay; xem đề: gắn cờ hai phía, không đổi trạng thái, không ghi DB, câu ngân hàng không bị gắn, đề khác không so).
+- Hạn chế: (1) đối chiếu trên dữ liệu thật (đề 1–4 của `datn_mcq_e2e`, 31/10, app thật cổng 8085, worker tắt, chỉ GET): ở ngưỡng 0,85 bắt 4/6 cặp NÊN gắn — 57/55 (đề 4 C10/C11) 0,9806; 49/48 (C4/C2) 0,9253; 60 với ý của 56 (C6/C14) 0,8933; 34/33 (đề 3 C3/C2) 0,8536 (sát ngưỡng) — và bỏ sót 62/BI1 (đề 4 C3/C1) 0,8259 và 29/27 (đề 2 C3/C2) 0,7494. Cặp KHÔNG nên gắn đều không bị gắn: đề 1 C5/C6 dưới 0,60, đề 4 C7/C8 (52/53) 0,7358. Cờ khác đã bật: đề 3 C7/C8 (37/39) 0,9908 (báo cáo thẩm định cũng ghi cùng khuôn), đề 2 C1/C4 (32/28, bình phương hiệu và bình phương tổng, cùng khuôn) 0,9707, đề 1 C1/C3 (BI1 và 25, cùng hỏi "biểu thức nào là đơn thức/đa thức") 0,8671; đọc nội dung thì cả ba là cùng khuôn nên không có gắn nhầm. Cặp đề 1 C7/C8 (q7/q8) 0,8368 bị bỏ sót dù báo cáo ghi cùng khuôn. Quyết định 31/10 (chủ dự án): mặc định 0,82 (đổi cả `application.yaml` và mặc định trong code; biến `EXAM_SIMILAR_THRESHOLD` vẫn ghi đè được). Lý do: lớp 2 chỉ gắn cờ nên ưu tiên recall. Trên 4 đề, 0,82 gắn 10 cặp (0,85 gắn 7), thêm 3 cặp: 62/BI1 (0,8259), đề 1 q7/q8 (0,8368, báo cáo thẩm định ghi cùng khuôn) và đề 3 q38 với ý a của q43 (0,8480; mcq khai triển $(2x - 5)^2$ với ý khai triển $(3x + 1)^2$: cùng khuôn, khác biểu thức nên không lộ đáp án; cặp biên, chưa có nhãn của người). 0 gắn nhầm trong các cặp đã có nhãn. Cặp cao nhất dưới ngưỡng: 0,7946 (đề 1 q20/q21). Hạn chế: ngưỡng chọn trên chính 4 đề này nên có thể overfit; sẽ kiểm lại ở đợt thẩm định đề mới. Bỏ sót đã biết: 29/27 (0,7494) và mcq với trả lời ngắn (21/17, ngoài phạm vi). Bảng điểm đầy đủ ở dưới; (2) `GET /api/exams` (`needsReviewSlots`) chưa tính lý do này, nên số trong danh sách có thể thấp hơn `needsReviewCount` khi xem đề. Đã cân nhắc và KHÔNG sửa vì chi phí không nhỏ: danh sách tối đa 50 đề, mỗi đề tới 60 chỗ, mà muốn so phải nạp nội dung từng câu (câu ngân hàng hoặc câu sinh, thêm 4 ý với câu tf) và thứ tự ô của đề, tức thêm vài truy vấn mỗi chỗ, gần gấp đôi chi phí hiện có của danh sách (đã gọi `summarize` mỗi chỗ `ready`); (3) item trả về từ Giữ/Đổi/Sửa (không phải xem đề) chưa có lý do này đến khi tải lại đề; (4) chỉ so mcq với mcq và mcq với ý đúng/sai, chưa so đúng/sai với đúng/sai hay trả lời ngắn với nhau; (5) khối "câu đã có" chỉ lấy 6 chỗ đầu của ô (theo thứ tự chỗ) khi ô có hơn 7 câu; (6) khía cạnh đếm theo số MỨC có yêu cầu cần đạt (m ≤ 3), không tách các ý trong một yêu cầu, nên ô mcq/sa (1 mức) luôn rơi vào nhánh "m < N" khi có từ 2 câu. Chủ dự án đồng ý cách hiểu này (31/10). Ma trận mẫu chỉ có 1 yêu cầu cho mỗi mức nên phân công khía cạnh ít tác dụng; đa dạng chủ yếu nhờ khối "câu đã có trong ô này" và câu dặn đổi hình thức hỏi.
+- Bảng điểm mọi cặp có độ giống từ 0,60 trong 4 đề của `datn_mcq_e2e` (31/10, điểm của `ExamQuestionSimilarity`; số là thứ tự câu trong đề, tức C-số; "mcq/tf" là mcq với một ý của câu đúng/sai; cặp dưới 0,60 không liệt kê, trong đó có đề 1 C5/C6). Cột "gắn" là ở mặc định 0,82:
+
+  | Đề | Cặp | Điểm | Gắn | Ghi chú |
+  |---|---|---|---|---|
+  | 1 | 1–2 | 0,7248 | không | |
+  | 1 | 1–3 | 0,8671 | có | BI1 và q25, cùng hỏi "biểu thức nào là đơn thức/đa thức" |
+  | 1 | 2–3 | 0,7021 | không | |
+  | 1 | 2–14 | 0,6093 | không | mcq/tf |
+  | 1 | 3–14 | 0,6106 | không | mcq/tf |
+  | 1 | 6–14 | 0,6771 | không | mcq/tf |
+  | 1 | 7–8 | 0,8368 | có | q7/q8 phân tích nhân tử, báo cáo ghi cùng khuôn |
+  | 1 | 9–10 | 0,7946 | không | q20/q21, cặp cao nhất dưới ngưỡng |
+  | 2 | 1–2 | 0,7363 | không | |
+  | 2 | 1–3 | 0,6754 | không | |
+  | 2 | 1–4 | 0,9707 | có | q32/q28, bình phương hiệu và bình phương tổng |
+  | 2 | 2–3 | 0,7494 | không | q27/q29, NÊN gắn, bỏ sót đã biết |
+  | 2 | 2–4 | 0,7299 | không | |
+  | 2 | 3–4 | 0,6432 | không | |
+  | 3 | 1–2 | 0,7446 | không | |
+  | 3 | 1–3 | 0,7042 | không | |
+  | 3 | 2–3 | 0,8536 | có | q33/q34, NÊN gắn |
+  | 3 | 5–6 | 0,7902 | không | |
+  | 3 | 6–7 | 0,6575 | không | |
+  | 3 | 6–8 | 0,6818 | không | |
+  | 3 | 6–14 | 0,8480 | có | mcq/tf, q38 với ý a của q43; cặp biên, xem trên |
+  | 3 | 7–8 | 0,9908 | có | q37/q39, cùng khuôn theo báo cáo |
+  | 3 | 9–10 | 0,7631 | không | |
+  | 3 | 9–11 | 0,7680 | không | |
+  | 3 | 9–12 | 0,6127 | không | |
+  | 3 | 10–11 | 0,6743 | không | |
+  | 4 | 1–3 | 0,8259 | có | BI1 và q62, NÊN gắn (bỏ sót ở 0,85) |
+  | 4 | 2–4 | 0,9253 | có | q48/q49, NÊN gắn |
+  | 4 | 2–13 | 0,6389 | không | mcq/tf |
+  | 4 | 5–6 | 0,6660 | không | |
+  | 4 | 6–8 | 0,7212 | không | |
+  | 4 | 6–14 | 0,8933 | có | mcq/tf, q60 với ý a của q56, NÊN gắn (lộ đáp án) |
+  | 4 | 7–8 | 0,7358 | không | q52/q53, KHÔNG nên gắn |
+  | 4 | 10–11 | 0,9806 | có | q57/q55, NÊN gắn |
+
+- Bài học: một quy tắc đúng ở phạm vi này (ngân hàng: khác số là khác câu) có thể sai ở phạm vi khác (một đề); xử lý bằng lớp riêng theo phạm vi thay vì nới quy tắc chung.
+- Trạng thái: Đã sửa (chờ đối chiếu dữ liệu thật).
 
 ## Hàng đợi/đồng thời
 
