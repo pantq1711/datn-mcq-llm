@@ -1,15 +1,10 @@
 import { Avatar, Card, Descriptions, Divider, Spin, Tag, Typography } from "antd";
 import { MailOutlined, IdcardOutlined, UserOutlined } from "@ant-design/icons";
 import { useAuth } from "../../../context/AuthContext";
+import { describeRole } from "../../../utils/auth.utils";
 import "./ProfilePage.css";
 
 const { Title, Text } = Typography;
-
-const roleMap: Record<string, { label: string; color: string }> = {
-    teacher: { label: "Giáo viên", color: "blue" },
-    admin: { label: "Quản trị viên", color: "red" },
-    researcher: { label: "Nghiên cứu viên", color: "green" },
-};
 
 export default function ProfilePage() {
     const { user } = useAuth();
@@ -25,7 +20,7 @@ export default function ProfilePage() {
         );
     }
 
-    const roleInfo = roleMap[user.role] ?? { label: user.role, color: "default" };
+    const roleInfo = describeRole(user.role);
 
     return (
         <div className="profile-page">

@@ -1,6 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 
-import TeacherLayout from "../layouts/TeacherLayout";
+import AppLayout from "../layouts/AppLayout";
 // import ReviewQuestionDetailPage from "../features/teacher-review/pages/ReviewQuestionDetailPage";
 // import ReviewQuestionsPage from "../features/teacher-review/pages/ReviewQuestionsPage";
 import DashboardPage from "../features/dashboard/pages/DashboardPage";
@@ -38,14 +38,10 @@ export default function AppRoutes() {
                     <Route path="register" element={<RegisterPage />} />
                     <Route path="forgot-password" element={<ForgotPasswordPage />} />
                 </Route>
-                {/* Mọi vai trò đã đăng nhập đều xem được hồ sơ */}
-                <Route element={<RequireAuth />}>
-                    <Route path="profile" element={<ProfilePage />} />
-                </Route>
             </Route>
 
             <Route element={<RequireAuth allowedRoles={[ROLE_TEACHER]} />}>
-                <Route element={<TeacherLayout />}>
+                <Route element={<AppLayout />}>
                     <Route path="" element={<DashboardPage />} />
                     {/* <Route path="review" element={<ReviewQuestionsPage />} />
                     <Route path="review/:id" element={<ReviewQuestionDetailPage />} /> */}
@@ -68,7 +64,17 @@ export default function AppRoutes() {
             </Route>
 
             <Route element={<RequireAuth allowedRoles={[ROLE_ADMIN]} />}>
-                <Route path="admin/users" element={<UserManagementPage />} />
+                {/* Dùng chung layout để admin có Header (đăng xuất, hồ sơ) và Sidebar */}
+                <Route element={<AppLayout />}>
+                    <Route path="admin/users" element={<UserManagementPage />} />
+                </Route>
+            </Route>
+
+            {/* Mọi vai trò đã đăng nhập đều xem được hồ sơ, trong layout chung */}
+            <Route element={<RequireAuth />}>
+                <Route element={<AppLayout />}>
+                    <Route path="profile" element={<ProfilePage />} />
+                </Route>
             </Route>
 
             <Route path="*" element={<NotFoundPage />} />
