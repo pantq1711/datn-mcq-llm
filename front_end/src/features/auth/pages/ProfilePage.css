@@ -19,6 +19,14 @@
     padding: 24px;
 }
 
+.profile-password-card {
+    margin-top: 16px;
+}
+
+.profile-password-card .ant-form {
+    max-width: 420px;
+}
+
 /* ===== Card ===== */
 .profile-card {
     border-radius: 12px;

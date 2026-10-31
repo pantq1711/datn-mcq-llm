@@ -41,7 +41,7 @@ export async function getMe(): Promise<UserInfo> {
   return response.data;
 }
 
-export async function changePassword(email: string) {
-  const response = await axiosInstance.post("/api/auth/password", { email });
-  return response.data;   // tùy API trả về gì
+/** Đổi mật khẩu; 204 thì mọi phiên bị thu hồi (docs/api mục 8). */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await axiosInstance.post("/api/auth/password", { currentPassword, newPassword });
 }

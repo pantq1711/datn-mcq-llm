@@ -2,6 +2,7 @@ import { Avatar, Card, Descriptions, Divider, Spin, Tag, Typography } from "antd
 import { MailOutlined, IdcardOutlined, UserOutlined } from "@ant-design/icons";
 import { useAuth } from "../../../context/AuthContext";
 import { describeRole } from "../../../utils/auth.utils";
+import ChangePasswordForm from "../components/ChangePasswordForm";
 import "./ProfilePage.css";
 
 const { Title, Text } = Typography;
@@ -87,6 +88,10 @@ export default function ProfilePage() {
                         <a href={`mailto:${user.email}`}>{user.email}</a>
                     </Descriptions.Item>
                 </Descriptions>
+            </Card>
+
+            <Card className="profile-card profile-password-card" bordered={false} title="Đổi mật khẩu">
+                <ChangePasswordForm />
             </Card>
         </div>
     );
