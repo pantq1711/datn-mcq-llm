@@ -337,7 +337,7 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     Không có cột tiền: `LlmClient` không tính giá (`cost_usd` luôn 0). Tổng hợp: `docs/thong-ke/06-chi-phi.sql`. Không đưa ra API.
   - Lý do "cần xem kỹ" thêm (W2-3): `grounding_not_supported`, `grounding_unknown` (từ kết quả), `grounding_pending`, `grounding_failed`
     (từ trạng thái job).
-  - Lý do "cần xem kỹ" thêm (thẩm định 31/10, câu `mcq`, Solver `solver-v3-option-check`): `solver_multiple_correct` (Solver xét từng
+  - Lý do "cần xem kỹ" thêm (thẩm định 31/10, câu `mcq`, Solver xét từng phương án `solver-v3-option-check`/`solver-v4-literal-reading`): `solver_multiple_correct` (Solver xét từng
     phương án thấy từ 2 phương án đúng, `judge_answer = 'multiple'`), `solver_no_correct` (không phương án nào đúng,
     `judge_answer = 'none'`). Thay cho `solver_inconsistent` ở hai trường hợp này; chỉ áp cho kết quả có khối xét từng phương án
     (mục 4.6). Chuỗi hiển thị đề xuất cho frontend: "Có thể có hơn một phương án đúng, thầy/cô kiểm tra lại" và "Hệ thống không tìm
@@ -500,12 +500,22 @@ Solver chỉ thấy đề dẫn và 4 ý, không thấy nhãn và lời giải c
 }
 ```
 
-### 4.6. Solver câu `mcq` (4 trường, `solver-v3-option-check`, thẩm định 31/10)
+### 4.6. Solver câu `mcq` (4 trường, `solver-v4-literal-reading` và `solver-v3-option-check`, thẩm định 31/10)
 
 Solver chỉ thấy đề và 4 phương án, không thấy đáp án và lời giải của câu. Solver giải bài rồi xét **từng** phương án A–D,
-không dừng ở phương án đầu tiên khớp. Thứ tự: `reasoning`, `options_verdict`, `correct_count`, `judge_answer`. Phiên bản
-cũ `solver-v2-delimited` (2 trường `reasoning`, `judge_answer`) vẫn có trong code để đo lại, chọn bằng
-`app.llm.solver-prompt-version`; mặc định là v3.
+không dừng ở phương án đầu tiên khớp. Thứ tự: `reasoning`, `options_verdict`, `correct_count`, `judge_answer`.
+
+- `solver-v4-literal-reading` (mặc định): một phương án là ĐÚNG nếu học sinh bảo vệ được nó là đáp án theo đúng chữ của đề,
+  không thêm yêu cầu đề không nêu.
+  - Phân tích nhân tử: mọi tích nhân lại bằng đa thức đã cho đều đúng, trừ khi đề ghi "triệt để" hoặc "đặt nhân tử chung
+    lớn nhất".
+  - Khẳng định hình học không có "luôn": phương án đúng trong ít nhất một trường hợp hợp lệ thì là đúng.
+  - Đề mơ hồ khiến từ 2 phương án bảo vệ được thì `correct_count` từ 2.
+- `solver-v3-option-check` (lần thử 1): cùng JSON, nhưng hiểu "đúng" hẹp (chỉ nhận cách phân tích triệt để; khẳng định không
+  "luôn" đúng là sai).
+- `solver-v2-delimited` (2 trường `reasoning`, `judge_answer`): Solver cũ.
+
+v2 và v3 giữ nguyên để đo lại, chọn bằng `app.llm.solver-prompt-version`. Bảng dưới áp cho cả v3 và v4.
 
 | Trường | Kiểu | Ý nghĩa |
 |---|---|---|

@@ -42,11 +42,12 @@ import java.util.Set;
  *   <li>Chỉ đọc câu đã lưu (generated_question và 4 ý tf); Solver chỉ thấy đề và phương án/ý như trong pipeline.</li>
  *   <li>{@code app.solver-probe.prompt-version} chọn phiên bản prompt Solver mcq cần đo (một giá trị trong
  *       {@link PromptBuilder#SOLVER_PROMPT_VERSIONS}, ví dụ {@code solver-v2-delimited} cho số "trước",
- *       {@code solver-v3-option-check} cho số "sau"); Solver của lần chạy lấy đúng phiên bản này. Không có trong code
- *       hoặc khác phiên bản Solver đang chạy thì dừng trước khi gọi lượt nào.</li>
+ *       {@code solver-v3-option-check} hoặc {@code solver-v4-literal-reading} cho số "sau"); Solver của lần chạy lấy đúng
+ *       phiên bản này. Không có trong code hoặc khác phiên bản Solver đang chạy thì dừng trước khi gọi lượt nào.</li>
  * </ul>
  *
- * Chạy xong thì đóng app (không mở cổng HTTP nếu chạy với {@code --spring.main.web-application-type=none}).
+ * Chạy xong thì đóng app. Chạy kèm {@code --server.port=0 --app.worker.enabled=false}; KHÔNG dùng
+ * {@code --spring.main.web-application-type=none} (SecurityConfig cần ngữ cảnh web, app không khởi động được).
  */
 @Component
 @ConditionalOnProperty(prefix = "app.solver-probe", name = "ids-file")

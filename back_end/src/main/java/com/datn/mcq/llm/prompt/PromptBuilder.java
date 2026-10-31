@@ -10,10 +10,18 @@ import java.util.List;
 public class PromptBuilder {
 
     /**
-     * Phiên bản prompt Solver mcq mặc định (thẩm định 31/10): Solver giải rồi xét TỪNG phương án A-D, trả thêm
-     * {@code options_verdict} và {@code correct_count}, để bắt câu có từ 2 phương án đúng trở lên. Giữ ranh giới đề của v2.
+     * Phiên bản prompt Solver mcq mặc định (chốt 31/10 sau lần đo v3 được 0/9): như v3, thêm quy tắc "phương án ĐÚNG nếu
+     * học sinh bảo vệ được theo đúng chữ của đề" (phân tích nhân tử chưa triệt để, khẳng định hình học không có "luôn"),
+     * để bắt đề mơ hồ. Cùng JSON với v3.
      */
-    public static final String SOLVER_PROMPT_VERSION = "solver-v3-option-check";
+    public static final String SOLVER_PROMPT_VERSION = "solver-v4-literal-reading";
+
+    /**
+     * Phiên bản prompt Solver mcq v3 (thẩm định 31/10, lần thử 1): xét TỪNG phương án A-D, trả thêm
+     * {@code options_verdict} và {@code correct_count}. Đo được 0/9 vì Solver hiểu "đúng" hẹp (xem dev-log L-54). Giữ
+     * nguyên để đo lại.
+     */
+    public static final String SOLVER_PROMPT_VERSION_V3 = "solver-v3-option-check";
 
     /**
      * Phiên bản prompt Solver mcq cũ (W2-4a mục 5): bọc đề bài trong khối ranh giới, chỉ trả một kết luận. Giữ lại để công
@@ -22,7 +30,8 @@ public class PromptBuilder {
     public static final String SOLVER_PROMPT_VERSION_V2 = "solver-v2-delimited";
 
     /** Các phiên bản prompt Solver mcq có trong code. */
-    public static final List<String> SOLVER_PROMPT_VERSIONS = List.of(SOLVER_PROMPT_VERSION_V2, SOLVER_PROMPT_VERSION);
+    public static final List<String> SOLVER_PROMPT_VERSIONS =
+            List.of(SOLVER_PROMPT_VERSION_V2, SOLVER_PROMPT_VERSION_V3, SOLVER_PROMPT_VERSION);
 
     /** Trả phiên bản đã trim nếu có trong code; ngược lại ném IllegalArgumentException. */
     public static String requireSolverPromptVersion(String version) {
@@ -107,9 +116,57 @@ public class PromptBuilder {
         String b = PromptData.neutralize(optionB);
         String c = PromptData.neutralize(optionC);
         String d = PromptData.neutralize(optionD);
-        return SOLVER_PROMPT_VERSION_V2.equals(v)
-                ? solverPromptV2(q, a, b, c, d)
-                : solverPromptV3(q, a, b, c, d);
+        return switch (v) {
+            case SOLVER_PROMPT_VERSION_V2 -> solverPromptV2(q, a, b, c, d);
+            case SOLVER_PROMPT_VERSION_V3 -> solverPromptV3(q, a, b, c, d);
+            default -> solverPromptV4(q, a, b, c, d);
+        };
+    }
+
+    /**
+     * v4 (chốt 31/10): như v3, thêm quy tắc đọc đúng chữ của đề. Phương án ĐÚNG khi học sinh bảo vệ được theo đúng chữ của
+     * đề; đề mơ hồ khiến từ 2 phương án bảo vệ được thì phải trả correct_count từ 2. Bỏ hai cụm của v3 khiến Solver hiểu
+     * "đúng" hẹp ("đúng dạng đề yêu cầu" và "không luôn đúng là sai").
+     */
+    private static String solverPromptV4(String q, String a, String b, String c, String d) {
+        return """
+                Bạn là giáo viên THCS chấm thẩm định độc lập một câu hỏi trắc nghiệm.
+                Dưới đây là đề bài và 4 phương án A, B, C, D (không kèm đáp án của người soạn):
+
+                %s
+                <<<CÂU_HỎI_CẦN_GIẢI
+                Câu hỏi: %s
+                A. %s
+                B. %s
+                C. %s
+                D. %s
+                HẾT_CÂU_HỎI>>>
+
+                Yêu cầu:
+                1. Tự giải bài toán từng bước từ đề bài ở trường "reasoning" (không đoán mò theo phương án).
+                2. Quy tắc xác định phương án ĐÚNG: một phương án là ĐÚNG nếu học sinh bảo vệ được nó là đáp án theo ĐÚNG CHỮ CỦA ĐỀ, không thêm yêu cầu mà đề không nêu.
+                   - Phân tích thành nhân tử: nếu đề chỉ ghi "phân tích thành nhân tử" thì mọi phương án là một TÍCH và nhân lại bằng đúng đa thức đã cho đều ĐÚNG, kể cả khi chưa phân tích triệt để. Chỉ khi đề ghi rõ "triệt để", "đặt nhân tử chung lớn nhất" hoặc tương đương thì mới loại cách chưa triệt để.
+                   - Tính chất, khẳng định hình học: nếu đề không có chữ "luôn" (hoặc tương đương) mà phương án đúng trong ít nhất một trường hợp hợp lệ của hình đã cho thì phương án đó là ĐÚNG.
+                   - Tổng quát: nếu đề mơ hồ khiến từ 2 phương án trở lên bảo vệ được thì correct_count phải từ 2 trở lên. Mục tiêu là phát hiện đề mơ hồ, không phải đoán ý người ra đề.
+                   Ví dụ:
+                   - Đề "Phân tích $2x^3 - 6x^2$ thành nhân tử" (không ghi "triệt để"): phương án $2x(x^2 - 3x)$ là ĐÚNG vì nó là một tích và $2x(x^2 - 3x) = 2x^3 - 6x^2$; phương án $2x^2(x - 3)$ cũng ĐÚNG.
+                   - Câu hỏi về hai đường chéo của một hình thang cân: phương án "Hai đường chéo vuông góc với nhau" là ĐÚNG khi đề không ghi "luôn", vì có hình thang cân có hai đường chéo vuông góc.
+                3. Xét TỪNG phương án A, B, C, D một cách độc lập theo quy tắc ở mục 2, KHÔNG dừng lại khi đã thấy một phương án đúng. Mỗi phương án là một phần tử của mảng "options_verdict" (đúng 4 phần tử, theo thứ tự A, B, C, D) gồm:
+                   - "option": chữ cái của phương án ("A", "B", "C" hoặc "D");
+                   - "correct": true nếu phương án đó ĐÚNG theo quy tắc ở mục 2, false nếu sai;
+                   - "reason": lý do một dòng, nêu phép kiểm cụ thể đã làm với chính phương án đó.
+                   Cách kiểm:
+                   - Đề yêu cầu biến đổi biểu thức (phân tích thành nhân tử, rút gọn, khai triển...): khai triển hoặc rút gọn phương án rồi so với biểu thức của đề.
+                   - Đề hỏi giá trị, nghiệm, số đo: thay hoặc tính lại để đối chiếu.
+                   - Đề hỏi định nghĩa, tính chất, khẳng định: đối chiếu với đúng các điều kiện đề nêu; đề không ghi "luôn" thì xét xem có trường hợp hợp lệ nào của hình đã cho làm phương án đúng không.
+                4. "correct_count": số phương án có "correct" là true (từ 0 đến 4).
+                5. "judge_answer":
+                   - Ghi "A", "B", "C", hoặc "D" nếu correct_count bằng 1 (chữ cái của phương án đúng đó).
+                   - Ghi "multiple" nếu correct_count từ 2 trở lên.
+                   - Ghi "none" nếu correct_count bằng 0.
+                %s
+                Trả về DUY NHẤT một đối tượng JSON có 4 trường theo thứ tự: "reasoning", "options_verdict", "correct_count", "judge_answer".
+                """.formatted(SOLVER_INSTRUCTION, q, a, b, c, d, ESCAPE_HINT);
     }
 
     /**

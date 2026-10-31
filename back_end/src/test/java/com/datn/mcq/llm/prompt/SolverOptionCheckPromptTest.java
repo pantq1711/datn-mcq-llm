@@ -18,15 +18,16 @@ class SolverOptionCheckPromptTest {
     private final PromptBuilder builder = new PromptBuilder();
 
     private String v3Prompt() {
-        return builder.buildSolverPrompt("Phân tích $2x^3 - 6x^2$ thành nhân tử", "$2x^2(x - 3)$",
-                "$2(x^3 - 3x^2)$", "$x^2(2x - 6)$", "$2x(x^2 - 3x)$");
+        return builder.buildSolverPrompt(PromptBuilder.SOLVER_PROMPT_VERSION_V3, "Phân tích $2x^3 - 6x^2$ thành nhân tử",
+                "$2x^2(x - 3)$", "$2(x^3 - 3x^2)$", "$x^2(2x - 6)$", "$2x(x^2 - 3x)$");
     }
 
     @Test
-    void phienBanMacDinhLaV3VaVanGiuV2() {
-        assertEquals("solver-v3-option-check", PromptBuilder.SOLVER_PROMPT_VERSION);
+    void vanGiuV2VaV3DeDoLai() {
+        assertEquals("solver-v3-option-check", PromptBuilder.SOLVER_PROMPT_VERSION_V3);
         assertEquals("solver-v2-delimited", PromptBuilder.SOLVER_PROMPT_VERSION_V2);
-        assertEquals(List.of("solver-v2-delimited", "solver-v3-option-check"), PromptBuilder.SOLVER_PROMPT_VERSIONS);
+        assertEquals(List.of("solver-v2-delimited", "solver-v3-option-check", "solver-v4-literal-reading"),
+                PromptBuilder.SOLVER_PROMPT_VERSIONS);
         assertEquals(PromptBuilder.SOLVER_PROMPT_VERSION, AnswerSolverChecker.SOLVER_PROMPT_VERSION);
     }
 
@@ -64,7 +65,7 @@ class SolverOptionCheckPromptTest {
         assertFalse(p.contains("options_verdict"));
         assertTrue(p.trim().endsWith(
                 "Trả về DUY NHẤT một đối tượng JSON có 2 trường: \"reasoning\" và \"judge_answer\"."));
-        assertEquals(v3Prompt(), builder.buildSolverPrompt(PromptBuilder.SOLVER_PROMPT_VERSION,
+        assertEquals(v3Prompt(), builder.buildSolverPrompt(" solver-v3-option-check ",
                 "Phân tích $2x^3 - 6x^2$ thành nhân tử", "$2x^2(x - 3)$", "$2(x^3 - 3x^2)$", "$x^2(2x - 6)$",
                 "$2x(x^2 - 3x)$"));
     }

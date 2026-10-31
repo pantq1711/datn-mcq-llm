@@ -19,9 +19,10 @@ class HardeningW24aItem5Test {
 
     @Test
     void solverPrompt_phienBanVaHangSoCoMat() {
-        // Thẩm định 31/10: mặc định là v3 (xét từng phương án); v2 vẫn giữ để đo lại.
-        assertEquals("solver-v3-option-check", PromptBuilder.SOLVER_PROMPT_VERSION);
-        assertEquals("solver-v3-option-check", AnswerSolverChecker.SOLVER_PROMPT_VERSION);
+        // Thẩm định 31/10: mặc định là v4 (xét từng phương án, đọc đúng chữ của đề); v2, v3 vẫn giữ để đo lại.
+        assertEquals("solver-v4-literal-reading", PromptBuilder.SOLVER_PROMPT_VERSION);
+        assertEquals("solver-v4-literal-reading", AnswerSolverChecker.SOLVER_PROMPT_VERSION);
+        assertEquals("solver-v3-option-check", PromptBuilder.SOLVER_PROMPT_VERSION_V3);
         assertEquals("solver-v2-delimited", PromptBuilder.SOLVER_PROMPT_VERSION_V2);
     }
 

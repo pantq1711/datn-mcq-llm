@@ -67,7 +67,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-51 | Model viết đơn vị đo `\text{km/h}` ngoài `$...$`, cả ô mcq mức vừa bị loại 18/18 lượt sinh (bổ sung 27/10) | LLM & parse | Cao | Đã sửa |
 | L-52 | W2-4b: hàng đợi, bộ điều tiết Gemini, worker liên tục (bổ sung 28/10) | Hàng đợi/đồng thời | Cao | Đã sửa |
 | L-53 | Dedup: `similarity` null do chốt chặn số liệu; câu fallback của ô đang sinh lại không là ứng viên (bổ sung 31/10) | QC | Trung bình | Đã sửa |
-| L-54 | Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (thẩm định 31/10) | QC | Cao | Đã sửa, chờ đo "sau" |
+| L-54 | Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (thẩm định 31/10) | QC | Cao | v3 đo 0/9; v4 chờ đo |
 
 **Thống kê theo nhóm** (53 mục):
 
@@ -832,8 +832,9 @@ Theo mức độ: Cao 13, Trung bình 26, Thấp 14.
   - câu 25: bản giáo viên sửa có 2 đáp án.
 - Nguyên nhân gốc: prompt `solver-v2-delimited` đã cho phép ghi `multiple`/`none`, nhưng chỉ có một trường kết luận và không bắt
   xét từng phương án. Solver giải ra một kết quả, gặp phương án đầu tiên khớp thì dừng, ghi chữ cái đó.
-- Đo "trước" (bước 1): công cụ `SolverProbeRunner` (chạy thủ công, không ghi DB, CSV ra ngoài repo). Số "trước" và "sau" do nhóm
-  chạy; chưa có số tại thời điểm ghi mục này.
+- Đo "trước" (bước 1): công cụ `SolverProbeRunner` (chạy thủ công, không ghi DB, CSV ra ngoài repo). Lệnh đúng có
+  `--server.port=0 --app.worker.enabled=false`; lệnh ban đầu có `--spring.main.web-application-type=none` làm app không khởi
+  động được (SecurityConfig cần ngữ cảnh web), lần thử đó không gọi Gemini.
 - Cách sửa (bước 2):
   - Prompt `solver-v3-option-check`: Solver giải bài rồi xét TỪNG phương án A–D (đúng/sai, lý do một dòng: khai triển/rút gọn,
     thay số, đối chiếu điều kiện; khẳng định không "luôn" đúng là sai), trả thêm `options_verdict` và `correct_count`, vẫn giữ
@@ -849,7 +850,26 @@ Theo mức độ: Cao 13, Trung bình 26, Thấp 14.
   `solver_no_correct`; 1 đúng khớp → `qc_passed`; 1 đúng khác đáp án → `solver_inconsistent`).
 - Hạn chế: mỗi lượt Solver mcq dài hơn (4 lý do một dòng), nên tốn thêm token; số token đo ở cột `token_count` của công cụ đo.
   Việc tách lý do dựa vào dòng đầu của ghi chú Solver, nên ai sửa định dạng ghi chú phải sửa cùng `QcSummaryService`.
-- Trạng thái: Đã sửa, chờ đo "sau" bằng công cụ đo với `solver-v3-option-check`.
+- Lần thử 1 (`solver-v3-option-check`, commit `366b4b0`, DB `datn_mcq_e2e`, 29 câu, mỗi phiên bản chạy 2 lần, 31/10):
+  - Bắt được trên 9 câu lỗi: v2 0/9 và 0/9; v3 0/9 và 0/9.
+  - Báo nhầm trên 20 câu tốt: v2 0/19 (câu 27 lỗi 429, vượt 15 lượt/phút) và 0/20; v3 1/20 (câu 35 `multiple`) và 2/20
+    (câu 35 `multiple`, câu 32 `none`). Cả hai là Solver tính sai.
+  - Token trung bình mỗi câu: v2 687 và 684; v3 1206 và 1203. Độ trễ trung bình: v2 1179 và 1087 ms; v3 1640 và 1712 ms.
+  - Ổn định giữa 2 lần: v2 28/28 câu cùng kết luận; v3 28/29 (câu 32 đổi).
+  - Lý do 0/9 (đọc đề trong DB, các id đúng là câu đã thẩm định): Solver hiểu "đúng" hẹp.
+    - 6 câu phân tích nhân tử: Solver chỉ nhận cách phân tích triệt để, vì prompt v3 có cụm "đúng dạng đề yêu cầu".
+    - Câu 15, 61: chính prompt v3 dặn "khẳng định không luôn đúng là sai".
+    - Câu 25: Solver coi "$6$ km" không phải đơn thức vì có đơn vị.
+- Quy tắc nghiệp vụ chốt 31/10: phương án ĐÚNG nếu học sinh bảo vệ được nó là đáp án theo đúng chữ của đề, không thêm yêu cầu
+  đề không nêu.
+  - Phân tích nhân tử: mọi tích nhân lại bằng đa thức đã cho đều đúng, trừ khi đề ghi "triệt để" hoặc "đặt nhân tử chung lớn
+    nhất".
+  - Khẳng định hình học: đề không có "luôn" thì phương án đúng trong ít nhất một trường hợp hợp lệ là đúng.
+  - Đề mơ hồ thì `correct_count` từ 2. Mục tiêu là phát hiện đề mơ hồ, không đoán ý người ra đề.
+- Lần thử 2: prompt `solver-v4-literal-reading` (mặc định) = v3 + quy tắc trên + 2 ví dụ ($2x(x^2 - 3x)$ là phân tích đúng của
+  $2x^3 - 6x^2$; "hai đường chéo vuông góc" của hình thang cân là đúng khi đề không ghi "luôn"). Bỏ hai cụm gây hiểu hẹp của v3.
+  Cùng JSON và cách kết luận với v3. v2, v3 giữ nguyên từng chữ (`SolverPromptFrozenTextTest` ghim SHA-256 của prompt) để đo lại.
+- Trạng thái: Đã sửa, chờ đo v4 trên cùng 29 câu.
 
 ## Hàng đợi/đồng thời
 
