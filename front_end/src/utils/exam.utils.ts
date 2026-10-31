@@ -86,11 +86,12 @@ const warningFieldLabels: Record<string, string> = {
 };
 
 /**
- * Cảnh báo định dạng của backend ("warning: <nội dung>", nguồn: FormatChecker, LatexValidationRules, ShortAnswerValue,
- * LlmOutputRepair, TfJsonParser). Chỉ dịch các dạng đã biết; không bao giờ ghép chuỗi thô của backend ra giao diện.
+ * Lỗi, cảnh báo và việc tự sửa của bước định dạng do backend ghi (nguồn: FormatChecker, LatexValidationRules,
+ * ShortAnswerValue, LlmOutputRepair, TfJsonParser, TfExplanationLeak). Chỉ dịch các dạng đã biết; không bao giờ ghép
+ * chuỗi thô của backend ra giao diện.
  */
-function describeFormatWarning(warning: string): string {
-    const text = warning.trim();
+export function describeFormatIssue(issue: string): string {
+    const text = issue.trim();
 
     // "label: 4 ý cùng nhãn T|F": cả 4 ý đúng/sai cùng một đáp án
     const sameLabel = /^label:\s*4 ý cùng nhãn\s*([TF])\s*$/i.exec(text);
@@ -104,12 +105,43 @@ function describeFormatWarning(warning: string): string {
         return EXPLANATION_DRAFT_REASON;
     }
 
+    // Hệ thống tự sửa lỗi gõ công thức ở đầu ra của AI (không nói chi tiết kỹ thuật)
+    if (text.startsWith("json: đã sửa")) {
+        return "Hệ thống đã tự sửa lỗi gõ công thức trong câu.";
+    }
+    if (text.startsWith("Không giải mã được JSON")) {
+        return "Hệ thống không đọc được câu do AI soạn.";
+    }
+    if (text.startsWith("4 phương án")) {
+        return "Các phương án A, B, C, D có nội dung trùng nhau.";
+    }
+    if (text.startsWith("4 ý a, b, c, d")) {
+        return "Các ý a), b), c), d) có nội dung trùng nhau.";
+    }
+
     const parts = /^([a-z_]+):\s*([\s\S]*)$/.exec(text);
     const field = parts?.[1];
     const detail = parts?.[2] ?? "";
+
+    // Nhãn đúng/sai của từng ý bị trống hoặc không đọc được
+    const labelField = field ? /^label_([a-d])$/.exec(field) : null;
+    if (labelField) {
+        return `Chưa rõ ý ${labelField[1]}) đúng hay sai.`;
+    }
+
     const place = field ? warningFieldLabels[field] : undefined;
     if (!field || !place) {
         return GENERIC_FORMAT_WARNING;
+    }
+
+    if (field === "explanation" && detail.startsWith("lời giải nhắc tới mẫu nhãn")) {
+        return "Lời giải nhắc tới việc gán đáp án theo mẫu. Cần viết lại cho đúng từng ý.";
+    }
+    if (field === "explanation" && detail.startsWith("lời giải tự sửa lại")) {
+        return "Lời giải có phần tự sửa lại đề. Cần viết lại lời giải cuối cùng.";
+    }
+    if (detail.startsWith("nội dung trống")) {
+        return `Chưa có nội dung ở ${place}.`;
     }
 
     if (field === "explanation" && detail.startsWith("lời giải có thể còn phần nháp")) {
@@ -127,13 +159,16 @@ function describeFormatWarning(warning: string): string {
     if (detail.startsWith("Lệnh ")) {
         return `Công thức ở ${place} có ký hiệu lạ, có thể gõ sai. Thầy/cô xem lại công thức.`;
     }
+    if (field === "answer") {
+        return "Đáp số chưa đúng dạng. Thầy/cô kiểm tra lại đáp số.";
+    }
     // Còn lại của một trường đã biết là lỗi công thức (môi trường không hỗ trợ, ngoặc lệch, thiếu đối số…)
     return `Công thức ở ${place} có chỗ trình bày chưa đúng. Thầy/cô xem lại công thức.`;
 }
 
 export function describeReviewReason(reason: string): string {
     if (reason.startsWith("warning:")) {
-        return describeFormatWarning(reason.slice("warning:".length));
+        return describeFormatIssue(reason.slice("warning:".length));
     }
     if (reason.startsWith("duplicate:")) {
         return "Câu này trùng với một câu khác. Thầy/cô sửa lại hoặc đổi câu.";
