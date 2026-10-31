@@ -15,6 +15,16 @@
 /* ===== Page wrapper ===== */
 .profile-page {
     width: 100%;
+    /* Khung nội dung của AppLayout không có padding */
+    padding: 24px;
+}
+
+.profile-password-card {
+    margin-top: 16px;
+}
+
+.profile-password-card .ant-form {
+    max-width: 420px;
 }
 
 /* ===== Card ===== */

@@ -11,6 +11,7 @@ import { buildByLesson } from "../services/examApi";
 import type { BankTopic } from "../../question-bank/types/questionBank.types";
 import { getBankTopics } from "../../question-bank/services/questionBankApi";
 import { mergeBankTopics, sortBankTopics } from "../../../utils/bankTopic.utils";
+import { showApiError } from "../../../utils/apiError";
 import "./BuildByLessonForm.css";
 
 const { Title, Text, Paragraph } = Typography;
@@ -224,15 +225,18 @@ export default function BuildByLessonForm({
         // Mức 3 & 4: Tra cứu theo tên bài nhập vào
         const matchedTopic = topicMap.get(watchedLesson.trim().toLowerCase());
         if (matchedTopic) {
+            const trimmedContent = watchedContent?.trim() ?? "";
+            // count là tổng mọi dạng, mọi mức của bài; backend chỉ dùng lại câu cùng dạng, cùng mức (và cùng nội dung nếu nhập phạm vi), docs/api mục 7.2a
             return (
                 <div style={{ marginTop: 4 }}>
                     <Text type="success">
-                        Ngân hàng có {matchedTopic.count} câu thuộc bài này. Hệ thống sẽ dùng lại câu phù hợp trước khi sinh mới.
+                        Ngân hàng có {matchedTopic.count} câu của bài này (tính mọi dạng, mọi mức). Hệ thống dùng lại câu
+                        cùng dạng và mức trước, phần thiếu sẽ sinh mới.
                     </Text>
-                    {watchedContent && watchedContent.trim() !== "" && (
+                    {trimmedContent !== "" && (
                         <div>
                             <Text type="secondary" style={{ fontSize: 12 }}>
-                                Phạm vi cụ thể: {watchedContent.trim()}
+                                Đã nhập phạm vi "{trimmedContent}": chỉ dùng lại câu ngân hàng cùng nội dung này, nên số câu dùng lại có thể ít hơn.
                             </Text>
                         </div>
                     )}
@@ -337,13 +341,8 @@ export default function BuildByLessonForm({
             } else {
                 navigate(`/exams/${result.examId}`);
             }
-        } catch (err: any) {
-            const errMsg =
-                err?.response?.data?.error ||
-                err?.response?.data?.message ||
-                err?.message ||
-                "Có lỗi xảy ra khi tạo đề thi.";
-            message.error(errMsg);
+        } catch (err: unknown) {
+            showApiError(err, "Không tạo được đề thi.");
         } finally {
             setSubmitting(false);
         }

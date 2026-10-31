@@ -2,6 +2,7 @@ import { Tag, Typography } from "antd";
 import { BulbOutlined } from "@ant-design/icons";
 import type { ExamQuestionItem } from "../types/exam.types";
 import { difficultyConfig, resolveQuestionType } from "../../../utils/exam.utils";
+import MathText from "../../../components/common/MathText/MathText";
 
 import "./ExamQuestionList.css";
 
@@ -18,7 +19,7 @@ export default function QuestionContent({ question, showExplanation = true }: Qu
     return (
         <div className="exam-question-content-wrapper">
             <Paragraph className="exam-question-item-text">
-                {question.questionText}
+                <MathText text={question.questionText} />
             </Paragraph>
 
             {/* Render đáp án theo từng dạng câu */}
@@ -26,7 +27,7 @@ export default function QuestionContent({ question, showExplanation = true }: Qu
                 if (type === "sa") {
                     return (
                         <div className="exam-question-short-answer">
-                            <Text strong>Đáp số:</Text> {question.saAnswer ?? question.optionA}
+                            <Text strong>Đáp số:</Text> <MathText text={question.saAnswer ?? question.optionA} />
                         </div>
                     );
                 }
@@ -41,7 +42,7 @@ export default function QuestionContent({ question, showExplanation = true }: Qu
                                 return (
                                     <div key={statement.key} className="exam-question-option">
                                         <div className="exam-question-option-label"><Text strong>{statement.key})</Text></div>
-                                        <Text className="exam-question-option-text">{statement.text}</Text>
+                                        <Text className="exam-question-option-text"><MathText text={statement.text} /></Text>
                                         {statementDifficulty && (
                                             <Tag color={statementDifficulty.color}>{statementDifficulty.label}</Tag>
                                         )}
@@ -77,7 +78,7 @@ export default function QuestionContent({ question, showExplanation = true }: Qu
                                     className={`exam-question-option ${isCorrect ? 'exam-question-option-correct' : ''}`}
                                 >
                                     <div className="exam-question-option-label"><Text strong>{label}.</Text></div>
-                                    <Text className="exam-question-option-text">{optionsMap[label]}</Text>
+                                    <Text className="exam-question-option-text"><MathText text={optionsMap[label]} /></Text>
                                     {isCorrect && (
                                         <Tag color="success" className="exam-question-option-answer">Đáp án đúng</Tag>
                                     )}
@@ -96,7 +97,7 @@ export default function QuestionContent({ question, showExplanation = true }: Qu
                         <Text strong>Lời giải chi tiết:</Text>
                     </div>
                     <Paragraph className="exam-question-explanation-text">
-                        {question.explanation}
+                        <MathText text={question.explanation} />
                     </Paragraph>
                 </div>
             )}

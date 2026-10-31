@@ -1,29 +1,16 @@
 import { Card, Descriptions, Divider, Drawer, Space, Tag, Typography, Spin } from "antd";
+import dayjs from "dayjs";
 import "./QuestionDetail.css";
+import QuestionContent from "../../exam/components/QuestionContent";
+import type { BankItemDetail, QuestionType } from "../types/questionBank.types";
+import type { ExamQuestionItem } from "../../exam/types/exam.types";
 
-const { Paragraph, Text, Title } = Typography;
-
-export type QuestionStatus = "approved" | "edited";
-
-export interface QuestionDetailData {
-    id: number;
-    questionText: string;
-    optionA: string;
-    optionB: string;
-    optionC: string;
-    optionD: string;
-    correct_option: "A" | "B" | "C" | "D";
-    subject: string;
-    difficulty: "easy" | "medium" | "hard";
-    status: QuestionStatus;
-    sourceQuestion?: string;
-    createdAt: string;
-}
+const { Paragraph, Title } = Typography;
 
 interface QuestionDetailProps {
     open: boolean;
     loading?: boolean;
-    question: QuestionDetailData | null;
+    question: BankItemDetail | null;
     onClose: () => void;
 }
 
@@ -42,16 +29,29 @@ const difficultyMap = {
     },
 } as const;
 
-const statusMap = {
-    approved: {
-        label: "Đã duyệt",
-        color: "green",
-    },
-    edited: {
-        label: "Đã chỉnh sửa",
-        color: "blue",
-    },
-} as const;
+const questionTypeMap: Record<QuestionType, { label: string; color: string }> = {
+    mcq: { label: "Trắc nghiệm", color: "blue" },
+    tf: { label: "Đúng / Sai", color: "cyan" },
+    sa: { label: "Trả lời ngắn", color: "purple" },
+};
+
+/** Đưa câu ngân hàng về dạng QuestionContent dùng (null → undefined). */
+function toQuestionItem(question: BankItemDetail): ExamQuestionItem {
+    return {
+        id: question.id,
+        questionText: question.questionText,
+        optionA: question.optionA ?? undefined,
+        optionB: question.optionB ?? undefined,
+        optionC: question.optionC ?? undefined,
+        optionD: question.optionD ?? undefined,
+        correctOption: question.correctOption ?? undefined,
+        explanation: question.explanation ?? undefined,
+        difficulty: question.difficulty ?? undefined,
+        questionType: question.questionType,
+        saAnswer: question.saAnswer ?? undefined,
+        statements: question.statements,
+    };
+}
 
 export default function QuestionDetail({
     open,
@@ -59,6 +59,8 @@ export default function QuestionDetail({
     question,
     onClose,
 }: QuestionDetailProps) {
+    const questionType = question?.questionType ? questionTypeMap[question.questionType] : null;
+
     return (
         <Drawer
             title="Chi tiết câu hỏi"
@@ -91,21 +93,46 @@ export default function QuestionDetail({
                             {question.subject}
                         </Descriptions.Item>
 
+                        <Descriptions.Item label="Dạng câu">
+                            {questionType ? (
+                                <Tag color={questionType.color}>{questionType.label}</Tag>
+                            ) : (
+                                "—"
+                            )}
+                        </Descriptions.Item>
+
                         <Descriptions.Item label="Độ khó">
-                            <Tag color={difficultyMap[question.difficulty].color}>
-                                {difficultyMap[question.difficulty].label}
-                            </Tag>
+                            {/* Câu tf có difficulty null: mức nằm ở từng ý (docs/api "Ngân hàng câu hỏi") */}
+                            {question.difficulty ? (
+                                <Tag color={difficultyMap[question.difficulty].color}>
+                                    {difficultyMap[question.difficulty].label}
+                                </Tag>
+                            ) : question.questionType === "tf" ? (
+                                "Theo từng ý"
+                            ) : (
+                                "—"
+                            )}
                         </Descriptions.Item>
 
-                        <Descriptions.Item label="Trạng thái">
-                            <Tag color={statusMap[question.status].color}>
-                                {statusMap[question.status].label}
-                            </Tag>
+                        <Descriptions.Item label="Khối – Chủ đề" span={2}>
+                            {[question.gradeLevel ? `Khối ${question.gradeLevel}` : null, question.topic]
+                                .filter(Boolean)
+                                .join(" – ") || "—"}
                         </Descriptions.Item>
 
-                        <Descriptions.Item label="Ngày tạo" span={2}>
-                            {question.createdAt}
+                        <Descriptions.Item label="Số đề đã dùng">
+                            {question.usageCount ?? 0}
                         </Descriptions.Item>
+
+                        <Descriptions.Item label="Ngày tạo">
+                            {question.createdAt ? dayjs(question.createdAt).format("DD/MM/YYYY HH:mm") : "—"}
+                        </Descriptions.Item>
+
+                        {question.origin?.edited && (
+                            <Descriptions.Item label="Nguồn" span={2}>
+                                <Tag color="blue">Đã qua giáo viên sửa</Tag>
+                            </Descriptions.Item>
+                        )}
                     </Descriptions>
 
                     {question.sourceQuestion && (
@@ -120,62 +147,15 @@ export default function QuestionDetail({
                         </Card>
                     )}
 
+                    <Divider className="question-detail-divider" />
+
                     <div className="question-detail-section">
                         <Title level={5} className="question-detail-section-title">
                             Nội dung câu hỏi
                         </Title>
 
-                        <Paragraph className="question-detail-question">
-                            {question.questionText}
-                        </Paragraph>
-                    </div>
-
-                    <Divider className="question-detail-divider" />
-
-                    <div className="question-detail-section">
-                        <Title level={5} className="question-detail-section-title">
-                            Các phương án trả lời
-                        </Title>
-
-                        <Space
-                            direction="vertical"
-                            size={12}
-                            className="question-detail-options"
-                        >
-                            {[
-                                { key: "A", label: "A", content: question.optionA },
-                                { key: "B", label: "B", content: question.optionB },
-                                { key: "C", label: "C", content: question.optionC },
-                                { key: "D", label: "D", content: question.optionD },
-                            ].map((option) => {
-                                const isCorrect =
-                                    option.key === question.correct_option;
-
-                                return (
-                                    <div
-                                        key={option.key}
-                                        className={`question-detail-option ${isCorrect
-                                            ? "question-detail-option-correct"
-                                            : ""
-                                            }`}
-                                    >
-                                        <div className="question-detail-option-label">
-                                            <Text strong>{option.label}</Text>
-
-                                            {isCorrect && (
-                                                <Tag color="green">
-                                                    Đáp án đúng
-                                                </Tag>
-                                            )}
-                                        </div>
-
-                                        <Paragraph className="question-detail-option-content">
-                                            {option.content}
-                                        </Paragraph>
-                                    </div>
-                                );
-                            })}
-                        </Space>
+                        {/* Dùng chung với trang đề: đủ mcq / tf / sa, đáp án, lời giải và KaTeX */}
+                        <QuestionContent question={toQuestionItem(question)} />
                     </div>
                 </Space>
             )}

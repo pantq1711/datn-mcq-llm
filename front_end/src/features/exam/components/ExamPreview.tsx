@@ -131,6 +131,16 @@ export default function ExamPreview({
                                     <td>Vận dụng</td>
                                     <td style={{ textAlign: "right" }}>{exam.hardCount ?? 0}</td>
                                 </tr>
+                                <tr>
+                                    <td>Đúng/Sai (mức theo từng ý)</td>
+                                    <td style={{ textAlign: "right" }}>{exam.tfCount ?? 0}</td>
+                                </tr>
+                                {(exam.missingCount ?? 0) > 0 && (
+                                    <tr style={{ color: "#8c8c8c" }}>
+                                        <td>Chưa có câu</td>
+                                        <td style={{ textAlign: "right" }}>{exam.missingCount}</td>
+                                    </tr>
+                                )}
                                 <tr style={{ fontWeight: 600, background: "#fafafa" }}>
                                     <td>Tổng số câu</td>
                                     <td style={{ textAlign: "right" }}>{exam.questionCount}</td>

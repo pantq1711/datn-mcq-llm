@@ -1,6 +1,9 @@
+import type { ExamItemStatement } from "../../exam/types/exam.types";
+
 export type QuestionDifficulty = "easy" | "medium" | "hard";
-export type QuestionStatus = "approved" | "edited";
 export type QuestionType = "mcq" | "tf" | "sa";
+export type BankSort = "newest" | "oldest" | "least_used" | "recently_used";
+export type BankUsage = "used" | "unused";
 
 export interface QuestionTableItem {
     id: number;
@@ -10,8 +13,7 @@ export interface QuestionTableItem {
     gradeLevel?: number;
     topic?: string;
     questionType?: QuestionType;
-    difficulty: QuestionDifficulty;
-    status?: QuestionStatus;
+    difficulty?: QuestionDifficulty | null
     origin?: {
         type: string;
         reviewMode: string;
@@ -19,6 +21,8 @@ export interface QuestionTableItem {
     };
     usageCount?: number;
     createdAt: string;
+    content?: string | null;
+    lastUsedAt?: string | null
 }
 
 export interface QuestionFilterValues {
@@ -28,7 +32,9 @@ export interface QuestionFilterValues {
     questionType: QuestionType | null;
     topic: string | null;
     difficulty: QuestionDifficulty | null;
-    status: QuestionStatus | null;
+    usage: BankUsage | null;
+    levels: (QuestionDifficulty | null)[] | null; // 4 phần tử a-d, chỉ khi questionType = "tf"
+    content: string | null;
 }
 
 export interface Subject {
@@ -54,7 +60,8 @@ export interface BankTopic {
 export interface BankItemParams extends Partial<QuestionFilterValues> {
     page?: number;
     pageSize?: number;
-    sort?: string;
+    // Sắp xếp nằm cạnh bảng, áp dụng ngay, không thuộc bộ lọc
+    sort?: BankSort;
 }
 
 export interface BankItemsResponse {
@@ -70,26 +77,20 @@ export interface BankItemsResponse {
 export interface BankItemDetail {
     id: number;
     questionText: string;
-    optionA: string;
-    optionB: string;
-    optionC: string;
-    optionD: string;
-    correct_option: "A" | "B" | "C" | "D";
-    explanation?: string;
+    optionA?: string | null;
+    optionB?: string | null;
+    optionC?: string | null;
+    optionD?: string | null;
+    correctOption?: "A" | "B" | "C" | "D" | null;
+    explanation?: string | null;
     subject: string;
     subjectName?: string;
     gradeLevel?: number;
     topic?: string;
     questionType?: QuestionType;
-    saAnswer?: string;
-    statements?: {
-        key: string;
-        statementText: string;
-        correctLabel: boolean;
-        difficulty: QuestionDifficulty;
-    }[];
-    difficulty: QuestionDifficulty;
-    status: QuestionStatus;
+    saAnswer?: string | null;
+    statements?: ExamItemStatement[];
+    difficulty?: QuestionDifficulty | null;
     sourceQuestion?: string;
     origin?: {
         type: string;
@@ -98,4 +99,6 @@ export interface BankItemDetail {
     };
     usageCount?: number;
     createdAt: string;
+    content?: string | null;
+    lastUsedAt?: string | null;
 }

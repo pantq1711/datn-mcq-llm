@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button, Checkbox, Form, Input, Space, Typography, } from "antd";
+import { Alert, Button, Form, Input, Typography, } from "antd";
 import { Controller, useForm } from "react-hook-form";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "../../../context/AuthContext";
 import { login } from '../services/authApi';
@@ -11,17 +11,8 @@ import { useState } from "react";
 const { Text } = Typography;
 
 const loginSchema = z.object({
-    email: z
-        .string()
-        .min(1, "Vui lòng nhập email.")
-        .email("Email không hợp lệ."),
-
-    password: z
-        .string()
-        .min(1, "Vui lòng nhập mật khẩu.")
-        .min(6, "Mật khẩu phải có ít nhất 6 ký tự."),
-
-    rememberMe: z.boolean(),
+    email: z.string().trim().min(1, "Vui lòng nhập email.").email("Email không hợp lệ."),
+    password: z.string().min(1, "Vui lòng nhập mật khẩu."),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -39,7 +30,6 @@ export default function LoginForm() {
         defaultValues: {
             email: "",
             password: "",
-            rememberMe: false,
         },
     });
 
@@ -69,7 +59,10 @@ export default function LoginForm() {
             onSubmit={handleSubmit(onSubmit)}
             noValidate
         >
-            {errorMessage && <p className="error-msg">{errorMessage}</p>}
+            {/* Nguyên câu tiếng Việt của backend: sai mật khẩu, bị khóa do sai nhiều lần, quá nhiều lần từ một địa chỉ mạng */}
+            {errorMessage && (
+                <Alert type="error" showIcon message={errorMessage} className="login-form-error" />
+            )}
 
             <Form layout="vertical" component={false}>
                 <Form.Item
@@ -118,25 +111,6 @@ export default function LoginForm() {
                     />
                 </Form.Item>
 
-                <div className="login-form-options">
-                    <Controller
-                        name="rememberMe"
-                        control={control}
-                        render={({ field }) => (
-                            <Checkbox
-                                checked={field.value}
-                                onChange={field.onChange}
-                            >
-                                Ghi nhớ đăng nhập
-                            </Checkbox>
-                        )}
-                    />
-
-                    <Link to="/auth/forgot-password">
-                        Quên mật khẩu?
-                    </Link>
-                </div>
-
                 <Button
                     type="primary"
                     htmlType="submit"
@@ -148,19 +122,11 @@ export default function LoginForm() {
                     Đăng nhập
                 </Button>
 
-                <Space
-                    direction="vertical"
-                    size={4}
-                    className="login-form-register"
-                >
+                <div className="login-form-note">
                     <Text type="secondary">
-                        Chưa có tài khoản?
+                        Chưa có tài khoản hoặc quên mật khẩu? Liên hệ quản trị viên.
                     </Text>
-
-                    <Link to="/auth/register">
-                        Đăng ký tài khoản
-                    </Link>
-                </Space>
+                </div>
             </Form>
         </form>
     );

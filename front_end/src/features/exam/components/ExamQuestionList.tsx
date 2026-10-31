@@ -3,7 +3,7 @@ import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, EyeOut
 
 import "./ExamQuestionList.css";
 import type { ExamQuestionItem } from "../types/exam.types";
-import { difficultyConfig, describeReviewReason } from "../../../utils/exam.utils";
+import { difficultyConfig, describeFailureReason, describeReviewReason } from "../../../utils/exam.utils";
 import QuestionContent from "./QuestionContent";
 
 const { Text } = Typography;
@@ -222,7 +222,7 @@ export default function ExamQuestionList({
                                 {!hasContent ? (
                                     <Text type="secondary" italic>
                                         {state === "failed"
-                                            ? "Hệ thống chưa sinh được câu cho chỗ này. Hãy bấm \"Đổi câu khác\" để thử lại."
+                                            ? describeFailureReason(question.failureReason)
                                             : "Hệ thống đang sinh câu cho chỗ này…"}
                                     </Text>
                                 ) : (

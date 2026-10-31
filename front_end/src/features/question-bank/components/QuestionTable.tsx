@@ -1,8 +1,9 @@
-import { Button, Space, Table, Tag, Tooltip, Typography, } from "antd";
+import { Button, Space, Table, Tag, Tooltip, Typography, Card, Select } from "antd";
 import type { TableColumnsType, TablePaginationConfig } from "antd";
-import { EyeOutlined, EyeInvisibleOutlined } from "@ant-design/icons";
+import { EyeOutlined } from "@ant-design/icons";
+import dayjs from "dayjs";
 import "./QuestionTable.css";
-import type { QuestionDifficulty, QuestionStatus, QuestionTableItem, QuestionType } from "../types/questionBank.types";
+import type { BankSort, QuestionTableItem, QuestionType } from "../types/questionBank.types";
 
 const { Text } = Typography;
 
@@ -12,9 +13,10 @@ interface QuestionTableProps {
     total?: number;
     page?: number;
     pageSize?: number;
+    sort?: BankSort;
+    onSortChange?: (sort: BankSort) => void;
     onPageChange?: (page: number, pageSize: number) => void;
     onView?: (question: QuestionTableItem) => void;
-    onHide?: (question: QuestionTableItem) => void; // Thêm callback ẩn câu hỏi
 }
 
 const difficultyMap = {
@@ -32,16 +34,13 @@ const difficultyMap = {
     },
 } as const;
 
-const statusMap = {
-    approved: {
-        label: "Đã duyệt",
-        color: "green",
-    },
-    edited: {
-        label: "Đã chỉnh sửa",
-        color: "blue",
-    },
-} as const;
+// Đúng giá trị docs/api "Ngân hàng câu hỏi"; giá trị lạ backend trả 400
+const sortOptions: { label: string; value: BankSort }[] = [
+    { label: "Mới nhất", value: "newest" },
+    { label: "Cũ nhất", value: "oldest" },
+    { label: "Ít đề dùng nhất", value: "least_used" },
+    { label: "Dùng gần đây", value: "recently_used" },
+];
 
 export default function QuestionTable({
     data,
@@ -49,9 +48,10 @@ export default function QuestionTable({
     total,
     page = 1,
     pageSize = 10,
+    sort = "newest",
+    onSortChange,
     onPageChange,
-    onView,
-    onHide,
+    onView
 }: QuestionTableProps) {
     const columns: TableColumnsType<QuestionTableItem> = [
         {
@@ -116,46 +116,66 @@ export default function QuestionTable({
         },
         {
             title: "Độ khó",
-            dataIndex: "difficulty",
             key: "difficulty",
             width: 130,
             align: "center",
-            render: (difficulty: QuestionDifficulty) => {
-                const config = difficultyMap[difficulty];
-
-                return (
-                    <Tag color={config.color}>
-                        {config.label}
-                    </Tag>
-                );
+            render: (_, record) => {
+                if (record.questionType === "tf") {
+                    return "Theo từng ý";
+                }
+                if (record.difficulty && difficultyMap[record.difficulty]) {
+                    const config = difficultyMap[record.difficulty];
+                    return (
+                        <Tag color={config.color}>
+                            {config.label}
+                        </Tag>
+                    );
+                }
+                return "—";
             },
         },
         {
-            title: "Trạng thái",
-            dataIndex: "status",
-            key: "status",
-            width: 140,
+            title: (
+                <Tooltip title="Số đề (của mọi giáo viên) đang dùng câu này và ngày tạo đề mới nhất có câu này. Đây là căn cứ của sắp xếp “Ít đề dùng nhất” và “Dùng gần đây”.">
+                    <span>Số đề dùng</span>
+                </Tooltip>
+            ),
+            dataIndex: "usageCount",
+            key: "usageCount",
+            width: 150,
             align: "center",
-            render: (status: QuestionStatus) => {
-                const config = statusMap[status];
-
-                return (
-                    <Tag color={config.color}>
-                        {config.label}
-                    </Tag>
-                );
-            },
+            render: (usageCount: number, record) => (
+                <Space direction="vertical" size={0} align="center">
+                    <Space size={4}>
+                        <Text>{usageCount ?? 0}</Text>
+                        {record.origin?.edited && (
+                            <Tag color="blue" style={{ fontSize: 10, marginRight: 0, padding: "0 4px" }}>
+                                Đã sửa
+                            </Tag>
+                        )}
+                    </Space>
+                    {/* Cho thấy lý do thứ tự khi sắp "Dùng gần đây" (backend xếp theo lastUsedAt) */}
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                        {record.lastUsedAt ? `Gần nhất ${dayjs(record.lastUsedAt).format("DD/MM/YYYY")}` : "Chưa dùng"}
+                    </Text>
+                </Space>
+            ),
         },
         {
             title: "Ngày tạo",
             dataIndex: "createdAt",
             key: "createdAt",
             width: 140,
+            render: (val: string) => {
+                if (!val) return "—";
+                const d = dayjs(val);
+                return d.isValid() ? d.format("DD/MM/YYYY") : val;
+            },
         },
         {
             title: "Thao tác",
             key: "action",
-            width: 120, // Tăng nhẹ width để vừa 2 nút
+            width: 80,
             align: "center",
             render: (_, record) => (
                 <Space size={0}>
@@ -164,14 +184,6 @@ export default function QuestionTable({
                             type="text"
                             icon={<EyeOutlined />}
                             onClick={() => onView?.(record)}
-                        />
-                    </Tooltip>
-                    <Tooltip title="Ẩn câu hỏi">
-                        <Button
-                            type="text"
-                            danger // Có thể thêm màu đỏ nhẹ hoặc giữ mặc định tùy ý
-                            icon={<EyeInvisibleOutlined />}
-                            onClick={() => onHide?.(record)}
                         />
                     </Tooltip>
                 </Space>
@@ -184,6 +196,7 @@ export default function QuestionTable({
         pageSize,
         total: total ?? data.length,
         showSizeChanger: true,
+        pageSizeOptions: [10, 20, 50],
         showTotal: (totalItems, range) =>
             `${range[0]}-${range[1]} trong tổng số ${totalItems} câu hỏi`,
         onChange: (nextPage, nextPageSize) => {
@@ -193,14 +206,30 @@ export default function QuestionTable({
 
     return (
         <div className="question-table">
-            <Table<QuestionTableItem>
-                rowKey="id"
-                columns={columns}
-                dataSource={data}
-                loading={loading}
-                pagination={pagination}
-                scroll={{ x: 1100 }}
-            />
+            <Card
+                bordered={false}
+                extra={
+                    <Space size={8}>
+                        <Text type="secondary" style={{ fontSize: 13 }}>Sắp xếp:</Text>
+                        <Select
+                            value={sort}
+                            onChange={(val) => onSortChange?.(val)}
+                            options={sortOptions}
+                            style={{ width: 160 }}
+                            size="small"
+                        />
+                    </Space>
+                }
+            >
+                <Table<QuestionTableItem>
+                    rowKey="id"
+                    columns={columns}
+                    dataSource={data}
+                    loading={loading}
+                    pagination={pagination}
+                    scroll={{ x: 1100 }}
+                />
+            </Card>
         </div>
     );
 }

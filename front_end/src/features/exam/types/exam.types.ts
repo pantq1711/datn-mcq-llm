@@ -11,6 +11,8 @@ export type TruthLabel = "T" | "F";
 export type ExamSlotState = "pending" | "generating" | "ready" | "kept" | "edited" | "failed";
 export type ExamItemSource = "bank" | "generated";
 export type ExamQcState = "checking" | "passed" | "needs_review";
+/** Lý do chỗ ở trạng thái failed (docs/contract/enums.md, V23); chỉ có khi state = "failed". */
+export type ExamSlotFailureReason = "llm_error" | "qc_exhausted";
 
 export interface ExamPreviewData {
     title: string;
@@ -20,6 +22,10 @@ export interface ExamPreviewData {
     easyCount: number;
     mediumCount: number;
     hardCount: number;
+    /** Câu đúng/sai: mức nằm ở từng ý a-d nên đếm riêng, không vào Biết/Hiểu/Vận dụng. */
+    tfCount: number;
+    /** Chỗ chưa có câu (đang sinh, sinh lỗi). */
+    missingCount?: number;
     instructions?: string;
 }
 
@@ -57,6 +63,7 @@ export interface ExamQuestionItem {
     qcState?: ExamQcState;
     edited?: boolean;
     originalQuestionId?: number;
+    failureReason?: ExamSlotFailureReason;
 }
 
 export interface Subject {
@@ -137,6 +144,7 @@ export interface ExamItemDto {
     qcState?: ExamQcState;
     edited: boolean;
     originalQuestionId?: number;
+    failureReason?: ExamSlotFailureReason;
 }
 
 export interface ExamPartDto {

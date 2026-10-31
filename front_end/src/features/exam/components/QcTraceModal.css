@@ -472,6 +472,59 @@
     }
 }
 
+/* --- Các bước QC trong một phiên bản (QcVersionCard) --- */
+
+.qc-trace-modal__qc {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.qc-trace-modal__qc-row {
+    display: grid;
+    grid-template-columns: 110px minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+}
+
+.qc-trace-modal__qc-name.ant-typography {
+    font-size: 12px;
+    line-height: 22px;
+}
+
+.qc-trace-modal__qc-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.qc-trace-modal__qc-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12px;
+}
+
+.qc-trace-modal__qc-reasoning.ant-typography,
+.qc-trace-modal__qc-quote.ant-typography {
+    margin: 0;
+    font-size: 12px;
+    white-space: pre-line;
+}
+
+.qc-trace-modal__qc-reasons {
+    margin-top: 10px;
+}
+
+@media (max-width: 575px) {
+    .qc-trace-modal__qc-row {
+        grid-template-columns: 1fr;
+        gap: 2px;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .qc-trace-modal__step-card {
         transition: none;

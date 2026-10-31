@@ -16,8 +16,12 @@ export async function login(payload: LoginRequest): Promise<LoginResponse> {
     }
     return response.data;
   } catch (error: any) {
-    // Cố gắng lấy thông báo lỗi từ response
-    const errMsg = error?.response?.data?.message || "Login failed";
+    // Backend trả thông báo tiếng Việt trong "error" (401 sai thông tin, 429 bị khóa do sai nhiều lần; docs/api mục 8, 8.2)
+    const data = error?.response?.data;
+    const errMsg =
+      data?.error ||
+      data?.message ||
+      (error?.response ? "Đăng nhập thất bại" : "Không kết nối được máy chủ. Vui lòng thử lại.");
     throw new Error(errMsg);
   }
 }
@@ -41,7 +45,7 @@ export async function getMe(): Promise<UserInfo> {
   return response.data;
 }
 
-export async function changePassword(email: string) {
-  const response = await axiosInstance.post("/api/auth/password", { email });
-  return response.data;   // tùy API trả về gì
+/** Đổi mật khẩu; 204 thì mọi phiên bị thu hồi (docs/api mục 8). */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await axiosInstance.post("/api/auth/password", { currentPassword, newPassword });
 }

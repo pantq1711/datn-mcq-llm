@@ -11,6 +11,7 @@ import type { ExamSubjectOption, BuildResultDto, CellContextInput, BuildExamRequ
 import type { ExamMatrix, ExamMatrixDetail, ExamMatrixCellPayload } from "../../exam-matrix/types/examMatrix.types";
 import { getCatalogSubjects, buildExamByMatrix } from "../services/examApi";
 import { difficultyConfig } from "../../../utils/exam.utils";
+import { showApiError } from "../../../utils/apiError";
 import { listExamMatrices, getExamMatrix, duplicateExamMatrix, } from "../../exam-matrix/services/examMatrixService";
 
 import "./GenerateExamPage.css";
@@ -292,13 +293,8 @@ export default function GenerateExamPage() {
                 `Khởi tạo đề thi từ ma trận thành công! Mã đề: ${result.examCode} (${result.fromBank} từ ngân hàng, ${result.jobsQueued} đang sinh).`
             );
             navigate(`/exams/${result.examId}`);
-        } catch (err: any) {
-            const errMsg =
-                err?.response?.data?.error ||
-                err?.response?.data?.message ||
-                err?.message ||
-                "Lỗi khi khởi tạo đề thi từ ma trận.";
-            message.error(errMsg);
+        } catch (err: unknown) {
+            showApiError(err, "Lỗi khi khởi tạo đề thi từ ma trận.");
         } finally {
             setBuildingMatrixExam(false);
         }

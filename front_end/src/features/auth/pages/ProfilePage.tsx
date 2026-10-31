@@ -1,15 +1,11 @@
 import { Avatar, Card, Descriptions, Divider, Spin, Tag, Typography } from "antd";
 import { MailOutlined, IdcardOutlined, UserOutlined } from "@ant-design/icons";
 import { useAuth } from "../../../context/AuthContext";
+import { describeRole } from "../../../utils/auth.utils";
+import ChangePasswordForm from "../components/ChangePasswordForm";
 import "./ProfilePage.css";
 
 const { Title, Text } = Typography;
-
-const roleMap: Record<string, { label: string; color: string }> = {
-    teacher: { label: "Giáo viên", color: "blue" },
-    admin: { label: "Quản trị viên", color: "red" },
-    researcher: { label: "Nghiên cứu viên", color: "green" },
-};
 
 export default function ProfilePage() {
     const { user } = useAuth();
@@ -25,7 +21,7 @@ export default function ProfilePage() {
         );
     }
 
-    const roleInfo = roleMap[user.role] ?? { label: user.role, color: "default" };
+    const roleInfo = describeRole(user.role);
 
     return (
         <div className="profile-page">
@@ -92,6 +88,10 @@ export default function ProfilePage() {
                         <a href={`mailto:${user.email}`}>{user.email}</a>
                     </Descriptions.Item>
                 </Descriptions>
+            </Card>
+
+            <Card className="profile-card profile-password-card" bordered={false} title="Đổi mật khẩu">
+                <ChangePasswordForm />
             </Card>
         </div>
     );
