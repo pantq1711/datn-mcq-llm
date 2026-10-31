@@ -5,8 +5,9 @@ import { useNavigate } from 'react-router-dom';
 
 import { ExamMatrixTable } from '../components/ExamMatrixTable';
 import { ExamMatrixTemplateModal } from '../components/ExamMatrixTemplateModal';
-import type { ExamMatrix } from '../types/examMatrix.types.ts';
+import type { ExamMatrixSummary } from '../types/examMatrix.types.ts';
 import { listExamMatrices, deleteExamMatrix, duplicateExamMatrix, createExamMatrixFromSample } from "../services/examMatrixService";
+import { getCatalogSubjects } from '../../exam/services/examApi';
 import './ExamMatrixListPage.css';
 
 const { Title } = Typography;
@@ -15,7 +16,9 @@ export default function ExamMatrixListPage() {
     const navigate = useNavigate();
     const [searchText, setSearchText] = useState('');
     const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-    const [matrices, setMatrices] = useState<ExamMatrix[]>([]);
+    const [matrices, setMatrices] = useState<ExamMatrixSummary[]>([]);
+    // Tên môn theo id, tải một lần từ /api/catalog/subjects
+    const [subjectNames, setSubjectNames] = useState<Record<number, string>>({});
 
     const [loading, setLoading] = useState(false);
 
@@ -88,6 +91,12 @@ export default function ExamMatrixListPage() {
 
     useEffect(() => {
         fetchMatrices();
+        getCatalogSubjects()
+            .then((subjects) =>
+                setSubjectNames(Object.fromEntries(subjects.map((s) => [Number(s.id), s.name])))
+            )
+            // Không có tên môn thì bảng hiện "Môn #id", không chặn danh sách
+            .catch((err) => console.warn("Không tải được danh sách môn học", err));
     }, []);         // chạy một lần khi component mount
 
     return (
@@ -143,6 +152,7 @@ export default function ExamMatrixListPage() {
 
                     <ExamMatrixTable
                         matrices={matrices}
+                        subjectNames={subjectNames}
                         searchText={searchText}
                         loading={loading}
                         onEditMatrix={handleEditMatrix}

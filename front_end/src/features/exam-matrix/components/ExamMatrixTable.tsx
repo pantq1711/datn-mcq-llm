@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
-import { getSubjectById } from '../services/subjectService';
-import { Button, Empty, Popconfirm, Space, Table, Tooltip, Typography } from 'antd';
+import { useMemo } from 'react';
+import { Button, Empty, Popconfirm, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { CopyOutlined, DeleteOutlined, EditOutlined, FileAddOutlined } from '@ant-design/icons';
 
 import './ExamMatrixTable.css';
-import type { ExamMatrix } from "../types/examMatrix.types";
+import type { ExamMatrixSummary } from "../types/examMatrix.types";
 
 const { Text } = Typography;
 
+type MatrixRow = ExamMatrixSummary & { subjectName: string };
+
 export interface ExamMatrixTableProps {
-    /** Danh sách được lấy từ API hoặc component cha. */
-    matrices?: ExamMatrix[];
+    /** Danh sách từ GET /api/exam-matrices (MatrixSummaryDto). */
+    matrices?: ExamMatrixSummary[];
+    /** Tên môn theo id, trang tải từ /api/catalog/subjects. */
+    subjectNames?: Record<number, string>;
     /** Từ khóa tìm kiếm do ExamMatrixListPage quản lý. */
     searchText: string;
     /** Hiển thị trạng thái tải dữ liệu. */
@@ -30,7 +33,7 @@ export interface ExamMatrixTableProps {
 function normalizeSearchValue(value: string): string {
     return value
         .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[̀-ͯ]/g, '')
         .replace(/đ/g, 'd')
         .replace(/Đ/g, 'D')
         .toLocaleLowerCase('vi-VN')
@@ -56,6 +59,7 @@ function formatDate(value?: string | null): string {
  */
 export function ExamMatrixTable({
     matrices = [],
+    subjectNames = {},
     searchText,
     loading = false,
     onEditMatrix,
@@ -63,70 +67,48 @@ export function ExamMatrixTable({
     onDuplicateMatrix,
     onGenerateExam,
 }: ExamMatrixTableProps) {
-    const [subjectMap, setSubjectMap] = useState<Record<string | number, string>>({});
-
-    useEffect(() => {
-        const missingIds = Array.from(
-            new Set(matrices.map(m => m.subjectId))
-        ).filter(id => !(id in subjectMap));
-
-        if (missingIds.length === 0) return;
-
-        (async () => {
-            try {
-                const results = await Promise.all(
-                    missingIds.map(id => getSubjectById(id))
-                );
-                // Cập nhật cache
-                setSubjectMap(prev => {
-                    const next = { ...prev };
-                    results.forEach(sub => {
-                        next[sub.id] = sub.name;
-                    });
-                    return next;
-                });
-            } catch (err: any) {
-                // Không làm gián đoạn UI; chỉ log lỗi và bỏ qua
-                console.error('Failed to load subject names:', err);
-            }
-        })();
-    }, [matrices, subjectMap]);
-
-    // Bổ sung tạm thời trường subjectName cho mỗi matrix
-    const matricesWithName = useMemo(() => {
-        return matrices.map(m => ({
-            ...m,
-            // Nếu cache đã có tên thì dùng, còn không thì fallback là raw id
-            subjectName: subjectMap[m.subjectId] ?? String(m.subjectId),
-        }));
-    }, [matrices, subjectMap]);
+    const rows = useMemo<MatrixRow[]>(
+        () =>
+            matrices.map((m) => ({
+                ...m,
+                subjectName: subjectNames[m.subjectId] ?? `Môn #${m.subjectId}`,
+            })),
+        [matrices, subjectNames]
+    );
 
     const filteredMatrices = useMemo(() => {
         const keyword = normalizeSearchValue(searchText);
-        if (!keyword) return matricesWithName;
+        if (!keyword) return rows;
 
-        return matricesWithName.filter(matrix => {
+        return rows.filter(matrix => {
             const searchableText = normalizeSearchValue(
                 [
                     matrix.name,
                     matrix.subjectName,
-                    matrix.gradeLevel == null ? '' : String(matrix.gradeLevel),
+                    matrix.gradeLevel == null ? '' : `khoi ${matrix.gradeLevel}`,
                 ].join(' ')
             );
             return searchableText.includes(keyword);
         });
-    }, [matricesWithName, searchText]);
+    }, [rows, searchText]);
 
-    const columns: TableColumnsType<any> = [
+    const columns: TableColumnsType<MatrixRow> = [
         {
             title: 'Tên ma trận',
             dataIndex: 'name',
             key: 'name',
-            render: (name: string) => (
+            render: (name: string, record) => (
                 <div className="exam-matrix-table__name-cell">
                     <Text className="exam-matrix-table__name">
                         {name}
                     </Text>
+                    {record.examCount > 0 && (
+                        <div>
+                            <Tag color="gold" style={{ marginTop: 4 }}>
+                                Đã dùng cho {record.examCount} đề
+                            </Tag>
+                        </div>
+                    )}
                 </div>
             ),
         },
@@ -140,43 +122,38 @@ export function ExamMatrixTable({
                     <Text>{subjectName}</Text>
                     {record.gradeLevel != null && (
                         <Text type="secondary" className="exam-matrix-table__meta">
-                            Lớp {String(record.gradeLevel).replace(/^Lớp\s*/i, '')}
+                            Khối {record.gradeLevel}
                         </Text>
                     )}
                 </div>
             ),
         },
         {
-            title: 'Tổng số câu',
-            key: 'questionCount',
+            // Danh sách không có tổng câu (MatrixSummaryDto chỉ có cellCount)
+            title: 'Số ô',
+            dataIndex: 'cellCount',
+            key: 'cellCount',
             align: 'center',
-            width: 130,
-            sorter: (a: any, b: any) => {
-                const countA = a.questionCount ?? a.cells?.reduce((sum: number, cell: any) => sum + (cell.questionCount || 0), 0) ?? 0;
-                const countB = b.questionCount ?? b.cells?.reduce((sum: number, cell: any) => sum + (cell.questionCount || 0), 0) ?? 0;
-                return countA - countB;
-            },
-            render: (_, record: any) => {
-                const total = record.questionCount ?? record.cells?.reduce((sum: number, cell: any) => sum + (cell.questionCount || 0), 0) ?? 0;
-                return (
-                    <Text className="exam-matrix-table__question-count">
-                        {total.toLocaleString('vi-VN')}
-                    </Text>
-                );
-            },
+            width: 110,
+            sorter: (a, b) => a.cellCount - b.cellCount,
+            render: (cellCount: number) => (
+                <Text className="exam-matrix-table__question-count">
+                    {cellCount.toLocaleString('vi-VN')}
+                </Text>
+            ),
         },
         {
-            title: 'Cập nhật lần cuối',
-            dataIndex: 'updatedAt',
-            key: 'updatedAt',
-            width: 170,
+            title: 'Ngày tạo',
+            dataIndex: 'createdAt',
+            key: 'createdAt',
+            width: 150,
             sorter: (a, b) => {
-                const first = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-                const second = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+                const first = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const second = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                 return first - second;
             },
-            render: (updatedAt?: string | null) => (
-                <Text type="secondary">{formatDate(updatedAt)}</Text>
+            render: (createdAt?: string | null) => (
+                <Text type="secondary">{formatDate(createdAt)}</Text>
             ),
         },
         {
@@ -185,19 +162,21 @@ export function ExamMatrixTable({
             align: 'center',
             width: 180, // Tăng chiều rộng cột thao tác lên 180px cho 4 nút
             render: (_value, record) => {
-                const totalQuestions = record.questionCount ?? record.cells?.reduce((sum: number, cell: any) => sum + (cell.questionCount || 0), 0) ?? 0;
-                const isZeroQuestions = totalQuestions === 0;
+                // Mỗi ô có ít nhất 1 câu: còn ô là còn câu để tạo đề
+                const hasNoCells = record.cellCount === 0;
+                // Backend trả 409 MATRIX_IN_USE khi xóa ma trận đã có đề (docs/api mục 7.1a)
+                const inUse = record.examCount > 0;
 
                 return (
                     <Space size={4} className="exam-matrix-table__actions">
                         {onGenerateExam && (
-                            <Tooltip title={isZeroQuestions ? "Ma trận chưa có câu nào" : "Tạo đề từ ma trận này"}>
+                            <Tooltip title={hasNoCells ? "Ma trận chưa có ô nào" : "Tạo đề từ ma trận này"}>
                                 <Button
                                     type="text"
                                     icon={<FileAddOutlined />}
-                                    disabled={isZeroQuestions}
+                                    disabled={hasNoCells}
                                     aria-label={`Tạo đề từ ma trận này ${record.name}`}
-                                    onClick={() => !isZeroQuestions && onGenerateExam(record.id)}
+                                    onClick={() => !hasNoCells && onGenerateExam(record.id)}
                                 />
                             </Tooltip>
                         )}
@@ -226,12 +205,20 @@ export function ExamMatrixTable({
                                 okText="Xóa"
                                 cancelText="Hủy"
                                 okButtonProps={{ danger: true }}
+                                disabled={inUse}
                                 onConfirm={() => onDeleteMatrix(record.id)}
                             >
-                                <Tooltip title="Xóa ma trận">
+                                <Tooltip
+                                    title={
+                                        inUse
+                                            ? "Ma trận đã có đề, không xóa được. Có thể nhân bản."
+                                            : "Xóa ma trận"
+                                    }
+                                >
                                     <Button
                                         type="text"
                                         danger
+                                        disabled={inUse}
                                         icon={<DeleteOutlined />}
                                         aria-label={`Xóa ma trận ${record.name}`}
                                     />
@@ -258,7 +245,7 @@ export function ExamMatrixTable({
                 </Text>
             </div>
 
-            <Table<any>
+            <Table<MatrixRow>
                 rowKey="id"
                 columns={columns}
                 dataSource={filteredMatrices}

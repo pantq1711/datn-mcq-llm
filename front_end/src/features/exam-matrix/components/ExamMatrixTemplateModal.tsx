@@ -110,7 +110,7 @@ export function ExamMatrixTemplateModal({
                 />
 
                 {loading ? (
-                    <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                    <div className="exam-matrix-template-modal__empty">
                         <Spin size="large" />
                         <p style={{ marginTop: 12 }}>Đang tải mẫu…</p>
                     </div>
@@ -162,7 +162,7 @@ export function ExamMatrixTemplateModal({
                         )}
                     />
                 ) : (
-                    <div style={{ padding: '40px 0' }}>
+                    <div className="exam-matrix-template-modal__empty">
                         <Empty
                             image={Empty.PRESENTED_IMAGE_SIMPLE}
                             description={emptyDescription}

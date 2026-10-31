@@ -1,5 +1,5 @@
 import axiosInstance from "../../../services/apiClient";
-import type { CreateExamMatrixPayload, ExamMatrix, ExamMatrixDetail, DeleteResponse, ExamMatrixSample } from "../types/examMatrix.types";
+import type { CreateExamMatrixPayload, ExamMatrix, ExamMatrixDetail, ExamMatrixSummary, DeleteResponse, ExamMatrixSample } from "../types/examMatrix.types";
 
 /* ---------- CREATE ---------- */
 export async function createExamMatrix(payload: CreateExamMatrixPayload) {
@@ -8,8 +8,8 @@ export async function createExamMatrix(payload: CreateExamMatrixPayload) {
 }
 
 /* ---------- LIST ---------- */
-export async function listExamMatrices(): Promise<ExamMatrix[]> {
-    const { data } = await axiosInstance.get<ExamMatrix[]>("/api/exam-matrices");
+export async function listExamMatrices(): Promise<ExamMatrixSummary[]> {
+    const { data } = await axiosInstance.get<ExamMatrixSummary[]>("/api/exam-matrices");
     return data;
 }
 
