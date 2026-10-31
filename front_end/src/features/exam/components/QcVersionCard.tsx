@@ -8,7 +8,7 @@ import {
 } from "@ant-design/icons";
 
 import type { QcVersion } from "../types/qcTrace.types";
-import { describeReviewReason } from "../../../utils/exam.utils";
+import { describeFormatIssue, describeReviewReason } from "../../../utils/exam.utils";
 import {
     describeAnswerCheck,
     describeGrounding,
@@ -59,6 +59,11 @@ const List: FC<{ items: string[]; type?: "danger" | "warning" | "secondary" }> =
             ))}
         </ul>
     );
+
+/** Lỗi, cảnh báo, việc tự sửa của bước định dạng, dịch cho giáo viên và gộp các dòng giống nhau. */
+function describeFormatIssues(issues: string[]): string[] {
+    return [...new Set(issues.map(describeFormatIssue))];
+}
 
 function describeAnswer(version: QcVersion): string | null {
     const answer = version.answer;
@@ -120,9 +125,9 @@ export const QcVersionCard: FC<Props> = ({ version, isLast }) => {
                             tone={qc.format.passed ? "success" : "error"}
                             label={qc.format.passed ? "Đạt" : "Không đạt"}
                         >
-                            <List items={qc.format.errors} type="danger" />
-                            <List items={qc.format.warnings} type="warning" />
-                            <List items={qc.format.autoRepairs.map((r) => `Tự sửa: ${r}`)} type="secondary" />
+                            <List items={describeFormatIssues(qc.format.errors)} type="danger" />
+                            <List items={describeFormatIssues(qc.format.warnings)} type="warning" />
+                            <List items={describeFormatIssues(qc.format.autoRepairs)} type="secondary" />
                         </QcRow>
                     ) : (
                         <NoData name="Định dạng" />
