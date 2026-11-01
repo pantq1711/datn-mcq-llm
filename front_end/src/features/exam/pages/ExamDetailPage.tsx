@@ -376,13 +376,9 @@ export default function ExamDetailPage() {
                         </Title>
 
                         <Space size={8} wrap className="exam-detail-page-meta">
-                            <Tag color={examStatusConfig[detail.status]?.color ?? "default"}>
-                                {examStatusConfig[detail.status]?.label ?? detail.status}
-                            </Tag>
+                            <Text>{examStatusConfig[detail.status]?.label ?? detail.status}</Text>
                             {detail.kind && (
-                                <Tag color={examKindConfig[detail.kind]?.color ?? "default"}>
-                                    {examKindConfig[detail.kind]?.label ?? detail.kind}
-                                </Tag>
+                                <Text>{examKindConfig[detail.kind]?.label ?? detail.kind}</Text>
                             )}
                             {detail.needsReviewCount > 0 && (
                                 <Tag color="volcano" icon={<WarningOutlined />}>

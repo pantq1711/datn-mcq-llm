@@ -96,6 +96,7 @@
 
 .exam-question-item-text {
     margin-bottom: 16px !important;
+    font-size: 16px;
     line-height: 1.7;
     white-space: pre-wrap;
 }
@@ -131,8 +132,16 @@
 .exam-question-option-text {
     flex: 1;
     min-width: 0;
+    font-size: 16px;
     line-height: 1.6;
     word-break: break-word;
+}
+
+/* Nhãn A, B, C, D, a), b) và các chữ kèm theo cùng cỡ 16px với nội dung câu */
+.exam-question-option-label,
+.exam-question-option-answer,
+.exam-question-short-answer {
+    font-size: 16px;
 }
 
 .exam-question-option-answer {
@@ -163,6 +172,7 @@
 .exam-question-explanation-text {
     margin-bottom: 0 !important;
     color: rgba(0, 0, 0, 0.85);
+    font-size: 16px;
     line-height: 1.6;
     white-space: pre-wrap;
 }

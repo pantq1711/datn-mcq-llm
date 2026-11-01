@@ -30,23 +30,24 @@ function renderStateTags(question: ExamQuestionItem) {
             break;
         case "pending":
         case "generating":
-            tags.push(<Tag key="state" color="processing">Đang soạn câu</Tag>);
+            tags.push(<Text key="state" type="secondary">Đang soạn câu</Text>);
             break;
         case "failed":
-            tags.push(<Tag key="state" color="error">Chưa soạn được</Tag>);
+            tags.push(<Text key="state" type="danger">Chưa soạn được</Text>);
             break;
     }
+    // Chỉ giữ 3 tag màu: Cần xem kỹ, Đã lưu vào ngân hàng, Đã sửa. Còn lại là chữ thường.
     if (question.source === "bank") {
         // Câu lấy từ ngân hàng không có nút Sửa: ghi rõ để giáo viên hiểu vì sao
-        tags.push(<Tag key="source" color="purple">Câu từ ngân hàng</Tag>);
+        tags.push(<Text key="source" type="secondary">Câu từ ngân hàng</Text>);
     } else if (question.source === "generated") {
-        tags.push(<Tag key="source" color="geekblue">Câu mới</Tag>);
+        tags.push(<Text key="source" type="secondary">Câu mới</Text>);
     }
     if (question.edited && question.state === "ready") {
         tags.push(<Tag key="edited" color="gold">Đã sửa</Tag>);
     }
     if (question.qcState === "checking") {
-        tags.push(<Tag key="qc" color="processing">Đang kiểm lại</Tag>);
+        tags.push(<Text key="qc" type="secondary">Đang tự kiểm tra lại</Text>);
     }
     return tags;
 }
@@ -136,9 +137,7 @@ export default function ExamQuestionList({
                                         </div>
 
                                         {difficulty && (
-                                            <Tag color={difficulty.color}>
-                                                {difficulty.label}
-                                            </Tag>
+                                            <Text type="secondary">{difficulty.label}</Text>
                                         )}
 
                                         {question.needsReview && (
@@ -218,9 +217,9 @@ export default function ExamQuestionList({
                                 {question.needsReview && reasons.length > 0 && (
                                     <div className="exam-question-review-reasons">
                                         <Text type="warning" strong>Lý do cần xem kỹ:</Text>
-                                        <Space size={[4, 4]} wrap>
+                                        <Space size={[12, 4]} wrap>
                                             {reasons.map((reason) => (
-                                                <Tag key={reason} color="orange">{describeReviewReason(reason)}</Tag>
+                                                <Text key={reason}>{describeReviewReason(reason)}</Text>
                                             ))}
                                         </Space>
                                     </div>
