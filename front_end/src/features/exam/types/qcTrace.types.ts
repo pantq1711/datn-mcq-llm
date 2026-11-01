@@ -1,4 +1,4 @@
-// Vết QC của một chỗ: GET /api/exams/{id}/slots/{slotId}/qc-trace (docs/api mục 7.7, 7.7a)
+import type { ExamSlotFailureReason } from "./exam.types";
 
 export interface QcUserRef {
     id: number | null;
@@ -123,4 +123,5 @@ export interface QcTraceResponse {
     solverRetries?: number;
     lineages: QcLineage[];
     actions: QcAction[];
+    failureReason?: ExamSlotFailureReason;
 }
