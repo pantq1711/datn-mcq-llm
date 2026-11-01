@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { Button, Empty, List, Skeleton, Space, Tag, Tooltip, Typography } from "antd";
-import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, EyeOutlined, WarningOutlined } from "@ant-design/icons";
+import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, WarningOutlined } from "@ant-design/icons";
 
 import "./ExamQuestionList.css";
 import type { ExamQuestionItem } from "../types/exam.types";
-import { difficultyConfig, describeFailureReason, describeReviewReason } from "../../../utils/exam.utils";
+import { describeFailureReason, describeLevel, describeReviewReason, resolveQuestionType } from "../../../utils/exam.utils";
 import QuestionContent from "./QuestionContent";
 
 const { Text } = Typography;
@@ -22,23 +23,24 @@ function renderStateTags(question: ExamQuestionItem) {
     const tags = [];
     switch (question.state) {
         case "kept":
-            tags.push(<Tag key="state" color="success">Đã giữ</Tag>);
+            tags.push(<Tag key="state" color="success">Đã lưu vào ngân hàng</Tag>);
             break;
         case "edited":
-            tags.push(<Tag key="state" color="success">Đã giữ (bản sửa)</Tag>);
+            tags.push(<Tag key="state" color="success">Đã lưu vào ngân hàng (bản sửa)</Tag>);
             break;
         case "pending":
         case "generating":
-            tags.push(<Tag key="state" color="processing">Đang sinh câu</Tag>);
+            tags.push(<Tag key="state" color="processing">Đang soạn câu</Tag>);
             break;
         case "failed":
-            tags.push(<Tag key="state" color="error">Sinh câu lỗi</Tag>);
+            tags.push(<Tag key="state" color="error">Chưa soạn được</Tag>);
             break;
     }
     if (question.source === "bank") {
-        tags.push(<Tag key="source" color="purple">Ngân hàng</Tag>);
+        // Câu lấy từ ngân hàng không có nút Sửa: ghi rõ để giáo viên hiểu vì sao
+        tags.push(<Tag key="source" color="purple">Câu từ ngân hàng</Tag>);
     } else if (question.source === "generated") {
-        tags.push(<Tag key="source" color="geekblue">AI sinh</Tag>);
+        tags.push(<Tag key="source" color="geekblue">Câu mới</Tag>);
     }
     if (question.edited && question.state === "ready") {
         tags.push(<Tag key="edited" color="gold">Đã sửa</Tag>);
@@ -47,6 +49,25 @@ function renderStateTags(question: ExamQuestionItem) {
         tags.push(<Tag key="qc" color="processing">Đang kiểm lại</Tag>);
     }
     return tags;
+}
+
+/** Nội dung câu; lời giải thu gọn, giáo viên bấm "Xem lời giải" mới mở. */
+function QuestionBody({ question }: { question: ExamQuestionItem }) {
+    const [showExplanation, setShowExplanation] = useState(false);
+
+    return (
+        <>
+            <QuestionContent question={question} showExplanation={showExplanation} />
+            {question.explanation && (
+                <Button
+                    className="exam-explanation-toggle"
+                    onClick={() => setShowExplanation((prev) => !prev)}
+                >
+                    {showExplanation ? "Ẩn lời giải" : "Xem lời giải"}
+                </Button>
+            )}
+        </>
+    );
 }
 
 export default function ExamQuestionList({
@@ -89,11 +110,13 @@ export default function ExamQuestionList({
                 split={false}
                 className="exam-question-list-content"
                 renderItem={(question, index) => {
-                    const difficulty = question.difficulty
-                        ? difficultyConfig[question.difficulty]
-                        : null;
                     const state = question.state ?? "ready";
                     const hasContent = state === "ready" || state === "kept" || state === "edited";
+                    // Câu đúng/sai có mức ở từng ý; chỗ chưa có câu thì chưa có mức. Câu còn lại thiếu mức hoặc mức lạ: "Chưa phân loại"
+                    const difficulty =
+                        hasContent && resolveQuestionType(question) !== "tf"
+                            ? describeLevel(question.difficulty)
+                            : null;
                     const canKeep = state === "ready" && question.qcState !== "checking";
                     const canChange = state !== "pending" && state !== "generating";
                     const canEdit = state === "ready" && question.source !== "bank";
@@ -139,28 +162,15 @@ export default function ExamQuestionList({
 
                                     {/* Nhóm các nút hành động */}
                                     <Space size={4} align="center">
-                                        <Tooltip title="Xem vết kiểm tra chất lượng (QC) của câu hỏi này">
-                                            <Button
-                                                type="text"
-                                                size="small"
-                                                icon={<EyeOutlined />}
-                                                className="exam-action-btn-qc"
-                                                onClick={() => onViewQcTrace?.(question, index)}
-                                            >
-                                                Xem vết QC
-                                            </Button>
-                                        </Tooltip>
-
                                         {canKeep && (
-                                            <Tooltip title="Giữ lại câu hỏi này">
+                                            <Tooltip title="Câu này sẽ được lưu vào ngân hàng chung để dùng cho các đề sau.">
                                                 <Button
                                                     type="text"
-                                                    size="small"
                                                     icon={<CheckCircleOutlined />}
                                                     className="exam-action-btn-keep"
                                                     onClick={() => onKeep?.(question, index)}
                                                 >
-                                                    Giữ
+                                                    Lưu vào ngân hàng
                                                 </Button>
                                             </Tooltip>
                                         )}
@@ -169,7 +179,6 @@ export default function ExamQuestionList({
                                             <Tooltip title="Đổi sang câu hỏi khác cùng mức độ">
                                                 <Button
                                                     type="text"
-                                                    size="small"
                                                     icon={<SwapOutlined />}
                                                     className="exam-action-btn-change"
                                                     onClick={() => onChangeQuestion?.(question, index)}
@@ -183,7 +192,6 @@ export default function ExamQuestionList({
                                             <Tooltip title="Chỉnh sửa nội dung câu hỏi">
                                                 <Button
                                                     type="text"
-                                                    size="small"
                                                     icon={<EditOutlined />}
                                                     className="exam-action-btn-edit"
                                                     onClick={() => onEdit?.(question, index)}
@@ -197,7 +205,6 @@ export default function ExamQuestionList({
                                             <Tooltip title="Xóa câu hỏi khỏi đề">
                                                 <Button
                                                     type="text"
-                                                    size="small"
                                                     danger
                                                     icon={<DeleteOutlined />}
                                                     className="exam-action-btn-delete"
@@ -223,10 +230,23 @@ export default function ExamQuestionList({
                                     <Text type="secondary" italic>
                                         {state === "failed"
                                             ? describeFailureReason(question.failureReason)
-                                            : "Hệ thống đang sinh câu cho chỗ này…"}
+                                            : "Hệ thống đang soạn câu này…"}
                                     </Text>
                                 ) : (
-                                    <QuestionContent question={question} showExplanation />
+                                    <QuestionBody question={question} />
+                                )}
+
+                                {/* Kết quả tự kiểm tra: link nhỏ, không nằm trong hàng nút chính */}
+                                {onViewQcTrace && (
+                                    <div className="exam-question-qc-link">
+                                        <Button
+                                            type="link"
+                                            size="small"
+                                            onClick={() => onViewQcTrace(question, index)}
+                                        >
+                                            Xem kết quả tự kiểm tra
+                                        </Button>
+                                    </div>
                                 )}
                             </div>
                         </List.Item>

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, Col, Empty, Form, Input, Modal, Row, Select, Space, Spin, Table, Tabs, Tag, Tooltip, Typography, message, } from "antd";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button, Card, Col, Collapse, Empty, Form, Input, Modal, Row, Select, Space, Spin, Table, Tabs, Tag, Tooltip, Typography, message, } from "antd";
 import type { TableColumnsType } from "antd";
 import { ArrowLeftOutlined, BookOutlined, BulbOutlined, CopyOutlined, EditOutlined, PaperClipOutlined, PlusOutlined, RocketOutlined, SettingOutlined, TableOutlined, } from "@ant-design/icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -10,7 +10,7 @@ import type { MaterialDto } from "../../materials/types/material.types";
 import type { ExamSubjectOption, BuildResultDto, CellContextInput, BuildExamRequest } from "../types/exam.types";
 import type { ExamMatrix, ExamMatrixDetail, ExamMatrixCellPayload } from "../../exam-matrix/types/examMatrix.types";
 import { getCatalogSubjects, buildExamByMatrix } from "../services/examApi";
-import { difficultyConfig } from "../../../utils/exam.utils";
+import { describeLevel } from "../../../utils/exam.utils";
 import { showApiError } from "../../../utils/apiError";
 import { listExamMatrices, getExamMatrix, duplicateExamMatrix, } from "../../exam-matrix/services/examMatrixService";
 
@@ -67,6 +67,10 @@ export default function GenerateExamPage() {
     const [activeTab, setActiveTab] = useState<string>(
         searchParams.get("tab") === "by-matrix" || initialMatrixId ? "by-matrix" : "by-lesson"
     );
+    // Giáo viên đã tự bấm đổi tab thì không tự chuyển sang "Theo ma trận" nữa
+    const tabPickedRef = useRef(false);
+    // Chỉ tải danh sách ma trận một lần lúc mở trang (tránh gọi hai lần ở chế độ dev)
+    const matricesRequestedRef = useRef(false);
     const [subjectOptions, setSubjectOptions] = useState<ExamSubjectOption[]>([]);
     const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
 
@@ -182,24 +186,29 @@ export default function GenerateExamPage() {
         fetchSubjects();
     }, []);
 
-    // Tải danh sách ma trận khi chuyển sang tab ma trận
+    // Tải danh sách ma trận ngay khi mở trang để biết có mở sẵn tab "Theo ma trận" hay không
     useEffect(() => {
-        if (activeTab === "by-matrix" && matrices.length === 0) {
-            fetchMatrices();
-        }
-    }, [activeTab]);
+        if (matricesRequestedRef.current) return;
+        matricesRequestedRef.current = true;
+        fetchMatrices();
+    }, []);
 
     const fetchMatrices = async () => {
         setLoadingMatrices(true);
         try {
             const data = await listExamMatrices();
             setMatrices(data);
+            // Có ít nhất một ma trận thì mở sẵn tab "Theo ma trận"
+            if (data.length > 0 && !tabPickedRef.current) setActiveTab("by-matrix");
             if (!selectedMatrixId) {
-                if (data.length > 0) setSelectedMatrixId(data[0].id);
-            } else if (!data.some((m) => m.id === selectedMatrixId)) {
-                // Ma trận từ URL đã bị xóa hoặc id sai
-                message.warning("Không tìm thấy ma trận đã chọn, đã chuyển sang ma trận đầu tiên.");
-                setSelectedMatrixId(data[0]?.id ?? null);
+                if (data.length > 0) setSelectedMatrixId(String(data[0].id));
+            } else if (!data.some((m) => String(m.id) === String(selectedMatrixId))) {
+                // Ma trận từ URL đã bị xóa hoặc id sai; có key nên chỉ hiện một thông báo
+                message.warning({
+                    content: "Không tìm thấy ma trận đã chọn, đã chuyển sang ma trận đầu tiên.",
+                    key: "matrix-not-found",
+                });
+                setSelectedMatrixId(data[0] ? String(data[0].id) : null);
             }
         } catch (err) {
             console.error("Lỗi khi tải ma trận:", err);
@@ -290,7 +299,7 @@ export default function GenerateExamPage() {
         try {
             const result = await buildExamByMatrix(payload);
             message.success(
-                `Khởi tạo đề thi từ ma trận thành công! Mã đề: ${result.examCode} (${result.fromBank} từ ngân hàng, ${result.jobsQueued} đang sinh).`
+                `Đã tạo đề (${result.fromBank} câu từ ngân hàng, ${result.jobsQueued} câu đang soạn).`
             );
             navigate(`/exams/${result.examId}`);
         } catch (err: unknown) {
@@ -300,15 +309,33 @@ export default function GenerateExamPage() {
         }
     };
 
-    const selectedMatrix = matrices.find((m) => m.id === selectedMatrixId) || null;
+    // id từ URL là chuỗi, id từ API có thể là số: so sánh theo chuỗi
+    const selectedMatrix = matrices.find((m) => String(m.id) === String(selectedMatrixId)) || null;
 
     const matrixSelectOptions = matrices.map((m) => {
         const sub = subjectOptions.find((s) => s.value === m.subjectId);
         return {
-            value: m.id,
+            value: String(m.id),
             label: `${m.name} — Khối ${m.gradeLevel}${sub ? ` (${sub.label})` : ""}`,
         };
     });
+
+    // Số câu của ma trận đang chọn theo dạng câu, để hiện dòng tóm tắt cạnh nút Tạo đề
+    const matrixSummary = useMemo(() => {
+        const counts = { mcq: 0, tf: 0, sa: 0 };
+        (matrixDetail?.cells ?? []).forEach((c) => {
+            counts[c.questionType] += c.questionCount;
+        });
+        const parts = [
+            counts.mcq > 0 ? `${counts.mcq} trắc nghiệm` : null,
+            counts.tf > 0 ? `${counts.tf} đúng/sai` : null,
+            counts.sa > 0 ? `${counts.sa} trả lời ngắn` : null,
+        ].filter((p): p is string => p !== null);
+        return { total: counts.mcq + counts.tf + counts.sa, detail: parts.join(" · ") };
+    }, [matrixDetail]);
+
+    // Đã gắn tài liệu hoặc ghi chú riêng cho ô ở mục nâng cao (mục đóng nên nhắc ngay ở tiêu đề)
+    const hasAdvancedOptions = Object.keys(cellContexts).length > 0;
 
     // Cột hiển thị bảng ô ma trận
     const cellColumns: TableColumnsType<ExamMatrixCellPayload & { cellKey: number }> = [
@@ -364,13 +391,8 @@ export default function GenerateExamPage() {
                 if (record.questionType === "tf") {
                     return <Tag>4 ý a–d</Tag>;
                 }
-                const diffMap: Record<string, { label: string; color: string }> = {
-                    easy: { label: "Biết", color: "green" },
-                    medium: { label: "Hiểu", color: "orange" },
-                    hard: { label: "Vận dụng", color: "red" },
-                };
-                const config = record.difficulty ? diffMap[record.difficulty] : null;
-                return config ? <Tag color={config.color}>{config.label}</Tag> : "—";
+                const config = describeLevel(record.difficulty);
+                return <Tag color={config.color}>{config.label}</Tag>;
             },
         },
         {
@@ -451,7 +473,7 @@ export default function GenerateExamPage() {
 
                 <div className="generate-exam-header-content">
                     <Title level={2} className="generate-exam-page-title">
-                        Khởi tạo đề thi
+                        Tạo đề thi
                     </Title>
                     <Paragraph type="secondary" className="generate-exam-page-subtitle">
                         Tạo đề thi tự động kết hợp câu hỏi ngân hàng và mô hình AI. Hỗ trợ theo từng bài học hoặc theo ma trận chuẩn.
@@ -462,7 +484,10 @@ export default function GenerateExamPage() {
             <div className="generate-exam-tabs-container">
                 <Tabs
                     activeKey={activeTab}
-                    onChange={setActiveTab}
+                    onChange={(key) => {
+                        tabPickedRef.current = true;
+                        setActiveTab(key);
+                    }}
                     type="card"
                     size="large"
                     items={[
@@ -495,21 +520,6 @@ export default function GenerateExamPage() {
                             children: (
                                 <div className="generate-exam-tab-content">
                                     <Card className="generate-exam-matrix-card" bordered={false}>
-                                        <div className="build-lesson-intro">
-                                            <div className="build-lesson-intro-icon">
-                                                <TableOutlined />
-                                            </div>
-                                            <div>
-                                                <Title level={4} className="build-lesson-intro-title">
-                                                    Tạo đề thi theo ma trận đề
-                                                </Title>
-                                                <Paragraph type="secondary" className="build-lesson-intro-desc">
-                                                    Dành cho kiểm tra giữa kỳ, cuối kỳ. Bạn có thể chọn, tạo hoặc nhân bản ma trận.
-                                                    Từng ô ma trận có thể gắn tài liệu và ghi chú riêng cho AI.
-                                                </Paragraph>
-                                            </div>
-                                        </div>
-
                                         {loadingMatrices ? (
                                             <div style={{ textAlign: "center", padding: "40px 0" }}>
                                                 <Spin tip="Đang tải danh sách ma trận..." />
@@ -543,7 +553,7 @@ export default function GenerateExamPage() {
                                                         <Form.Item
                                                             label="Chọn ma trận đề thi"
                                                             required
-                                                            tooltip="Chọn ma trận đã tạo sẵn để sinh đề thi tương ứng"
+                                                            tooltip="Chọn ma trận đã tạo sẵn để tạo đề thi tương ứng"
                                                         >
                                                             <Select
                                                                 size="large"
@@ -581,6 +591,86 @@ export default function GenerateExamPage() {
                                                         </Form.Item>
                                                     </Col>
                                                 </Row>
+
+                                                {/* Tóm tắt ma trận đã chọn và nút Tạo đề ở ngay đầu, không phải cuộn xuống */}
+                                                {selectedMatrix && (
+                                                    <div className="generate-exam-summary-bar">
+                                                        <Text strong className="generate-exam-summary-text">
+                                                            {selectedMatrix.name}
+                                                            {loadingMatrixDetail
+                                                                ? " · đang tải…"
+                                                                : ` · ${matrixSummary.total} câu${matrixSummary.detail ? ` (${matrixSummary.detail})` : ""}`}
+                                                        </Text>
+                                                        <Button
+                                                            type="primary"
+                                                            size="large"
+                                                            icon={<RocketOutlined />}
+                                                            loading={buildingMatrixExam}
+                                                            disabled={!selectedMatrixId || loadingMatrixDetail}
+                                                            onClick={handleBuildByMatrix}
+                                                        >
+                                                            Tạo đề
+                                                        </Button>
+                                                    </div>
+                                                )}
+
+                                                <Form.Item
+                                                    label="Tài liệu áp dụng cho cả ma trận"
+                                                    tooltip="Đính kèm tối đa 5 tài liệu dùng chung cho toàn bộ các ô trong đề thi"
+                                                    extra="Không bắt buộc — AI sẽ bám theo tài liệu này khi soạn"
+                                                    style={{ marginTop: 16 }}
+                                                >
+                                                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                                        <Button
+                                                            icon={<PaperClipOutlined />}
+                                                            onClick={() => setIsGlobalMaterialModalOpen(true)}
+                                                        >
+                                                            {globalMaterials.length > 0 ? "Thay đổi tài liệu" : "Đính kèm tài liệu"}
+                                                        </Button>
+                                                        {globalMaterials.length > 0 && (
+                                                            <Tag color="blue">
+                                                                {globalMaterials.length} tài liệu chung
+                                                            </Tag>
+                                                        )}
+                                                        {usedMaterialCount > 0 && (
+                                                            <Tooltip title="Tài liệu chung và tài liệu từng ô, trùng nhau tính một">
+                                                                <Tag color={usedMaterialCount > MAX_MATERIALS_PER_BUILD ? "error" : "default"}>
+                                                                    Đang dùng {usedMaterialCount}/{MAX_MATERIALS_PER_BUILD} tài liệu
+                                                                </Tag>
+                                                            </Tooltip>
+                                                        )}
+                                                    </div>
+                                                </Form.Item>
+
+                                                {globalMaterials.length > 0 && (
+                                                    <div style={{ marginBottom: 16, padding: "8px 12px", background: "#f6faff", borderRadius: 6 }}>
+                                                        <Text strong style={{ fontSize: 13, marginRight: 8 }}>
+                                                            Tài liệu chung:
+                                                        </Text>
+                                                        <Space size={[6, 6]} wrap>
+                                                            {globalMaterials.map((m) => (
+                                                                <Tag
+                                                                    key={m.id}
+                                                                    closable
+                                                                    onClose={() =>
+                                                                        setGlobalMaterials((prev) =>
+                                                                            prev.filter((item) => item.id !== m.id)
+                                                                        )
+                                                                    }
+                                                                    color="blue"
+                                                                >
+                                                                    📄 {m.fileName}
+                                                                </Tag>
+                                                            ))}
+                                                        </Space>
+                                                        <Alert
+                                                            type="warning"
+                                                            showIcon
+                                                            style={{ marginTop: 8 }}
+                                                            message="Có tài liệu chung: mọi câu sẽ được soạn mới, không lấy câu từ ngân hàng."
+                                                        />
+                                                    </div>
+                                                )}
 
                                                 {selectedMatrix && (
                                                     <div className="selected-matrix-info-box">
@@ -624,65 +714,23 @@ export default function GenerateExamPage() {
                                                             />
                                                         </Form.Item>
                                                     </Col>
-                                                    <Col xs={24} md={10}>
-                                                        <Form.Item
-                                                            label="Tài liệu áp dụng cho cả ma trận (tùy chọn)"
-                                                            tooltip="Đính kèm tối đa 5 tài liệu dùng chung cho toàn bộ các ô trong đề thi"
-                                                        >
-                                                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                                                <Button
-                                                                    icon={<PaperClipOutlined />}
-                                                                    onClick={() => setIsGlobalMaterialModalOpen(true)}
-                                                                >
-                                                                    {globalMaterials.length > 0 ? "Thay đổi tài liệu" : "Đính kèm tài liệu"}
-                                                                </Button>
-                                                                {globalMaterials.length > 0 && (
-                                                                    <Tag color="blue">
-                                                                        {globalMaterials.length} tài liệu chung
-                                                                    </Tag>
-                                                                )}
-                                                                {usedMaterialCount > 0 && (
-                                                                    <Tooltip title="Tài liệu chung và tài liệu từng ô, trùng nhau tính một">
-                                                                        <Tag color={usedMaterialCount > MAX_MATERIALS_PER_BUILD ? "error" : "default"}>
-                                                                            Đang dùng {usedMaterialCount}/{MAX_MATERIALS_PER_BUILD} tài liệu
-                                                                        </Tag>
-                                                                    </Tooltip>
-                                                                )}
-                                                            </div>
-                                                        </Form.Item>
-                                                    </Col>
                                                 </Row>
 
-                                                {globalMaterials.length > 0 && (
-                                                    <div style={{ marginBottom: 16, padding: "8px 12px", background: "#f6faff", borderRadius: 6 }}>
-                                                        <Text strong style={{ fontSize: 13, marginRight: 8 }}>
-                                                            Tài liệu chung:
-                                                        </Text>
-                                                        <Space size={[6, 6]} wrap>
-                                                            {globalMaterials.map((m) => (
-                                                                <Tag
-                                                                    key={m.id}
-                                                                    closable
-                                                                    onClose={() =>
-                                                                        setGlobalMaterials((prev) =>
-                                                                            prev.filter((item) => item.id !== m.id)
-                                                                        )
-                                                                    }
-                                                                    color="blue"
-                                                                >
-                                                                    📄 {m.fileName}
-                                                                </Tag>
-                                                            ))}
-                                                        </Space>
-                                                        <Alert
-                                                            type="warning"
-                                                            showIcon
-                                                            style={{ marginTop: 8 }}
-                                                            message="Có tài liệu chung: mọi ô sẽ sinh mới qua AI, không lấy câu ngân hàng."
-                                                        />
-                                                    </div>
-                                                )}
-
+                                                {/* Chỉ phần "Gắn cho ô này" (tài liệu, ghi chú theo ô) nằm trong mục nâng cao, mặc định đóng */}
+                                                <Collapse
+                                                    ghost
+                                                    items={[{
+                                                        key: "advanced",
+                                                        label: (
+                                                            <Text strong>
+                                                                Tùy chọn nâng cao
+                                                                {hasAdvancedOptions && (
+                                                                    <Tag color="blue" style={{ marginLeft: 8 }}>Đã chọn</Tag>
+                                                                )}
+                                                            </Text>
+                                                        ),
+                                                        children: (
+                                                            <>
                                                 {/* Danh sách các ô ma trận */}
                                                 <Card
                                                     size="small"
@@ -690,7 +738,7 @@ export default function GenerateExamPage() {
                                                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                             <span>Cấu hình từng ô ma trận [Gắn tài liệu + Ghi chú cho AI]</span>
                                                             <Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
-                                                                Ô có tài liệu hoặc yêu cầu riêng sẽ bỏ qua ngân hàng và sinh mới qua AI
+                                                                Ô có tài liệu hoặc yêu cầu riêng sẽ không lấy câu từ ngân hàng mà soạn câu mới
                                                             </Text>
                                                         </div>
                                                     }
@@ -711,28 +759,10 @@ export default function GenerateExamPage() {
                                                         />
                                                     )}
                                                 </Card>
-
-                                                <Alert
-                                                    type="info"
-                                                    showIcon
-                                                    message="Quy trình sinh đề theo ma trận"
-                                                    description="Hệ thống ưu tiên lấy các câu hỏi khớp từng ô trong ngân hàng câu hỏi. Ô có tài liệu hoặc ghi chú riêng sẽ được sinh câu mới qua AI và kiểm định QC."
-                                                    style={{ marginBottom: 24 }}
+                                                            </>
+                                                        ),
+                                                    }]}
                                                 />
-
-                                                <div className="build-lesson-footer">
-                                                    <Button
-                                                        type="primary"
-                                                        size="large"
-                                                        icon={<RocketOutlined />}
-                                                        loading={buildingMatrixExam}
-                                                        disabled={!selectedMatrixId}
-                                                        onClick={handleBuildByMatrix}
-                                                        className="build-lesson-submit-btn"
-                                                    >
-                                                        Khởi tạo đề thi từ ma trận
-                                                    </Button>
-                                                </div>
                                             </Form>
                                         )}
                                     </Card>
@@ -760,7 +790,7 @@ export default function GenerateExamPage() {
                 open={activeConfigCell !== null}
                 title={
                     activeConfigCell
-                        ? `Ngữ cảnh sinh câu: Ô ${activeConfigCell.cell.part} — ${activeConfigCell.cell.topic}`
+                        ? `Ghi chú soạn câu: Ô ${activeConfigCell.cell.part} — ${activeConfigCell.cell.topic}`
                         : ""
                 }
                 onCancel={() => setActiveConfigCell(null)}
@@ -806,15 +836,15 @@ export default function GenerateExamPage() {
                                     activeConfigCell.cell.statementDifficulties?.length ? (
                                         <Tag>
                                             {activeConfigCell.cell.statementDifficulties
-                                                .map((d) => difficultyConfig[d].label)
+                                                .map((d) => describeLevel(d).label)
                                                 .join(" · ")}
                                         </Tag>
                                     ) : null
-                                ) : activeConfigCell.cell.difficulty ? (
-                                    <Tag color={difficultyConfig[activeConfigCell.cell.difficulty].color}>
-                                        {difficultyConfig[activeConfigCell.cell.difficulty].label}
+                                ) : (
+                                    <Tag color={describeLevel(activeConfigCell.cell.difficulty).color}>
+                                        {describeLevel(activeConfigCell.cell.difficulty).label}
                                     </Tag>
-                                ) : null}
+                                )}
                                 <Tag>{activeConfigCell.cell.questionCount} câu</Tag>
                             </Space>
                             {activeConfigCell.cell.content && (
@@ -892,7 +922,7 @@ export default function GenerateExamPage() {
                             showIcon
                             icon={<BulbOutlined />}
                             message="Lưu ý quan trọng"
-                            description="Ô có tài liệu hoặc ghi chú riêng sẽ bỏ qua ngân hàng câu hỏi và sinh mới 100% qua hàng đợi AI."
+                            description="Ô có tài liệu hoặc ghi chú riêng sẽ không lấy câu từ ngân hàng, mọi câu của ô đều được soạn mới."
                             style={{ marginTop: 16 }}
                         />
                     </div>

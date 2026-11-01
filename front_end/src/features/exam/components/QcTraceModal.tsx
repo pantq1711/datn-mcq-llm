@@ -24,7 +24,7 @@ import { getQcTrace } from "../services/examApi";
 import type { QcLineage, QcTraceResponse } from "../types/qcTrace.types";
 import { QcVersionCard } from "./QcVersionCard";
 import { describeAction, describeSlotState, formatQcTime, tagColor } from "../../../utils/qcTrace.utils";
-import { describeFailureReason } from "../../../utils/exam.utils";
+import { describeChangedFields, describeFailureReason } from "../../../utils/exam.utils";
 
 import "./QcTraceModal.css";
 
@@ -37,15 +37,22 @@ interface Props {
     onClose: () => void;
 }
 
+/** Tình trạng một lần soạn, nói bằng chữ của giáo viên (không hiện mã công việc). */
+function describeJobStatus(status: string): string {
+    if (status === "done") return "Đã xong";
+    if (status === "failed") return "Bị lỗi";
+    return "Đang soạn";
+}
+
 function lineageHeader(lineage: QcLineage, index: number) {
     const job = lineage.job;
     return (
         <Space size={6} wrap>
-            <Text strong>{lineage.origin === "bank" ? "Câu ngân hàng" : `Lần sinh ${index + 1}`}</Text>
+            <Text strong>{lineage.origin === "bank" ? "Câu từ ngân hàng" : `Lần soạn ${index + 1}`}</Text>
             {lineage.versions.some((v) => v.current) && <Tag color="purple">Đang dùng</Tag>}
             {job && (
                 <Tag color={job.status === "failed" ? "error" : job.status === "done" ? "default" : "warning"}>
-                    Job #{job.jobId} · {job.status}
+                    {describeJobStatus(job.status)}
                     {job.attempt ? ` · lần thử ${job.attempt}` : ""}
                 </Tag>
             )}
@@ -98,7 +105,7 @@ export const QcTraceModal: FC<Props> = ({
                 const errorMessage =
                     apiError?.error ??
                     apiError?.message ??
-                    "Không thể lấy vết kiểm soát chất lượng.";
+                    "Không tải được kết quả tự kiểm tra.";
 
                 if (active) {
                     setError(errorMessage);
@@ -143,11 +150,11 @@ export const QcTraceModal: FC<Props> = ({
 
                     <div className="qc-trace-modal__title-content">
                         <Text className="qc-trace-modal__title-text">
-                            Nhật ký kiểm soát chất lượng
+                            Kết quả tự kiểm tra
                         </Text>
 
                         <Text className="qc-trace-modal__subtitle">
-                            Các lần sinh, phiên bản, từng bước QC và thao tác của chỗ
+                            Các lần soạn, phiên bản, từng bước tự kiểm tra và thao tác của câu này
                         </Text>
                     </div>
                 </div>
@@ -160,7 +167,7 @@ export const QcTraceModal: FC<Props> = ({
                     >
                         {loading
                             ? "Đang tải dữ liệu..."
-                            : `${lineages.length} lần sinh · ${actions.length} thao tác`}
+                            : `${lineages.length} lần soạn · ${actions.length} thao tác`}
                     </Text>
 
                     <Button
@@ -176,9 +183,9 @@ export const QcTraceModal: FC<Props> = ({
                 {trace && (
                     <div className="qc-trace-modal__context">
                         <div className="qc-trace-modal__context-item">
-                            <span className="qc-trace-modal__context-label">Chỗ</span>
+                            <span className="qc-trace-modal__context-label">Câu</span>
                             <Text strong>
-                                Số {trace.slotNo} · Phần {trace.part}
+                                Câu {trace.slotNo} · Phần {trace.part}
                                 {trace.topic ? ` · ${trace.topic}` : ""}
                             </Text>
                         </div>
@@ -186,11 +193,11 @@ export const QcTraceModal: FC<Props> = ({
                         <div className="qc-trace-modal__context-divider" />
 
                         <div className="qc-trace-modal__context-item">
-                            <span className="qc-trace-modal__context-label">Trạng thái</span>
+                            <span className="qc-trace-modal__context-label">Tình trạng</span>
                             <Space size={4} wrap>
                                 {slotState && <Tag color={tagColor(slotState.tone)}>{slotState.label}</Tag>}
                                 {trace.source && (
-                                    <Tag>{trace.source === "bank" ? "Từ ngân hàng" : "Hệ thống sinh"}</Tag>
+                                    <Tag>{trace.source === "bank" ? "Câu từ ngân hàng" : "Câu mới"}</Tag>
                                 )}
                             </Space>
                         </div>
@@ -201,7 +208,7 @@ export const QcTraceModal: FC<Props> = ({
                             <span className="qc-trace-modal__context-label">Lần thử</span>
                             <Text strong>
                                 {trace.attempts ?? 0}
-                                {trace.solverRetries ? ` · Solver thử lại ${trace.solverRetries}` : ""}
+                                {trace.solverRetries ? ` · tự kiểm tra lại ${trace.solverRetries} lần` : ""}
                             </Text>
                         </div>
                     </div>
@@ -215,9 +222,9 @@ export const QcTraceModal: FC<Props> = ({
                         message={describeFailureReason(trace.failureReason)}
                         description={
                             trace.failureReason === "llm_error"
-                                ? "Xem lỗi job ở lần sinh cuối bên dưới."
+                                ? "Xem lỗi ở lần soạn cuối bên dưới."
                                 : trace.failureReason === "qc_exhausted"
-                                    ? "Xem lỗi định dạng hoặc trùng lặp ở các lần sinh bên dưới."
+                                    ? "Xem lỗi trình bày hoặc câu trùng ở các lần soạn bên dưới."
                                     : undefined
                         }
                     />
@@ -228,7 +235,7 @@ export const QcTraceModal: FC<Props> = ({
                         <Spin size="large" />
 
                         <Text type="secondary">
-                            Đang tải lịch sử kiểm soát chất lượng...
+                            Đang tải kết quả tự kiểm tra...
                         </Text>
                     </div>
                 ) : error ? (
@@ -237,7 +244,7 @@ export const QcTraceModal: FC<Props> = ({
                         type="error"
                         showIcon
                         icon={<ExclamationCircleOutlined />}
-                        message="Không thể tải nhật ký QC"
+                        message="Không tải được kết quả tự kiểm tra"
                         description={error}
                     />
                 ) : isEmpty ? (
@@ -250,11 +257,11 @@ export const QcTraceModal: FC<Props> = ({
                                 size={4}
                             >
                                 <Text strong>
-                                    Chưa có lịch sử kiểm soát
+                                    Chưa có kết quả tự kiểm tra
                                 </Text>
 
                                 <Text type="secondary">
-                                    Chỗ này chưa có lần sinh hay thao tác nào được ghi nhận.
+                                    Câu này chưa có lần soạn hay thao tác nào được ghi nhận.
                                 </Text>
                             </Space>
                         }
@@ -265,14 +272,14 @@ export const QcTraceModal: FC<Props> = ({
                             <div className="qc-trace-modal__timeline">
                                 <div className="qc-trace-modal__section-heading">
                                     <div>
-                                        <Text strong>Các lần sinh</Text>
+                                        <Text strong>Các lần soạn</Text>
                                         <Paragraph type="secondary">
-                                            Mỗi lần sinh gồm câu LLM gốc rồi các bản giáo viên sửa, kèm kết quả từng bước QC.
+                                            Mỗi lần soạn gồm câu hệ thống soạn ra, rồi các bản thầy/cô sửa, kèm kết quả từng bước tự kiểm tra.
                                         </Paragraph>
                                     </div>
 
                                     <Tag color="blue" icon={<NodeIndexOutlined />}>
-                                        {lineages.length} lần sinh
+                                        {lineages.length} lần soạn
                                     </Tag>
                                 </div>
 
@@ -302,7 +309,7 @@ export const QcTraceModal: FC<Props> = ({
                                 <div className="qc-trace-modal__section-heading">
                                     <div>
                                         <Text strong>Thao tác của giáo viên</Text>
-                                        <Paragraph type="secondary">Sửa, Đổi, Giữ theo thứ tự thời gian.</Paragraph>
+                                        <Paragraph type="secondary">Sửa, Đổi, Lưu vào ngân hàng theo thứ tự thời gian.</Paragraph>
                                     </div>
                                 </div>
 
@@ -346,11 +353,10 @@ export const QcTraceModal: FC<Props> = ({
                                                             {action.instruction && <div>Yêu cầu: {action.instruction}</div>}
                                                             {action.changedFields && action.changedFields.length > 0 && (
                                                                 <div>
-                                                                    Trường đã sửa: {action.changedFields.join(", ")}
-                                                                    {action.editDistance != null && ` (khoảng cách sửa ${action.editDistance})`}
+                                                                    Đã sửa: {describeChangedFields(action.changedFields)}
                                                                 </div>
                                                             )}
-                                                            {action.bankItemId != null && <div>Câu ngân hàng #{action.bankItemId}</div>}
+                                                            {action.bankItemId != null && <div>Câu từ ngân hàng</div>}
                                                         </div>
                                                     ) : (
                                                         <Text type="secondary" className="qc-trace-modal__no-details">

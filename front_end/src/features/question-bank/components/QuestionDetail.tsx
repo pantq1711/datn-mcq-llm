@@ -2,6 +2,8 @@ import { Card, Descriptions, Divider, Drawer, Space, Tag, Typography, Spin } fro
 import dayjs from "dayjs";
 import "./QuestionDetail.css";
 import QuestionContent from "../../exam/components/QuestionContent";
+import MathText from "../../../components/common/MathText/MathText";
+import { describeLevel } from "../../../utils/exam.utils";
 import type { BankItemDetail, QuestionType } from "../types/questionBank.types";
 import type { ExamQuestionItem } from "../../exam/types/exam.types";
 
@@ -13,21 +15,6 @@ interface QuestionDetailProps {
     question: BankItemDetail | null;
     onClose: () => void;
 }
-
-const difficultyMap = {
-    easy: {
-        label: "Dễ",
-        color: "green",
-    },
-    medium: {
-        label: "Trung bình",
-        color: "orange",
-    },
-    hard: {
-        label: "Khó",
-        color: "red",
-    },
-} as const;
 
 const questionTypeMap: Record<QuestionType, { label: string; color: string }> = {
     mcq: { label: "Trắc nghiệm", color: "blue" },
@@ -101,16 +88,14 @@ export default function QuestionDetail({
                             )}
                         </Descriptions.Item>
 
-                        <Descriptions.Item label="Độ khó">
+                        <Descriptions.Item label="Mức độ">
                             {/* Câu tf có difficulty null: mức nằm ở từng ý (docs/api "Ngân hàng câu hỏi") */}
-                            {question.difficulty ? (
-                                <Tag color={difficultyMap[question.difficulty].color}>
-                                    {difficultyMap[question.difficulty].label}
-                                </Tag>
-                            ) : question.questionType === "tf" ? (
+                            {question.questionType === "tf" && !question.difficulty ? (
                                 "Theo từng ý"
                             ) : (
-                                "—"
+                                <Tag color={describeLevel(question.difficulty).color}>
+                                    {describeLevel(question.difficulty).label}
+                                </Tag>
                             )}
                         </Descriptions.Item>
 
@@ -142,7 +127,7 @@ export default function QuestionDetail({
                             className="question-detail-source"
                         >
                             <Paragraph className="question-detail-source-text">
-                                {question.sourceQuestion}
+                                <MathText text={question.sourceQuestion} />
                             </Paragraph>
                         </Card>
                     )}

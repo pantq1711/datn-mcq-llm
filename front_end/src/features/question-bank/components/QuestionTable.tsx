@@ -4,6 +4,8 @@ import { EyeOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import "./QuestionTable.css";
 import type { BankSort, QuestionTableItem, QuestionType } from "../types/questionBank.types";
+import MathText from "../../../components/common/MathText/MathText";
+import { describeLevel } from "../../../utils/exam.utils";
 
 const { Text } = Typography;
 
@@ -18,21 +20,6 @@ interface QuestionTableProps {
     onPageChange?: (page: number, pageSize: number) => void;
     onView?: (question: QuestionTableItem) => void;
 }
-
-const difficultyMap = {
-    easy: {
-        label: "Biết",
-        color: "green",
-    },
-    medium: {
-        label: "Hiểu",
-        color: "orange",
-    },
-    hard: {
-        label: "Vận dụng",
-        color: "red",
-    },
-} as const;
 
 // Đúng giá trị docs/api "Ngân hàng câu hỏi"; giá trị lạ backend trả 400
 const sortOptions: { label: string; value: BankSort }[] = [
@@ -68,13 +55,15 @@ export default function QuestionTable({
             title: "Câu hỏi",
             dataIndex: "questionText",
             key: "questionText",
+            // Đủ rộng để thấy công thức đầu câu, không bị ép còn vài chữ
+            width: 280,
             ellipsis: {
                 showTitle: false,
             },
             render: (questionText: string) => (
-                <Tooltip title={questionText} placement="topLeft">
+                <Tooltip title={<MathText text={questionText} />} placement="topLeft">
                     <span className="question-table-question">
-                        {questionText}
+                        <MathText text={questionText} />
                     </span>
                 </Tooltip>
             ),
@@ -115,7 +104,7 @@ export default function QuestionTable({
             render: (topic?: string) => topic ? <Text type="secondary">{topic}</Text> : "—",
         },
         {
-            title: "Độ khó",
+            title: "Mức độ",
             key: "difficulty",
             width: 130,
             align: "center",
@@ -123,15 +112,13 @@ export default function QuestionTable({
                 if (record.questionType === "tf") {
                     return "Theo từng ý";
                 }
-                if (record.difficulty && difficultyMap[record.difficulty]) {
-                    const config = difficultyMap[record.difficulty];
-                    return (
-                        <Tag color={config.color}>
-                            {config.label}
-                        </Tag>
-                    );
-                }
-                return "—";
+                // Mức thiếu hoặc lạ (dữ liệu cũ): "Chưa phân loại", không hiện mã thô hay ô trống
+                const config = describeLevel(record.difficulty);
+                return (
+                    <Tag color={config.color}>
+                        {config.label}
+                    </Tag>
+                );
             },
         },
         {

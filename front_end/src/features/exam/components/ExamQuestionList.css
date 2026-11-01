@@ -73,6 +73,22 @@
     margin-bottom: 12px;
 }
 
+/* Nút trên mỗi câu đủ cao để bấm dễ (≥ 36px) */
+.exam-question-item-header .ant-btn,
+.exam-explanation-toggle {
+    min-height: 36px;
+}
+
+.exam-explanation-toggle {
+    margin-top: 12px;
+}
+
+.exam-question-qc-link {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
 .exam-question-item-number {
     flex-shrink: 0;
     font-weight: 600;

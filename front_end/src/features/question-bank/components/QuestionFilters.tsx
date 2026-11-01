@@ -267,13 +267,13 @@ export default function QuestionFilters({
                     </Col>
 
                     <Col xs={24} sm={12} lg={6}>
-                        <Form.Item label="Độ khó">
+                        <Form.Item label="Mức độ">
                             <Select
                                 value={value.difficulty ?? undefined}
                                 onChange={(difficulty) =>
                                     updateField("difficulty", difficulty ?? null)
                                 }
-                                placeholder="Tất cả độ khó"
+                                placeholder="Tất cả mức độ"
                                 options={difficultyOptions}
                                 allowClear
                                 className="question-filters-select"

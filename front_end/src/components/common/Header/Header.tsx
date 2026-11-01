@@ -79,7 +79,7 @@ export default function Header({
                         level={4}
                         className="app-header-brand-title"
                     >
-                        Online learning
+                        Soạn đề Toán THCS
                     </Typography.Title>
                 </div>
             </div>

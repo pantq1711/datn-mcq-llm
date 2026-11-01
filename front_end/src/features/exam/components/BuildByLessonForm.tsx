@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AutoComplete, Button, Card, Col, Form, Input, InputNumber, Row, Select, Space, Spin, Tag, Typography, message } from "antd";
-import { BookOutlined, BulbOutlined, ExclamationCircleOutlined, PaperClipOutlined, RocketOutlined } from "@ant-design/icons";
+import { BulbOutlined, ExclamationCircleOutlined, PaperClipOutlined, RocketOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 import MaterialManagerModal from "../../materials/components/MaterialManagerModal";
@@ -14,8 +14,11 @@ import { mergeBankTopics, sortBankTopics } from "../../../utils/bankTopic.utils"
 import { showApiError } from "../../../utils/apiError";
 import "./BuildByLessonForm.css";
 
-const { Title, Text, Paragraph } = Typography;
+const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
+
+// Giới hạn của backend: tổng số câu một đề sinh theo bài (application.yaml, max-questions-per-exam)
+const MAX_QUESTIONS_PER_EXAM = 60;
 
 export interface BuildByLessonFormProps {
     subjects: ExamSubjectOption[];
@@ -211,7 +214,7 @@ export default function BuildByLessonForm({
             return (
                 <Text type="warning" style={{ display: "block", marginTop: 4 }}>
                     <ExclamationCircleOutlined style={{ marginRight: 4 }} />
-                    Khi có tài liệu hoặc yêu cầu thêm, hệ thống bỏ qua ngân hàng và sinh mới toàn bộ.
+                    Khi có tài liệu hoặc yêu cầu thêm, hệ thống không lấy câu từ ngân hàng mà soạn mới toàn bộ.
                 </Text>
             );
         }
@@ -231,7 +234,7 @@ export default function BuildByLessonForm({
                 <div style={{ marginTop: 4 }}>
                     <Text type="success">
                         Ngân hàng có {matchedTopic.count} câu của bài này (tính mọi dạng, mọi mức). Hệ thống dùng lại câu
-                        cùng dạng và mức trước, phần thiếu sẽ sinh mới.
+                        cùng dạng và mức trước, phần thiếu sẽ soạn mới.
                     </Text>
                     {trimmedContent !== "" && (
                         <div>
@@ -247,7 +250,7 @@ export default function BuildByLessonForm({
         // Mức 4: Không khớp chủ đề nào trong ngân hàng
         return (
             <Text type="secondary" style={{ display: "block", marginTop: 4 }}>
-                Chưa có câu ngân hàng cho bài này, mọi câu sẽ được sinh mới.
+                Chưa có câu ngân hàng cho bài này, mọi câu sẽ được soạn mới.
             </Text>
         );
     }, [
@@ -280,8 +283,8 @@ export default function BuildByLessonForm({
             return;
         }
 
-        if (totalQuestions > 50) {
-            message.error(`Một lần sinh theo bài tối đa 50 câu (hiện đang chọn ${totalQuestions} câu).`);
+        if (totalQuestions > MAX_QUESTIONS_PER_EXAM) {
+            message.error(`Một đề theo bài tối đa ${MAX_QUESTIONS_PER_EXAM} câu (hiện đang chọn ${totalQuestions} câu).`);
             return;
         }
 
@@ -333,7 +336,7 @@ export default function BuildByLessonForm({
         try {
             const result = await buildByLesson(payload);
             message.success(
-                `Khởi tạo đề thi thành công! Tổng ${result.slots} câu (${result.fromBank} từ ngân hàng, ${result.jobsQueued} đang sinh).`
+                `Đã tạo đề, tổng ${result.slots} câu (${result.fromBank} câu từ ngân hàng, ${result.jobsQueued} câu đang soạn).`
             );
 
             if (onSuccess) {
@@ -375,21 +378,6 @@ export default function BuildByLessonForm({
 
     return (
         <Card className="build-lesson-card" bordered={false}>
-            <div className="build-lesson-intro">
-                <div className="build-lesson-intro-icon">
-                    <BookOutlined />
-                </div>
-                <div>
-                    <Title level={4} className="build-lesson-intro-title">
-                        Tạo đề thi theo bài học
-                    </Title>
-                    <Paragraph type="secondary" className="build-lesson-intro-desc">
-                        Thích hợp cho kiểm tra thường xuyên (15 phút), kiểm tra định kỳ 1 tiết hoặc ôn tập từng bài học
-                        SGK. Hệ thống ưu tiên chọn câu hỏi sẵn có từ ngân hàng và tự động sinh mới các câu còn thiếu qua AI.
-                    </Paragraph>
-                </div>
-            </div>
-
             <Form
                 form={form}
                 layout="vertical"
@@ -511,9 +499,9 @@ export default function BuildByLessonForm({
                     <div className="build-lesson-matrix-table">
                         <div className="build-lesson-matrix-row heading-row">
                             <div className="col-type">Dạng câu hỏi</div>
-                            <div className="col-level">Biết (Dễ)</div>
-                            <div className="col-level">Hiểu (Vừa)</div>
-                            <div className="col-level">Vận dụng (Khó)</div>
+                            <div className="col-level">Biết</div>
+                            <div className="col-level">Hiểu</div>
+                            <div className="col-level">Vận dụng</div>
                             <div className="col-subtotal">Số câu</div>
                         </div>
 
@@ -527,17 +515,17 @@ export default function BuildByLessonForm({
                             </div>
                             <div className="col-level">
                                 <Form.Item name="mcqEasy" noStyle>
-                                    <InputNumber min={0} max={50} className="level-input" />
+                                    <InputNumber min={0} max={MAX_QUESTIONS_PER_EXAM} className="level-input" />
                                 </Form.Item>
                             </div>
                             <div className="col-level">
                                 <Form.Item name="mcqMedium" noStyle>
-                                    <InputNumber min={0} max={50} className="level-input" />
+                                    <InputNumber min={0} max={MAX_QUESTIONS_PER_EXAM} className="level-input" />
                                 </Form.Item>
                             </div>
                             <div className="col-level">
                                 <Form.Item name="mcqHard" noStyle>
-                                    <InputNumber min={0} max={50} className="level-input" />
+                                    <InputNumber min={0} max={MAX_QUESTIONS_PER_EXAM} className="level-input" />
                                 </Form.Item>
                             </div>
                             <div className="col-subtotal">
@@ -550,7 +538,7 @@ export default function BuildByLessonForm({
                             <div className="col-type">
                                 <div>
                                     <Text strong>Phần II. Đúng / Sai</Text>
-                                    <div className="col-type-desc">Mỗi câu gồm 4 ý a, b, c, d (Dễ, Dễ, Vừa, Khó)</div>
+                                    <div className="col-type-desc">Mỗi câu gồm 4 ý a, b, c, d (Biết, Biết, Hiểu, Vận dụng)</div>
                                 </div>
                             </div>
                             <div className="col-level span-3">
@@ -579,17 +567,17 @@ export default function BuildByLessonForm({
                             </div>
                             <div className="col-level">
                                 <Form.Item name="saEasy" noStyle>
-                                    <InputNumber min={0} max={50} className="level-input" />
+                                    <InputNumber min={0} max={MAX_QUESTIONS_PER_EXAM} className="level-input" />
                                 </Form.Item>
                             </div>
                             <div className="col-level">
                                 <Form.Item name="saMedium" noStyle>
-                                    <InputNumber min={0} max={50} className="level-input" />
+                                    <InputNumber min={0} max={MAX_QUESTIONS_PER_EXAM} className="level-input" />
                                 </Form.Item>
                             </div>
                             <div className="col-level">
                                 <Form.Item name="saHard" noStyle>
-                                    <InputNumber min={0} max={50} className="level-input" />
+                                    <InputNumber min={0} max={MAX_QUESTIONS_PER_EXAM} className="level-input" />
                                 </Form.Item>
                             </div>
                             <div className="col-subtotal">
@@ -603,15 +591,15 @@ export default function BuildByLessonForm({
                             <div>
                                 <Text strong>Tổng số câu hỏi: </Text>
                                 <Tag
-                                    color={totalQuestions === 0 ? "default" : totalQuestions > 50 ? "error" : "success"}
+                                    color={totalQuestions === 0 ? "default" : totalQuestions > MAX_QUESTIONS_PER_EXAM ? "error" : "success"}
                                     style={{ fontSize: 14, padding: "2px 10px" }}
                                 >
-                                    {totalQuestions} / 50 câu
+                                    {totalQuestions} / {MAX_QUESTIONS_PER_EXAM} câu
                                 </Tag>
                             </div>
-                            {totalQuestions > 50 && (
+                            {totalQuestions > MAX_QUESTIONS_PER_EXAM && (
                                 <Text type="danger">
-                                    Vượt quá giới hạn tối đa 50 câu mỗi lần sinh đề.
+                                    Vượt quá giới hạn tối đa {MAX_QUESTIONS_PER_EXAM} câu mỗi đề.
                                 </Text>
                             )}
                             {totalQuestions === 0 && (
@@ -641,7 +629,7 @@ export default function BuildByLessonForm({
                     }
                 >
                     <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 12 }}>
-                        Đính kèm file Word (.docx), PDF hoặc TXT bài giảng để mô hình AI sinh câu hỏi bám sát văn bản tài liệu
+                        Đính kèm file Word (.docx), PDF hoặc TXT bài giảng để hệ thống soạn câu hỏi bám sát văn bản tài liệu
                         (tối đa 5 tài liệu).
                     </Paragraph>
 
@@ -672,7 +660,7 @@ export default function BuildByLessonForm({
                 <Card size="small" className="build-lesson-section" title="4. Yêu cầu thêm cho AI (tùy chọn)">
                     <Form.Item
                         name="extraInstruction"
-                        label="Chỉ dẫn thêm cho câu hỏi sinh bằng AI"
+                        label="Chỉ dẫn thêm cho câu hỏi soạn mới"
                         tooltip="Yêu cầu cụ thể về bối cảnh, tình huống thực tế hoặc phong cách diễn đạt cho AI."
                     >
                         <TextArea
@@ -687,7 +675,7 @@ export default function BuildByLessonForm({
                         showIcon
                         icon={<BulbOutlined />}
                         message="Lưu ý về nguồn câu hỏi"
-                        description="Hệ thống sẽ đối soát với Ngân hàng câu hỏi theo Môn, Bài học và Mức độ. Nếu có tài liệu hoặc yêu cầu thêm cho AI, hệ thống sẽ ưu tiên sinh câu hỏi mới bám sát các nội dung này."
+                        description="Hệ thống sẽ đối soát với Ngân hàng câu hỏi theo Môn, Bài học và Mức độ. Nếu có tài liệu hoặc yêu cầu thêm cho AI, hệ thống sẽ ưu tiên soạn câu hỏi mới bám sát các nội dung này."
                     />
                 </Card>
 
@@ -698,10 +686,10 @@ export default function BuildByLessonForm({
                         htmlType="submit"
                         icon={<RocketOutlined />}
                         loading={submitting}
-                        disabled={totalQuestions <= 0 || totalQuestions > 50}
+                        disabled={totalQuestions <= 0 || totalQuestions > MAX_QUESTIONS_PER_EXAM}
                         className="build-lesson-submit-btn"
                     >
-                        Tạo và Duyệt đề thi
+                        Tạo đề
                     </Button>
                 </div>
             </Form>

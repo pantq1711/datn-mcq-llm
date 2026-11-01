@@ -1,7 +1,7 @@
 import { Tag, Typography } from "antd";
 import { BulbOutlined } from "@ant-design/icons";
 import type { ExamQuestionItem } from "../types/exam.types";
-import { difficultyConfig, resolveQuestionType } from "../../../utils/exam.utils";
+import { describeLevel, resolveQuestionType } from "../../../utils/exam.utils";
 import MathText from "../../../components/common/MathText/MathText";
 
 import "./ExamQuestionList.css";
@@ -36,16 +36,12 @@ export default function QuestionContent({ question, showExplanation = true }: Qu
                     return (
                         <div className="exam-question-item-options">
                             {(question.statements ?? []).map((statement) => {
-                                const statementDifficulty = statement.difficulty
-                                    ? difficultyConfig[statement.difficulty]
-                                    : null;
+                                const statementDifficulty = describeLevel(statement.difficulty);
                                 return (
                                     <div key={statement.key} className="exam-question-option">
                                         <div className="exam-question-option-label"><Text strong>{statement.key})</Text></div>
                                         <Text className="exam-question-option-text"><MathText text={statement.text} /></Text>
-                                        {statementDifficulty && (
-                                            <Tag color={statementDifficulty.color}>{statementDifficulty.label}</Tag>
-                                        )}
+                                        <Tag color={statementDifficulty.color}>{statementDifficulty.label}</Tag>
                                         <Tag
                                             color={statement.label === "T" ? "success" : "error"}
                                             className="exam-question-option-answer"

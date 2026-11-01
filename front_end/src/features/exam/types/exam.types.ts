@@ -14,19 +14,17 @@ export type ExamQcState = "checking" | "passed" | "needs_review";
 /** Lý do chỗ ở trạng thái failed (docs/contract/enums.md, V23); chỉ có khi state = "failed". */
 export type ExamSlotFailureReason = "llm_error" | "qc_exhausted";
 
+/** Số câu của một Phần theo ma trận (ExamPartDto.required). */
+export interface ExamPreviewPart {
+    part: string;
+    label: string;
+    count: number;
+}
+
 export interface ExamPreviewData {
-    title: string;
-    subject?: string;
     questionCount: number;
-    duration?: number;
-    easyCount: number;
-    mediumCount: number;
-    hardCount: number;
-    /** Câu đúng/sai: mức nằm ở từng ý a-d nên đếm riêng, không vào Biết/Hiểu/Vận dụng. */
-    tfCount: number;
-    /** Chỗ chưa có câu (đang sinh, sinh lỗi). */
-    missingCount?: number;
-    instructions?: string;
+    /** Số câu theo Phần I, II, III; cộng lại bằng questionCount. */
+    parts: ExamPreviewPart[];
 }
 
 export interface ExamItemStatement {
@@ -183,15 +181,18 @@ export interface UpdateSlotQuestionPayload {
     statements?: { key: StatementKey; text: string; label: TruthLabel }[];
 }
 
-export interface ExamProgressCell {
-    cellId: string;
-    answered: boolean;
-    needReview?: boolean;
-}
+/** Trạng thái soạn đề (docs/api mục 7.3): còn chỗ đang soạn, đủ câu, hoặc hết việc nhưng có chỗ lỗi. */
+export type ExamBuildStatus = "generating" | "ready" | "partial";
 
+/** Response của GET /api/exams/{id}/progress (docs/api mục 7.3). */
 export interface ExamProgress {
-    examId: string;
-    cells: ExamProgressCell[];
+    examId: number;
+    status: ExamBuildStatus;
+    total: number;
+    ready: number;
+    generating: number;
+    failed: number;
+    fromBank: number;
 }
 
 export interface LessonCellInput {

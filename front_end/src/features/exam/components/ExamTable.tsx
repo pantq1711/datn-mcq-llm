@@ -31,10 +31,10 @@ export default function ExamTable({
 }: ExamTableProps) {
     const columns: ColumnsType<ExamListItem> = [
         {
-            title: "Mã đề",
+            title: "Mã hệ thống",
             dataIndex: "examCode",
             key: "examCode",
-            width: 110,
+            width: 130,
             align: "center",
             render: (_, record) => <Text strong>{record.examCode || "—"}</Text>,
         },
@@ -79,7 +79,7 @@ export default function ExamTable({
                         <Text>{`${done} / ${total} câu`}</Text>
                         {generating > 0 && (
                             <Tag color="processing" style={{ fontSize: 11, margin: 0 }}>
-                                {generating} đang sinh...
+                                {generating} đang soạn...
                             </Tag>
                         )}
                         {failed > 0 && (
@@ -92,7 +92,7 @@ export default function ExamTable({
             },
         },
         {
-            title: "Trạng thái sinh",
+            title: "Tình trạng",
             key: "generatingStatus",
             width: 140,
             align: "center",
@@ -101,7 +101,7 @@ export default function ExamTable({
                 const failed = record.failedSlots ?? 0;
 
                 if (generating > 0) {
-                    return <Tag color="processing">{generating} đang tạo</Tag>;
+                    return <Tag color="processing">{generating} đang soạn</Tag>;
                 }
                 if (failed > 0) {
                     return <Tag color="error">{failed} lỗi</Tag>;
