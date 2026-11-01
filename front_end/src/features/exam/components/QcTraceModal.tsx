@@ -24,6 +24,7 @@ import { getQcTrace } from "../services/examApi";
 import type { QcLineage, QcTraceResponse } from "../types/qcTrace.types";
 import { QcVersionCard } from "./QcVersionCard";
 import { describeAction, describeSlotState, formatQcTime, tagColor } from "../../../utils/qcTrace.utils";
+import { describeFailureReason } from "../../../utils/exam.utils";
 
 import "./QcTraceModal.css";
 
@@ -204,6 +205,22 @@ export const QcTraceModal: FC<Props> = ({
                             </Text>
                         </div>
                     </div>
+                )}
+
+                {/* Chỗ failed: lý do từ failureReason (V23), cùng câu với danh sách câu của đề */}
+                {trace?.state === "failed" && (
+                    <Alert
+                        type="error"
+                        showIcon
+                        message={describeFailureReason(trace.failureReason)}
+                        description={
+                            trace.failureReason === "llm_error"
+                                ? "Xem lỗi job ở lần sinh cuối bên dưới."
+                                : trace.failureReason === "qc_exhausted"
+                                    ? "Xem lỗi định dạng hoặc trùng lặp ở các lần sinh bên dưới."
+                                    : undefined
+                        }
+                    />
                 )}
 
                 {loading ? (
