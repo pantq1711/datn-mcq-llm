@@ -124,7 +124,8 @@ export default function LoginForm() {
 
                 <div className="login-form-note">
                     <Text type="secondary">
-                        Chưa có tài khoản hoặc quên mật khẩu? Liên hệ quản trị viên.
+                        Chưa có tài khoản hoặc quên mật khẩu?<br />
+                        Liên hệ quản trị viên.
                     </Text>
                 </div>
             </Form>

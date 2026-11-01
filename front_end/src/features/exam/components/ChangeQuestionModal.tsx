@@ -213,7 +213,7 @@ export default function ChangeQuestionModal({
                                             <span>Soạn câu mới</span>
                                         </Space>
                                     </Radio.Button>
-                                    <Tooltip title={bankExhausted ? "Ngân hàng đã hết câu phù hợp cho chỗ này" : undefined}>
+                                    <Tooltip title={bankExhausted ? "Ngân hàng đã hết câu phù hợp để thay câu này" : undefined}>
                                         <Radio.Button value="bank" disabled={bankExhausted}>
                                             <Space size={6}>
                                                 <DatabaseOutlined />
@@ -231,7 +231,7 @@ export default function ChangeQuestionModal({
                                             className="change-question-bank-exhausted-alert"
                                             type="warning"
                                             showIcon
-                                            message="Ngân hàng không còn câu phù hợp cho chỗ này"
+                                            message="Ngân hàng không còn câu phù hợp để thay câu này"
                                             description="Bạn có thể soạn câu mới (có thể ghi thêm yêu cầu bên dưới) rồi bấm &quot;Soạn câu mới&quot;."
                                         />
                                     )}
