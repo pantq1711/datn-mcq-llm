@@ -1,5 +1,5 @@
-import { Avatar, Badge, Button, Dropdown, Layout, Space, Typography, } from "antd";
-import { BellOutlined, LogoutOutlined, MenuOutlined, UserOutlined, } from "@ant-design/icons";
+import { Avatar, Button, Dropdown, Layout, Space, Typography, } from "antd";
+import { LogoutOutlined, MenuOutlined, UserOutlined, } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import type { MenuProps } from "antd";
 import { useAuth } from "../../../context/AuthContext";
@@ -86,16 +86,6 @@ export default function Header({
 
             {variant === "default" && (
                 <div className="app-header-right">
-                    <Button
-                        type="text"
-                        shape="circle"
-                        className="app-header-notification"
-                    >
-                        <Badge count={3} size="small">
-                            <BellOutlined />
-                        </Badge>
-                    </Button>
-
                     <Dropdown menu={{ items: userMenuItems, onClick: handleMenuClick }}>
                         <Button type="text" className="app-header-user">
                             <Space size={10}>

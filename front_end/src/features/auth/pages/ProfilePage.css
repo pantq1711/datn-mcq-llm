@@ -88,7 +88,7 @@
 .profile-id {
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 13px;
-    color: #8c8c8c;
+    color: rgba(0, 0, 0, 0.65);
 }
 
 /* ===== Responsive ===== */

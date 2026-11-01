@@ -11,6 +11,44 @@
     margin: 0 0 4px !important;
 }
 
-.dashboard-statistics {
+/* Nút lớn, dễ thấy nhất trên trang */
+.dashboard-create-button {
+    height: 64px;
+    padding: 0 40px;
     margin-bottom: 24px;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.dashboard-recent-loading {
+    display: flex;
+    justify-content: center;
+    padding: 32px 0;
+}
+
+.dashboard-recent-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 8px !important;
+    cursor: pointer;
+}
+
+.dashboard-recent-item:hover {
+    background: #f5faff;
+}
+
+.dashboard-recent-main {
+    min-width: 0;
+}
+
+.dashboard-recent-title {
+    font-size: 16px;
+}
+
+.dashboard-recent-meta {
+    margin-top: 2px;
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.65);
 }

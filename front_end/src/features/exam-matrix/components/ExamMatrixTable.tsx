@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Button, Empty, Popconfirm, Space, Table, Tag, Tooltip, Typography } from 'antd';
+import { Button, Empty, Popconfirm, Space, Table, Tooltip, Typography } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { CopyOutlined, DeleteOutlined, EditOutlined, FileAddOutlined } from '@ant-design/icons';
 
@@ -27,6 +27,8 @@ export interface ExamMatrixTableProps {
     onDuplicateMatrix?: (matrixId: string) => void;
     /** Tạo đề thi từ ma trận. Nếu bỏ qua, nút tạo đề không hiển thị. */
     onGenerateExam?: (matrixId: string) => void;
+    /** Bấm "Tạo từ mẫu" ở trạng thái rỗng (chưa có ma trận nào). */
+    onCreateFromTemplate?: () => void;
 }
 
 /** Bỏ dấu tiếng Việt để tìm kiếm linh hoạt hơn (ví dụ: "ma tran" tìm được "Ma trận"). */
@@ -66,6 +68,7 @@ export function ExamMatrixTable({
     onDeleteMatrix,
     onDuplicateMatrix,
     onGenerateExam,
+    onCreateFromTemplate,
 }: ExamMatrixTableProps) {
     const rows = useMemo<MatrixRow[]>(
         () =>
@@ -104,9 +107,7 @@ export function ExamMatrixTable({
                     </Text>
                     {record.examCount > 0 && (
                         <div>
-                            <Tag color="gold" style={{ marginTop: 4 }}>
-                                Đã dùng cho {record.examCount} đề
-                            </Tag>
+                            <Text type="secondary">Đã dùng cho {record.examCount} đề</Text>
                         </div>
                     )}
                 </div>
@@ -231,9 +232,8 @@ export function ExamMatrixTable({
         },
     ];
 
-    const emptyDescription = searchText.trim()
-        ? 'Không tìm thấy ma trận phù hợp.'
-        : 'Chưa có ma trận nào. Hãy tạo ma trận mới hoặc bắt đầu từ mẫu có sẵn.';
+    const isSearching = searchText.trim() !== '';
+    const emptyDescription = isSearching ? 'Không tìm thấy ma trận phù hợp.' : 'Chưa có ma trận.';
 
     return (
         <div className="exam-matrix-table">
@@ -258,7 +258,13 @@ export function ExamMatrixTable({
                         <Empty
                             image={Empty.PRESENTED_IMAGE_SIMPLE}
                             description={emptyDescription}
-                        />
+                        >
+                            {!isSearching && onCreateFromTemplate && (
+                                <Button type="primary" size="large" onClick={onCreateFromTemplate}>
+                                    Tạo từ mẫu
+                                </Button>
+                            )}
+                        </Empty>
                     ),
                 }}
                 pagination={{
