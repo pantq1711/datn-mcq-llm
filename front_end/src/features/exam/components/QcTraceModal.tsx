@@ -9,6 +9,7 @@ import {
     Space,
     Spin,
     Tag,
+    Tooltip,
     Typography,
 } from "antd";
 import {
@@ -57,7 +58,14 @@ function lineageHeader(lineage: QcLineage, index: number) {
                 </Tag>
             )}
             <Text type="secondary">{lineage.versions.length} phiên bản</Text>
-            {job?.error && <Text type="danger">{job.error}</Text>}
+            {/* Lỗi kỹ thuật của backend chỉ để trong tooltip, không hiện thẳng cho giáo viên */}
+            {job?.error && (
+                <Tooltip title={job.error}>
+                    <Text type="danger">
+                        Lỗi khi soạn câu <Text type="secondary" underline>(Chi tiết)</Text>
+                    </Text>
+                </Tooltip>
+            )}
         </Space>
     );
 }

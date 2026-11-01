@@ -118,7 +118,7 @@ export default function EditQuestionModal({
     const handleSubmit = async () => {
         if (!question || isBusy) return;
         if (question.slotId === undefined || question.questionId === undefined) {
-            message.error("Không xác định được chỗ của câu hỏi trong đề");
+            message.error("Không xác định được câu này trong đề. Hãy tải lại trang.");
             return;
         }
 

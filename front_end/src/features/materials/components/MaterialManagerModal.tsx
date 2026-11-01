@@ -274,7 +274,7 @@ export default function MaterialManagerModal({
                                                                 </Text>
                                                                 {selectable && reservedIds?.includes(item.id) && (
                                                                     <Tooltip title="Đã tính vào giới hạn; chọn thêm ở đây không tốn suất">
-                                                                        <Tag color="default">Đã dùng ở chỗ khác</Tag>
+                                                                        <Tag color="default">Đã chọn ở phần khác</Tag>
                                                                     </Tooltip>
                                                                 )}
                                                                 {item.warnings && item.warnings.length > 0 && (

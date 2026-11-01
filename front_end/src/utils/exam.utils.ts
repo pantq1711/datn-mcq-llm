@@ -66,7 +66,7 @@ export function describeFailureReason(reason?: string | null): string {
         case "qc_exhausted":
             return "Không soạn được câu đạt yêu cầu sau 3 lần. Bấm Đổi câu (có thể ghi thêm yêu cầu).";
         default:
-            return "Chưa soạn được câu cho chỗ này. Bấm Đổi câu để thử lại.";
+            return "Chưa soạn được câu này. Bấm Đổi câu để thử lại.";
     }
 }
 
@@ -208,7 +208,7 @@ export function describeFormatIssue(issue: string): string {
         return "Đáp số chưa đúng dạng. Thầy/cô kiểm tra lại đáp số.";
     }
     // Còn lại của một trường đã biết là lỗi công thức (môi trường không hỗ trợ, ngoặc lệch, thiếu đối số…)
-    return `Công thức ở ${place} có chỗ trình bày chưa đúng. Thầy/cô xem lại công thức.`;
+    return `Công thức ở ${place} có phần trình bày chưa đúng. Thầy/cô xem lại công thức.`;
 }
 
 export function describeReviewReason(reason: string): string {
