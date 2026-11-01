@@ -23,6 +23,19 @@ export const difficultyConfig: Record<
 
 const EXPLANATION_DRAFT_REASON = "Lời giải có thể còn phần nháp, thầy/cô xem lại lời giải.";
 
+const UNCLASSIFIED_LEVEL = { label: "Chưa phân loại", color: "default" };
+
+/**
+ * Mức độ để hiển thị. Backend chỉ trả easy / medium / hard (enum Difficulty); thiếu hoặc giá trị lạ
+ * (dữ liệu cũ) thì hiện "Chưa phân loại", không bao giờ hiện mã thô hay để trống.
+ */
+export function describeLevel(level?: string | null): { label: string; color: string } {
+    if (level && Object.prototype.hasOwnProperty.call(difficultyConfig, level)) {
+        return difficultyConfig[level as ExamQuestionDifficulty];
+    }
+    return UNCLASSIFIED_LEVEL;
+}
+
 // Lý do "cần xem kỹ": đủ danh sách mã ở docs/contract/enums.md (mục 3) và docs/api mục 7.4, 7.5a, 7.7a
 const reviewReasonLabels: Record<string, string> = {
     solver_inconsistent: "Hệ thống tự giải lại và ra đáp án khác. Thầy/cô kiểm tra lại đáp án.",
@@ -70,6 +83,18 @@ export const examStatusConfig: Record<ExamStatus, { label: string; color: string
 
 const GENERIC_FORMAT_WARNING = "Có điểm trình bày cần xem lại";
 
+// Đầu câu các lỗi đáp số (ShortAnswerValue) đã đủ rõ cho giáo viên, không cần dịch lại
+const readableAnswerErrors = [
+    "đáp án phải là",
+    "không phân tích được",
+    "dấu chấm có thể",
+    "có chữ số 0",
+    "số 0 mang dấu",
+    "chuỗi dài quá",
+    "số dưới dấu căn",
+    "mẫu số bằng 0",
+];
+
 // Tên trường backend nhắc tới trong cảnh báo định dạng → chỗ trong câu, nói theo giáo viên
 const warningFieldLabels: Record<string, string> = {
     question_text: "câu dẫn",
@@ -84,6 +109,22 @@ const warningFieldLabels: Record<string, string> = {
     explanation: "lời giải",
     answer: "đáp số",
 };
+
+// Tên trường backend ghi ở "changedFields" của bản sửa → chữ cho giáo viên
+const changedFieldLabels: Record<string, string> = {
+    ...warningFieldLabels,
+    correct_option: "đáp án đúng",
+    sa_answer: "đáp số",
+    label_a: "Đúng/Sai của ý a)",
+    label_b: "Đúng/Sai của ý b)",
+    label_c: "Đúng/Sai của ý c)",
+    label_d: "Đúng/Sai của ý d)",
+};
+
+/** Các chỗ giáo viên đã sửa trong câu, viết cho dễ đọc; tên lạ thì gọi chung là "nội dung khác". */
+export function describeChangedFields(fields: string[]): string {
+    return [...new Set(fields.map((f) => changedFieldLabels[f] ?? "nội dung khác"))].join(", ");
+}
 
 /**
  * Lỗi, cảnh báo và việc tự sửa của bước định dạng do backend ghi (nguồn: FormatChecker, LatexValidationRules,
@@ -160,6 +201,10 @@ export function describeFormatIssue(issue: string): string {
         return `Công thức ở ${place} có ký hiệu lạ, có thể gõ sai. Thầy/cô xem lại công thức.`;
     }
     if (field === "answer") {
+        // Lỗi đáp số do backend viết sẵn bằng tiếng Việt dễ hiểu: bỏ tiền tố "answer:" rồi giữ nguyên câu
+        if (readableAnswerErrors.some((start) => detail.startsWith(start))) {
+            return detail.charAt(0).toUpperCase() + detail.slice(1);
+        }
         return "Đáp số chưa đúng dạng. Thầy/cô kiểm tra lại đáp số.";
     }
     // Còn lại của một trường đã biết là lỗi công thức (môi trường không hỗ trợ, ngoặc lệch, thiếu đối số…)

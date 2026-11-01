@@ -3,9 +3,10 @@ import { Alert, Button, Form, Input, message, Modal, Select, Space, Tag, Typogra
 import { EditOutlined } from "@ant-design/icons";
 
 import type {
-    ExamItemDto, ExamOption, ExamQuestionDifficulty, ExamQuestionItem, StatementKey, TruthLabel, UpdateSlotQuestionPayload,
+    ExamItemDto, ExamOption, ExamQuestionItem, StatementKey, TruthLabel, UpdateSlotQuestionPayload,
 } from "../types/exam.types";
 import { updateQuestion } from "../services/examApi";
+import { describeFormatIssue, describeLevel } from "../../../utils/exam.utils";
 
 import "./EditQuestionModal.css";
 
@@ -13,12 +14,6 @@ const { Text } = Typography;
 const { TextArea } = Input;
 
 const STATEMENT_KEYS: StatementKey[] = ["a", "b", "c", "d"];
-
-const difficultyLabels: Record<ExamQuestionDifficulty, string> = {
-    easy: "Biết",
-    medium: "Hiểu",
-    hard: "Vận dụng",
-};
 
 interface EditQuestionFormValues {
     questionText: string;
@@ -46,7 +41,9 @@ function extractErrorMessage(e: any): string {
     const data = e?.response?.data;
     const base = data?.error || data?.message || e?.message || "Gặp lỗi khi cập nhật câu hỏi";
     if (Array.isArray(data?.errors) && data.errors.length > 0) {
-        return `${base}: ${data.errors.join("; ")}`;
+        // `error` của backend đã chứa sẵn các lỗi này: chỉ hiện danh sách lỗi một lần, bỏ tiền tố tên trường ("answer: …")
+        const lines = [...new Set((data.errors as string[]).map(describeFormatIssue))];
+        return `Bản sửa chưa đạt: ${lines.join("; ")}`;
     }
     if (data?.code === "VERSION_CONFLICT") {
         return `${base}. Hãy tải lại trang rồi sửa tiếp.`;
@@ -141,7 +138,7 @@ export default function EditQuestionModal({
             );
             message.success(
                 saved.qcState === "checking"
-                    ? "Đã lưu bản sửa. Solver đang kiểm lại câu hỏi."
+                    ? "Đã lưu bản sửa. Hệ thống đang tự kiểm tra lại đáp án."
                     : "Cập nhật câu hỏi thành công"
             );
             await onSave(saved);
@@ -153,10 +150,25 @@ export default function EditQuestionModal({
         }
     };
 
-    const handleCancel = () => {
-        if (isBusy) return;
+    const closeModal = () => {
         form.resetFields();
         onCancel();
+    };
+
+    const handleCancel = () => {
+        if (isBusy) return;
+        // Đã gõ gì đó mà chưa lưu thì hỏi lại, tránh mất công sửa vì lỡ bấm ra ngoài
+        if (form.isFieldsTouched()) {
+            Modal.confirm({
+                title: "Bỏ các thay đổi chưa lưu?",
+                okText: "Bỏ thay đổi",
+                cancelText: "Tiếp tục sửa",
+                okButtonProps: { danger: true },
+                onOk: closeModal,
+            });
+            return;
+        }
+        closeModal();
     };
 
     return (
@@ -172,7 +184,7 @@ export default function EditQuestionModal({
             style={{ top: 20 }}
             onCancel={handleCancel}
             closable={!isBusy}
-            maskClosable={!isBusy}
+            maskClosable={false}
             keyboard={!isBusy}
             destroyOnClose
             className="edit-question-modal"
@@ -208,10 +220,10 @@ export default function EditQuestionModal({
                     className="edit-question-form"
                 >
                     {/* Mức độ do ô ma trận quyết định, không sửa được (docs/api mục 7.5a) */}
-                    {question.difficulty && (
+                    {questionType !== "tf" && (
                         <div style={{ marginBottom: 16 }}>
                             <Text strong>Mức độ nhận thức: </Text>
-                            <Tag>{difficultyLabels[question.difficulty]}</Tag>
+                            <Tag>{describeLevel(question.difficulty).label}</Tag>
                         </div>
                     )}
 
@@ -266,7 +278,7 @@ export default function EditQuestionModal({
                         <Form.Item
                             name="saAnswer"
                             label={<Text strong>Đáp số</Text>}
-                            extra="Một giá trị số, ví dụ 3,5 hoặc \frac{1}{2}."
+                            extra="Số nguyên hoặc số thập phân, tối đa 4 ký tự kể cả dấu - và dấu phẩy. Ví dụ: 12 ; -3,5 ; 0,25"
                             rules={[{ required: true, whitespace: true, message: "Vui lòng nhập đáp số." }]}
                         >
                             <Input placeholder="Nhập đáp số" disabled={isBusy} />

@@ -169,8 +169,8 @@ export default function MaterialListPage() {
                         Tài liệu bài học
                     </Title>
                     <Paragraph type="secondary" className="material-list-page-subtitle">
-                        Tải lên các file Word (.docx), PDF hoặc TXT bài giảng, sách giáo khoa để cung cấp ngữ cảnh tài liệu
-                        cho mô hình AI sinh câu hỏi bám sát chương trình giảng dạy.
+                        Tải lên các file Word (.docx), PDF hoặc TXT bài giảng, sách giáo khoa
+                        để hệ thống soạn câu hỏi bám sát chương trình giảng dạy.
                     </Paragraph>
                 </div>
                 <Space>

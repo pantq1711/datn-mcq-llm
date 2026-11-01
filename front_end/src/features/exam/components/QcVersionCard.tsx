@@ -8,7 +8,8 @@ import {
 } from "@ant-design/icons";
 
 import type { QcVersion } from "../types/qcTrace.types";
-import { describeFormatIssue, describeReviewReason } from "../../../utils/exam.utils";
+import { describeChangedFields, describeFormatIssue, describeReviewReason } from "../../../utils/exam.utils";
+import MathText from "../../../components/common/MathText/MathText";
 import {
     describeAnswerCheck,
     describeGrounding,
@@ -93,7 +94,7 @@ export const QcVersionCard: FC<Props> = ({ version, isLast }) => {
                         <Text strong className="qc-trace-modal__step-action">
                             {version.kind === "teacher_edit"
                                 ? `GV sửa${version.editedBy?.name ? ` · ${version.editedBy.name}` : ""}`
-                                : "Bản LLM"}
+                                : "Câu mới"}
                         </Text>
                         <Tag color={tagColor(status.tone)}>{status.label}</Tag>
                         {version.current && <Tag color="purple">Đang dùng</Tag>}
@@ -111,8 +112,7 @@ export const QcVersionCard: FC<Props> = ({ version, isLast }) => {
                         {answer && <div>{answer}</div>}
                         {version.changedFields && version.changedFields.length > 0 && (
                             <div>
-                                Trường đã sửa: {version.changedFields.join(", ")}
-                                {version.editDistance != null && ` (khoảng cách sửa ${version.editDistance})`}
+                                Đã sửa: {describeChangedFields(version.changedFields)}
                             </div>
                         )}
                     </div>
@@ -158,22 +158,22 @@ export const QcVersionCard: FC<Props> = ({ version, isLast }) => {
                             const check = describeAnswerCheck(qc.answerCheck);
                             const judge = qc.answerCheck.state === "inconsistent" ? describeJudgeAnswer(qc.answerCheck) : null;
                             return (
-                                <QcRow name="Solver" tone={check.tone} label={check.label}>
-                                    {judge && <Text type="danger">Solver chọn: {judge}</Text>}
+                                <QcRow name="Kiểm tra đáp án" tone={check.tone} label={check.label}>
+                                    {judge && <Text type="danger">Hệ thống tự giải ra: {judge}</Text>}
                                     {qc.answerCheck.solverReasoning && (
                                         <Paragraph
                                             type="secondary"
                                             className="qc-trace-modal__qc-reasoning"
-                                            ellipsis={{ rows: 2, expandable: true, symbol: "Xem lập luận" }}
+                                            ellipsis={{ rows: 2, expandable: true, symbol: "Xem cách hệ thống giải" }}
                                         >
-                                            {qc.answerCheck.solverReasoning}
+                                            <MathText text={qc.answerCheck.solverReasoning} />
                                         </Paragraph>
                                     )}
                                 </QcRow>
                             );
                         })()
                     ) : (
-                        <NoData name="Solver" />
+                        <NoData name="Kiểm tra đáp án" />
                     )}
 
                     {/* Chỉ câu sinh từ đề có tài liệu mới có bước này (docs/api mục 7.7a) */}

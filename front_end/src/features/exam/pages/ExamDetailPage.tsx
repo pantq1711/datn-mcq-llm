@@ -1,12 +1,12 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button, Card, Spin, Space, Tag, Typography, message } from "antd";
-import { ArrowLeftOutlined, FileWordOutlined, LineChartOutlined, WarningOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Progress, Spin, Space, Tag, Tooltip, Typography, message } from "antd";
+import { ArrowLeftOutlined, FileWordOutlined, SyncOutlined, WarningOutlined } from "@ant-design/icons";
 
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
-import type { ExamPreviewData, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
-import { examKindConfig, examStatusConfig, resolveQuestionType } from "../../../utils/exam.utils";
-import { keepQuestion, replaceQuestion, getExamDetail, getExamExportDocx, getCatalogSubjects } from '../services/examApi';
+import type { ExamPreviewData, ExamProgress, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
+import { examKindConfig, examStatusConfig } from "../../../utils/exam.utils";
+import { keepQuestion, replaceQuestion, getExamDetail, getExamProgress, getExamExportDocx, getCatalogSubjects } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
 import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
 
@@ -14,7 +14,6 @@ import "./ExamDetailPage.css";
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import ChangeQuestionModal, { type ChangeQuestionResult } from "../components/ChangeQuestionModal";
 import EditQuestionModal from "../components/EditQuestionModal";
-import { ExamProgressDetail } from '../components/ExamProgressDetail';
 import { QcTraceModal } from '../components/QcTraceModal';
 
 const { Title, Text } = Typography;
@@ -27,6 +26,47 @@ const partTitles: Record<string, string> = {
     II: "Phần II. Trắc nghiệm đúng sai",
     III: "Phần III. Trả lời ngắn",
 };
+
+// Tên ngắn của Phần trong bảng ma trận cấu trúc
+const partSummaryLabels: Record<string, string> = {
+    I: "Phần I – Trắc nghiệm",
+    II: "Phần II – Đúng/Sai",
+    III: "Phần III – Trả lời ngắn",
+};
+
+/** Câu chữ và màu của thanh tiến độ ở đầu trang đề (docs/api mục 7.3). */
+function describeBuildProgress(
+    progress: ExamProgress,
+    createdAt: string
+): { type: "info" | "success" | "warning"; text: string } {
+    const done = `${progress.ready}/${progress.total}`;
+    const stayNote = "Thầy/cô có thể rời trang, đề vẫn tiếp tục được soạn.";
+    if (progress.status === "generating") {
+        // Chưa xong câu nào thì chưa có cơ sở để ước lượng: không hiện thời gian
+        if (progress.ready <= 0) {
+            return { type: "info", text: `Đang soạn ${done} câu… ${stayNote}` };
+        }
+        // Thời gian trung bình mỗi câu đã xong (từ lúc tạo đề) nhân số câu còn lại
+        const elapsedSeconds = Math.max(0, (Date.now() - new Date(createdAt).getTime()) / 1000);
+        if (!Number.isFinite(elapsedSeconds)) {
+            return { type: "info", text: `Đang soạn ${done} câu… ${stayNote}` };
+        }
+        const remainingSeconds = (elapsedSeconds / progress.ready) * Math.max(0, progress.generating);
+        // Làm tròn lên phút, ít nhất 1 phút khi còn câu đang soạn
+        const minutes = Math.max(1, Math.ceil(remainingSeconds / 60));
+        return {
+            type: "info",
+            text: `Đang soạn ${done} câu · khoảng ${minutes} phút nữa. ${stayNote}`,
+        };
+    }
+    if (progress.status === "partial" && progress.failed > 0) {
+        return {
+            type: "warning",
+            text: `Đã soạn xong ${done} câu · ${progress.failed} câu chưa soạn được (xem bên dưới).`,
+        };
+    }
+    return { type: "success", text: `Đã soạn xong ${done} câu.` };
+}
 
 /** Chuyển một chỗ của đề (ExamItemDto) sang dạng câu hiển thị trong danh sách. */
 function toQuestionItem(item: ExamItemDto): ExamQuestionItem {
@@ -70,9 +110,9 @@ export default function ExamDetailPage() {
     const [editingQuestion, setEditingQuestion] = useState<ExamQuestionItem | null>(null);
 
     const [detail, setDetail] = useState<ExamDetail | null>(null);
+    const [progress, setProgress] = useState<ExamProgress | null>(null);
     const [loading, setLoading] = useState(true);
 
-    const [showProgress, setShowProgress] = useState(false);
     const [exportLoading, setExportLoading] = useState(false);
 
     const [qcModalVisible, setQcModalVisible] = useState(false);
@@ -91,12 +131,17 @@ export default function ExamDetailPage() {
         if (!examId) return;
         const currentFetchId = ++fetchSequenceRef.current;
         try {
-            const data = await getExamDetail(examId);
+            // Tiến độ lỗi thì thôi, vẫn hiện đề; chỉ lỗi tải đề mới tính vào bộ đếm lỗi
+            const [data, progressData] = await Promise.all([
+                getExamDetail(examId),
+                getExamProgress(examId).catch(() => null),
+            ]);
 
             // Chỉ cập nhật state nếu đây là request mới nhất
             if (currentFetchId !== fetchSequenceRef.current) return;
 
             setDetail(data);
+            if (progressData) setProgress(progressData);
             consecutiveErrorsRef.current = 0;
             setPollingStoppedDueToError(false);
         } catch (err: any) {
@@ -139,12 +184,15 @@ export default function ExamDetailPage() {
     }, [detail]);
 
     const hasPendingWork = !pollingStoppedDueToError && pendingSummary.total > 0;
+    // Còn câu đang soạn thì chưa xuất Word được
+    const isGenerating = pendingSummary.generatingCount > 0 || progress?.status === "generating";
 
     useEffect(() => {
         if (!examId) {
             setLoading(false);
             return;
         }
+        setProgress(null);
         setLoading(true);
         loadDetail().finally(() => setLoading(false));
     }, [examId, loadDetail]);
@@ -223,25 +271,20 @@ export default function ExamDetailPage() {
     if (loading) return <Spin tip="Đang tải đề…" />;
     if (!detail) return <p>Không có dữ liệu đề.</p>;
 
-    const allQuestions = parts.flatMap((p) => p.questions);
-    // Câu tf có difficulty null (mức ở từng ý) nên đếm riêng để các dòng cộng đủ tổng
-    const leveledQuestions = allQuestions.filter((q) => resolveQuestionType(q) !== "tf");
+    // Số câu theo Phần lấy từ ma trận (required), nên luôn cộng đủ tổng dù câu đang soạn hay lỗi
     const questionCount = parts.reduce((sum, p) => sum + p.required, 0);
-    const easyCount = leveledQuestions.filter((q) => q.difficulty === "easy").length;
-    const mediumCount = leveledQuestions.filter((q) => q.difficulty === "medium").length;
-    const hardCount = leveledQuestions.filter((q) => q.difficulty === "hard").length;
-    const tfCount = allQuestions.length - leveledQuestions.length;
     const exam: ExamPreviewData = {
-        title: detail.title,
-        subject: subjectName,
         questionCount,
-        easyCount,
-        mediumCount,
-        hardCount,
-        tfCount,
-        // Mọi chỗ còn lại (chưa có câu, đang soạn, lỗi) để các dòng luôn cộng đủ tổng
-        missingCount: Math.max(0, questionCount - easyCount - mediumCount - hardCount - tfCount),
+        parts: parts.map((p) => ({
+            part: p.part,
+            label: partSummaryLabels[p.part] ?? `Phần ${p.part}`,
+            count: p.required,
+        })),
     };
+    const progressView = progress ? describeBuildProgress(progress, detail.createdAt) : null;
+    const progressPercent = progress && progress.total > 0
+        ? Math.min(100, Math.round((progress.ready / progress.total) * 100))
+        : 0;
 
     const handleGenerateReplacement = async (request: ChangeQuestionRequest): Promise<ChangeQuestionResult> => {
         if (!examId || request.question.slotId === undefined) return;
@@ -254,7 +297,7 @@ export default function ExamDetailPage() {
             message.success(
                 source === "bank"
                     ? "Đã đổi câu hỏi từ ngân hàng thành công!"
-                    : "Đã yêu cầu sinh câu thay thế qua AI!"
+                    : "Đã yêu cầu soạn câu thay thế!"
             );
             setChangeQuestion(null);
             await loadDetail();
@@ -281,11 +324,11 @@ export default function ExamDetailPage() {
         if (!examId || question.slotId === undefined) return;
         try {
             await keepQuestion(Number(examId), question.slotId);
-            message.success('Đã giữ câu hỏi thành công');
+            message.success('Đã lưu câu vào ngân hàng');
             await loadDetail();
         } catch (e: any) {
             console.error(e);
-            message.error(e?.response?.data?.error || e?.message || 'Gặp lỗi khi giữ câu hỏi');
+            message.error(e?.response?.data?.error || e?.message || 'Gặp lỗi khi lưu câu vào ngân hàng');
         }
     };
 
@@ -303,9 +346,9 @@ export default function ExamDetailPage() {
                     <Spin size="small" />
                     <Text type="secondary" style={{ fontSize: 13, fontWeight: "normal" }}>
                         Đang cập nhật:
-                        {pendingSummary.generatingCount > 0 ? ` ${pendingSummary.generatingCount} chỗ đang sinh` : ""}
+                        {pendingSummary.generatingCount > 0 ? ` ${pendingSummary.generatingCount} câu đang soạn` : ""}
                         {pendingSummary.generatingCount > 0 && pendingSummary.checkingCount > 0 ? "," : ""}
-                        {pendingSummary.checkingCount > 0 ? ` ${pendingSummary.checkingCount} câu đang kiểm lại` : ""}
+                        {pendingSummary.checkingCount > 0 ? ` ${pendingSummary.checkingCount} câu đang tự kiểm tra lại` : ""}
                     </Text>
                 </Space>
             )}
@@ -347,45 +390,48 @@ export default function ExamDetailPage() {
                                 </Tag>
                             )}
                             {subjectName && <Text type="secondary">{subjectName}</Text>}
-                            <Text type="secondary">Mã đề: {detail.examCode}</Text>
+                            <Text type="secondary">Mã hệ thống: {detail.examCode}</Text>
                         </Space>
                     </div>
 
                     <Space size={8} className="exam-detail-page-actions">
-                        <Button
-                            icon={<LineChartOutlined />}
-                            onClick={() => setShowProgress((prev) => !prev)}
-                            disabled={!examId}
-                        >
-                            {showProgress ? "Ẩn tiến độ" : "Xem tiến độ chi tiết"}
-                        </Button>
-
-                        <Button
-                            type="primary"
-                            icon={<FileWordOutlined />}
-                            loading={exportLoading}
-                            onClick={handleExportWord}
-                        >
-                            Xuất file Word
-                        </Button>
+                        <Tooltip title={isGenerating ? "Đề đang được soạn, chờ xong rồi xuất Word." : undefined}>
+                            {/* Nút bị khóa không nhận chuột nên bọc span để tooltip vẫn hiện */}
+                            <span>
+                                <Button
+                                    type="primary"
+                                    icon={<FileWordOutlined />}
+                                    loading={exportLoading}
+                                    disabled={isGenerating}
+                                    onClick={handleExportWord}
+                                >
+                                    Xuất file Word
+                                </Button>
+                            </span>
+                        </Tooltip>
                     </Space>
                 </div>
             </div>
 
-            <div className="exam-detail-page-overview">
-                <Card title="Thông tin đề thi">
-                    <ExamPreview exam={exam} />
-                </Card>
-            </div>
-
-            {showProgress && examId && (
+            {progress && progressView && (
                 <div className="exam-detail-page-progress">
-                    <ExamProgressDetail
-                        examId={examId}
-                        onClose={() => setShowProgress(false)}
+                    <Alert
+                        type={progressView.type}
+                        showIcon
+                        icon={progress.status === "generating" ? <SyncOutlined spin /> : undefined}
+                        message={progressView.text}
+                        description={progress.status === "generating"
+                            ? <Progress percent={progressPercent} showInfo={false} />
+                            : undefined}
                     />
                 </div>
             )}
+
+            <div className="exam-detail-page-overview">
+                <Card>
+                    <ExamPreview exam={exam} />
+                </Card>
+            </div>
 
             <div className="exam-detail-page-question-list">
                 <Card title={questionListCardTitle}>

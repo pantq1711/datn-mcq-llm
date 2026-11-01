@@ -3,7 +3,7 @@ import { Alert, Button, Form, Input, Modal, Radio, Space, Tag, Tooltip, Typograp
 import { InfoCircleOutlined, SwapOutlined, BulbOutlined, DatabaseOutlined, RobotOutlined } from "@ant-design/icons";
 
 import type { ExamQuestionItem, ChangeQuestionRequest, ExamQuestionType } from "../types/exam.types";
-import { difficultyConfig, resolveQuestionType } from "../../../utils/exam.utils";
+import { describeLevel, resolveQuestionType } from "../../../utils/exam.utils";
 import QuestionContent from "../components/QuestionContent";
 
 import "./ChangeQuestionModal.css";
@@ -63,15 +63,12 @@ export default function ChangeQuestionModal({
 
         if (type === "tf" && item.statements && item.statements.length > 0) {
             const levelsText = item.statements
-                .map(s => (s.difficulty ? difficultyConfig[s.difficulty]?.label : "Biết"))
-                .filter(Boolean)
+                .map(s => describeLevel(s.difficulty).label)
                 .join(" · ");
             return <Tag color="blue">{levelsText}</Tag>;
         }
 
-        const diffConfig = item.difficulty ? difficultyConfig[item.difficulty] : null;
-        if (!diffConfig) return null;
-
+        const diffConfig = describeLevel(item.difficulty);
         return <Tag color={diffConfig.color}>{diffConfig.label}</Tag>;
     };
 
@@ -102,7 +99,7 @@ export default function ChangeQuestionModal({
         try {
             const result = await onGenerate({ question, instruction, source });
             if (result === "bank_exhausted") {
-                // Không tự sinh: chỉ chuyển sang "Sinh mới qua AI" để giáo viên tự bấm (lần sinh tốn lượt gọi AI)
+                // Không tự soạn: chỉ chuyển sang "Soạn câu mới" để giáo viên tự bấm (mỗi lần soạn tốn lượt gọi AI)
                 setBankExhausted(true);
                 form.setFieldsValue({ source: "generate" });
             }
@@ -128,6 +125,8 @@ export default function ChangeQuestionModal({
             }
             width={720}
             style={{ top: 20 }}
+            // Nội dung dài thì cuộn trong hộp; nút hành động ở đáy luôn thấy được (kể cả màn 1366×768)
+            styles={{ body: { maxHeight: "calc(100vh - 210px)", overflowY: "auto" } }}
             onCancel={handleCancel}
             closable={!isBusy}
             maskClosable={!isBusy}
@@ -135,19 +134,25 @@ export default function ChangeQuestionModal({
             destroyOnClose
             className="change-question-modal"
             footer={
-                <div className="change-question-modal-footer">
-                    <Button onClick={handleCancel} disabled={isBusy}>
-                        Hủy
-                    </Button>
-                    <Button
-                        type="primary"
-                        icon={<SwapOutlined />}
-                        loading={isBusy}
-                        disabled={!question}
-                        onClick={handleSubmit}
-                    >
-                        {watchedSource === "bank" ? "Đổi câu từ ngân hàng" : "Sinh câu mới qua AI"}
-                    </Button>
+                <div
+                    className="change-question-modal-footer"
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}
+                >
+                    <Text type="danger">Câu hiện tại sẽ bị thay. Không hoàn tác được.</Text>
+                    <Space size={8}>
+                        <Button onClick={handleCancel} disabled={isBusy}>
+                            Hủy
+                        </Button>
+                        <Button
+                            type="primary"
+                            icon={<SwapOutlined />}
+                            loading={isBusy}
+                            disabled={!question}
+                            onClick={handleSubmit}
+                        >
+                            {watchedSource === "bank" ? "Đổi câu từ ngân hàng" : "Soạn câu mới"}
+                        </Button>
+                    </Space>
                 </div>
             }
         >
@@ -205,7 +210,7 @@ export default function ChangeQuestionModal({
                                     <Radio.Button value="generate">
                                         <Space size={6}>
                                             <RobotOutlined />
-                                            <span>Sinh mới qua AI</span>
+                                            <span>Soạn câu mới</span>
                                         </Space>
                                     </Radio.Button>
                                     <Tooltip title={bankExhausted ? "Ngân hàng đã hết câu phù hợp cho chỗ này" : undefined}>
@@ -227,7 +232,7 @@ export default function ChangeQuestionModal({
                                             type="warning"
                                             showIcon
                                             message="Ngân hàng không còn câu phù hợp cho chỗ này"
-                                            description="Bạn có thể sinh câu mới qua AI (có thể nhập yêu cầu bổ sung bên dưới) rồi bấm &quot;Sinh câu mới qua AI&quot;."
+                                            description="Bạn có thể soạn câu mới (có thể ghi thêm yêu cầu bên dưới) rồi bấm &quot;Soạn câu mới&quot;."
                                         />
                                     )}
                                     <Form.Item
@@ -251,7 +256,7 @@ export default function ChangeQuestionModal({
                                     <div className="change-question-instruction-hint">
                                         <InfoCircleOutlined />
                                         <Text type="secondary">
-                                            Nêu rõ bối cảnh hoặc cách diễn đạt mong muốn. Hệ thống sẽ sinh câu mới và chạy kiểm định QC.
+                                            Nêu rõ bối cảnh hoặc cách diễn đạt mong muốn. Hệ thống sẽ soạn câu mới và tự kiểm tra đáp án.
                                         </Text>
                                     </div>
                                 </>

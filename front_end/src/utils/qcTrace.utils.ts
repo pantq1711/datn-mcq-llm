@@ -20,12 +20,12 @@ export function tagColor(tone: QcTone): string {
 
 // Trạng thái câu (docs/api mục 3)
 const questionStatusLabels: Record<string, Label> = {
-    generated: { label: "Đã sinh", tone: "default" },
+    generated: { label: "Mới soạn", tone: "default" },
     format_failed: { label: "Lỗi định dạng", tone: "error" },
     duplicate: { label: "Trùng lặp", tone: "error" },
-    qc_passed: { label: "Qua QC", tone: "success" },
+    qc_passed: { label: "Đạt tự kiểm tra", tone: "success" },
     rejected: { label: "Bị loại", tone: "error" },
-    in_bank: { label: "Đã vào ngân hàng", tone: "success" },
+    in_bank: { label: "Đã lưu vào ngân hàng", tone: "success" },
 };
 
 export function describeQuestionStatus(status: string): Label {
@@ -34,12 +34,12 @@ export function describeQuestionStatus(status: string): Label {
 
 // Trạng thái chỗ (docs/api mục 7.4, 7.5)
 const slotStateLabels: Record<string, Label> = {
-    pending: { label: "Chờ sinh", tone: "default" },
-    generating: { label: "Đang sinh", tone: "warning" },
+    pending: { label: "Chờ soạn", tone: "default" },
+    generating: { label: "Đang soạn", tone: "warning" },
     ready: { label: "Sẵn sàng", tone: "success" },
-    kept: { label: "Đã giữ", tone: "success" },
+    kept: { label: "Đã lưu vào ngân hàng", tone: "success" },
     edited: { label: "Đã sửa", tone: "default" },
-    failed: { label: "Sinh lỗi", tone: "error" },
+    failed: { label: "Chưa soạn được", tone: "error" },
 };
 
 export function describeSlotState(state: string): Label {
@@ -50,7 +50,7 @@ const notRunReasons: Record<string, string> = {
     format_failed: "câu lỗi định dạng",
     duplicate: "câu bị trùng",
     dedup_not_concluded: "chưa kết luận trùng lặp",
-    solver_not_run: "Solver chưa chạy",
+    solver_not_run: "chưa tự kiểm tra",
     superseded: "đã có bản mới hơn",
     not_recorded: "không có bản ghi",
 };
@@ -58,16 +58,17 @@ const notRunReasons: Record<string, string> = {
 export function describeAnswerCheck(check: QcAnswerCheck): Label {
     switch (check.state) {
         case "consistent":
-            return { label: "Solver khớp đáp án", tone: "success" };
+            return { label: "Tự giải ra cùng đáp án", tone: "success" };
         case "inconsistent":
-            return { label: "Solver lệch đáp án", tone: "error" };
+            return { label: "Tự giải ra đáp án khác", tone: "error" };
         case "error":
-            return { label: `Solver lỗi${check.error ? `: ${check.error}` : ""}`, tone: "error" };
+            return { label: "Chưa tự kiểm tra được đáp án", tone: "error" };
         case "pending":
-            return { label: "Solver đang chạy", tone: "warning" };
+            return { label: "Đang tự kiểm tra", tone: "warning" };
         case "not_run":
             return {
-                label: `Chưa chạy Solver${check.reason ? ` (${notRunReasons[check.reason] ?? check.reason})` : ""}`,
+                // Lý do lạ thì không hiện mã thô
+                label: `Chưa tự kiểm tra đáp án${check.reason && notRunReasons[check.reason] ? ` (${notRunReasons[check.reason]})` : ""}`,
                 tone: "default",
             };
         default:
@@ -106,7 +107,7 @@ export function describeGrounding(state: string): Label {
 const actionLabels: Record<string, Label> = {
     edit: { label: "Sửa câu", tone: "default" },
     replace: { label: "Đổi câu", tone: "warning" },
-    keep: { label: "Giữ câu (vào ngân hàng)", tone: "success" },
+    keep: { label: "Lưu câu vào ngân hàng", tone: "success" },
 };
 
 export function describeAction(action: string): Label {
