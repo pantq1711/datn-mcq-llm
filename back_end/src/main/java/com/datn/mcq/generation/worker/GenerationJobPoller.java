@@ -320,20 +320,8 @@ public class GenerationJobPoller {
         } else {
             ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText(), production);
             savedQuestion = processor.saveGeneratedQuestionFromJob(ctx, llmResult, parsed);
-            qcInput = new QuestionQcInput(
-                    savedQuestion.getId(),
-                    parsed.parseSuccess(),
-                    parsed.questionText(),
-                    parsed.optionA(),
-                    parsed.optionB(),
-                    parsed.optionC(),
-                    parsed.optionD(),
-                    parsed.correctOption(),
-                    parsed.explanation(),
-                    ctx.validateLatex(),
-                    runAnswerCheck,
-                    parsed.parseError()
-            ).withParseWarnings(parsed.parseWarnings());
+            qcInput = GenerationService.mcqQcInput(
+                    savedQuestion.getId(), parsed, ctx.validateLatex(), runAnswerCheck);
             parseError = parsed.parseError();
         }
 

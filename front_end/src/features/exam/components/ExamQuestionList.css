@@ -22,6 +22,13 @@
     padding-top: 0;
 }
 
+.exam-question-content-wrapper {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
 .exam-question-item {
     width: 100%;
     margin-bottom: 16px;
@@ -40,12 +47,46 @@
     background: #f0f8ff;
 }
 
+.exam-question-item-needs-review {
+    border-color: #ffbb96;
+    background: #fff7f0;
+}
+
+.exam-question-review-reasons {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.exam-question-review-tooltip {
+    margin: 0;
+    padding-left: 16px;
+}
+
 .exam-question-item-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 12px;
+}
+
+/* Nút trên mỗi câu đủ cao để bấm dễ (≥ 36px) */
+.exam-question-item-header .ant-btn,
+.exam-explanation-toggle {
+    min-height: 36px;
+}
+
+.exam-explanation-toggle {
+    margin-top: 12px;
+}
+
+.exam-question-qc-link {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
 }
 
 .exam-question-item-number {

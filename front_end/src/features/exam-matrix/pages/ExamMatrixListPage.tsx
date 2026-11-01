@@ -5,8 +5,9 @@ import { useNavigate } from 'react-router-dom';
 
 import { ExamMatrixTable } from '../components/ExamMatrixTable';
 import { ExamMatrixTemplateModal } from '../components/ExamMatrixTemplateModal';
-import type { ExamMatrix } from '../types/examMatrix.types.ts';
+import type { ExamMatrixSummary } from '../types/examMatrix.types.ts';
 import { listExamMatrices, deleteExamMatrix, duplicateExamMatrix, createExamMatrixFromSample } from "../services/examMatrixService";
+import { getCatalogSubjects } from '../../exam/services/examApi';
 import './ExamMatrixListPage.css';
 
 const { Title } = Typography;
@@ -15,13 +16,32 @@ export default function ExamMatrixListPage() {
     const navigate = useNavigate();
     const [searchText, setSearchText] = useState('');
     const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-    const [matrices, setMatrices] = useState<ExamMatrix[]>([]);
+    const [matrices, setMatrices] = useState<ExamMatrixSummary[]>([]);
+    // Tên môn theo id, tải một lần từ /api/catalog/subjects
+    const [subjectNames, setSubjectNames] = useState<Record<number, string>>({});
 
     const [loading, setLoading] = useState(false);
 
     const handleCreateMatrix = () => navigate('/exam-matrices/new');
     const handleEditMatrix = (matrixId: string) =>
         navigate(`/exam-matrices/${matrixId}/edit`);
+
+    // Tải danh sách ma trận (dùng lại khi cần làm mới)
+    const fetchMatrices = async () => {
+        setLoading(true);
+        try {
+            const data = await listExamMatrices();
+            setMatrices(data);
+        } catch (err: any) {
+            const msg =
+                err?.response?.data?.error ||
+                err?.message ||
+                "Không thể tải danh sách ma trận.";
+            message.error(msg);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleDeleteMatrix = async (matrixId: string) => {
         setLoading(true);
@@ -41,18 +61,11 @@ export default function ExamMatrixListPage() {
         }
     };
 
-
-    const handleSelectTemplate = (templateId: string) => {
-        setIsTemplateModalOpen(false);
-        navigate(`/exam-matrices/new?templateId=${encodeURIComponent(templateId)}`);
-    };
-
     const handleDuplicateMatrix = async (matrixId: string) => {
         try {
             const newMatrix = await duplicateExamMatrix(matrixId);
             message.success(`Đã tạo bản sao: ${newMatrix.name}`);
-            // Refresh list (gọi listExamMatrices lại) để thấy ma trận mới
-            await listExamMatrices(); // hàm fetch list hiện tại
+            await fetchMatrices();
         } catch (err: any) {
             message.error(err?.response?.data?.error || 'Không thể nhân bản ma trận');
         }
@@ -62,36 +75,29 @@ export default function ExamMatrixListPage() {
         try {
             const newMatrix = await createExamMatrixFromSample(key);
             message.success(`Đã tạo ma trận: ${newMatrix.name}`);
-            // Nếu muốn mở ngay trang chỉnh sửa hoặc chi tiết:
-            navigate(`/exam-matrices/${newMatrix.id}`);
+            setIsTemplateModalOpen(false)
+            handleEditMatrix(String(newMatrix.id))
         } catch (err: any) {
             message.error(err?.response?.data?.error || 'Không thể tạo ma trận từ mẫu');
         }
     };
+
+    const handleGenerateExam = (matrixId: string) =>
+        navigate(`/exams/generate?tab=by-matrix&matrixId=${encodeURIComponent(matrixId)}`);
 
     const handleReset = () => {
         setSearchText('');
     };
 
     useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const data = await listExamMatrices();
-                setMatrices(data);
-            } catch (err: any) {
-                const msg =
-                    err?.response?.data?.error ||
-                    err?.message ||
-                    "Không thể tải danh sách ma trận.";
-                message.error(msg);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, []);          // chạy một lần khi component mount
+        fetchMatrices();
+        getCatalogSubjects()
+            .then((subjects) =>
+                setSubjectNames(Object.fromEntries(subjects.map((s) => [Number(s.id), s.name])))
+            )
+            // Không có tên môn thì bảng hiện "Môn #id", không chặn danh sách
+            .catch((err) => console.warn("Không tải được danh sách môn học", err));
+    }, []);         // chạy một lần khi component mount
 
     return (
         <div className="exam-matrix-list-page">
@@ -146,11 +152,13 @@ export default function ExamMatrixListPage() {
 
                     <ExamMatrixTable
                         matrices={matrices}
+                        subjectNames={subjectNames}
                         searchText={searchText}
                         loading={loading}
                         onEditMatrix={handleEditMatrix}
                         onDeleteMatrix={handleDeleteMatrix}
                         onDuplicateMatrix={handleDuplicateMatrix}
+                        onGenerateExam={handleGenerateExam}
                     />
                 </Card>
             )}
@@ -158,7 +166,6 @@ export default function ExamMatrixListPage() {
             <ExamMatrixTemplateModal
                 open={isTemplateModalOpen}
                 onCancel={() => setIsTemplateModalOpen(false)}
-                onSelectTemplate={handleSelectTemplate}
                 onCreateFromSample={handleCreateFromSample}
             />
         </div>

@@ -25,6 +25,29 @@
     min-width: 0;
 }
 
+.question-filter-topic-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.question-filter-topic-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.question-filter-topic-text {
+    font-weight: 500;
+    color: #1f1f1f;
+}
+
+.question-filter-topic-right {
+    display: flex;
+    align-items: center;
+}
+
 @media (max-width: 767px) {
     .question-filters-actions-col {
         align-items: stretch;

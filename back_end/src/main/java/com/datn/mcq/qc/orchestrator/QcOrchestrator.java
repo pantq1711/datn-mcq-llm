@@ -256,7 +256,9 @@ public class QcOrchestrator {
      * Gọi Solver cho một câu (gọi mạng, KHÔNG ghi DB, không mở transaction). Ném lỗi khi không có kết quả hợp lệ (lỗi
      * mạng/HTTP, hết thời gian chờ, JSON hỏng, thiếu hoặc sai judge_*), nơi gọi coi là ERROR.
      * <ul>
-     *   <li>mcq: so judge_answer với correct_option;</li>
+     *   <li>mcq: Solver v3 xét từng phương án; khớp khi đúng một phương án đúng và trùng correct_option, nhiều hoặc
+     *       không có phương án đúng là không khớp ({@code multiple}/{@code none}); thiếu options_verdict thì so
+     *       judge_answer với correct_option như cũ;</li>
      *   <li>sa (V4): so đáp số theo giá trị; ambiguous và không phân tích được là kết quả hợp lệ không khớp;</li>
      *   <li>tf (GĐ3): khớp khi đủ 4 ý khớp; có ý lệch hoặc undecidable là không khớp.</li>
      * </ul>
@@ -285,7 +287,12 @@ public class QcOrchestrator {
                 input.questionText(), input.optionA(), input.optionB(), input.optionC(), input.optionD(),
                 input.correctOption());
         return new SolverVerdict(QuestionType.MCQ, mcq.passed(), mcq.judgeModel(), mcq.reasoning(), mcq.judgeAnswer(),
-                null, null, null, mcq.usage());
+                null, null, null, mcq.usage(), mcq.optionCorrect());
+    }
+
+    /** Phiên bản prompt Solver mcq đang dùng (công cụ đo đối chiếu trước khi gọi). */
+    public String solverPromptVersion() {
+        return answerSolverChecker.promptVersion();
     }
 
     /**

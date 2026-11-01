@@ -14,10 +14,13 @@ export interface LoginResponse {
   };
 }
 
+/** Vai trò do GET /api/auth/me trả về (chữ thường như DB). */
+export type UserRole = "teacher" | "admin" | "researcher";
+
 export interface UserInfo {
   id: string;
   name: string;
   email: string;
-  role: "GV" | "AD" | "STUDENT" | string; // tùy API
+  role: UserRole;
   // các trường bổ sung nếu backend trả về
 }

@@ -1,135 +1,80 @@
-import { Button, Card, Space, Typography, message, Form, Spin } from 'antd';
-import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Alert, Button, Card, Space, Typography, message, Form, Spin } from 'antd';
+import { ArrowLeftOutlined, CopyOutlined, SaveOutlined } from '@ant-design/icons';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
-import { ExamMatrixBasicInfoForm } from '../components/ExamMatrixBasicInfoForm';
-import { ExamMatrixDistributionTable, createEmptyExamMatrixCounts, type ExamMatrixCounts, type ExamMatrixQuestionType, type ExamMatrixCognitiveLevel } from '../components/ExamMatrixDistributionTable';
+import { ExamMatrixBasicInfoForm, type ExamMatrixBasicInfoValues, type ExamMatrixSubjectOption } from '../components/ExamMatrixBasicInfoForm';
+import { ExamMatrixCellEditor } from '../components/ExamMatrixCellEditor';
 import { ExamMatrixTotalSummary } from '../components/ExamMatrixTotalSummary';
-import { createExamMatrix, updateExamMatrix, getExamMatrix, getExamMatrixTemplate } from '../services/examMatrixService';
+import { createExamMatrix, updateExamMatrix, getExamMatrix, duplicateExamMatrix } from '../services/examMatrixService';
+import { getCatalogSubjects } from '../../exam/services/examApi';
+import type { CreateExamMatrixPayload, ExamMatrixCellInput } from '../types/examMatrix.types';
+import { createEmptyCell, normalizeCell, toCellInput, validateCells } from '../../../utils/matrixCell.utils';
 import './ExamMatrixFormPage.css';
 
 const { Title, Text } = Typography;
 
 /**
- * Trang tạo/chỉnh sửa ma trận.
+ * Trang tạo/chỉnh sửa ma trận: thông tin chung + danh sách ô (docs/api mục 7.1, 7.1a).
  */
 export default function ExamMatrixFormPage() {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
-    const [searchParams] = useSearchParams();
-
-    const templateId = searchParams.get('templateId');
     const isEditMode = Boolean(id);
-    const isTemplateMode = !isEditMode && Boolean(templateId);
 
-    const [basicForm] = Form.useForm();
+    const [basicForm] = Form.useForm<ExamMatrixBasicInfoValues>();
     const [saving, setSaving] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [duplicating, setDuplicating] = useState(false);
 
-    // Khởi tạo state đúng chuẩn ExamMatrixCounts thay vì mảng any[]
-    const [matrixCounts, setMatrixCounts] = useState<ExamMatrixCounts>(createEmptyExamMatrixCounts);
+    const [cells, setCells] = useState<ExamMatrixCellInput[]>(() => [createEmptyCell()]);
+    // Ma trận đã có đề: giữ nguyên ô gốc để gửi lại đúng cấu trúc cũ (backend trả 200, không đổi gì)
+    const [originalCells, setOriginalCells] = useState<ExamMatrixCellInput[]>([]);
+    const [examCount, setExamCount] = useState(0);
+    const isLocked = isEditMode && examCount > 0;
 
-    const pageTitle = isEditMode
-        ? 'Chỉnh sửa ma trận'
-        : isTemplateMode
-            ? 'Tạo ma trận từ mẫu'
-            : 'Tạo ma trận';
+    const [subjects, setSubjects] = useState<ExamMatrixSubjectOption[]>([]);
+    const [loadingSubjects, setLoadingSubjects] = useState(false);
+
+    const pageTitle = isEditMode ? 'Chỉnh sửa ma trận' : 'Tạo ma trận';
 
     const handleCancel = () => {
         navigate('/exam-matrices');
     };
 
-    // Hàm build payload và validate theo quy tắc backend
-    const buildPayload = async () => {
-        // 1. Validate và lấy giá trị từ form thông tin chung
+    useEffect(() => {
+        setLoadingSubjects(true);
+        getCatalogSubjects()
+            .then((list) => setSubjects(list.map((s) => ({ label: s.name, value: Number(s.id) }))))
+            .catch(() => message.error('Không thể tải danh sách môn học'))
+            .finally(() => setLoadingSubjects(false));
+    }, []);
+
+    // Dựng body đúng CreateMatrixRequest; lỗi thì ném Error với thông báo cho giáo viên
+    const buildPayload = async (): Promise<CreateExamMatrixPayload> => {
         const basicValues = await basicForm.validateFields();
 
-        // Validate tên ma trận (tối đa 255 ký tự, không để trống)
-        if (!basicValues.name || basicValues.name.trim() === '') {
-            throw new Error('Vui lòng nhập tên ma trận.');
-        }
-        if (basicValues.name.length > 255) {
-            throw new Error('Tên ma trận không được vượt quá 255 ký tự.');
+        const payloadCells = isLocked ? originalCells : cells;
+        if (!isLocked) {
+            const cellError = validateCells(payloadCells);
+            if (cellError) throw new Error(cellError);
         }
 
-        // Validate môn học (phải là number)
-        const subjectIdNum = Number(basicValues.subjectId);
-        if (!basicValues.subjectId || isNaN(subjectIdNum)) {
-            throw new Error('Vui lòng chọn môn học hợp lệ.');
-        }
-
-        // Validate khối lớp (từ 6 đến 9)
-        const grade = Number(basicValues.gradeLevel ?? basicValues.grade);
-        if (isNaN(grade) || grade < 6 || grade > 9) {
-            throw new Error('Khối lớp phải nằm trong khoảng từ 6 đến 9.');
-        }
-
-        // 2. Validate phân bổ câu hỏi từ ma trận object (matrixCounts)
-        let totalQuestions = 0;
-        const parts: any[] = [];
-        const cells: any[] = []; // Thêm mảng cells nếu CreateExamMatrixPayload yêu cầu
-
-        const questionTypes: ExamMatrixQuestionType[] = ['MULTIPLE_CHOICE', 'TRUE_FALSE', 'SHORT_ANSWER'];
-        const cognitiveLevels: ExamMatrixCognitiveLevel[] = ['KNOW', 'UNDERSTAND', 'APPLY'];
-
-        // Map dạng câu hỏi UI sang định dạng partType của backend
-        const typeMapping: Record<ExamMatrixQuestionType, string> = {
-            MULTIPLE_CHOICE: 'mcq',
-            TRUE_FALSE: 'tf',
-            SHORT_ANSWER: 'sa',
-        };
-
-        // Map mức độ nhận thức UI sang difficulty của backend
-        const difficultyMapping: Record<ExamMatrixCognitiveLevel, string> = {
-            KNOW: 'easy',
-            UNDERSTAND: 'medium',
-            APPLY: 'hard',
-        };
-
-        for (const qType of questionTypes) {
-            for (const cLevel of cognitiveLevels) {
-                const count = Number(matrixCounts[qType]?.[cLevel] || 0);
-
-                if (count > 0) {
-                    if (count > 50) {
-                        throw new Error('Số lượng câu hỏi trong mỗi ô phải từ 1 đến 50.');
-                    }
-                    totalQuestions += count;
-
-                    const partType = typeMapping[qType];
-                    const basePart: any = {
-                        partType,
-                        questionCount: count,
-                        learningOutcomes: `Yêu cầu cần đạt cho ${qType} ${cLevel}`,
-                    };
-
-                    if (partType === 'tf') {
-                        basePart.statementDifficulties = ['easy', 'easy', 'medium', 'hard'];
-                    } else {
-                        basePart.difficulty = difficultyMapping[cLevel];
-                    }
-
-                    parts.push(basePart);
-                    cells.push(basePart); // Đồng bộ dữ liệu vào cells nếu type yêu cầu
-                }
-            }
-        }
-
-        if (totalQuestions === 0) {
-            throw new Error('Vui lòng cấu hình ít nhất một ô phân bổ câu hỏi có số lượng lớn hơn 0.');
-        }
+        const notes = (basicValues.notesText ?? '')
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
 
         return {
             name: basicValues.name.trim(),
-            subjectId: subjectIdNum,
-            gradeLevel: grade,
-            description: basicValues.description || '',
-            parts,
-            cells, // Bổ sung thuộc tính cells để khớp hoàn toàn với CreateExamMatrixPayload
+            subjectId: Number(basicValues.subjectId),
+            gradeLevel: Number(basicValues.gradeLevel),
+            source: basicValues.source?.trim() || null,
+            notes,
+            cells: isLocked ? payloadCells : payloadCells.map(normalizeCell),
         };
     };
 
-    // Xử lý sự kiện Lưu
     const handleSave = async () => {
         try {
             setSaving(true);
@@ -147,106 +92,63 @@ export default function ExamMatrixFormPage() {
                 message.error("Vui lòng điền đầy đủ các thông tin bắt buộc!");
                 return;
             }
-            const errMsg = error?.response?.data?.error || error?.response?.data?.message || error?.message || "Tạo ma trận thất bại!";
+            // 400 nêu số ô ("Ô 2: ..."), 409 MATRIX_IN_USE nêu số đề: hiện nguyên thông báo backend
+            const errMsg = error?.response?.data?.error || error?.response?.data?.message || error?.message || "Lưu ma trận thất bại!";
             message.error(errMsg);
         } finally {
             setSaving(false);
         }
     };
 
+    // Ma trận đã có đề không đổi cấu trúc được: nhân bản rồi sửa bản sao
+    const handleDuplicate = async () => {
+        if (!id) return;
+        try {
+            setDuplicating(true);
+            const copy = await duplicateExamMatrix(id);
+            message.success(`Đã tạo bản sao "${copy.name}". Bạn có thể sửa cấu trúc ở bản này.`);
+            navigate(`/exam-matrices/${copy.id}/edit`);
+        } catch (err: any) {
+            message.error(err?.response?.data?.error || 'Không thể nhân bản ma trận');
+        } finally {
+            setDuplicating(false);
+        }
+    };
+
     useEffect(() => {
         if (!isEditMode) return;
-        setSaving(true); // Dùng chung state "saving" để hiển thị spinner
+        setLoading(true);
         (async () => {
             try {
                 const data = await getExamMatrix(id!);
-                // Điền dữ liệu vào form chung
                 basicForm.setFieldsValue({
                     name: data.name,
                     subjectId: data.subjectId,
                     gradeLevel: data.gradeLevel,
-                    description: data.notes?.join('\n') ?? '',
+                    source: data.source ?? '',
+                    notesText: data.notes?.join('\n') ?? '',
                 });
-                // Điền matrixCounts (các ô) – chuyển từ cells sang cấu trúc UI
-                const initCounts = createEmptyExamMatrixCounts();
-                data.cells.forEach(cell => {
-                    const { questionType, difficulty, questionCount } = cell;
-
-                    const qType = (
-                        questionType === 'mcq' ? 'MULTIPLE_CHOICE' :
-                            questionType === 'tf' ? 'TRUE_FALSE' : 'SHORT_ANSWER'
-                    ) as ExamMatrixQuestionType;
-
-                    // Dạng 'tf' không dùng difficulty riêng thì mặc định gán 'KNOW' hoặc xử lý tùy ý
-                    const cLevel = (
-                        questionType === 'tf'
-                            ? 'KNOW'
-                            : (difficulty?.toUpperCase() as ExamMatrixCognitiveLevel) || 'KNOW'
-                    );
-
-                    // Gán trực tiếp vì initCounts[qType] đã được khởi tạo sẵn từ createEmptyExamMatrixCounts()
-                    if (initCounts[qType] && cLevel) {
-                        initCounts[qType][cLevel] = questionCount;
-                    }
-                });
-                setMatrixCounts(initCounts);
+                // Giữ đủ từng ô theo thứ tự (không gộp theo dạng × mức như trước)
+                const loadedCells = (data.cells ?? []).map(toCellInput);
+                setCells(loadedCells);
+                setOriginalCells(loadedCells);
+                setExamCount(data.examCount ?? 0);
             } catch (err: any) {
                 const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message;
                 message.error(msg ?? 'Không thể tải ma trận để sửa. Vui lòng thử lại.');
             } finally {
-                setSaving(false);
+                setLoading(false);
             }
         })();
     }, [isEditMode, id, basicForm]);
 
-    useEffect(() => {
-        if (!isTemplateMode) return;
-        setSaving(true);                    // reuse same spinner state
-        (async () => {
-            try {
-                const tmpl = await getExamMatrixTemplate(templateId!);
-                // ---- Basic form -------------------------------------------------
-                basicForm.setFieldsValue({
-                    name: tmpl.name ?? '',
-                    subjectId: tmpl.subjectId ?? '',
-                    gradeLevel: tmpl.gradeLevel ?? '',
-                    description: tmpl.description ?? '',
-                });
-
-                // ---- matrixCounts ------------------------------------------------
-                const initCounts = createEmptyExamMatrixCounts();
-                tmpl.cells?.forEach(cell => {
-                    const { questionType, difficulty, questionCount } = cell;
-                    const qType = (
-                        questionType === 'mcq' ? 'MULTIPLE_CHOICE' :
-                            questionType === 'tf' ? 'TRUE_FALSE' : 'SHORT_ANSWER'
-                    ) as ExamMatrixQuestionType;
-                    const cLevel = (
-                        questionType === 'tf'
-                            ? 'KNOW'
-                            : (difficulty?.toUpperCase() as ExamMatrixCognitiveLevel) || 'KNOW'
-                    );
-                    if (initCounts[qType] && cLevel) {
-                        initCounts[qType][cLevel] = questionCount;
-                    }
-                });
-                setMatrixCounts(initCounts);
-            } catch (err: any) {
-                const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message;
-                message.error(msg ?? 'Không thể tải mẫu ma trận. Vui lòng thử lại.');
-            } finally {
-                setSaving(false);
-            }
-        })();
-    }, [isTemplateMode, templateId, basicForm]);
-
     return (
         <main className="exam-matrix-form-page">
-            {(isEditMode || isTemplateMode) && saving ? (
+            {loading ? (
                 <div className="profile-loading" style={{ textAlign: 'center', padding: '80px 0' }}>
                     <Spin size="large" />
                     <p className="profile-loading-text" style={{ marginTop: '16px' }}>
-                        {isEditMode ? 'Đang tải ma trận…' : 'Đang tải mẫu ma trận…'}
+                        Đang tải ma trận…
                     </p>
                 </div>
             ) : (
@@ -279,6 +181,20 @@ export default function ExamMatrixFormPage() {
                         </Space>
                     </header>
 
+                    {isLocked && (
+                        <Alert
+                            type="warning"
+                            showIcon
+                            message={`Ma trận đã dùng cho ${examCount} đề: chỉ sửa được tên, nguồn, ghi chú.`}
+                            description="Muốn đổi môn, khối hoặc các ô, hãy nhân bản ma trận rồi sửa bản sao."
+                            action={
+                                <Button icon={<CopyOutlined />} loading={duplicating} onClick={handleDuplicate}>
+                                    Nhân bản để sửa
+                                </Button>
+                            }
+                        />
+                    )}
+
                     <div className="exam-matrix-form-page__content">
                         <div className="exam-matrix-form-page__main-column">
                             <Card
@@ -286,17 +202,23 @@ export default function ExamMatrixFormPage() {
                                 title="Thông tin chung"
                                 bordered
                             >
-                                <ExamMatrixBasicInfoForm form={basicForm} />
+                                <ExamMatrixBasicInfoForm
+                                    form={basicForm}
+                                    subjects={subjects}
+                                    loadingSubjects={loadingSubjects}
+                                    lockStructure={isLocked}
+                                />
                             </Card>
 
                             <Card
                                 className="exam-matrix-form-page__section-card"
-                                title="Phân bổ câu hỏi"
+                                title={`Các ô của ma trận (${cells.length})`}
                                 bordered
                             >
-                                <ExamMatrixDistributionTable
-                                    value={matrixCounts}
-                                    onChange={setMatrixCounts}
+                                <ExamMatrixCellEditor
+                                    value={cells}
+                                    onChange={setCells}
+                                    readOnly={isLocked}
                                 />
                             </Card>
                         </div>
@@ -307,7 +229,7 @@ export default function ExamMatrixFormPage() {
                                 title="Tổng quan ma trận"
                                 bordered
                             >
-                                <ExamMatrixTotalSummary value={matrixCounts} />
+                                <ExamMatrixTotalSummary value={cells} />
                             </Card>
 
                             <Card
@@ -316,9 +238,9 @@ export default function ExamMatrixFormPage() {
                                 bordered
                             >
                                 <Text type="secondary">
-                                    Kiểm tra tổng số câu và số câu ở từng dạng trước khi lưu ma trận.
-                                    Khi tạo từ mẫu, bạn có thể điều chỉnh lại thông tin và phân bổ cho
-                                    phù hợp với đề kiểm tra cần xây dựng.
+                                    Mỗi ô là một nhóm câu cùng dạng, cùng mức và cùng chủ đề. Phần I chỉ có trắc
+                                    nghiệm, phần II chỉ có đúng/sai, phần III chỉ có trả lời ngắn. Mỗi mức ô dùng
+                                    cần có yêu cầu cần đạt.
                                 </Text>
                             </Card>
                         </aside>

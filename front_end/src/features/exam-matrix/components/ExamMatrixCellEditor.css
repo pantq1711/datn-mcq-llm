@@ -1,0 +1,18 @@
+.exam-matrix-cell-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+.exam-matrix-cell-editor__card {
+    border-radius: 8px;
+}
+
+.exam-matrix-cell-editor__label.ant-typography {
+    display: block;
+    margin-bottom: 4px;
+    color: #595959;
+    font-size: 13px;
+}

@@ -64,7 +64,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-true}   # chỉ đặt false khi chạy thử qua http (xem README mục 9)
     expose:
       - "8080"
-    mem_limit: 1g
+    mem_limit: ${APP_MEM_LIMIT:-1536m}   # VPS 4 GB: app 1,5 GB + db 768 MB + web 128 MB + hệ điều hành; VPS 2 GB: đặt APP_MEM_LIMIT=1g
     stop_grace_period: 40s
     security_opt:
       - no-new-privileges:true

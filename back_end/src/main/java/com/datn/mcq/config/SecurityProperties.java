@@ -22,7 +22,7 @@ public record SecurityProperties(Jwt jwt, Refresh refresh, Boolean cookieSecure,
 
     public SecurityProperties {
         jwt = jwt != null ? jwt : new Jwt(null, null, null);
-        refresh = refresh != null ? refresh : new Refresh(null, null);
+        refresh = refresh != null ? refresh : new Refresh(null, null, null);
         cookieSecure = cookieSecure == null || cookieSecure;
         cors = cors != null ? cors : new Cors(null);
         bootstrapAdmin = bootstrapAdmin != null ? bootstrapAdmin : new BootstrapAdmin(null, null, null);
@@ -44,10 +44,16 @@ public record SecurityProperties(Jwt jwt, Refresh refresh, Boolean cookieSecure,
         }
     }
 
-    public record Refresh(Duration ttl, Duration absoluteTtl) {
+    /**
+     * @param reuseGrace (D6) cửa sổ ân hạn kể từ lúc một refresh token bị thay bởi lần xoay vòng hợp lệ: trong khoảng này
+     *                   việc gửi lại token cũ (tab thứ hai chưa nhận cookie mới) không bị coi là dùng lại; mặc định 30 giây,
+     *                   {@code 0} là tắt (mọi lần gửi lại token đã thay đều thu hồi cả chuỗi)
+     */
+    public record Refresh(Duration ttl, Duration absoluteTtl, Duration reuseGrace) {
         public Refresh {
             ttl = ttl != null ? ttl : Duration.ofDays(7);
             absoluteTtl = absoluteTtl != null ? absoluteTtl : Duration.ofDays(30);
+            reuseGrace = reuseGrace != null && !reuseGrace.isNegative() ? reuseGrace : Duration.ofSeconds(30);
         }
     }
 

@@ -32,6 +32,6 @@ class LlmClientJsonModeConfigTest {
         Map<String, Object> props = (Map<String, Object>) schema.get("properties");
         Map<String, Object> judge = (Map<String, Object>) props.get("judge_answer");
         assertEquals(List.of("A", "B", "C", "D", "multiple", "none"), judge.get("enum"));
-        assertEquals(List.of("reasoning", "judge_answer"), schema.get("required"));
+        assertEquals(List.of("reasoning", "options_verdict", "correct_count", "judge_answer"), schema.get("required"));
     }
 }

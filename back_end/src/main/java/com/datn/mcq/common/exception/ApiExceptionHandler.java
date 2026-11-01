@@ -71,7 +71,11 @@ public class ApiExceptionHandler {
         if (!ex.getErrors().isEmpty()) {
             body.put("errors", ex.getErrors());
         }
-        return ResponseEntity.status(ex.getStatus()).body(body);
+        var builder = ResponseEntity.status(ex.getStatus());
+        if (ex.getRetryAfterSeconds() != null && ex.getRetryAfterSeconds() > 0) {
+            builder.header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()));
+        }
+        return builder.body(body);
     }
 
     /** SQLState của khóa ngoại bị vi phạm (PostgreSQL 23503). */

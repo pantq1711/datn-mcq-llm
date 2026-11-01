@@ -80,6 +80,7 @@ abstract class ExamFlowTestBase {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).apply(springSecurity()).build();
         TestDataCleaner.cleanAll(dataSource, jdbc, getClass().getSimpleName() + ".setUp");
         SOLVER.mcqJudge = "B";
+        SOLVER.mcqOptions = null;
         SOLVER.saJudge = "5";
         SOLVER.reasoning = "r";
         SOLVER.tfJudges = null;

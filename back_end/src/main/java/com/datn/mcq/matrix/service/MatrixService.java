@@ -5,8 +5,10 @@ import com.datn.mcq.catalog.entity.QuestionTemplate;
 import com.datn.mcq.catalog.entity.Subject;
 import com.datn.mcq.catalog.service.CatalogService;
 import com.datn.mcq.common.exception.ApiErrorException;
+import com.datn.mcq.common.util.CellTextLimits;
 import com.datn.mcq.common.util.JsonStringArray;
 import com.datn.mcq.common.util.SimpleJson;
+import com.datn.mcq.config.GenerationLimitProperties;
 import com.datn.mcq.enums.DbEnum;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.QuestionType;
@@ -53,8 +55,6 @@ public class MatrixService {
     private static final Map<String, QuestionType> PART_TYPES =
             Map.of("I", QuestionType.MCQ, "II", QuestionType.TF, "III", QuestionType.SA);
     private static final Set<String> LEVEL_KEYS = Set.of("easy", "medium", "hard");
-    /** W1-4: tổng số câu tối đa của một lần sinh theo bài (mỗi câu thiếu tốn một job, giãn cách 13 giây). */
-    public static final int MAX_LESSON_QUESTIONS = 50;
     /** Câu đúng/sai sinh theo bài không nêu mức: ý a-d lần lượt dễ, dễ, vừa, khó. */
     private static final List<Difficulty> DEFAULT_TF_LEVELS =
             List.of(Difficulty.EASY, Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD);
@@ -63,13 +63,15 @@ public class MatrixService {
     private final ExamMatrixCellRepository cellRepository;
     private final CatalogService catalogService;
     private final MatrixUsageLookup usage;
+    private final GenerationLimitProperties limits;
 
     public MatrixService(ExamMatrixRepository matrixRepository, ExamMatrixCellRepository cellRepository,
-                         CatalogService catalogService, MatrixUsageLookup usage) {
+                         CatalogService catalogService, MatrixUsageLookup usage, GenerationLimitProperties limits) {
         this.matrixRepository = matrixRepository;
         this.cellRepository = cellRepository;
         this.catalogService = catalogService;
         this.usage = usage;
+        this.limits = limits;
     }
 
     /** Tạo ma trận; {@code ownerId} là người đăng nhập (W1-1). */
@@ -121,7 +123,6 @@ public class MatrixService {
             throw new IllegalArgumentException("learningOutcomes chỉ nhận khóa easy, medium, hard");
         }
         List<CellInput> cells = new ArrayList<>();
-        int total = 0;
         List<LessonCellInput> in = req.cells() == null ? List.of() : req.cells();
         for (int i = 0; i < in.size(); i++) {
             LessonCellInput c = in.get(i);
@@ -145,15 +146,10 @@ public class MatrixService {
             }
             cells.add(new CellInput(partOf(c.questionType()), c.questionType(), lesson, req.content(), outcomes,
                     c.difficulty(), tf ? levels : c.statementDifficulties(), c.questionCount()));
-            total += c.questionCount() == null ? 0 : c.questionCount();
         }
         CreateMatrixRequest matrixRequest = new CreateMatrixRequest(title, req.subjectId(), req.gradeLevel(), null,
                 List.of(), cells);
-        validate(matrixRequest);
-        if (total > MAX_LESSON_QUESTIONS) {
-            throw new IllegalArgumentException("Một lần sinh theo bài tối đa " + MAX_LESSON_QUESTIONS + " câu (hiện "
-                    + total + ")");
-        }
+        validate(matrixRequest, "Một lần sinh theo bài");
         return persist(matrixRequest, null, ExamMatrix.KIND_LESSON, ownerId);
     }
 
@@ -178,7 +174,7 @@ public class MatrixService {
         if (ownerId == null) {
             throw new IllegalArgumentException("Thiếu người tạo ma trận");
         }
-        validate(req);
+        validate(req, MATRIX_SUBJECT);
         Subject subject = catalogService.getSubjectById(req.subjectId());
         ExamMatrix matrix = new ExamMatrix();
         matrix.setKind(kind);
@@ -237,7 +233,7 @@ public class MatrixService {
     @Transactional
     public MatrixDto update(Integer id, CreateMatrixRequest req, Integer ownerId) {
         ExamMatrix matrix = lockOwnedForUpdate(id, ownerId);
-        validate(req);
+        validate(req, MATRIX_SUBJECT);
         Subject subject = catalogService.getSubjectById(req.subjectId());
         List<ExamMatrixCell> oldCells = cellRepository.findByMatrixIdOrderByPositionAsc(id);
         int exams = usage.examCount(id);
@@ -530,7 +526,11 @@ public class MatrixService {
 
     // ---------- kiểm tra ----------
 
-    static void validate(CreateMatrixRequest req) {
+    /** Chủ ngữ trong thông báo vượt trần số câu của một ma trận (sinh theo bài dùng "Một lần sinh theo bài"). */
+    private static final String MATRIX_SUBJECT = "Một ma trận";
+
+    /** @param subject chủ ngữ của thông báo khi tổng số câu vượt {@code app.generation-limits.max-questions-per-exam} */
+    private void validate(CreateMatrixRequest req, String subject) {
         if (req == null || req.name() == null || req.name().isBlank()) {
             throw new IllegalArgumentException("name không được để trống");
         }
@@ -549,12 +549,18 @@ public class MatrixService {
         if (req.cells().size() > 100) {
             throw new IllegalArgumentException("Ma trận có tối đa 100 ô");
         }
+        int total = 0;
         for (int i = 0; i < req.cells().size(); i++) {
             validateCell(i + 1, req.cells().get(i));
+            total += req.cells().get(i).questionCount();
+        }
+        if (total > limits.getMaxQuestionsPerExam()) {
+            throw new IllegalArgumentException(subject + " tối đa " + limits.getMaxQuestionsPerExam()
+                    + " câu (hiện " + total + ")");
         }
     }
 
-    private static void validateCell(int index, CellInput c) {
+    private void validateCell(int index, CellInput c) {
         String p = "Ô " + index + ": ";
         if (c == null) {
             throw new IllegalArgumentException(p + "ô trống");
@@ -599,9 +605,26 @@ public class MatrixService {
             }
             used = List.of(c.difficulty());
         }
+        // D2: độ dài các trường đi vào prompt (đo theo ký tự sau trim, đúng như lúc lưu).
+        String content = c.content() == null ? null : c.content().trim();
+        if (CellTextLimits.length(content) > limits.getCellContentMaxChars()) {
+            throw new IllegalArgumentException(p + "content dài tối đa " + limits.getCellContentMaxChars()
+                    + " ký tự (hiện " + CellTextLimits.length(content) + ")");
+        }
         Map<String, String> outcomes = c.learningOutcomes() == null ? Map.of() : c.learningOutcomes();
+        if (outcomes.size() > limits.getCellOutcomesMaxItems()) {
+            throw new IllegalArgumentException(p + "learningOutcomes tối đa " + limits.getCellOutcomesMaxItems()
+                    + " mục (hiện " + outcomes.size() + ")");
+        }
         if (!LEVEL_KEYS.containsAll(outcomes.keySet())) {
             throw new IllegalArgumentException(p + "learningOutcomes chỉ nhận khóa easy, medium, hard");
+        }
+        for (Map.Entry<String, String> e : outcomes.entrySet()) {
+            String text = e.getValue() == null ? null : e.getValue().trim();
+            if (CellTextLimits.length(text) > limits.getCellOutcomeMaxChars()) {
+                throw new IllegalArgumentException(p + "yêu cầu cần đạt mức " + e.getKey() + " dài tối đa "
+                        + limits.getCellOutcomeMaxChars() + " ký tự (hiện " + CellTextLimits.length(text) + ")");
+            }
         }
         for (Difficulty level : used) {
             String text = outcomes.get(level.getDbValue());

@@ -65,7 +65,10 @@ nhà cung cấp, cho mở cổng 80 và 443 (Let's Encrypt cần cả hai), tên
 - **2 vCPU / 2 GB + swap 2 GB: đủ cho giai đoạn dùng thử.** Ba container dùng khoảng 0,5 GiB, còn lại cho hệ điều hành
   (~0,3 GiB) và dư địa. Swap 2 GB là bắt buộc (mục 4.3) để chịu được đỉnh bất thường. Không build image trên máy này.
 - **4 GB:** chọn khi nhiều người dùng đồng thời (nhiều đề sinh song song, xuất Word cùng lúc), dữ liệu lớn lên, hoặc muốn
-  build image tại chỗ. Khi tăng RAM có thể tăng `mem_limit` của `app` và `db` trong `compose.prod.yaml`.
+  build image tại chỗ. **Cấu hình 4 GB (D5):** `compose.prod.yaml` đặt `mem_limit` của `app` là **1536m** (heap JVM 55% ≈ 845 MB;
+  đổi bằng `APP_MEM_LIMIT` trong `deploy/.env`), `db` 768m, `web` 128m: tổng giới hạn 2,4 GB, còn lại cho hệ điều hành,
+  pandoc (tiến trình con nằm trong cgroup của `app`) và page cache. Máy 2 GB **phải** đặt `APP_MEM_LIMIT=1g` (1536m + 768m + 128m
+  vượt RAM thật). Không đổi `db`/`web` khi nâng RAM nếu chưa đo.
 
 ## 3. Chuẩn bị trước
 
@@ -183,7 +186,7 @@ Biến đặt trong `deploy/.env` (mẫu: `deploy/.env.example`). Compose **đè
 - **Múi giờ `Asia/Bangkok`:** code dùng `LocalDateTime.now()` và cột `TIMESTAMP` không múi giờ nên giờ phụ thuộc múi giờ
   JVM. Image đặt `-Duser.timezone=Asia/Bangkok` và `TZ`; PostgreSQL cũng đặt `timezone=Asia/Bangkok`. Đừng đổi giữa chừng
   trên dữ liệu đã có.
-- **JVM:** heap = 55% bộ nhớ container (`mem_limit` của `app` là 1 GB). Để chỉnh, đặt `JAVA_TOOL_OPTIONS` trong
+- **JVM:** heap = 55% bộ nhớ container (`mem_limit` của `app` mặc định 1536m, mục 2 "Cấu hình 4 GB"; máy 2 GB đặt `APP_MEM_LIMIT=1g`). Để chỉnh, đặt `JAVA_TOOL_OPTIONS` trong
   `deploy/.env` (thay **toàn bộ** cờ trong image, nhớ giữ `-Djava.awt.headless=true` và `-Duser.timezone=Asia/Bangkok`).
 - **Upload:** hiện chưa có endpoint upload; giới hạn 10 MB/tệp, 12 MB/yêu cầu (backend) và 12 MB thân `/api/*` (Caddy)
   chỉ là chuẩn bị. Muốn đổi thì sửa cả `application-prod.yaml` và `deploy/web/Caddyfile`.
@@ -194,6 +197,28 @@ Biến đặt trong `deploy/.env` (mẫu: `deploy/.env.example`). Compose **đè
   - `MATERIAL_QUEUE_WAIT` (mặc định: `30s`): thời gian chờ xếp hàng lấy permit; nếu quá thời gian này sẽ trả lời ngay `503 Service Unavailable` (`EXTRACTOR_UNAVAILABLE` hoặc `PANDOC_UNAVAILABLE`) kèm header `Retry-After: 30`.
   - `MATERIAL_PANDOC_HEAP_MB` (mặc định prod: `256`): Pandoc được chạy kèm cờ Haskell RTS `+RTS -M<MB>m -RTS` để khống chế heap tối đa, tránh tràn RAM container.
   - **Thư mục tạm `/tmp`:** Chuyển từ `tmpfs: 128m` sang Docker volume trên đĩa `app_tmp:/tmp`. Thay đổi này giúp tiết kiệm 128 MB RAM cho container và đảm bảo sẵn sàng tương thích nếu sau này bật `read_only: true` (volume ghi được mount vào `/tmp`, không làm mất cờ read-only của container filesystem).
+- **Giới hạn sinh câu theo từng giáo viên (D1):** để một người không làm tắc hàng đợi và cạn quota Gemini dùng chung
+  (480 lượt/ngày cho cả hệ thống). Chỉ câu hệ thống phải sinh mới bị tính; câu lấy từ ngân hàng thì không. Đặt trong
+  `deploy/.env`, đổi xong khởi động lại `app`:
+  - `GENERATION_MAX_QUESTIONS_PER_EXAM` (mặc định `60`): tổng số câu của một ma trận hoặc một đề sinh theo bài; vượt thì 400.
+  - `GENERATION_MAX_PENDING_JOBS` (mặc định `60`): số job sinh câu đang chờ/đang chạy của một giáo viên; vượt thì 429
+    `GENERATION_QUEUE_LIMIT`.
+  - `GENERATION_MAX_DAILY_QUESTIONS` (mặc định `120`): số câu yêu cầu sinh mỗi ngày (theo giờ Việt Nam, đặt lại lúc 0 giờ),
+    tính cả Đổi câu bằng sinh mới; vượt thì 429 `DAILY_GENERATION_LIMIT` kèm `Retry-After`.
+  - D2, độ dài trường ô ma trận đi vào prompt: `GENERATION_CELL_CONTENT_MAX_CHARS` (`1000`),
+    `GENERATION_CELL_OUTCOME_MAX_CHARS` (`500`), `GENERATION_CELL_OUTCOMES_MAX_ITEMS` (`10`). Chỉ hạ được, không nới quá giá trị
+    mặc định (trần cứng của prompt; đặt cao hơn thì app không khởi động).
+  Migration V24 thêm bảng `generation_quota` (một dòng mỗi giáo viên). Mã lỗi và thông báo: `docs/api/README.md` mục 7.2b.
+  Cỡ các trần nên đối chiếu với `LLM_DAILY_QUOTA` (480): 120 câu/ngày/giáo viên × số giáo viên dùng cùng lúc không được vượt quá
+  quota Gemini của cả hệ thống (mỗi câu tốn ít nhất một lượt sinh, thường thêm lượt Solver).
+- **Giới hạn đăng nhập theo IP (D3):** `LOGIN_IP_MAX_ATTEMPTS` (mặc định `20`) lần mỗi `LOGIN_IP_WINDOW` (mặc định `1m`) cho
+  mỗi IP (IPv6 gom /64), chạy trước bcrypt, độc lập với `LOGIN_MAX_FAILURES`/`LOGIN_FAILURE_WINDOW`/`LOGIN_LOCK_DURATION` (khóa
+  theo email + IP). Phụ thuộc `FORWARD_HEADERS_STRATEGY=native` để thấy IP thật sau Caddy; nếu không, mọi người cùng chung IP
+  của proxy và dùng chung 20 lần/phút. Vượt thì 429 `TOO_MANY_ATTEMPTS` kèm `Retry-After`. Bộ đếm trong bộ nhớ, mất khi khởi
+  động lại.
+- **Cửa sổ ân hạn refresh (D6):** `REFRESH_REUSE_GRACE` (mặc định `30s`, `0` là tắt): token vừa bị thay trong khoảng này mà bị
+  gửi lại (tab thứ hai) trả 401 `REFRESH_RACE` thay vì thu hồi cả chuỗi. Chuỗi đã bị thu hồi vì lý do khác (đăng xuất, đổi mật
+  khẩu, khóa) thì vẫn là dùng lại. Frontend phải xử lý `REFRESH_RACE` (chờ 1 giây, thử lại một lần): `docs/api/README.md` mục 8.
 - **PostgreSQL:** `shared_buffers=256MB`, `max_connections=60`, `mem_limit` 768 MB.
 
 ## 6. Vận hành

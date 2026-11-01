@@ -74,12 +74,6 @@
     margin-bottom: 16px;
 }
 
-/* Đảm bảo component tiến độ không tràn khỏi vùng nội dung */
-.exam-detail-page-progress .exam-progress-detail {
-    width: 100%;
-    min-width: 0;
-}
-
 /* --- Question list --- */
 
 .exam-detail-page-question-list {

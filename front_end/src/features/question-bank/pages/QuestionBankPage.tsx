@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Card, message, Typography } from "antd";
+import { Button, Card, message, Tooltip, Typography } from "antd";
+import { FileWordOutlined } from "@ant-design/icons";
 import QuestionDetail from "../components/QuestionDetail";
 import QuestionFilters from "../components/QuestionFilters";
 import QuestionTable from "../components/QuestionTable";
 import "./QuestionBankPage.css";
-import type { SubjectOption, BankItemDetail, QuestionTableItem, QuestionFilterValues } from "../types/questionBank.types";
+import type { SubjectOption, BankItemDetail, BankSort, QuestionTableItem, QuestionFilterValues } from "../types/questionBank.types";
 import { getCatalogSubjects, getBankItems, getBankItemDetail } from "../services/questionBankApi";
 
 const { Title } = Typography;
@@ -12,8 +13,13 @@ const { Title } = Typography;
 const initialFilters: QuestionFilterValues = {
     keyword: "",
     subjectId: null,
+    gradeLevel: null,
+    questionType: null,
+    topic: null,
     difficulty: null,
-    status: null,
+    usage: null,
+    levels: null,
+    content: null
 };
 
 export default function QuestionBankPage() {
@@ -34,12 +40,13 @@ export default function QuestionBankPage() {
     const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
     const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
 
+    const [sort, setSort] = useState<BankSort>("newest");
+
     useEffect(() => {
         const fetchSubjects = async () => {
             setLoadingSubjects(true);
             try {
                 const subjects = await getCatalogSubjects();
-                // Map dữ liệu API về format { label, value } cho antd Select
                 const options = subjects.map((s) => ({
                     label: s.name,
                     value: s.id,
@@ -55,16 +62,17 @@ export default function QuestionBankPage() {
         fetchSubjects();
     }, []);
 
-    const fetchQuestions = async (currentPage = page, currentPageSize = pageSize, currentFilters = filters) => {
+    const fetchQuestions = async (currentPage = page, currentPageSize = pageSize, currentFilters = filters, currentSort = sort) => {
         setLoadingTable(true);
         try {
             const res = await getBankItems({
                 page: currentPage,
                 pageSize: currentPageSize,
                 ...currentFilters,
+                sort: currentSort,
             });
             setQuestions(res.items || []);
-            setTotalQuestions(res.total || 0);
+            setTotalQuestions(res.totalItems ?? res.total ?? 0);
         } catch (error) {
             console.error("Lỗi khi tải danh sách câu hỏi ngân hàng:", error);
             message.error("Không thể tải danh sách câu hỏi.");
@@ -75,19 +83,13 @@ export default function QuestionBankPage() {
 
     // Gọi khi lần đầu mở trang hoặc khi phân trang thay đổi
     useEffect(() => {
-        fetchQuestions(page, pageSize);
+        fetchQuestions(page, pageSize, filters, sort);
     }, [page, pageSize]);
 
 
     const handleFilter = () => {
         setPage(1); // Reset về trang 1 khi lọc
-        fetchQuestions(1, pageSize, filters);
-    };
-
-    const handleReset = () => {
-        setFilters(initialFilters);
-        setPage(1);
-        fetchQuestions(1, pageSize, initialFilters);
+        fetchQuestions(1, pageSize, filters, sort);
     };
 
     const handleViewQuestion = async (questionItem: QuestionTableItem) => {
@@ -96,23 +98,11 @@ export default function QuestionBankPage() {
         try {
             const detail = await getBankItemDetail(questionItem.id);
             setSelectedQuestion(detail);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Lỗi khi tải chi tiết câu hỏi:", error);
-            message.error("Không thể tải chi tiết câu hỏi.");
-            // Fallback: nếu API chi tiết lỗi, hiển thị tạm thông tin đã có từ bảng
-            setSelectedQuestion({
-                id: questionItem.id,
-                questionText: questionItem.questionText,
-                optionA: "Không có dữ liệu",
-                optionB: "Không có dữ liệu",
-                optionC: "Không có dữ liệu",
-                optionD: "Không có dữ liệu",
-                correct_option: "A",
-                subject: questionItem.subject,
-                difficulty: questionItem.difficulty,
-                status: questionItem.status,
-                createdAt: questionItem.createdAt,
-            });
+            message.error(error?.response?.data?.error || "Không thể tải chi tiết câu hỏi.");
+            setIsDetailOpen(false);
+            setSelectedQuestion(null);
         } finally {
             setLoadingDetail(false);
         }
@@ -126,6 +116,22 @@ export default function QuestionBankPage() {
     const handlePageChange = (newPage: number, newPageSize: number) => {
         setPage(newPage);
         setPageSize(newPageSize);
+        fetchQuestions(newPage, newPageSize, filters, sort);
+    };
+
+    // Khi đổi lựa chọn sắp xếp: áp dụng ngay lập tức
+    const handleSortChange = (value: BankSort) => {
+        setSort(value);
+        setPage(1);
+        fetchQuestions(1, pageSize, filters, value);
+    };
+
+    // Khi bấm nút "Đặt lại" trong bộ lọc
+    const handleReset = () => {
+        setFilters(initialFilters);
+        setSort("newest"); // Đưa sắp xếp về newest
+        setPage(1);
+        fetchQuestions(1, pageSize, initialFilters, "newest");
     };
 
     return (
@@ -134,6 +140,11 @@ export default function QuestionBankPage() {
                 <Title level={2} className="question-bank-page-title">
                     Ngân hàng câu hỏi
                 </Title>
+                <Tooltip title="Chưa hỗ trợ: cần API nhập câu vào ngân hàng ở backend.">
+                    <Button icon={<FileWordOutlined />} disabled>
+                        Nhập từ Word
+                    </Button>
+                </Tooltip>
             </div>
 
             <div className="question-bank-page-filters">
@@ -150,17 +161,17 @@ export default function QuestionBankPage() {
             </div>
 
             <div className="question-bank-page-table">
-                <Card>
-                    <QuestionTable
-                        data={questions}
-                        total={totalQuestions}
-                        page={page}
-                        pageSize={pageSize}
-                        loading={loadingTable}
-                        onPageChange={handlePageChange}
-                        onView={handleViewQuestion}
-                    />
-                </Card>
+                <QuestionTable
+                    data={questions}
+                    total={totalQuestions}
+                    page={page}
+                    pageSize={pageSize}
+                    sort={sort}
+                    loading={loadingTable}
+                    onSortChange={handleSortChange}
+                    onPageChange={handlePageChange}
+                    onView={handleViewQuestion}
+                />
             </div>
 
             <QuestionDetail

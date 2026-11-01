@@ -13,3 +13,8 @@
     white-space: nowrap;
     line-height: 1.5;
 }
+
+/* MathText đặt pre-wrap cho phần chữ; trong ô bảng vẫn phải một dòng để có dấu … */
+.question-table-question span {
+    white-space: nowrap !important;
+}

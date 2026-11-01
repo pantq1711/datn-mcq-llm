@@ -337,9 +337,17 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     Không có cột tiền: `LlmClient` không tính giá (`cost_usd` luôn 0). Tổng hợp: `docs/thong-ke/06-chi-phi.sql`. Không đưa ra API.
   - Lý do "cần xem kỹ" thêm (W2-3): `grounding_not_supported`, `grounding_unknown` (từ kết quả), `grounding_pending`, `grounding_failed`
     (từ trạng thái job).
+  - Lý do "cần xem kỹ" thêm (thẩm định 31/10, câu `mcq`, Solver xét từng phương án `solver-v3-option-check`/`solver-v4-literal-reading`): `solver_multiple_correct` (Solver xét từng
+    phương án thấy từ 2 phương án đúng, `judge_answer = 'multiple'`), `solver_no_correct` (không phương án nào đúng,
+    `judge_answer = 'none'`). Thay cho `solver_inconsistent` ở hai trường hợp này; chỉ áp cho kết quả có khối xét từng phương án
+    (mục 4.6). Chuỗi hiển thị đề xuất cho frontend: "Có thể có hơn một phương án đúng, thầy/cô kiểm tra lại" và "Hệ thống không tìm
+    được phương án đúng, thầy/cô kiểm tra lại".
   - `lesson_material.extracted_text`: văn bản thường (docx đã làm sạch markdown, giữ `$...$`); xem `docs/api/README.md` mục 9.3.
   - `bank_item.visible_to_user_id` (V19): NULL là câu dùng chung (mọi câu cũ); khác NULL thì chỉ người dùng đó thấy và dùng
     lại. Đặt khi Giữ câu sinh từ đề có tài liệu đính kèm. Không xóa dây chuyền theo `users`.
+  - Lý do "cần xem kỹ" thêm (thẩm định 31/10, câu cùng khuôn trong MỘT đề): `similar_in_exam: <n>` — câu hệ thống sinh (chưa Giữ, không phải câu ngân hàng) cùng khuôn với câu thứ `n` của CHÍNH đề này (`n` đếm từ 1 theo thứ tự hiển thị: phần I, II, III; mỗi chỗ một số, kể cả chỗ chưa có câu). Mỗi câu kia một lý do (`similar_in_exam: 55`, `similar_in_exam: 60`...). Tính lúc xem đề (`GET /api/exams/{id}`, `ExamQuestionSimilarity`), **không lưu DB, không có migration, không đổi `generated_question.status`, không loại câu**; chỉ bật `needsReview`, đưa `qcState` từ `passed` về `needs_review` (`checking` giữ nguyên) và cộng vào `needsReviewCount`. Danh sách đề (`GET /api/exams`, `needsReviewSlots`) chưa tính lý do này. Khuôn: bỏ `$`, thay mọi số bằng `#`, thay cụm 2–5 chữ in hoa (tên điểm, tên hình) bằng `@`, chữ thường, gộp khoảng trắng; độ giống là cosine 3-gram ký tự, ngưỡng `app.exam.similar-threshold` (`EXAM_SIMILAR_THRESHOLD`, mặc định 0,82, chọn trên 4 đề của `datn_mcq_e2e`, xem dev-log L-55). So câu trắc nghiệm với câu trắc nghiệm (thân câu và tập phương án) và câu trắc nghiệm với từng ý của câu đúng/sai (bắt câu trắc nghiệm làm lộ đáp án một ý); câu ngân hàng và câu đã Giữ/Sửa được so nhưng không bị gắn cờ (chỉ câu hệ thống sinh trong cặp bị gắn). Không đổi quy tắc dedup của ngân hàng và của câu sinh (câu chỉ khác số liệu không tính là trùng vẫn đúng ở đó); đề khác không bao giờ được so. Chuỗi hiển thị đề xuất cho frontend: "Gần giống câu {n} trong đề, nên đổi một trong hai câu".
+  - Chống câu cùng khuôn lúc sinh (thẩm định 31/10, prompt ma trận mcq v4, sa v5, tf v6): prompt sinh câu cho một chỗ có khối "Các câu đã có trong ô này" (câu dẫn cắt 200 ký tự, tối đa 6 câu của các chỗ khác cùng ô trong cùng đề, đọc lúc worker nhận job; Đổi câu không gồm câu đang bị thay) và dòng "câu thứ k/N" giao khía cạnh thứ ((k−1) mod m)+1 trong m yêu cầu cần đạt của ô (m = số mức có yêu cầu cần đạt mà prompt liệt kê); m = 0 hoặc m < N thì dặn thêm dùng hình thức hỏi khác các câu cùng ô. Không thêm cột hay bảng.
+  - Lý do "cần xem kỹ" thêm (thẩm định 31/10, mọi dạng câu): `explanation_draft_suspect` — lời giải có "tính lại", "làm lại" hoặc "sửa lại" (không phân biệt hoa thường và dấu). Các cụm này cũng gặp trong lời giải bình thường nên **không chặn**: bước format chỉ ghi cảnh báo `explanation: lời giải có thể còn phần nháp (tính lại, làm lại, sửa lại)` vào `warnings` (không đổi `format_failed`, không đổi `generated_question.status`, không migration) và `QcSummaryService` đổi cảnh báo đó thành mã `explanation_draft_suspect` thay vì `warning: ...`. Áp cho cả câu LLM sinh lẫn bản giáo viên sửa. Chuỗi hiển thị đề xuất cho frontend: "Lời giải có thể còn phần nháp, thầy/cô xem lại lời giải". Các cụm chắc chắn là nháp ("xin lỗi", "sorry", "wait", "nhầm" dạng hẹp, "à không") thì **chặn** câu LLM sinh (`format_failed`, lỗi "Lời giải còn chứa phần nháp/tự sửa; chỉ ghi lời giải cuối cùng."); bản giáo viên sửa chỉ có cảnh báo cùng nội dung (`warning: Lời giải còn chứa phần nháp/tự sửa; ...`). Lời giải đã bị cụm chặn bắt thì không thêm `explanation_draft_suspect`. Xem dev-log L-56.
   - Cờ "cần xem kỹ" bỏ qua cảnh báo `json: đã sửa ... escape LaTeX` (vẫn lưu ở `warnings`); cảnh báo `<trường>: đã tự đóng $` và các cảnh báo khác vẫn bật cờ.
 
 - Giáo viên sửa câu trong đề (W1-2, V13, ngày 24/10):
@@ -492,5 +500,63 @@ Solver chỉ thấy đề dẫn và 4 ý, không thấy nhãn và lời giải c
   "judge_c": "F",
   "reasoning_d": "$1 + \\frac{1}{x}$ nguyên khi $x = \\pm 1$, loại $x = 1$, còn một giá trị.",
   "judge_d": "F"
+}
+```
+
+### 4.6. Solver câu `mcq` (4 trường, `solver-v4-literal-reading` và `solver-v3-option-check`, thẩm định 31/10)
+
+Solver chỉ thấy đề và 4 phương án, không thấy đáp án và lời giải của câu. Solver giải bài rồi xét **từng** phương án A–D,
+không dừng ở phương án đầu tiên khớp. Thứ tự: `reasoning`, `options_verdict`, `correct_count`, `judge_answer`.
+
+- `solver-v4-literal-reading` (mặc định): một phương án là ĐÚNG nếu học sinh bảo vệ được nó là đáp án theo đúng chữ của đề,
+  không thêm yêu cầu đề không nêu.
+  - Phân tích nhân tử: mọi tích nhân lại bằng đa thức đã cho đều đúng, trừ khi đề ghi "triệt để" hoặc "đặt nhân tử chung
+    lớn nhất".
+  - Khẳng định hình học không có "luôn": phương án đúng trong ít nhất một trường hợp hợp lệ thì là đúng.
+  - Đề mơ hồ khiến từ 2 phương án bảo vệ được thì `correct_count` từ 2.
+- `solver-v3-option-check` (lần thử 1): cùng JSON, nhưng hiểu "đúng" hẹp (chỉ nhận cách phân tích triệt để; khẳng định không
+  "luôn" đúng là sai).
+- `solver-v2-delimited` (2 trường `reasoning`, `judge_answer`): Solver cũ.
+
+v2 và v3 giữ nguyên để đo lại, chọn bằng `app.llm.solver-prompt-version`. Bảng dưới áp cho cả v3 và v4.
+
+| Trường | Kiểu | Ý nghĩa |
+|---|---|---|
+| `reasoning` | chuỗi | Lời giải của Solver |
+| `options_verdict` | mảng 4 đối tượng `{option, correct, reason}` | `option` là `A`..`D` (mỗi chữ cái một lần, không cần đúng thứ tự, trim, không phân biệt hoa thường); `correct` là `true`/`false`; `reason` là lý do một dòng |
+| `correct_count` | số nguyên | Số phương án đúng do Solver tự đếm (chỉ để đối chiếu) |
+| `judge_answer` | chuỗi `A`..`D`, `multiple`, `none` | Kết luận do Solver ghi (chỉ để đối chiếu khi có `options_verdict` hợp lệ) |
+
+Backend đếm số phương án đúng từ chính `options_verdict`. `correct_count` hoặc `judge_answer` lệch thì ghi cảnh báo vào
+log và vẫn theo `options_verdict`.
+
+| Số phương án đúng | `quality_check_result.judge_answer` | `answerCheckStatus` | `reviewReasons` |
+|---|---|---|---|
+| 1, trùng đáp án câu | chữ cái đó | `CONSISTENT` | không có |
+| 1, khác đáp án câu | chữ cái đó | `INCONSISTENT` | `solver_inconsistent` |
+| từ 2 trở lên | `multiple` | `INCONSISTENT` | `solver_multiple_correct` |
+| 0 | `none` | `INCONSISTENT` | `solver_no_correct` |
+| thiếu hoặc hỏng `options_verdict` (không phải mảng 4 phần tử, thiếu/trùng chữ cái, `correct` không phải true/false) | theo `judge_answer` như Solver cũ | như Solver cũ | `solver_inconsistent` khi lệch (kể cả `multiple`/`none`), không gắn lý do mới |
+| JSON hỏng, khóa trùng, lỗi gọi; hoặc thiếu `options_verdict` hợp lệ mà `judge_answer` thiếu/sai | không ghi dòng | `ERROR` | `solver_failed`/`solver_pending` như cũ |
+
+- `MULTIPLE_CORRECT` (`multiple`) và `NO_CORRECT` (`none`) là kết luận `INCONSISTENT`, đi đúng đường Q-2: câu mới sinh được
+  giữ làm câu dự phòng và sinh lại 1 lần; vẫn lỗi thì giữ câu kèm cờ. Không thêm giá trị `AnswerCheckStatus`, không thêm cột.
+- Kết quả từng phương án không có cột riêng: được ghi vào đầu `quality_check_result.solver_reasoning` (V14), dòng đầu là
+  `[Xét từng phương án] <số>/4 phương án đúng`, mỗi phương án một dòng `A: đúng – <lý do>`, rồi một dòng trống và
+  `reasoning`. `QcSummaryService` chỉ tách `solver_multiple_correct`/`solver_no_correct` khi ghi chú bắt đầu bằng
+  `[Xét từng phương án]`; dòng lưu trước v3 có `multiple`/`none` vẫn là `solver_inconsistent`. Ghi chú bị cắt ở 4000 ký tự
+  từ cuối, nên dòng đầu luôn còn; khi chép kết quả Solver sang bản sửa chỉ đổi lời giải, ghi chú được chép nguyên.
+
+```json
+{
+  "reasoning": "$2x^3 - 6x^2 = 2x^2(x - 3)$.",
+  "options_verdict": [
+    {"option": "A", "correct": true, "reason": "Khai triển $2x^2(x-3) = 2x^3 - 6x^2$."},
+    {"option": "B", "correct": true, "reason": "Khai triển $2x(x^2 - 3x) = 2x^3 - 6x^2$."},
+    {"option": "C", "correct": false, "reason": "Khai triển $x^2(2x + 6) = 2x^3 + 6x^2$, khác đề."},
+    {"option": "D", "correct": false, "reason": "$2(x^3 - 6x)$ khai triển ra $2x^3 - 12x$, khác đề."}
+  ],
+  "correct_count": 2,
+  "judge_answer": "multiple"
 }
 ```

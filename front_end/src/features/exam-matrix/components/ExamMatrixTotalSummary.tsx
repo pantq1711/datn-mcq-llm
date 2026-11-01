@@ -1,81 +1,45 @@
 import { Divider, Empty, Progress, Statistic, Tooltip, Typography } from 'antd';
-import {
-    AppstoreOutlined,
-    BarChartOutlined,
-    CalculatorOutlined,
-    InfoCircleOutlined,
-} from '@ant-design/icons';
+import { AppstoreOutlined, BarChartOutlined, CalculatorOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { useMemo } from 'react';
 
-import {
-    EXAM_MATRIX_COGNITIVE_LEVELS,
-    EXAM_MATRIX_QUESTION_TYPES,
-    createEmptyExamMatrixCounts,
-} from './ExamMatrixDistributionTable';
-import type {
-    ExamMatrixCounts,
-    ExamMatrixCognitiveLevel,
-    ExamMatrixQuestionType,
-} from './ExamMatrixDistributionTable';
+import type { ExamMatrixCellInput, MatrixQuestionType } from '../types/examMatrix.types';
+import { MATRIX_LEVELS, MATRIX_LEVEL_LABELS, MATRIX_TYPE_LABELS, PART_BY_TYPE, summarizeCells } from '../../../utils/matrixCell.utils';
 import './ExamMatrixTotalSummary.css';
 
 const { Text } = Typography;
 
 export interface ExamMatrixTotalSummaryProps {
-    /** The same distribution value supplied to ExamMatrixDistributionTable. */
-    value?: ExamMatrixCounts;
+    /** Các ô của ma trận (cùng giá trị với ExamMatrixCellEditor). */
+    value?: ExamMatrixCellInput[];
     /** Shows a loading skeleton/state while the matrix data is being loaded. */
     loading?: boolean;
 }
 
-function normalizeCount(value: number | null | undefined): number {
-    if (value === null || value === undefined || !Number.isFinite(value)) return 0;
-    return Math.max(0, Math.floor(value));
-}
-
-function getQuestionTypeTotal(
-    counts: ExamMatrixCounts,
-    questionType: ExamMatrixQuestionType,
-): number {
-    return EXAM_MATRIX_COGNITIVE_LEVELS.reduce(
-        (total, level) => total + normalizeCount(counts[questionType]?.[level.value]),
-        0,
-    );
-}
-
-function getCognitiveLevelTotal(
-    counts: ExamMatrixCounts,
-    cognitiveLevel: ExamMatrixCognitiveLevel,
-): number {
-    return EXAM_MATRIX_QUESTION_TYPES.reduce(
-        (total, type) => total + normalizeCount(counts[type.value]?.[cognitiveLevel]),
-        0,
-    );
-}
+const TYPES: MatrixQuestionType[] = ['mcq', 'tf', 'sa'];
 
 /**
- * Read-only summary of the current exam matrix distribution.
- * Pass the same `value` used by ExamMatrixDistributionTable to keep both components in sync.
+ * Tổng quan chỉ đọc của ma trận, cách tính như `totals` của backend (docs/api mục 7.1):
+ * số câu theo phần I-III và số lệnh hỏi theo mức (mỗi câu đúng/sai là 4 lệnh hỏi).
  */
 export function ExamMatrixTotalSummary({
     value,
     loading = false,
 }: ExamMatrixTotalSummaryProps) {
-    const counts = value ?? createEmptyExamMatrixCounts();
-
     const summary = useMemo(() => {
-        const byQuestionType = EXAM_MATRIX_QUESTION_TYPES.map((type) => ({
-            ...type,
-            total: getQuestionTypeTotal(counts, type.value),
+        const totals = summarizeCells(value ?? []);
+        const byQuestionType = TYPES.map((type) => ({
+            value: type,
+            label: MATRIX_TYPE_LABELS[type],
+            total: totals.questionsByPart[PART_BY_TYPE[type]],
         }));
-        const byCognitiveLevel = EXAM_MATRIX_COGNITIVE_LEVELS.map((level) => ({
-            ...level,
-            total: getCognitiveLevelTotal(counts, level.value),
+        const byCognitiveLevel = MATRIX_LEVELS.map((level) => ({
+            value: level,
+            label: MATRIX_LEVEL_LABELS[level],
+            total: totals.commandsByLevel[level],
         }));
-        const total = byQuestionType.reduce((sum, item) => sum + item.total, 0);
 
-        return { byQuestionType, byCognitiveLevel, total };
-    }, [counts]);
+        return { byQuestionType, byCognitiveLevel, total: totals.totalQuestions, totalCommands: totals.totalCommands };
+    }, [value]);
 
     if (loading) {
         return (
@@ -99,7 +63,7 @@ export function ExamMatrixTotalSummary({
                         <CalculatorOutlined />
                     </span>
                     <Text type="secondary">Tổng số câu</Text>
-                    <Tooltip title="Tổng được tính tự động từ 9 ô phân bổ ở bảng câu hỏi.">
+                    <Tooltip title="Tổng được tính tự động từ các ô của ma trận.">
                         <InfoCircleOutlined className="exam-matrix-total-summary__info-icon" />
                     </Tooltip>
                 </div>
@@ -119,7 +83,7 @@ export function ExamMatrixTotalSummary({
             <section className="exam-matrix-total-summary__section" aria-label="Số câu theo dạng câu hỏi">
                 <div className="exam-matrix-total-summary__section-heading">
                     <AppstoreOutlined />
-                    <Text strong>Số câu theo dạng</Text>
+                    <Text strong>Số câu theo phần</Text>
                 </div>
                 <div className="exam-matrix-total-summary__rows">
                     {summary.byQuestionType.map((item) => {
@@ -151,15 +115,18 @@ export function ExamMatrixTotalSummary({
 
             <Divider className="exam-matrix-total-summary__divider" />
 
-            <section className="exam-matrix-total-summary__section" aria-label="Số câu theo mức độ nhận thức">
+            <section className="exam-matrix-total-summary__section" aria-label="Số lệnh hỏi theo mức độ nhận thức">
                 <div className="exam-matrix-total-summary__section-heading">
                     <BarChartOutlined />
-                    <Text strong>Số câu theo mức độ</Text>
+                    <Text strong>Lệnh hỏi theo mức độ ({summary.totalCommands})</Text>
+                    <Tooltip title="Mỗi câu trắc nghiệm hoặc trả lời ngắn là 1 lệnh hỏi; mỗi câu đúng/sai là 4 lệnh hỏi theo mức của 4 ý.">
+                        <InfoCircleOutlined className="exam-matrix-total-summary__info-icon" />
+                    </Tooltip>
                 </div>
                 <div className="exam-matrix-total-summary__cognitive-grid">
                     {summary.byCognitiveLevel.map((item) => {
-                        const percent = summary.total > 0
-                            ? Math.round((item.total / summary.total) * 100)
+                        const percent = summary.totalCommands > 0
+                            ? Math.round((item.total / summary.totalCommands) * 100)
                             : 0;
 
                         return (
@@ -183,7 +150,7 @@ export function ExamMatrixTotalSummary({
                 <div className="exam-matrix-total-summary__empty-hint">
                     <Empty
                         image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description={<Text type="secondary">Nhập số câu ở bảng phân bổ để cập nhật tổng quan.</Text>}
+                        description={<Text type="secondary">Thêm ô và nhập số câu để cập nhật tổng quan.</Text>}
                     />
                 </div>
             )}

@@ -77,11 +77,14 @@ public class ExamBuildService {
     private final QcSummaryService qcSummaryService;
     private final ExamContextService contextService;
     private final MaterialPassageService passageService;
+    private final GenerationQuotaService generationQuota;
 
     public ExamBuildService(ExamRepository examRepository, ExamSlotRepository slotRepository,
                             MatrixService matrixService, GenerationService generationService,
                             CatalogService catalogService, QcSummaryService qcSummaryService,
-                            ExamContextService contextService, MaterialPassageService passageService) {
+                            ExamContextService contextService, MaterialPassageService passageService,
+                            GenerationQuotaService generationQuota) {
+        this.generationQuota = generationQuota;
         this.examRepository = examRepository;
         this.slotRepository = slotRepository;
         this.matrixService = matrixService;
@@ -150,6 +153,9 @@ public class ExamBuildService {
         int fromBank = 0;
         int jobs = 0;
         String lastTfPattern = null;
+        // Bước 1: tạo chỗ và lấy câu ngân hàng cho từng ô; chưa xếp job nào.
+        List<CellPlan> plans = new ArrayList<>();
+        int toGenerate = 0;
         for (ExamMatrixCell cell : cells) {
             List<ExamSlot> slots = new ArrayList<>();
             for (int i = 1; i <= cell.getQuestionCount(); i++) {
@@ -177,6 +183,18 @@ public class ExamBuildService {
                     missing.add(slots.get(i));
                 }
             }
+            plans.add(new CellPlan(cell, slots, missing, cellInstruction));
+            toGenerate += missing.size();
+        }
+        // D1: giữ chỗ cho đúng số câu phải sinh (câu ngân hàng không tính) rồi mới xếp job, cùng transaction; vượt trần thì
+        // 429 và toàn bộ đề vừa tạo rollback.
+        generationQuota.reserve(actorId, toGenerate);
+        // Bước 2: xếp job sinh câu cho phần thiếu.
+        for (CellPlan plan : plans) {
+            ExamMatrixCell cell = plan.cell();
+            List<ExamSlot> slots = plan.slots();
+            List<ExamSlot> missing = plan.missing();
+            String cellInstruction = plan.instruction();
             if (!missing.isEmpty()) {
                 MatrixCellSpec spec = spec(cell, matrix, subject, cellInstruction);
                 ExperimentRun run = generationService.createMatrixRun(subject.getId(), spec, missing.size());
@@ -187,7 +205,8 @@ public class ExamBuildService {
                     slot.setAttempts(1);
                     slot.setState(ExamSlot.GENERATING);
                     List<String> note = new ArrayList<>();
-                    addLine(note, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount()));
+                    addLine(note, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount(),
+                            outcomeLevels(cell)));
                     if (cell.getQuestionType() == QuestionType.TF) {
                         lastTfPattern = TfLabelPattern.choose(lastTfPattern, ThreadLocalRandom.current());
                         note.add(TfLabelPattern.promptLine(lastTfPattern));
@@ -203,6 +222,9 @@ public class ExamBuildService {
         return new BuildResultDto(exam.getId(), exam.getExamCode(), exam.getTitle(),
                 matrix.isLesson() ? null : matrix.getId(), total, fromBank, jobs, matrix.getKind());
     }
+
+    /** Kế hoạch của một ô lúc tạo đề: các chỗ, phần chỗ chưa có câu ngân hàng (cần sinh) và yêu cầu thêm hiệu lực của ô. */
+    private record CellPlan(ExamMatrixCell cell, List<ExamSlot> slots, List<ExamSlot> missing, String instruction) {}
 
     /**
      * Câu ngân hàng khớp một ô, đã xếp hạng mềm theo số lần dùng và đã loại câu đã có trong đề {@code examId} hoặc đã bị
@@ -412,6 +434,24 @@ public class ExamBuildService {
                 : new GenerationService.MaterialSnapshot(selection.context(), selection.refsJson());
     }
 
+    /**
+     * Các mức có yêu cầu cần đạt mà prompt của ô liệt kê (mcq/sa: mức của câu; tf: mức của 4 ý), theo thứ tự trong prompt
+     * ({@link Difficulty#values()}). Số mức này là m trong phân công khía cạnh của {@link MatrixPromptDraftV0#slotLine}.
+     */
+    static List<Difficulty> outcomeLevels(ExamMatrixCell cell) {
+        List<Difficulty> used = cell.getQuestionType() == QuestionType.TF
+                ? MatrixService.statementLevels(cell)
+                : List.of(cell.getDifficulty());
+        List<Difficulty> out = new ArrayList<>();
+        for (Difficulty level : Difficulty.values()) {
+            String text = cell.learningOutcome(level);
+            if (used.contains(level) && text != null && !text.isBlank()) {
+                out.add(level);
+            }
+        }
+        return out;
+    }
+
     /** Nội dung và yêu cầu cần đạt của ô, để khớp đoạn tài liệu (cùng với tên bài/chủ đề của ô). */
     static String selectionDetails(MatrixCellSpec spec) {
         List<String> parts = new ArrayList<>();
@@ -430,7 +470,7 @@ public class ExamBuildService {
      */
     String promptNote(ExamSlot slot, ExamMatrixCell cell, String instruction) {
         List<String> lines = new ArrayList<>();
-        addLine(lines, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount()));
+        addLine(lines, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount(), outcomeLevels(cell)));
         if (cell.getQuestionType() == QuestionType.TF) {
             lines.add(TfLabelPattern.promptLine(
                     TfLabelPattern.choose(latestTfPattern(slot), ThreadLocalRandom.current())));

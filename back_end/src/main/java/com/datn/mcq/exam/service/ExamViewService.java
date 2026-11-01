@@ -22,6 +22,7 @@ import com.datn.mcq.matrix.entity.ExamMatrix;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
 import com.datn.mcq.qc.service.QcSummaryService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -52,10 +53,17 @@ public class ExamViewService {
     private final BankService bankService;
     private final QcSummaryService qcSummaryService;
 
+    private final double similarThreshold;
+
     public ExamViewService(ExamBuildService buildService, ExamRepository examRepository,
                            ExamSlotRepository slotRepository, MatrixService matrixService,
                            GenerationService generationService, BankService bankService,
-                           QcSummaryService qcSummaryService) {
+                           QcSummaryService qcSummaryService,
+                           @Value("${app.exam.similar-threshold:0.82}") double similarThreshold) {
+        if (!(similarThreshold > 0.0 && similarThreshold <= 1.0)) {
+            throw new IllegalArgumentException("app.exam.similar-threshold phải nằm trong (0, 1], nhận " + similarThreshold);
+        }
+        this.similarThreshold = similarThreshold;
         this.buildService = buildService;
         this.examRepository = examRepository;
         this.slotRepository = slotRepository;
@@ -170,19 +178,17 @@ public class ExamViewService {
         }
         int generating = 0;
         int failed = 0;
-        int needsReview = 0;
         for (ExamSlot slot : slots) {
             ExamItemDto item = item(slot, cellById.get(slot.getCellId()));
             byPart.computeIfAbsent(item.part(), k -> new ArrayList<>()).add(item);
-            if (item.needsReview()) {
-                needsReview++;
-            }
             if (ExamSlot.FAILED.equals(slot.getState())) {
                 failed++;
             } else if (!ExamBuildService.hasQuestion(slot)) {
                 generating++;
             }
         }
+        flagSimilarInExam(byPart);
+        int needsReview = (int) byPart.values().stream().flatMap(List::stream).filter(ExamItemDto::needsReview).count();
         List<PartDto> parts = new ArrayList<>();
         for (Map.Entry<String, List<ExamItemDto>> e : byPart.entrySet()) {
             int ready = (int) e.getValue().stream().filter(i -> i.questionText() != null).count();
@@ -193,6 +199,33 @@ public class ExamViewService {
                 : matrixService.kindsByIds(List.of(exam.getMatrixId())));
         return new ExamViewDto(exam.getId(), exam.getExamCode(), exam.getTitle(), exam.getMode(), exam.getStatus(),
                 publicMatrixId(exam, kind), exam.getCreatedAt(), buildStatus, needsReview, parts, kind);
+    }
+
+    /**
+     * Thẩm định 31/10 (lớp 2): gắn lý do {@link ExamQuestionSimilarity#REASON_PREFIX}{@code <n>} cho câu hệ thống sinh cùng
+     * khuôn với câu thứ n của CHÍNH đề này (n đếm từ 1 theo thứ tự hiển thị: phần I, II, III). Mọi câu của đề tham gia so
+     * (kể cả câu ngân hàng), nhưng chỉ câu hệ thống sinh chưa Giữ mới bị gắn cờ. Tính lúc xem, không ghi DB, không đổi
+     * trạng thái câu. Thay phần tử trong các danh sách của {@code byPart}.
+     */
+    private void flagSimilarInExam(Map<String, List<ExamItemDto>> byPart) {
+        List<ExamItemDto> flat = byPart.values().stream().flatMap(List::stream).toList();
+        Map<Integer, List<Integer>> similar = ExamQuestionSimilarity.findSimilar(flat, similarThreshold);
+        if (similar.isEmpty()) {
+            return;
+        }
+        int position = 0;
+        for (List<ExamItemDto> items : byPart.values()) {
+            for (int i = 0; i < items.size(); i++) {
+                position++;
+                ExamItemDto item = items.get(i);
+                List<Integer> others = similar.get(position);
+                if (others != null && item.bankItemId() == null && "generated".equals(item.source())
+                        && item.questionText() != null) {
+                    items.set(i, item.withExtraReasons(
+                            others.stream().map(n -> ExamQuestionSimilarity.REASON_PREFIX + n).toList()));
+                }
+            }
+        }
     }
 
     /** W1-4: loại đề suy ra từ ma trận gốc; đề cũ không có ma trận là "manual". */

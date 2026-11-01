@@ -47,3 +47,7 @@ app:
       # Khóa giả CHỈ dùng cho test (trùng AuthTestSupport.TEST_JWT_SECRET_BASE64), không phải secret thật.
       secret: "dGVzdC1vbmx5LWp3dC1zZWNyZXQtZm9yLWRhdG4tbWNxLW5vdC1mb3ItcHJvZHVjdGlvbg=="
     # Không đặt bootstrap-admin: AdminBootstrap không tạo tài khoản khi chạy test.
+    # D3: hầu hết test đăng nhập từ cùng IP mặc định của MockMvc (127.0.0.1) và cùng dùng một bộ đếm trong bộ nhớ, nên nới
+    # hạn mức IP ở đây; LoginIpRateLimitTest đặt lại 20 lần/phút bằng @SpringBootTest(properties).
+    login-ip-limit:
+      max-attempts: 100000
