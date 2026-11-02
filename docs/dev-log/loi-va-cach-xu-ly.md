@@ -69,6 +69,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-53 | Dedup: `similarity` null do chốt chặn số liệu; câu fallback của ô đang sinh lại không là ứng viên (bổ sung 31/10) | QC | Trung bình | Đã sửa |
 | L-54 | Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (thẩm định 31/10) | QC | Cao | Đã sửa (v4 bắt 7/9 và 5/9, không báo nhầm) |
 | L-55 | Nhiều câu cùng khuôn (chỉ khác số, tên đỉnh) trong một đề; mcq lộ đáp án ý đúng/sai (thẩm định 31/10) | QC | Cao | Đã sửa (chờ đối chiếu dữ liệu thật) |
+| L-57 | Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11) | Xuất file | – | Đã kiểm (còn mục mở) |
 
 **Thống kê theo nhóm** (53 mục):
 
@@ -1145,6 +1146,29 @@ Theo mức độ: Cao 13, Trung bình 26, Thấp 14.
 - Bài học: xuất file cho phần mềm khác dùng tiếp thì phải kiểm cả siêu dữ liệu của file, không chỉ nội dung.
 - Trạng thái: Đã sửa. Chưa kiểm bằng Word và MathType thật sau bản sửa; mới kiểm XML bên trong file. Tiêu đề (Heading)
   vẫn dùng font theme của pandoc.
+
+### L-57 Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11)
+- Nhóm: Xuất file
+- Triệu chứng: không phải lỗi. Đây là ghi nhận kiểm chứng tính năng mới `?equation=mathtype` (commit `c78862d`).
+- Cách kiểm:
+  - Bước 0 (30/10): 876 công thức thật của 4 bộ đề, bộ chuyển đổi được 876/876, 116/116 câu đổi được toàn bộ. Đọc ngược
+    bằng bộ đọc MTEF của `tools/bank-import`: 786 giống LaTeX gốc, 88 tương đương, 2 bộ đọc không dịch được.
+  - Test tự động: `MtefGoldenTest` so cấu trúc MTEF với MTEF do MathType 7.12 sinh (10, 49 và 65 biểu thức mẫu);
+    `MathTypeOleTest`, `MathTypeDocxConverterTest`, `PandocRunnerTest`, `ExamBuildTest.xuatDeRaWordCongThucMathType`.
+  - Xuất thật (01/11): 4 bộ đề qua đúng `ExamMarkdownBuilder` → `PandocRunner` (không qua DB, vì DB dev trống), kết quả
+    310/350/1/221 đối tượng MathType, 0 công thức giữ Equation. Word mở được, đếm đúng số đối tượng, xuất được PDF.
+  - Kiểm tay (người dùng, 02/11): mở bằng MathType, bấm đúp sửa, lưu, mở lại; MathType Lite; in ra giấy: đạt.
+- Ghi nhận khi kiểm: trên máy không có MathType, bấm đúp thì Word hiện "Chuyển đổi công thức sang Office Math … Equation
+  Editor 3.0". Đây là hành vi của Word với mọi đối tượng MathType khi thiếu MathType, file vẫn đúng. Vì vậy mặc định để
+  `omml`, và frontend cần ghi chú khi cho chọn MathType.
+- Còn mở:
+  - `\widehat` trên một chữ cái thành `\hat` (66/876 công thức);
+  - tên kiểu trong `\1CompObj` là "MathType 6.0 Equation", MathType 7 ghi "7.0" (chép từ spike; MathType vẫn đọc được);
+  - file nặng do ảnh PNG 600 dpi;
+  - chưa chạy thử trong container Linux.
+- Bài học: với định dạng của phần mềm đóng, kiểm ở ba mức: cấu trúc (so với file do phần mềm sinh), đọc ngược trên dữ
+  liệu thật, và mở bằng chính phần mềm đó. Mức sau không thay được mức trước.
+- Trạng thái: Đã kiểm, dùng được. Còn các mục mở ở trên.
 
 ---
 

@@ -97,7 +97,7 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | POST | `/api/exams/{id}/slots/{slotId}/keep` | Giữ câu (vào ngân hàng) |
 | POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác: `source = generate` (mặc định) sinh lại đúng ô, có thể kèm yêu cầu của giáo viên; `source = bank` lấy câu ngân hàng khớp ô, hết thì 409 `BANK_EXHAUSTED` (mục 7.5) |
 | PUT | `/api/exams/{id}/slots/{slotId}/question` | Sửa câu của chỗ chưa Giữ (mục 7.5a); QC chạy lại, Solver qua hàng đợi |
-| GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; cần pandoc trên máy chủ |
+| GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; `?equation=omml` (mặc định) hoặc `mathtype` (mục 7.6); cần pandoc trên máy chủ |
 
 Chạy lại QC cho câu `generated` (quy tắc QC-RERUN, quyết định 6 ngày 22/10) đã có ở tầng service (`QcRerunService`, cả ba
 dạng) cho công cụ thí nghiệm, không có endpoint HTTP.
@@ -843,7 +843,9 @@ PUT /api/exams/12/slots/101/question
 ### 7.6. Xuất đề ra Word
 
 ```http
-GET /api/exams/12/export/docx   → 200, file MT2610231200001.docx (Content-Disposition: attachment)
+GET /api/exams/12/export/docx                    → 200, file MT2610231200001.docx (Content-Disposition: attachment)
+GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đối tượng MathType; header X-Equation-Kept-Omml: 0
+GET /api/exams/12/export/docx?equation=abc       → 400
 ```
 
 - Bản cơ bản: tiêu đề và mã đề; PHẦN I/II/III với tên phần đầy đủ (PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn,
@@ -857,6 +859,20 @@ GET /api/exams/12/export/docx   → 200, file MT2610231200001.docx (Content-Disp
 - Cách làm: dựng Markdown từ dữ liệu xem đề rồi gọi `pandoc --sandbox -f markdown+tex_math_dollars -t docx
   --reference-doc=reference.docx` (thư mục tạm riêng, tối đa 30 giây, xóa khi xong). Công thức `$...$` thành Equation
   gốc của Word (OMML), sửa được trong Word.
+- **Dạng công thức (`equation`, tùy chọn, không phân biệt hoa thường):**
+  - `omml` (mặc định, không truyền cũng là `omml`): Equation gốc của Word như trên. Dùng cho máy chỉ có Word.
+  - `mathtype`: sau pandoc, module `mathtype` đổi từng Equation thành đối tượng MathType (OLE `Equation.DSMT4`), kèm
+    ảnh xem trước PNG để Word hiển thị và in. Bấm đúp sửa bằng MathType, kể cả MathType Lite. Máy không cài MathType vẫn
+    xem và in được, nhưng bấm đúp thì Word đề nghị đổi sang Office Math.
+  - Giá trị khác: 400.
+  - Header `X-Equation-Kept-Omml` (chỉ có khi `equation=mathtype`, đã mở qua CORS): số công thức vẫn là Equation của Word
+    vì bộ chuyển chưa hỗ trợ cấu trúc hoặc ký hiệu đó. Không đổi được cả file (số công thức lệch, lỗi bất ngờ) thì trả file
+    Equation, header bằng tổng số công thức, ghi log WARN, không trả 500.
+  - Cách làm: chạy thêm `pandoc -t json` trên cùng file Markdown để lấy LaTeX từng công thức đúng thứ tự (vẽ ảnh xem trước),
+    trong cùng thư mục tạm và cùng lượt giữ Semaphore của pandoc.
+  - Chi phí (đo 01/11 trên 4 bộ đề thật khoảng 40 câu): file nặng khoảng 1,5–2 MB (Equation khoảng 20 KB) do ảnh xem trước
+    600 dpi; thời gian xuất tăng khoảng 2–3 giây với đề nhiều công thức, trong thời gian đó vẫn giữ Semaphore.
+  - Frontend: nên ghi rõ "Chỉ chọn MathType nếu máy đã cài MathType".
 - **Phòng thủ (D4):** `--sandbox` (cần pandoc từ 2.15, cùng yêu cầu với đọc docx tài liệu) để pandoc chỉ đọc các file nêu
   trong dòng lệnh, nên nội dung câu hỏi chứa `![](/etc/passwd)` hay chỉ thị include không lấy được file của máy chủ. Ngoài công
   thức, `ExamMarkdownBuilder` thoát mọi ký tự đặc biệt của Markdown gồm `\` và `` ` ``, nên `` ` ``, `` `{=openxml}` `` hay khối
