@@ -114,7 +114,7 @@ public class QcOrchestrator {
                 null,
                 null,
                 null,
-                formatOutcome.answerWarnings(),
+                storedWarnings(formatOutcome),
                 // V8 (ngày 23/10): lý do format không qua (kể cả lỗi giải mã JSON) lưu ở cột errors; NULL khi qua.
                 formatOutcome.passed() ? null : formatOutcome.errors()
         );
@@ -512,6 +512,17 @@ public class QcOrchestrator {
     }
 
     /** Mảng JSON các chuỗi; null khi không có cảnh báo. */
+    /**
+     * Cảnh báo bước format cần lưu: nhóm answerWarnings (cảnh báo giải mã, nhãn tf, đáp số) rồi nhóm warnings (lệnh LaTeX
+     * không hỗ trợ, lời giải có thể còn nháp, từ tiếng Anh…). Trước 2/11 chỉ lưu nhóm đầu nên nhóm sau không bao giờ thành lý
+     * do "cần xem kỹ" (đề 11 câu 190 và 192: "210^\toRadians" qua QC không cờ).
+     */
+    static List<String> storedWarnings(FormatChecker.FormatCheckOutcome outcome) {
+        java.util.LinkedHashSet<String> all = new java.util.LinkedHashSet<>(outcome.answerWarnings());
+        all.addAll(outcome.warnings());
+        return new java.util.ArrayList<>(all);
+    }
+
     static String writeWarnings(List<String> warnings) {
         return JsonStringArray.write(warnings);
     }

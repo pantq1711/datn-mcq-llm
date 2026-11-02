@@ -1,8 +1,11 @@
 package com.datn.mcq.generation.parser;
 
+import com.datn.mcq.common.util.LatexValidationRules;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -14,6 +17,7 @@ import java.util.regex.Pattern;
  *   <li>{@link #closeTrailingDollar}: công thức mở bằng "$" ở cuối trường mà quên "$" đóng.</li>
  *   <li>{@link #stripTextOutsideMath} (27/10): vỏ {@code \text{...}} của đơn vị đo viết ngoài $ ("$40$ \text{km/h}").</li>
  *   <li>{@link #fixDegreeSymbol} (31/10): ký hiệu độ viết {@code ^\bullet}/{@code ^\triangle} thay cho {@code ^{\circ}}.</li>
+ *   <li>{@link #wrapLatexOutsideMath} (2/11): biểu thức LaTeX liền mạch nằm ngoài $...$ (không áp cho trường {@code answer}).</li>
  * </ol>
  */
 public final class LlmOutputRepair {
@@ -291,19 +295,27 @@ public final class LlmOutputRepair {
 
     private static final String DEGREE = "^{\\circ}";
 
-    /** Chữ số hoặc "}" rồi "^" rồi {@code \bullet}/{@code \triangle}, có hoặc không có {...} và khoảng trắng. */
+    /**
+     * Lệnh model hay viết thay cho {@code \circ} (31/10: bullet, triangle; 2/11, đề 11 câu 190 và 192: toRadians, rceil, và
+     * các biến thể lceil, degree, deg, circle, o, cdot). Không gồm {@code prime} và {@code circ}.
+     */
+    private static final String WRONG_DEGREE_COMMANDS = "(?:bullet|triangle|toRadians|rceil|lceil|degree|deg|circle|o|cdot)";
+
+    /** Chữ số hoặc "}" rồi "^" rồi một lệnh trong {@link #WRONG_DEGREE_COMMANDS}, có hoặc không có {...} và khoảng trắng. */
     private static final Pattern WRONG_DEGREE = Pattern.compile(
-            "([0-9}])\\s*\\^\\s*(?:\\\\(?:bullet|triangle)(?![A-Za-z])|\\{\\s*\\\\(?:bullet|triangle)\\s*\\})");
+            "([0-9}])\\s*\\^\\s*(?:\\\\" + WRONG_DEGREE_COMMANDS + "(?![A-Za-z])|\\{\\s*\\\\" + WRONG_DEGREE_COMMANDS
+                    + "(?![A-Za-z])\\s*\\})");
 
     /**
      * Đổi ký hiệu độ viết sai thành {@code ^{\circ}} (31/10, thẩm định nội dung: "75•", "85△" ở 6 câu). CHỈ bên trong cặp
-     * $...$ và chỉ khi ngay sau một chữ số hoặc "}" là {@code ^\bullet}, {@code ^{\bullet}}, {@code ^\triangle} hoặc
-     * {@code ^{\triangle}} (cho phép khoảng trắng quanh "^"): "$75^\bullet$" thành "$75^{\circ}$". Ngoài ngữ cảnh đó giữ
-     * nguyên ({@code \triangle ABC}, {@code a^\bullet}, {@code \bullet} ngoài công thức). Cách xác định trong/ngoài $ như
+     * $...$ và chỉ khi ngay sau một chữ số hoặc "}" là "^" rồi một lệnh trong {@link #WRONG_DEGREE_COMMANDS} (bullet,
+     * triangle, từ 2/11 thêm toRadians, rceil, lceil, degree, deg, circle, o, cdot; dạng {@code ^\X} hoặc {@code ^{\X}},
+     * cho phép khoảng trắng quanh "^"): "$75^\bullet$" thành "$75^{\circ}$". Ngoài ngữ cảnh đó giữ nguyên
+     * ({@code \triangle ABC}, {@code a^\bullet}, {@code x^{\prime}}, {@code \bullet} ngoài công thức). Cách xác định trong/ngoài $ như
      * {@link #stripTextOutsideMath}; công thức không có "$" đóng thì không đụng tới.
      */
     public static DegreeRepair fixDegreeSymbol(String text) {
-        if (text == null || !(text.contains("\\bullet") || text.contains("\\triangle"))) {
+        if (text == null || text.indexOf('^') < 0 || text.indexOf('\\') < 0) {
             return new DegreeRepair(text, 0);
         }
         StringBuilder sb = new StringBuilder(text.length());
@@ -370,6 +382,233 @@ public final class LlmOutputRepair {
         return ESCAPE_WARNING_PREFIX + fixed + " ký hiệu độ (^\\bullet, ^\\triangle thành ^{\\circ}) ở " + field;
     }
 
+    /** @param text văn bản sau khi sửa; {@code wrapped} là số biểu thức đã được bọc $...$ */
+    public record WrapRepair(String text, int wrapped) {}
+
+    /** Lệnh có trong danh sách cho phép nhưng không là mỏ neo: \text do {@link #stripTextOutsideMath} lo, \begin/\end cần cả khối. */
+    private static final Set<String> NOT_ANCHOR = Set.of("text", "begin", "end");
+    private static final String SENTENCE_END = ".!?;";
+    private static final String TRAILING_PUNCTUATION = ".,;:!?";
+
+    /**
+     * Bọc $...$ quanh biểu thức LaTeX nằm NGOÀI cặp $...$ (2/11, thẩm định UX đề 10: lời giải câu 2 Phần I có
+     * "\frac{5x + y}{xy}" không nằm trong $). Mỏ neo là lệnh trong danh sách cho phép của {@link LatexValidationRules} (trừ
+     * \text, \begin, \end) hoặc mũ/chỉ số viết bằng ngoặc nhọn ("^" hay "_" liền sau là "{"). Từ mỏ neo mở rộng sang hai phía qua các "từ" (tách theo khoảng trắng
+     * ở ngoài ngoặc nhọn) trông như công thức: không có chữ ngoài ASCII (tiếng Việt), không phải từ chỉ gồm từ 2 chữ cái ASCII
+     * trở lên (từ tiếng Anh, "Ta", "Cho"), không có lệnh lạ, ngoặc nhọn cân; không đi qua từ kết thúc câu (. ! ? ;). Dấu câu
+     * cuối biểu thức nằm ngoài $; nếu sát một cặp $ khác thì chèn dấu cách để không thành "$$".
+     *
+     * <p>Không chắc thì giữ nguyên (bộ kiểm tra LaTeX báo lỗi, câu được sinh lại): số dấu $ (không tính "\$") lẻ; ngoặc nhọn
+     * lệch; lệnh lạ; "\n" (gạch rồi n) không phải lệnh. Mỗi biểu thức liền mạch chỉ bọc một lần dù có nhiều mỏ neo.
+     */
+    public static WrapRepair wrapLatexOutsideMath(String text) {
+        if (text == null || (text.indexOf('\\') < 0 && !text.contains("^{") && !text.contains("_{"))) {
+            return new WrapRepair(text, 0);
+        }
+        List<int[]> outside = outsideMathSpans(text);
+        if (outside == null) {
+            return new WrapRepair(text, 0);
+        }
+        StringBuilder sb = new StringBuilder(text.length() + 8);
+        int wrapped = 0;
+        int copied = 0;
+        for (int[] span : outside) {
+            int start = span[0];
+            int end = span[1];
+            sb.append(text, copied, start);
+            boolean afterDollar = start > 0;
+            boolean beforeDollar = end < text.length();
+            int[] count = new int[1];
+            sb.append(wrapSegment(text.substring(start, end), afterDollar, beforeDollar, count));
+            wrapped += count[0];
+            copied = end;
+        }
+        sb.append(text, copied, text.length());
+        return wrapped == 0 ? new WrapRepair(text, 0) : new WrapRepair(sb.toString(), wrapped);
+    }
+
+    /** Cảnh báo khi đã bọc $, ví dụ {@code explanation: đã tự bọc $ quanh công thức LaTeX nằm ngoài $}. */
+    public static String wrapWarning(String field, int wrapped) {
+        return field + ": đã tự bọc $ quanh " + (wrapped > 1 ? wrapped + " công thức" : "công thức") + " LaTeX nằm ngoài $";
+    }
+
+    /**
+     * Các đoạn [start, end) nằm ngoài cặp $...$ ("\$" và mọi ký hiệu "\" khác bỏ qua nguyên khối; "$$" là công thức riêng
+     * dòng); null khi số dấu $ lẻ (không biết đâu là trong/ngoài).
+     */
+    private static List<int[]> outsideMathSpans(String text) {
+        List<int[]> spans = new ArrayList<>();
+        int n = text.length();
+        int spanStart = 0;
+        boolean inMath = false;
+        boolean display = false;
+        int i = 0;
+        while (i < n) {
+            char c = text.charAt(i);
+            if (c == '\\') {
+                i += 2;
+                continue;
+            }
+            if (c == '$') {
+                boolean doubleDollar = i + 1 < n && text.charAt(i + 1) == '$';
+                if (!inMath) {
+                    if (i > spanStart) {
+                        spans.add(new int[] {spanStart, i});
+                    }
+                    display = doubleDollar;
+                    inMath = true;
+                    i += display ? 2 : 1;
+                } else {
+                    inMath = false;
+                    i += (display && doubleDollar) ? 2 : 1;
+                    spanStart = Math.min(i, n);
+                }
+                continue;
+            }
+            i++;
+        }
+        if (inMath) {
+            return null;
+        }
+        if (spanStart < n) {
+            spans.add(new int[] {spanStart, n});
+        }
+        return spans;
+    }
+
+    /** Một "từ" của đoạn ngoài $: [start, end) trong đoạn. */
+    private record Token(int start, int end, boolean anchor, boolean mathLike) {}
+
+    private static String wrapSegment(String seg, boolean afterDollar, boolean beforeDollar, int[] count) {
+        List<Token> tokens = tokenize(seg);
+        boolean anyAnchor = false;
+        for (Token t : tokens) {
+            anyAnchor |= t.anchor();
+        }
+        if (!anyAnchor) {
+            return seg;
+        }
+        StringBuilder out = new StringBuilder(seg.length() + 8);
+        int copied = 0;
+        int k = 0;
+        while (k < tokens.size()) {
+            if (!tokens.get(k).anchor()) {
+                k++;
+                continue;
+            }
+            int first = k;
+            while (first > 0 && tokens.get(first - 1).mathLike() && !endsSentence(seg, tokens.get(first - 1))) {
+                first--;
+            }
+            int last = k;
+            while (last + 1 < tokens.size() && tokens.get(last + 1).mathLike() && !endsSentence(seg, tokens.get(last))) {
+                last++;
+            }
+            int start = tokens.get(first).start();
+            int end = tokens.get(last).end();
+            while (end > start && TRAILING_PUNCTUATION.indexOf(seg.charAt(end - 1)) >= 0) {
+                end--;
+            }
+            out.append(seg, copied, start);
+            if (start == 0 && afterDollar) {
+                out.append(' ');
+            }
+            out.append('$').append(seg, start, end).append('$');
+            if (end == seg.length() && beforeDollar) {
+                out.append(' ');
+            }
+            copied = end;
+            count[0]++;
+            k = last + 1;
+        }
+        out.append(seg, copied, seg.length());
+        return out.toString();
+    }
+
+    /** True khi từ kết thúc bằng dấu hết câu: biểu thức không đi tiếp sang từ sau (hoặc lùi sang từ trước). */
+    private static boolean endsSentence(String seg, Token t) {
+        return t.end() > t.start() && SENTENCE_END.indexOf(seg.charAt(t.end() - 1)) >= 0;
+    }
+
+    /** Tách theo khoảng trắng ở ngoài ngoặc nhọn ("\frac{5x + y}{xy}" là một từ). */
+    private static List<Token> tokenize(String seg) {
+        List<Token> tokens = new ArrayList<>();
+        int n = seg.length();
+        int i = 0;
+        while (i < n) {
+            while (i < n && Character.isWhitespace(seg.charAt(i))) {
+                i++;
+            }
+            if (i >= n) {
+                break;
+            }
+            int start = i;
+            int depth = 0;
+            while (i < n && (depth > 0 || !Character.isWhitespace(seg.charAt(i)))) {
+                char c = seg.charAt(i);
+                if (c == '\\') {
+                    i += 2;
+                    continue;
+                }
+                if (c == '{') {
+                    depth++;
+                } else if (c == '}') {
+                    depth--;
+                }
+                i++;
+            }
+            int end = Math.min(i, n);
+            tokens.add(classify(seg.substring(start, end), start, end));
+        }
+        return tokens;
+    }
+
+    private static Token classify(String token, int start, int end) {
+        boolean anchor = false;
+        boolean ok = true;
+        int depth = 0;
+        int n = token.length();
+        for (int i = 0; i < n; i++) {
+            char c = token.charAt(i);
+            if (c > 127 && Character.isLetter(c)) {
+                ok = false;
+            } else if (c == '\\') {
+                if (i + 1 >= n) {
+                    ok = false;
+                } else if (isAsciiLetter(token.charAt(i + 1))) {
+                    String name = asciiWord(token, i + 1);
+                    if (LatexValidationRules.isAllowedCommand(name) && !NOT_ANCHOR.contains(name)) {
+                        anchor = true;
+                    } else {
+                        ok = false;
+                    }
+                    i += name.length();
+                } else if (token.charAt(i + 1) == '$') {
+                    ok = false;
+                    i++;
+                } else {
+                    i++;
+                }
+            } else if ((c == '^' || c == '_') && i + 1 < n && token.charAt(i + 1) == '{') {
+                anchor = true;
+            } else if (c == '{') {
+                depth++;
+            } else if (c == '}' && --depth < 0) {
+                ok = false;
+            }
+        }
+        if (depth != 0) {
+            ok = false;
+        }
+        if (ok) {
+            String bare = token.replaceAll("^[(\\[{]+", "").replaceAll("[)\\]},.;:!?]+$", "");
+            if (bare.matches("[A-Za-z]{2,}")) {
+                ok = false;
+            }
+        }
+        return new Token(start, end, anchor && ok, ok);
+    }
+
     /** Chế độ sửa: sửa escape LaTeX trong chuỗi JSON trước khi giải mã, ghi cảnh báo nếu có sửa. */
     static String repairJson(String json, boolean repair, List<String> warnings) {
         if (!repair) {
@@ -406,6 +645,14 @@ public final class LlmOutputRepair {
             if (g.fixed() > 0) {
                 warnings.add(degreeWarning(field, g.fixed()));
                 s = g.text();
+            }
+            // Đáp án câu trả lời ngắn là số viết trần: LaTeX ở đó để bước kiểm định dạng báo đúng lỗi dạng đáp án.
+            if (!"answer".equals(field)) {
+                WrapRepair w = wrapLatexOutsideMath(s);
+                if (w.wrapped() > 0) {
+                    warnings.add(wrapWarning(field, w.wrapped()));
+                    s = w.text();
+                }
             }
         }
         return (newlines ? McqJsonParser.normalizeLiteralNewlines(s) : s).trim();

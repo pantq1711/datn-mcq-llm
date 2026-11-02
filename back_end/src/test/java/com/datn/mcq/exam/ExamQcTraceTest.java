@@ -165,7 +165,8 @@ class ExamQcTraceTest extends ExamFlowTestBase {
         assertTrue(llm.get("qc").get("format").get("passed").asBoolean());
         assertEquals(List.of("option_a: đã tự đóng $"), texts(llm.get("qc").get("format").get("autoRepairs")));
         assertEquals(List.of(), texts(llm.get("qc").get("format").get("warnings")));
-        assertTrue(texts(llm.get("reviewReasons")).contains("warning: option_a: đã tự đóng $"));
+        assertFalse(texts(llm.get("reviewReasons")).contains("warning: option_a: đã tự đóng $"),
+                "2/11: tự đóng $ vẫn hiện ở autoRepairs nhưng không là lý do cần xem kỹ");
         JsonNode dedup = llm.get("qc").get("dedup");
         assertTrue(dedup.get("passed").asBoolean());
         double stored = jdbc.queryForObject("SELECT threshold_used FROM quality_check_result WHERE question_id = ?"

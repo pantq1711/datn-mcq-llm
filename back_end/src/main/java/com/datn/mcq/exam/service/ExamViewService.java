@@ -202,30 +202,12 @@ public class ExamViewService {
     }
 
     /**
-     * Thẩm định 31/10 (lớp 2): gắn lý do {@link ExamQuestionSimilarity#REASON_PREFIX}{@code <n>} cho câu hệ thống sinh cùng
-     * khuôn với câu thứ n của CHÍNH đề này (n đếm từ 1 theo thứ tự hiển thị: phần I, II, III). Mọi câu của đề tham gia so
-     * (kể cả câu ngân hàng), nhưng chỉ câu hệ thống sinh chưa Giữ mới bị gắn cờ. Tính lúc xem, không ghi DB, không đổi
-     * trạng thái câu. Thay phần tử trong các danh sách của {@code byPart}.
+     * Thẩm định 31/10 (lớp 2): gắn lý do {@code similar_in_exam: <Phần>.<số>} cho câu hệ thống sinh cùng khuôn với một câu
+     * ĐỨNG TRƯỚC nó trong CHÍNH đề này; từ 2/11 mỗi cặp chỉ câu sau bị gắn, và số đếm theo Phần như trang đề ("Câu k" của
+     * từng Phần), xem {@link ExamQuestionSimilarity#flag}. Tính lúc xem, không ghi DB, không đổi trạng thái câu.
      */
     private void flagSimilarInExam(Map<String, List<ExamItemDto>> byPart) {
-        List<ExamItemDto> flat = byPart.values().stream().flatMap(List::stream).toList();
-        Map<Integer, List<Integer>> similar = ExamQuestionSimilarity.findSimilar(flat, similarThreshold);
-        if (similar.isEmpty()) {
-            return;
-        }
-        int position = 0;
-        for (List<ExamItemDto> items : byPart.values()) {
-            for (int i = 0; i < items.size(); i++) {
-                position++;
-                ExamItemDto item = items.get(i);
-                List<Integer> others = similar.get(position);
-                if (others != null && item.bankItemId() == null && "generated".equals(item.source())
-                        && item.questionText() != null) {
-                    items.set(i, item.withExtraReasons(
-                            others.stream().map(n -> ExamQuestionSimilarity.REASON_PREFIX + n).toList()));
-                }
-            }
-        }
+        ExamQuestionSimilarity.flag(byPart, similarThreshold);
     }
 
     /** W1-4: loại đề suy ra từ ma trận gốc; đề cũ không có ma trận là "manual". */

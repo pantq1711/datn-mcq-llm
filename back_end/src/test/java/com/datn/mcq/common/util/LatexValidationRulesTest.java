@@ -255,4 +255,40 @@ class LatexValidationRulesTest {
     void commandOutsideMathIsStillReported() {
         assertError("A = \\frac{1}{x}", "lệnh LaTeX nằm ngoài cặp $...$");
     }
+
+    /**
+     * 3/11 (đo đề 13: \widehat bị cảnh báo nhầm, bật cờ "cần xem kỹ"): các lệnh KaTeX hay dùng ở THCS đều hợp lệ trong $...$,
+     * không cảnh báo. Lệnh sai/lạ như \toRadians vẫn cảnh báo.
+     */
+    @Test
+    void commonKatexCommandsUsedInJuniorHighAreAccepted() {
+        for (String command : java.util.List.of("widehat", "hat", "overline", "overrightarrow", "vec", "angle", "parallel",
+                "perp", "cong", "sim", "backsim", "Rightarrow", "Leftrightarrow", "Leftarrow", "in", "notin", "subset", "cup",
+                "cap", "emptyset", "mathbb", "infty", "approx", "pm", "mp", "div", "times", "cdot", "dots", "ldots", "text",
+                "mathrm", "quad", "qquad", "dfrac", "circ", "prime", "le", "ge", "leq", "geq", "ne", "neq")) {
+            assertEquals(java.util.List.of(), LatexValidationRules.validate("$a \\" + command + " b$"), command);
+            assertTrue(LatexValidationRules.isAllowedCommand(command), command);
+        }
+        assertEquals(java.util.List.of(), LatexValidationRules.validate("$\\widehat{ABC} = 60^{\\circ}$"));
+        assertEquals(java.util.List.of(), LatexValidationRules.validate("$\\overline{AB} \\parallel \\overrightarrow{CD}$ và $\\vec{u} \\perp \\hat{v}$"));
+        assertEquals(java.util.List.of(), LatexValidationRules.validate("$x^{\\prime} \\approx \\dfrac{1}{2}$, $A \\subset B$, $\\emptyset$, $\\mathbb{R}$"));
+    }
+
+    @Test
+    void unknownCommandStillWarnsAfterWideningTheList() {
+        java.util.List<String> all = LatexValidationRules.validate("$\\toRadians$");
+        assertEquals(1, all.size(), all.toString());
+        assertTrue(all.get(0).startsWith("Lệnh \\toRadians không hỗ trợ"), all.get(0));
+        assertTrue(LatexValidationRules.validate("$210^\\rceil$").get(0).startsWith("Lệnh \\rceil"));
+    }
+
+    /** 2/11: mũ và chỉ số viết bằng ngoặc nhọn ("x^{2}", "a_{1}") ngoài $ cũng là LaTeX thiếu $. */
+    @Test
+    void superscriptOrSubscriptBraceOutsideMathIsReported() {
+        assertError("Giá trị x^{2} + 1 dương", "lệnh LaTeX nằm ngoài cặp $...$");
+        assertError("Ta có a_{1} + a_{2}", "lệnh LaTeX nằm ngoài cặp $...$");
+        assertValid("Giá trị $x^{2} + 1$ dương");
+        assertValid("Tệp tên a_1 và x^2 viết thường");
+        assertEquals(1, LatexValidationRules.check("x^{2} và y_{3}").errors().size(), "chỉ báo một lần mỗi trường");
+    }
 }

@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Markdown của đề để pandoc chuyển sang Word (ngày 23/10, đợt 3, việc 3). Không cần pandoc. */
 class ExamMarkdownBuilderTest {
@@ -64,10 +66,6 @@ class ExamMarkdownBuilderTest {
     @Test
     void dungCauTrucDeDapAnLoiGiai() {
         String expected = """
-                # Đề giữa kì I
-
-                **Mã đề:** MT2610231200001
-
                 ## PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn
 
                 **Câu 1.** Bậc của đơn thức $2x^3$ là:
@@ -142,7 +140,83 @@ class ExamMarkdownBuilderTest {
 
                 **Câu 1.** Tổng bốn góc là $360^\\circ$.
                 """;
-        assertEquals(expected, ExamMarkdownBuilder.build(exam()));
+        String markdown = ExamMarkdownBuilder.build(exam(), HEADER);
+        int body = markdown.indexOf(HEADER_END);
+        assertTrue(body > 0, markdown);
+        assertEquals(expected, markdown.substring(body + HEADER_END.length()));
+    }
+
+    // ---------- đầu đề (2/11) ----------
+
+    private static final ExamHeader HEADER = ExamHeader.of("Giữa kì I – Toán 8", "Toán", 8, null);
+    private static final String HEADER_END = "\n```\n\n";
+
+    /** Khối openxml đầu tiên của markdown: bảng 2 cột không viền và dòng họ tên, lớp. */
+    private static String headerBlock(String markdown) {
+        assertTrue(markdown.startsWith("```{=openxml}\n<w:tbl>"), markdown.substring(0, 80));
+        return markdown.substring(0, markdown.indexOf(HEADER_END));
+    }
+
+    @Test
+    void dauDeLaBangHaiCotKhongVienVaDongHoTen() {
+        String block = headerBlock(ExamMarkdownBuilder.build(exam(), HEADER));
+        for (String part : List.of(
+                "PHÒNG GD&amp;ĐT ……………", "TRƯỜNG THCS ……………",
+                "ĐỀ KIỂM TRA GIỮA KÌ I", "Môn: Toán 8 — Thời gian: …… phút", "Mã đề: 101",
+                "Họ và tên: ………………………", "Lớp: ………")) {
+            assertTrue(block.contains(part), "đầu đề thiếu: " + part + "\n" + block);
+        }
+        assertEquals(1, block.split("<w:tbl>", -1).length - 1, "đúng một bảng");
+        assertEquals(2, block.split("<w:tc>", -1).length - 1, "hai cột");
+        assertEquals(1, block.split("<w:tr>", -1).length - 1, "một dòng");
+        for (String side : List.of("top", "left", "bottom", "right", "insideH", "insideV")) {
+            assertTrue(block.contains("<w:" + side + " w:val=\"nil\"/>"), "bảng không viền: thiếu " + side);
+        }
+        assertTrue(block.indexOf("Mã đề: 101") > block.indexOf("ĐỀ KIỂM TRA"), "ba dòng cột phải theo thứ tự");
+        assertTrue(block.indexOf("Họ và tên") > block.indexOf("</w:tbl>"), "dòng họ tên nằm dưới bảng");
+    }
+
+    @Test
+    void maHeThongMTKhongInRaFileVaKhongConDongTieuDeCu() {
+        String markdown = ExamMarkdownBuilder.build(exam(), HEADER);
+        assertFalse(markdown.contains("MT2610231200001"), "mã hệ thống không in ra");
+        assertFalse(markdown.contains("MT2"));
+        assertFalse(markdown.contains("**Mã đề:**"));
+        assertFalse(markdown.contains("# Đề giữa kì I"), "tiêu đề do đầu đề thay");
+    }
+
+    @Test
+    void thoiGianLayTuMaTranNeuCoKhongCoThiDeTrong() {
+        String withTime = headerBlock(ExamMarkdownBuilder.build(exam(), ExamHeader.of("Giữa kì I", "Toán", 8, 90)));
+        assertTrue(withTime.contains("Môn: Toán 8 — Thời gian: 90 phút"), withTime);
+        assertFalse(withTime.contains("……  phút"));
+        String without = headerBlock(ExamMarkdownBuilder.build(exam(), HEADER));
+        assertTrue(without.contains("Thời gian: …… phút"), without);
+    }
+
+    @Test
+    void dauDeThieuThongTinVanDungDinhDang() {
+        String block = headerBlock(ExamMarkdownBuilder.build(exam(), ExamHeader.blank("")));
+        assertTrue(block.contains("ĐỀ KIỂM TRA<"), block);
+        assertTrue(block.contains("Môn: …… — Thời gian: …… phút"), block);
+        assertTrue(block.contains("Mã đề: 101"), block);
+    }
+
+    @Test
+    void kyTuXmlTrongTenKiDuocThoat() {
+        String block = headerBlock(ExamMarkdownBuilder.build(exam(), ExamHeader.of("Kì <1> & \"2\"", "Toán", 8, null)));
+        assertTrue(block.contains("KÌ &lt;1&gt; &amp; &quot;2&quot;"), block);
+        assertFalse(block.contains("<1>"));
+    }
+
+    /** Chữ ký cũ (không truyền đầu đề) vẫn dùng được: tiêu đề lấy từ tên đề, mã đề hiển thị 101. */
+    @Test
+    void buildKhongTruyenDauDeDungTieuDeCuaDe() {
+        String markdown = ExamMarkdownBuilder.build(exam());
+        String block = headerBlock(markdown);
+        assertTrue(block.contains("ĐỀ KIỂM TRA ĐỀ GIỮA KÌ I"), block);
+        assertTrue(block.contains("Mã đề: 101"));
+        assertFalse(markdown.contains("MT2"));
     }
 
     @Test

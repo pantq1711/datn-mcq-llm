@@ -20,9 +20,10 @@ class LatexValidationSeverityTest {
 
     @Test
     void commandOutsideAllowlistIsOnlyAWarning() {
-        LatexValidationRules.Result result = LatexValidationRules.check("Cho $\\widehat{ABC} = 60^\\circ$");
+        // 3/11: \widehat đã vào danh sách cho phép; dùng lệnh vẫn lạ (\toRadians) làm ví dụ
+        LatexValidationRules.Result result = LatexValidationRules.check("Cho $\\toRadians{ABC} = 60^\\circ$");
         assertTrue(result.errors().isEmpty(), () -> "Không được là lỗi: " + result.errors());
-        assertTrue(containsPart(result.warnings(), "\\widehat"), () -> "Phải có cảnh báo: " + result.warnings());
+        assertTrue(containsPart(result.warnings(), "\\toRadians"), () -> "Phải có cảnh báo: " + result.warnings());
         assertFalse(result.hasErrors());
     }
 

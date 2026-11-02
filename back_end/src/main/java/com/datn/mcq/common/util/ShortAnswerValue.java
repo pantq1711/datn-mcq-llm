@@ -46,8 +46,14 @@ public final class ShortAnswerValue {
 
     /** Phiếu trả lời trắc nghiệm Bộ GD&ĐT 2025, Phần III: đáp án tối đa 4 ký tự (gồm dấu "-" đầu và dấu ","). */
     public static final int SA_ANSWER_MAX_LENGTH = 4;
-    public static final String MSG_SA_ANSWER_FORMAT = "đáp án phải là số nguyên hoặc thập phân tối đa 4 ký tự "
-            + "(gồm dấu - và dấu phẩy), không dùng phân số/căn; nếu kết quả lẻ thì đề phải ghi rõ làm tròn đến hàng nào";
+    /**
+     * Cũng là ghi chú sinh lại gửi model, nên chỉ dặn chọn lại số liệu, không gợi đổi đơn vị hay co giãn kết quả (2/11: đáp án
+     * 10000 từng bị đổi thành 100). Frontend nhận ra thông báo theo phần đầu "Đáp số phải là" (hoặc "đáp án phải là" của dữ
+     * liệu cũ), không theo phần còn lại.
+     */
+    public static final String MSG_SA_ANSWER_FORMAT = "Đáp số phải là số nguyên hoặc thập phân tối đa 4 ký tự. "
+            + "Hãy chọn lại số liệu của đề để đáp số tự nhiên thỏa điều kiện; "
+            + "không đổi đơn vị, không nhân/chia hay làm tròn kết quả để rút gọn.";
     public static final String MSG_RADICAND_TOO_LARGE = "số dưới dấu căn lớn hơn 10^12";
     public static final String MSG_ZERO_DENOMINATOR = "mẫu số bằng 0";
     public static final String WARN_UNREDUCED_FRACTION = "phân số chưa tối giản";

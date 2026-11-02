@@ -32,8 +32,9 @@ public final class ExamViewDtos {
      *                      solver_unparseable, statement_undecidable, dedup_not_run, explanation_draft_suspect (lời giải có
      *                      "tính lại", "làm lại" hoặc "sửa lại", thẩm định 31/10), "warning: ..." (cảnh báo format);
      *                      W1-2 thêm solver_pending (Solver đang kiểm lại bản sửa), solver_failed (job kiểm lại thất
-     *                      bại), "duplicate: &lt;id&gt;" (bản sửa trùng câu khác); "similar_in_exam: &lt;n&gt;" (câu hệ
-     *                      thống sinh cùng khuôn với câu thứ n trong đề, tính lúc xem đề, thẩm định 31/10)
+     *                      bại), "duplicate: &lt;id&gt;" (bản sửa trùng câu khác); "similar_in_exam: &lt;Phần&gt;.&lt;số&gt;" (câu hệ
+     *                      thống sinh cùng khuôn với câu đứng trước nó, Phần I/II/III và số "Câu k" trong Phần như trang đề;
+     *                      mỗi cặp chỉ câu sau bị gắn; tính lúc xem đề, thẩm định 31/10, đổi dạng 2/11)
      * @param qcState       (W1-2) chỉ với câu hệ thống sinh chưa Giữ: "checking" (Solver đang kiểm lại), "passed" (không
      *                      còn lý do cần xem kỹ), "needs_review" (có lý do); bỏ khỏi JSON với chỗ khác
      * @param edited        (W1-2) câu hiện tại của chỗ là bản giáo viên sửa (kể cả khi đã Giữ)
