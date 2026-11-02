@@ -82,7 +82,7 @@ export default function QuestionDetail({
 
                         <Descriptions.Item label="Dạng câu">
                             {questionType ? (
-                                <Tag color={questionType.color}>{questionType.label}</Tag>
+                                questionType.label
                             ) : (
                                 "—"
                             )}
@@ -93,9 +93,7 @@ export default function QuestionDetail({
                             {question.questionType === "tf" && !question.difficulty ? (
                                 "Theo từng ý"
                             ) : (
-                                <Tag color={describeLevel(question.difficulty).color}>
-                                    {describeLevel(question.difficulty).label}
-                                </Tag>
+                                describeLevel(question.difficulty).label
                             )}
                         </Descriptions.Item>
 
@@ -115,7 +113,7 @@ export default function QuestionDetail({
 
                         {question.origin?.edited && (
                             <Descriptions.Item label="Nguồn" span={2}>
-                                <Tag color="blue">Đã qua giáo viên sửa</Tag>
+                                <Tag color="gold">Đã sửa</Tag>
                             </Descriptions.Item>
                         )}
                     </Descriptions>

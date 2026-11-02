@@ -39,7 +39,7 @@
 
 .exam-matrix-total-summary__info-icon {
     margin-left: auto;
-    color: #8c8c8c;
+    color: rgba(0, 0, 0, 0.65);
     cursor: help;
 }
 
@@ -51,7 +51,7 @@
 }
 
 .exam-matrix-total-summary__statistic-suffix {
-    color: #8c8c8c;
+    color: rgba(0, 0, 0, 0.65);
     font-size: 13px;
     font-weight: 400;
 }
@@ -77,7 +77,7 @@
 }
 
 .exam-matrix-total-summary__section-heading>.anticon {
-    color: #8c8c8c;
+    color: rgba(0, 0, 0, 0.65);
 }
 
 .exam-matrix-total-summary__rows {

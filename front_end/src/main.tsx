@@ -17,7 +17,16 @@ const queryClient = new QueryClient();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ConfigProvider locale={viVN}>
+    <ConfigProvider
+      locale={viVN}
+      // Chữ phụ đủ đậm để đọc rõ (≥ rgba(0,0,0,.65)); antd mặc định nhạt hơn
+      theme={{
+        token: {
+          colorTextSecondary: "rgba(0, 0, 0, 0.65)",
+          colorTextDescription: "rgba(0, 0, 0, 0.65)",
+        },
+      }}
+    >
       <QueryClientProvider client={queryClient}>
         <App />
       </QueryClientProvider>

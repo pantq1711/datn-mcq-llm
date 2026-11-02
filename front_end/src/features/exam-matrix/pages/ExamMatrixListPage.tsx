@@ -159,6 +159,7 @@ export default function ExamMatrixListPage() {
                         onDeleteMatrix={handleDeleteMatrix}
                         onDuplicateMatrix={handleDuplicateMatrix}
                         onGenerateExam={handleGenerateExam}
+                        onCreateFromTemplate={() => setIsTemplateModalOpen(true)}
                     />
                 </Card>
             )}

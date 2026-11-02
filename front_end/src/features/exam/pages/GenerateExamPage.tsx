@@ -351,7 +351,7 @@ export default function GenerateExamPage() {
                         : record.part === "II"
                             ? "Phần II"
                             : "Phần III";
-                return <Tag color="blue">{partLabel}</Tag>;
+                return <Text>{partLabel}</Text>;
             },
         },
         {
@@ -361,9 +361,9 @@ export default function GenerateExamPage() {
             width: 130,
             align: "center",
             render: (type: string) => {
-                if (type === "tf") return <Tag color="cyan">Đúng / Sai</Tag>;
-                if (type === "sa") return <Tag color="purple">Trả lời ngắn</Tag>;
-                return <Tag color="geekblue">Trắc nghiệm</Tag>;
+                if (type === "tf") return <Text>Đúng / Sai</Text>;
+                if (type === "sa") return <Text>Trả lời ngắn</Text>;
+                return <Text>Trắc nghiệm</Text>;
             },
         },
         {
@@ -389,10 +389,9 @@ export default function GenerateExamPage() {
             align: "center",
             render: (_, record) => {
                 if (record.questionType === "tf") {
-                    return <Tag>4 ý a–d</Tag>;
+                    return <Text>4 ý a–d</Text>;
                 }
-                const config = describeLevel(record.difficulty);
-                return <Tag color={config.color}>{config.label}</Tag>;
+                return <Text>{describeLevel(record.difficulty).label}</Text>;
             },
         },
         {
@@ -681,7 +680,7 @@ export default function GenerateExamPage() {
                                                             </Col>
                                                             <Col xs={12} sm={8}>
                                                                 <Text type="secondary">Khối lớp: </Text>
-                                                                <Tag color="geekblue">Khối {selectedMatrix.gradeLevel}</Tag>
+                                                                <Text>Khối {selectedMatrix.gradeLevel}</Text>
                                                             </Col>
                                                             <Col xs={12} sm={8}>
                                                                 <Button
@@ -827,26 +826,20 @@ export default function GenerateExamPage() {
                 {activeConfigCell && (
                     <div>
                         <div style={{ marginBottom: 16 }}>
-                            <Space size={8} wrap>
-                                <Tag color="blue">Phần {activeConfigCell.cell.part}</Tag>
-                                <Tag color={QUESTION_TYPE_TAGS[activeConfigCell.cell.questionType].color}>
-                                    {QUESTION_TYPE_TAGS[activeConfigCell.cell.questionType].label}
-                                </Tag>
-                                {activeConfigCell.cell.questionType === "tf" ? (
-                                    activeConfigCell.cell.statementDifficulties?.length ? (
-                                        <Tag>
-                                            {activeConfigCell.cell.statementDifficulties
-                                                .map((d) => describeLevel(d).label)
-                                                .join(" · ")}
-                                        </Tag>
-                                    ) : null
-                                ) : (
-                                    <Tag color={describeLevel(activeConfigCell.cell.difficulty).color}>
-                                        {describeLevel(activeConfigCell.cell.difficulty).label}
-                                    </Tag>
-                                )}
-                                <Tag>{activeConfigCell.cell.questionCount} câu</Tag>
-                            </Space>
+                            <Text>
+                                {[
+                                    `Phần ${activeConfigCell.cell.part}`,
+                                    QUESTION_TYPE_TAGS[activeConfigCell.cell.questionType].label,
+                                    activeConfigCell.cell.questionType === "tf"
+                                        ? (activeConfigCell.cell.statementDifficulties ?? [])
+                                            .map((d) => describeLevel(d).label)
+                                            .join(", ")
+                                        : describeLevel(activeConfigCell.cell.difficulty).label,
+                                    `${activeConfigCell.cell.questionCount} câu`,
+                                ]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                            </Text>
                             {activeConfigCell.cell.content && (
                                 <div style={{ marginTop: 8 }}>
                                     <Text type="secondary" style={{ fontSize: 13 }}>

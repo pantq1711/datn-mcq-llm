@@ -135,6 +135,7 @@ export default function ExamListPage() {
                         page={page}
                         pageSize={pageSize}
                         onView={handleViewExam}
+                        onCreate={() => navigate("/exams/generate")}
                         onPageChange={handlePageChange}
                     />
                 </Card>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Popconfirm, Space, Table, Tag, Tooltip, Typography, message } from "antd";
+import { Button, Card, Empty, Popconfirm, Space, Table, Tag, Tooltip, Typography, message } from "antd";
 import type { TableColumnsType } from "antd";
 import { DeleteOutlined, EyeOutlined, FolderOpenOutlined, PlusOutlined, ReloadOutlined, WarningOutlined, } from "@ant-design/icons";
 import type { MaterialDto } from "../types/material.types";
@@ -169,8 +169,7 @@ export default function MaterialListPage() {
                         Tài liệu bài học
                     </Title>
                     <Paragraph type="secondary" className="material-list-page-subtitle">
-                        Tải lên các file Word (.docx), PDF hoặc TXT bài giảng, sách giáo khoa
-                        để hệ thống soạn câu hỏi bám sát chương trình giảng dạy.
+                        Tải lên SGK hoặc giáo án để câu hỏi bám nội dung bài.
                     </Paragraph>
                 </div>
                 <Space>
@@ -193,6 +192,18 @@ export default function MaterialListPage() {
                     dataSource={materials}
                     rowKey="id"
                     loading={loading}
+                    locale={{
+                        emptyText: (
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description="Chưa có tài liệu. Tải lên file SGK hoặc giáo án (Word, PDF) để câu hỏi bám nội dung bài."
+                            >
+                                <Button type="primary" size="large" onClick={() => setIsUploadModalOpen(true)}>
+                                    Tải lên
+                                </Button>
+                            </Empty>
+                        ),
+                    }}
                     pagination={{
                         current: page,
                         pageSize,
