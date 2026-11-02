@@ -37,6 +37,12 @@ server:
     # ngắt kết nối giữa chừng thay vì trả 413).
     max-swallow-size: 25MB
 
+# Log request ra terminal: CommonsRequestLoggingFilter ghi ở mức DEBUG, nhưng bean chỉ tồn tại khi LOG_REQUESTS=true
+# (RequestLoggingConfig), nên để DEBUG ở đây không làm prod ồn thêm khi cờ tắt.
+logging:
+  level:
+    org.springframework.web.filter.CommonsRequestLoggingFilter: DEBUG
+
 management:
   endpoints:
     web:
@@ -47,6 +53,9 @@ management:
       show-details: when-authorized   # W1-1: chỉ người đã đăng nhập thấy chi tiết (DB, ổ đĩa)
 
 app:
+  logging:
+    requests:
+      enabled: ${LOG_REQUESTS:false}   # true: in "Before/After request [METHOD /path?query]" cho mỗi API (không log body/header)
   llm:
     api-key: ${LLM_API_KEY:}   # để trống mặc định để smoke test không văng lỗi thiếu biến
     model: ${LLM_MODEL:gemini-3.5-flash-lite}
