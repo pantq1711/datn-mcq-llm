@@ -562,6 +562,24 @@ public class GenerationService {
                 spec.toJson());
     }
 
+    /** model_name của run chứa câu nhập từ Word (không phải model LLM nào). */
+    public static final String IMPORT_MODEL_NAME = "import-docx";
+    /** prompt_version của run chứa câu nhập từ Word. */
+    public static final String IMPORT_PROMPT_VERSION = "import-docx-v1";
+
+    /**
+     * V26 (nhập từ Word): run production, zero-shot cho câu nhập của một dạng ({@code chk_er_tf_sa_production}), không gắn
+     * model LLM nào; không có job, không gọi LLM. Run chỉ để giữ khóa ngoại (run_id, question_type) của generated_question.
+     */
+    @Transactional
+    public ExperimentRun createImportRun(Integer subjectId, QuestionType type, int numQuestions) {
+        ExperimentRun run = experimentService.createRun(subjectId, Purpose.PRODUCTION, Strategy.ZERO_SHOT,
+                IMPORT_MODEL_NAME, 0.0, IMPORT_PROMPT_VERSION, "", numQuestions, type);
+        run.setStatus("imported");
+        run.setEndedAt(run.getStartedAt());
+        return run;
+    }
+
     /**
      * Ảnh chụp đoạn tài liệu bài học của một job sinh câu (W2-3): {@code context} là khối văn bản đưa vào prompt, {@code
      * refsJson} là mảng JSON các đoạn đã chọn (để truy vết).

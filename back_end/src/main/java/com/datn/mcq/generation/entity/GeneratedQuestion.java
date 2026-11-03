@@ -2,6 +2,7 @@ package com.datn.mcq.generation.entity;
 
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
+import com.datn.mcq.enums.QuestionOrigin;
 import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
 import jakarta.persistence.Column;
@@ -106,7 +107,31 @@ public class GeneratedQuestion {
     @Column(name = "solver_error", columnDefinition = "TEXT")
     private String solverError;
 
+    /** V26: llm (đầu ra LLM, bản giáo viên sửa) hoặc import (câu nhập từ Word). Không đổi sau khi tạo. */
+    @Column(name = "origin", nullable = false, length = 10, updatable = false)
+    private QuestionOrigin origin = QuestionOrigin.LLM;
+
+    /** V26: lô nhập của câu nhập từ Word; null với câu LLM. */
+    @Column(name = "import_batch_id", updatable = false)
+    private Integer importBatchId;
+
     public GeneratedQuestion() {}
+
+    public QuestionOrigin getOrigin() {
+        return origin;
+    }
+
+    public void setOrigin(QuestionOrigin origin) {
+        this.origin = origin;
+    }
+
+    public Integer getImportBatchId() {
+        return importBatchId;
+    }
+
+    public void setImportBatchId(Integer importBatchId) {
+        this.importBatchId = importBatchId;
+    }
 
     public String getSolverError() {
         return solverError;

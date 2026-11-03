@@ -124,6 +124,14 @@ app:
     queue-wait: ${MATERIAL_QUEUE_WAIT:30s}
     extract-timeout: ${MATERIAL_EXTRACT_TIMEOUT:30s}
     pandoc-heap-mb: ${MATERIAL_PANDOC_HEAP_MB:256}
+  # Nhập ngân hàng câu từ Word (V26). Mặc định ở BankImportProperties; kiểm zip dùng chung app.materials.zip-*.
+  # Không gọi Gemini, không tính vào hạn mức sinh câu.
+  bank-import:
+    max-file-bytes: ${BANK_IMPORT_MAX_FILE_BYTES:10485760}
+    max-questions: ${BANK_IMPORT_MAX_QUESTIONS:200}            # số câu tối đa mỗi file (422 IMPORT_TOO_MANY_QUESTIONS)
+    max-pending-batches: ${BANK_IMPORT_MAX_PENDING:3}          # lô chờ xác nhận mỗi giáo viên (409 IMPORT_PENDING_LIMIT)
+    max-uploads-per-hour: ${BANK_IMPORT_MAX_UPLOADS_PER_HOUR:30}
+    preview-ttl: ${BANK_IMPORT_PREVIEW_TTL:24h}                # quá hạn: 410 IMPORT_EXPIRED, nội dung bị xóa
   # Bảng điểm cho phần tạo đề sau này (V4); luồng sinh câu không dùng. Giá trị mặc định nằm ở ExamScoringProperties.
   exam:
     # Thẩm định 31/10: độ giống 3-gram (sau khi che số và tên điểm) từ mức này thì xem đề gắn lý do similar_in_exam. Trong (0, 1].

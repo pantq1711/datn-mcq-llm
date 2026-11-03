@@ -43,6 +43,9 @@ com.datn.mcq
 ├── bank/                   bank_item
 ├── matrix/                 exam_matrix, exam_matrix_cell (V6: ma trận đề, mỗi ô một question_template)
 ├── material/               lesson_material (V18, W2-3: tài liệu bài học đính kèm, chỉ lưu văn bản đã trích)
+├── bankimport/             import_batch (V26, 3/11: nhập ngân hàng câu từ Word; docx/, parse/, model/ chuyển từ
+│                           tools/bank-import; công thức MathType dùng chung mtef/)
+├── mtef/                   đọc MTEF (MathType) → LaTeX, hàm thuần (P6; dùng chung material.extract và bankimport)
 ├── exam/                   exam, exam_question, exam_slot, exam_slot_action (V7: tạo đề theo ma trận)
 └── goldset/                dedup_gold_pair, dedup_gold_label
 ```
@@ -53,6 +56,7 @@ com.datn.mcq
 exam        ──► matrix, generation, qc, review, bank, catalog, user, material   (V7: tạo đề theo ma trận; W2-3: material)
 matrix      ──► catalog
 material    ──► (chỉ common; passage/PassageSelector là hàm thuần)   (W2-3 bước 4: exam ──► material qua MaterialService; material khai báo MaterialUsageLookup, exam cài đặt)
+bankimport  ──► bank, catalog, generation, review, material.extract (chỉ DocxInputGuard), mtef, qc (DedupChecker/DedupCandidate thuần, không gọi mạng)   (V26, quyết định 3/11; không bao giờ ──► llm)
 review      ──► generation, bank, catalog, experiment, user   (25/10: chỉ còn AssistedKeepService)
 generation  ──► qc, llm
 experiment  ──► generation, catalog

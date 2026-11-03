@@ -75,8 +75,16 @@ public final class ExamMarkdownBuilder {
             blocks.add("## PHẦN " + part.part());
             int k = 1;
             for (ExamItemDto item : part.items()) {
-                String explanation = hasQuestion(item) ? paragraphs(item.explanation()) : "";
-                blocks.add(label(k++) + (explanation.isEmpty() ? NONE : explanation));
+                int no = k++;
+                if (!hasQuestion(item)) {
+                    blocks.add(label(no) + NONE);
+                    continue;
+                }
+                // Quyết định 6 (nhập từ Word, 3/11): câu không có lời giải thì bỏ hẳn khối lời giải của câu đó.
+                String explanation = paragraphs(item.explanation());
+                if (!explanation.isEmpty()) {
+                    blocks.add(label(no) + explanation);
+                }
             }
         }
         return String.join("\n\n", blocks) + "\n";

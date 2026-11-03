@@ -34,7 +34,8 @@ class DbEnumTest {
                 new TruthValue.Conv(),
                 new TruthChoice.Conv(),
                 new SaAnswerKind.Conv(),
-                new SaJudgeKind.Conv());
+                new SaJudgeKind.Conv(),
+                new QuestionOrigin.Conv());
 
     private static final List<Class<? extends Enum<?>>> ENUMS = List.of(
                 Strategy.class,
@@ -56,7 +57,8 @@ class DbEnumTest {
                 TruthValue.class,
                 TruthChoice.class,
                 SaAnswerKind.class,
-                SaJudgeKind.class);
+                SaJudgeKind.class,
+                QuestionOrigin.class);
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -88,6 +90,14 @@ class DbEnumTest {
         assertEquals(AnswerChoice.MULTIPLE, new AnswerChoice.Conv().convertToEntityAttribute("multiple"));
         assertEquals(Option.B, new Option.Conv().convertToEntityAttribute("B "));
         assertEquals("answer_check", CheckType.ANSWER_CHECK.getDbValue());
+    }
+
+    /** V26: nguồn câu khớp CHECK chk_gq_origin và docs/contract/enums.md. */
+    @Test
+    void nguonCauV26KhopHopDong() {
+        assertEquals("llm", QuestionOrigin.LLM.getDbValue());
+        assertEquals("import", QuestionOrigin.IMPORT.getDbValue());
+        assertEquals(2, QuestionOrigin.values().length);
     }
 
     /** V4: chuỗi DB của các enum mới khớp docs/contract/enums.md và CHECK của V4. */

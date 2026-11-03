@@ -50,9 +50,13 @@ Chỉ ghi ở đây những điều đã có trong migration/`enums.md`. Phần 
 
 **M-8. [NGƯNG 25/10] Provenance:** `purpose` của một lần chấm phải khớp `experiment_run.purpose` của câu hỏi. Giá trị client gửi lên không được quyết định `purpose`; nếu khác thì từ chối.
 
-**M-9. `bank_item`:** (v2) chỉ được tạo/cập nhật khi giáo viên Giữ câu ở chế độ giáo viên (`production`, `AssistedKeepService`), với quyết định `approved_as_is`, và trong **cùng transaction** với `teacher_review` tương ứng (`teacher_review.review_mode = 'assisted'`, kể cả bản giáo viên đã Sửa). Câu thuộc run `experiment` không bao giờ vào `bank_item`. Chỉ `bank_item` được đưa vào đề (`exam_slot.bank_item_id`; `exam_question.bank_item_id` là dữ liệu cũ, chưa gỡ). Dòng `teacher_review.review_mode = 'blind'` cũ giữ nguyên trong DB.
+**M-9. `bank_item`:** (v2) chỉ được tạo/cập nhật qua **đúng hai đường**, cả hai trong **cùng transaction** với `teacher_review` tương ứng (`review_purpose = 'production'`, `review_mode = 'assisted'`, quyết định `approved_as_is`):
+1. Giáo viên Giữ câu ở chế độ giáo viên (`AssistedKeepService`), kể cả bản giáo viên đã Sửa.
+2. (3/11) Giáo viên xác nhận câu nhập từ Word (`BankImportService.confirm`, `/api/bank-imports/{id}/confirm`), với đủ các điều kiện: câu nguồn là `generated_question` có `origin = 'import'` thuộc một `import_batch` của chính người xác nhận, đang ở trạng thái `preview` và chưa hết hạn; người duyệt (`teacher_review.reviewer_id`) là người tải; câu không có cờ chặn; `bank_item.visible_to_user_id` = người tải (câu nhập không bao giờ là câu dùng chung); không gọi LLM, không xếp job Solver; toàn bộ câu của một lần xác nhận nằm trong một transaction.
 
-**M-10. Trạng thái QC:** chỉ chuyển `generated_question.status` theo kết quả pipeline QC hoặc theo duyệt production. Không ép trạng thái (ví dụ đặt thẳng `qc_passed`) ngoài pipeline. Định nghĩa đầy đủ của `qc_passed` đang chờ Q-2.
+Câu thuộc run `experiment` không bao giờ vào `bank_item`. Chỉ `bank_item` được đưa vào đề (`exam_slot.bank_item_id`; `exam_question.bank_item_id` là dữ liệu cũ, chưa gỡ). Dòng `teacher_review.review_mode = 'blind'` cũ giữ nguyên trong DB.
+
+**M-10. Trạng thái QC:** chỉ chuyển `generated_question.status` theo kết quả pipeline QC hoặc theo duyệt production. Không ép trạng thái (ví dụ đặt thẳng `qc_passed`) ngoài pipeline. Định nghĩa đầy đủ của `qc_passed` đang chờ Q-2. **Ngoại lệ duy nhất (3/11):** câu nhập từ Word (`origin = 'import'`) được tạo thẳng ở `in_bank` khi giáo viên xác nhận theo M-9 đường 2; câu này không qua pipeline QC (không có dòng `quality_check_result`) và không bao giờ ở `qc_passed`.
 
 **M-11. [NGƯNG 25/10] Experiment:** mỗi cặp (`question_id`, `reviewer_id`) chỉ có một lần nộp; không cho ghi đè nhãn thực nghiệm.
 
@@ -277,6 +281,8 @@ Xác nhận: không chạy lệnh thuộc M-27 / không gọi API tính phí / k
 - v2 (2026-10-25): thêm "Quyết định ngày 25/10/2026 – gỡ chấm mù, seed demo, C1/C2/C3". Ngưng M-6, M-7, M-8, M-11,
   Q-1, Q-4a, Q-6, F-5, F-11, F-12, F-15; thu hẹp Q-3; cập nhật M-9, M-12, M-16, M-17, M-27. Dọn tiếp (bước 0b): ngưng
   thêm Q-4b, F-6, F-13, F-14, F-20; gỡ entity `LabelAssignment` (bảng `label_assignment` giữ nguyên).
+- 2026-11-03: thêm "Quyết định ngày 3/11/2026 – nhập ngân hàng câu từ Word"; M-9 thêm đường thứ hai (xác nhận câu nhập),
+  M-10 thêm ngoại lệ câu nhập ở `in_bank`. Không đổi số phiên bản tài liệu.
 ## Quyết định ngày 21/10/2026 (thay thế các comment xung đột trong V1__init_schema.sql)
 
 Không sửa file V1 (đã chạy, sửa sẽ lệch checksum Flyway). Khi comment trong V1 mâu thuẫn với mục này, mục này thắng.
@@ -342,3 +348,28 @@ duyệt E1 = A, E2 = A, E3 = A, E4 = A, E5 = A). Chế độ giáo viên (`/api/
    `false`, không bật ở prod). Chúng phục vụ công cụ thí nghiệm (sinh đồng bộ, bơm job, chạy job, thử tải với Gemini giả).
 5. **Việc chưa làm (cố ý):** `exam_question` (F-10) giữ nguyên, xử lý ở task sau. Không DROP bảng hay cột nào; migration chỉ
    đi tiến. Q-3 còn mở cho thử nghiệm mới (xem bảng mục 10). Q-4c, Q-5, Q-8 không đổi; Q-4b ngưng.
+
+## Quyết định ngày 3/11/2026 – nhập ngân hàng câu từ Word
+
+Chủ dự án chốt sau khảo sát thiết kế (V26, module `com.datn.mcq.bankimport`, API `/api/bank-imports`).
+
+1. **Mô hình B1:** câu nhập đi qua chuỗi sẵn có `question_template` → `experiment_run` → `generated_question`
+   (`origin = 'import'`) → `teacher_review` → `bank_item`. M-9 có thêm đúng một đường thứ hai (xác nhận câu nhập), M-10 có
+   ngoại lệ câu nhập ở `in_bank` (xem M-9, M-10).
+2. **Phụ thuộc module (thu hẹp Q-8 cho riêng module này):** `bankimport` được phụ thuộc `bank`, `catalog`, `generation`,
+   `review`, `material.extract`, `mtef`. Câu nhập: `status = 'in_bank'` sau xác nhận; `teacher_review` `assisted`,
+   `approved_as_is`, người duyệt là người tải; `llm_difficulty` NULL, `final_difficulty` theo file (chạm Q-5 nhưng không
+   định nghĩa lại `llm_difficulty` của câu LLM).
+3. **tf:** cả 4 ý nhận chung mức của câu (file chỉ có một nhãn mức cho câu). Hạn chế ghi ở `docs/contract/enums.md`.
+4. **Không Solver:** không xếp job Solver cho câu nhập; không gọi `LlmClient` ở bất kỳ bước nào (có test khóa:
+   `BankImportApiTest`). Câu nhập không tính vào hạn mức sinh câu (D1) và bộ đếm Gemini; mọi thống kê đầu ra LLM lọc
+   `origin = 'llm'`.
+5. **Bộ đề thương mại** chỉ dùng làm dữ liệu kiểm thử thủ công; không đưa vào fixture, log, seed. Fixture tự dựng bằng
+   `DocxBuilder`; đối tượng MathType mẫu của test lấy từ file tự soạn `spikes/mathtype-ole/KIEM_TRA_mo_rong.docx`.
+6. **Câu không lời giải:** cho nhập, cờ thông tin `no_solution`, `explanation` NULL; xuất Word bỏ khối lời giải của câu đó.
+7. **Phạm vi bản đầu:** chỉ nhập câu không cần ảnh (câu có ảnh, công thức chưa chuyển được, bảng dữ liệu bị bỏ và đếm theo
+   lý do). Không có sửa câu trong bản xem trước; câu có cờ chặn không chọn được khi xác nhận (422 `IMPORT_ITEM_BLOCKED`).
+8. **Duyệt bổ sung sau review (3/11):** `bankimport` được phụ thuộc thêm `qc` (chỉ `DedupChecker`/`DedupCandidate`, hàm thuần,
+   không gọi mạng). Duyệt các phần thêm ngoài yêu cầu ban đầu: tham số tùy chọn `gradeLevel`/`topic` khi tải lên; lý do bỏ câu
+   `has_table`; cờ chặn `leak_suspect` và `structure_empty_field`; nhận diện ảnh rộng hơn bản tool (ảnh trong
+   `mc:AlternateContent`, hình vẽ không có ảnh nhúng, đối tượng OLE không phải công thức).

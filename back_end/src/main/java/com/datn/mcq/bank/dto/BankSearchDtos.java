@@ -19,7 +19,8 @@ public final class BankSearchDtos {
     private BankSearchDtos() {}
 
     /**
-     * @param type       nguồn câu: {@code ai} (câu AI đã được giáo viên duyệt); {@code import} để dành cho nhập từ Word
+     * @param type       nguồn câu: {@code ai} (câu AI đã được giáo viên duyệt) hoặc {@code import} (câu nhập từ Word, V26;
+     *                   reviewMode là {@code assisted}, người duyệt là người tải)
      * @param reviewMode {@code assisted} (Giữ trong đề ở chế độ giáo viên) hoặc {@code blind} (duyệt ở form chấm mù)
      * @param edited     câu đã qua tay giáo viên sửa (bản sửa trong đề hoặc sửa lúc duyệt)
      */
@@ -56,7 +57,10 @@ public final class BankSearchDtos {
 
     public record UserRef(Integer id, String name) {}
 
-    /** @param kind {@code llm} (đầu ra LLM) hoặc {@code teacher_edit} (giáo viên sửa trong đề) */
+    /**
+     * @param kind {@code llm} (đầu ra LLM), {@code teacher_edit} (giáo viên sửa trong đề) hoặc {@code import} (câu nhập từ
+     *             Word, V26)
+     */
     public record VersionDto(Integer questionId, String kind, LocalDateTime createdAt, UserRef editedBy,
                              List<String> changedFields, Integer editDistance) {}
 

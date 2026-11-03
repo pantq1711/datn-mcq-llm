@@ -146,6 +146,33 @@ class ExamMarkdownBuilderTest {
         assertEquals(expected, markdown.substring(body + HEADER_END.length()));
     }
 
+    /**
+     * Quyết định 6 (nhập từ Word): câu có trong đề nhưng không có lời giải (explanation NULL) thì phần LỜI GIẢI bỏ hẳn câu
+     * đó, không in "—"; số câu của các câu sau giữ nguyên. Chỗ chưa có câu vẫn in "—" như cũ.
+     */
+    @Test
+    void cauKhongLoiGiaiBiBoKhoiPhanLoiGiai() {
+        List<ExamItemDto> part1 = List.of(
+                mcq(1, "kept", "Câu nhập không lời giải", "$1$", "$2$", "$3$", "$4$", Option.A, null),
+                mcq(2, "kept", "Câu có lời giải", "$1$", "$2$", "$3$", "$4$", Option.B, "Lời giải câu hai."),
+                mcq(3, "kept", "Câu lời giải trống", "$1$", "$2$", "$3$", "$4$", Option.C, "   "),
+                mcq(4, "failed", null, null, null, null, null, null, null));
+        ExamViewDto exam = new ExamViewDto(6, "MT1", "Đề", "teacher", ExamStatus.DRAFT, 4,
+                LocalDateTime.of(2026, 11, 3, 12, 0), "partial", 0, List.of(new PartDto("I", 4, 1, part1)));
+        String markdown = ExamMarkdownBuilder.build(exam, HEADER);
+        String solutions = markdown.substring(markdown.indexOf("# LỜI GIẢI"));
+        assertEquals("""
+                # LỜI GIẢI
+
+                ## PHẦN I
+
+                **Câu 2.** Lời giải câu hai.
+
+                **Câu 4.** —
+                """, solutions);
+        assertTrue(markdown.contains("Câu 1: A"), "phần ĐÁP ÁN vẫn có câu không lời giải");
+    }
+
     // ---------- đầu đề (2/11) ----------
 
     private static final ExamHeader HEADER = ExamHeader.of("Giữa kì I – Toán 8", "Toán", 8, null);

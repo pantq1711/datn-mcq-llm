@@ -24,7 +24,7 @@ dev_users AS (
 roots AS (
     SELECT DISTINCT ON (j.question_id) j.question_id AS id, (j.material_context IS NOT NULL) AS co_tai_lieu
     FROM generation_job j
-    JOIN generated_question g ON g.id = j.question_id AND g.edited_from_question_id IS NULL
+    JOIN generated_question g ON g.id = j.question_id AND g.edited_from_question_id IS NULL AND g.origin = 'llm'
     JOIN experiment_run r ON r.id = g.run_id AND r.purpose = 'production' AND r.prompt_version LIKE 'matrix-%'
     JOIN exam_slot s ON s.id = j.exam_slot_id
     JOIN exam e ON e.id = s.exam_id AND e.mode = 'teacher' AND e.created_by NOT IN (SELECT id FROM dev_users)
