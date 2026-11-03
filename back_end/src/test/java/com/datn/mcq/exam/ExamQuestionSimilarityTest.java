@@ -11,6 +11,7 @@ import com.datn.mcq.exam.service.ExamQuestionSimilarity;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -75,19 +76,16 @@ class ExamQuestionSimilarityTest {
     }
 
     @Test
-    void hinhThangCan57Va55BiGanCoHaiPhia() {
+    void hinhThangCan57Va55ChiCauSauBiGan() {
         Map<Integer, List<Integer>> similar = ExamQuestionSimilarity.findSimilar(List.of(trapezoid57(), trapezoid55()), T);
-        assertEquals(List.of(2), similar.get(1));
-        assertEquals(List.of(1), similar.get(2));
+        assertEquals(Map.of(2, List.of(1)), similar, "2/11: mỗi cặp chỉ gắn câu có số thứ tự lớn hơn, trỏ về câu đứng trước");
     }
 
     @Test
     void capCauBacCungKhuonBiGan49Va48() {
         ExamItemDto a = mcq("Bậc của đơn thức $5x^3y^2$ là:", "$5$", "$3$", "$2$", "$6$");
         ExamItemDto b = mcq("Bậc của đơn thức $7x^4y^2$ là:", "$6$", "$4$", "$2$", "$7$");
-        Map<Integer, List<Integer>> similar = ExamQuestionSimilarity.findSimilar(List.of(a, b), T);
-        assertEquals(List.of(2), similar.get(1));
-        assertEquals(List.of(1), similar.get(2));
+        assertEquals(Map.of(2, List.of(1)), ExamQuestionSimilarity.findSimilar(List.of(a, b), T));
     }
 
     @Test
@@ -111,9 +109,9 @@ class ExamQuestionSimilarityTest {
                 "Khai triển biểu thức $(4x - 1)^2$ ta được kết quả là $16x^2 - 4x + 1$.",
                 "Biểu thức $P$ luôn dương với mọi giá trị của $x$.", "Giá trị của $P$ tại $x = 1$ bằng $12$.",
                 "Giá trị nhỏ nhất của $P$ bằng $3$.");
-        Map<Integer, List<Integer>> similar = ExamQuestionSimilarity.findSimilar(List.of(mcq, tf), T);
-        assertEquals(List.of(2), similar.get(1));
-        assertEquals(List.of(1), similar.get(2));
+        assertEquals(Map.of(2, List.of(1)), ExamQuestionSimilarity.findSimilar(List.of(mcq, tf), T));
+        assertEquals(Map.of(2, List.of(1)), ExamQuestionSimilarity.findSimilar(List.of(tf, mcq), T),
+                "thứ tự trong đề quyết định câu nào bị gắn, không phải dạng câu");
     }
 
     @Test
@@ -140,15 +138,14 @@ class ExamQuestionSimilarityTest {
     void soThuTuLaViTriTrongDeKeCaChoChuaCoCau() {
         Map<Integer, List<Integer>> similar = ExamQuestionSimilarity
                 .findSimilar(List.of(trapezoid57(), empty(), trapezoid55()), T);
-        assertEquals(List.of(3), similar.get(1));
-        assertEquals(List.of(1), similar.get(3));
+        assertEquals(Map.of(3, List.of(1)), similar);
         assertFalse(similar.containsKey(2), "chỗ chưa có câu không được so");
     }
 
     @Test
     void nguongCaoHonThiKhongGan() {
         assertEquals(Map.of(), ExamQuestionSimilarity.findSimilar(List.of(trapezoid57(), trapezoid55()), 0.9999));
-        assertTrue(ExamQuestionSimilarity.findSimilar(List.of(trapezoid57(), trapezoid55()), 0.5).containsKey(1));
+        assertTrue(ExamQuestionSimilarity.findSimilar(List.of(trapezoid57(), trapezoid55()), 0.5).containsKey(2));
     }
 
     @Test
@@ -158,8 +155,43 @@ class ExamQuestionSimilarityTest {
         ExamItemDto c = mcq("Cho hình thang cân $MNPQ$ có đáy $MN$ song song với $PQ$. Biết góc $M$ bằng $70^\\bullet$. "
                 + "Số đo góc $N$ là:", "$70^\\bullet$", "$110^\\bullet$", "$90^\\bullet$", "$120^\\bullet$");
         Map<Integer, List<Integer>> similar = ExamQuestionSimilarity.findSimilar(List.of(a, b, c), T);
-        assertEquals(List.of(2, 3), similar.get(1));
-        assertEquals(List.of(1, 3), similar.get(2));
-        assertEquals(List.of(1, 2), similar.get(3));
+        assertEquals(Map.of(2, List.of(1), 3, List.of(1, 2)), similar, "câu 1 không bị gắn; câu 3 liệt kê cả 1 và 2 tăng dần");
+    }
+
+    /**
+     * 2/11 (thẩm định UX đề 10: cờ ghi "câu 14" trong khi trang đề đánh số theo Phần): lý do ghi Phần và số trong Phần của
+     * câu đứng trước; câu đứng trước (Phần I) không bị gắn, câu sau (Phần II) bị gắn.
+     */
+    @Test
+    void gianCoTheoPhanVaSoTrongPhanChiGanCauSau() {
+        ExamItemDto other = mcq("Bậc của đơn thức $5x^3y^2$ là:", "$5$", "$3$", "$2$", "$6$");
+        ExamItemDto mcq = mcq("Khai triển biểu thức $(4x - 1)^2$ ta được kết quả là:", "$16x^2 - 8x + 1$",
+                "$16x^2 + 8x + 1$", "$16x^2 - 4x + 1$", "$4x^2 - 8x + 1$");
+        ExamItemDto tf = tf("Cho biểu thức $P = (4x - 1)^2 + 3$. Xét tính đúng sai của các khẳng định sau:",
+                "Khai triển biểu thức $(4x - 1)^2$ ta được kết quả là $16x^2 - 4x + 1$.",
+                "Biểu thức $P$ luôn dương với mọi giá trị của $x$.", "Giá trị của $P$ tại $x = 1$ bằng $12$.",
+                "Giá trị nhỏ nhất của $P$ bằng $3$.");
+        Map<String, List<ExamItemDto>> byPart = new LinkedHashMap<>();
+        byPart.put("I", new ArrayList<>(List.of(other, mcq)));
+        byPart.put("II", new ArrayList<>(List.of(tf)));
+        byPart.put("III", new ArrayList<>());
+
+        ExamQuestionSimilarity.flag(byPart, T);
+
+        assertEquals(List.of(), byPart.get("I").get(0).reviewReasons());
+        assertEquals(List.of(), byPart.get("I").get(1).reviewReasons(), "câu đứng trước của cặp không bị gắn");
+        assertFalse(byPart.get("I").get(1).needsReview());
+        ExamItemDto flagged = byPart.get("II").get(0);
+        assertEquals(List.of("similar_in_exam: I.2"), flagged.reviewReasons(), "Phần I, câu 2 (không phải câu 2 toàn đề hay 3)");
+        assertTrue(flagged.needsReview());
+        assertEquals("needs_review", flagged.qcState());
+    }
+
+    /** 2/11: trang đề đánh số theo Phần ("Câu 3" của Phần II), nên lý do mang Phần và số trong Phần. */
+    @Test
+    void lyDoMangPhanVaSoTrongPhan() {
+        assertEquals("similar_in_exam: I.2", ExamQuestionSimilarity.reason("I", 2));
+        assertEquals("similar_in_exam: III.10", ExamQuestionSimilarity.reason("III", 10));
+        assertTrue(ExamQuestionSimilarity.reason("II", 1).startsWith(ExamQuestionSimilarity.REASON_PREFIX));
     }
 }

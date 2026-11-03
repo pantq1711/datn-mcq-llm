@@ -35,7 +35,7 @@ public final class ExamQuestionSimilarity {
      * recall vì lớp này chỉ gắn cờ; xem dev-log L-55.
      */
     public static final double DEFAULT_THRESHOLD = 0.82;
-    /** Tiền tố lý do "cần xem kỹ", theo sau là số thứ tự (1, 2, ...) của câu kia trong đề. */
+    /** Tiền tố lý do "cần xem kỹ", theo sau là Phần và số trong Phần của câu đứng trước, xem {@link #reason}. */
     public static final String REASON_PREFIX = "similar_in_exam: ";
 
     /** Cụm 2-5 chữ in hoa đứng riêng (không dính chữ cái khác): tên điểm, tên hình như WXYZ, PQRS, AB. */
@@ -44,6 +44,48 @@ public final class ExamQuestionSimilarity {
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private ExamQuestionSimilarity() {}
+
+    /**
+     * Lý do "cần xem kỹ" trỏ tới câu {@code numberInPart} của Phần {@code part}, ví dụ {@code similar_in_exam: II.3}. Trang
+     * đề đánh số "Câu k" theo từng Phần nên lý do dùng đúng cách đánh số đó (không dùng số thứ tự toàn đề).
+     */
+    public static String reason(String part, int numberInPart) {
+        return REASON_PREFIX + part + "." + numberInPart;
+    }
+
+    /**
+     * Gắn lý do {@link #REASON_PREFIX} cho các câu hệ thống sinh cùng khuôn với câu đứng TRƯỚC nó trong đề. Mỗi cặp chỉ câu
+     * có số thứ tự lớn hơn bị gắn; câu ngân hàng và câu đã Giữ/Sửa được so nhưng không bị gắn. Thay phần tử trong các danh
+     * sách của {@code byPart} (theo thứ tự Phần hiển thị; mỗi chỗ một vị trí, kể cả chỗ chưa có câu).
+     */
+    public static void flag(Map<String, List<ExamItemDto>> byPart, double threshold) {
+        List<ExamItemDto> flat = byPart.values().stream().flatMap(List::stream).toList();
+        Map<Integer, List<Integer>> similar = findSimilar(flat, threshold);
+        if (similar.isEmpty()) {
+            return;
+        }
+        List<String> partOf = new ArrayList<>(flat.size());
+        List<Integer> numberOf = new ArrayList<>(flat.size());
+        for (Map.Entry<String, List<ExamItemDto>> e : byPart.entrySet()) {
+            for (int i = 0; i < e.getValue().size(); i++) {
+                partOf.add(e.getKey());
+                numberOf.add(i + 1);
+            }
+        }
+        int position = 0;
+        for (List<ExamItemDto> items : byPart.values()) {
+            for (int i = 0; i < items.size(); i++) {
+                position++;
+                ExamItemDto item = items.get(i);
+                List<Integer> earlier = similar.get(position);
+                if (earlier != null && item.bankItemId() == null && "generated".equals(item.source())
+                        && item.questionText() != null) {
+                    items.set(i, item.withExtraReasons(earlier.stream()
+                            .map(p -> reason(partOf.get(p - 1), numberOf.get(p - 1))).toList()));
+                }
+            }
+        }
+    }
 
     /** Văn bản đã chuẩn hóa về khuôn; xem mô tả lớp. */
     public static String pattern(String text) {
@@ -59,15 +101,15 @@ public final class ExamQuestionSimilarity {
     /**
      * @param items     các chỗ của đề theo thứ tự hiển thị (phần I, II, III); chỗ chưa có câu vẫn chiếm một vị trí
      * @param threshold độ giống 3-gram tối thiểu để coi là cùng khuôn
-     * @return vị trí (từ 1) của câu → vị trí (từ 1, tăng dần) của các câu khác cùng khuôn với nó; cả hai phía của một cặp
-     *         đều có mặt; câu không có cặp nào không có trong kết quả
+     * @return vị trí (từ 1) của câu → vị trí (từ 1, tăng dần) của các câu đứng TRƯỚC nó cùng khuôn với nó. Mỗi cặp chỉ có
+     *         câu có số thứ tự lớn hơn làm khóa (2/11: trước đây cả hai phía); câu không phải là câu sau của cặp nào thì không
+     *         có trong kết quả
      */
     public static Map<Integer, List<Integer>> findSimilar(List<ExamItemDto> items, double threshold) {
         Map<Integer, List<Integer>> out = new TreeMap<>();
         for (int i = 0; i < items.size(); i++) {
             for (int j = i + 1; j < items.size(); j++) {
                 if (similar(items.get(i), items.get(j), threshold)) {
-                    out.computeIfAbsent(i + 1, k -> new ArrayList<>()).add(j + 1);
                     out.computeIfAbsent(j + 1, k -> new ArrayList<>()).add(i + 1);
                 }
             }

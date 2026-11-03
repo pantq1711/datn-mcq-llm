@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -185,6 +186,24 @@ class MatrixApiTest {
             String classpath = new String(in.readAllBytes(), StandardCharsets.UTF_8).replace("\r\n", "\n");
             assertEquals(docs, classpath, "chép lại docs/sample/matrix_giuaki1_toan8.json vào src/main/resources/samples");
         }
+    }
+
+    /**
+     * 2/11: nguồn và ghi chú của mẫu hiện cho giáo viên (trang ma trận), nên không còn ghi chú nội bộ của nhóm
+     * ("Biết = easy, Hiểu = medium…", "Cần giáo viên xác nhận").
+     */
+    @Test
+    void mauKhongConGhiChuNoiBoTrongTruongHienChoGiaoVien() throws Exception {
+        String text = Files.readString(sampleFile(), StandardCharsets.UTF_8);
+        JsonNode sample = objectMapper.readTree(text);
+        String shown = sample.get("source").asText() + "\n" + sample.get("notes").toString();
+        for (String internal : List.of("= easy", "= medium", "= hard", "Biết =", "Hiểu =", "Vận dụng =",
+                "Cần giáo viên xác nhận", "xác nhận")) {
+            assertFalse(shown.contains(internal), "ghi chú nội bộ còn trong trường hiển thị: " + internal + " / " + shown);
+        }
+        assertTrue(sample.get("source").asText().startsWith("MA TRẬN, BẢN ĐẶC TẢ ĐỀ KT GIỮA K1 TOÁN 8"),
+                "vẫn nêu nguồn: " + sample.get("source"));
+        assertTrue(sample.get("notes").size() >= 2, "giữ các ghi chú hướng dẫn giáo viên (số câu theo phần, câu hình học)");
     }
 
     private static Path sampleFile() {

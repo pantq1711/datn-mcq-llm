@@ -308,6 +308,54 @@ class LlmOutputRepairTest {
         assertNull(LlmOutputRepair.fixDegreeSymbol(null).text());
     }
 
+    /**
+     * 2/11 (đề 11, câu 190 và 192): Gemini viết "210^\toRadians" và "210^\rceil" thay cho "210^\circ". Cùng bước chuẩn hóa
+     * ký hiệu độ mở rộng sang toRadians, rceil, lceil, degree, deg, circle, o, cdot (dạng ^\X và ^{\X}).
+     */
+    @Test
+    void kyHieuDoMoRongToRadiansRceilVaCacBienThe() {
+        for (String x : List.of("bullet", "triangle", "toRadians", "rceil", "lceil", "degree", "deg", "circle", "o", "cdot")) {
+            for (String form : List.of("$210^\\" + x + "$", "$210^{\\" + x + "}$", "$210 ^ \\" + x + "$", "$210^{ \\" + x + " }$")) {
+                LlmOutputRepair.DegreeRepair r = LlmOutputRepair.fixDegreeSymbol(form);
+                assertEquals("$210^{\\circ}$", r.text(), form);
+                assertEquals(1, r.fixed(), form);
+            }
+        }
+        // sau dấu "}" (ví dụ góc viết trong ngoặc nhọn) và hai ký hiệu trong một câu
+        assertEquals("$\\widehat{A} = {60}^{\\circ}$", LlmOutputRepair.fixDegreeSymbol("$\\widehat{A} = {60}^\\toRadians$").text());
+        LlmOutputRepair.DegreeRepair two = LlmOutputRepair.fixDegreeSymbol("Góc $A = 30^\\rceil$ và $B = 40^{\\lceil}$.");
+        assertEquals("Góc $A = 30^{\\circ}$ và $B = 40^{\\circ}$.", two.text());
+        assertEquals(2, two.fixed());
+    }
+
+    @Test
+    void kyHieuDoMoRongGiuNguyenCacDangKhongPhaiDo() {
+        for (String keep : List.of(
+                "$x^{\\prime}$", "$x^\\prime$", "$2^{\\prime}$", "$75^\\circ$", "$75^{\\circ}$",
+                "$\\triangle ABC$", "$\\triangle ABC$ có góc $A = 75^{\\circ}$",
+                "$a^\\toRadians$", "$x^\\rceil$", "$x^{\\deg}$", "$(2x)^\\cdot$",     // sau chữ cái hoặc ")": không phải số đo độ
+                "$75^\\degrees$", "$75^\\ox$", "$75^\\cdots$", "$75^\\toRadiansX$",   // lệnh khác chỉ có tiền tố trùng
+                "210^\\toRadians", "Giá \\$5 và 210^\\rceil")) {                    // ngoài $ không đụng
+            LlmOutputRepair.DegreeRepair r = LlmOutputRepair.fixDegreeSymbol(keep);
+            assertEquals(keep, r.text(), keep);
+            assertEquals(0, r.fixed(), keep);
+        }
+    }
+
+    /** Dạng thật của lần chạy: trong JSON là "\t" (tab) và "\r" (xuống dòng), bước sửa escape đưa về lệnh rồi mới chuẩn hóa độ. */
+    @Test
+    void cauMcqDe11ToRadiansVaRceilDuocSuaThanhDo() {
+        String raw = "{\"question_text\": \"Cho tứ giác $ABCD$ có $\\\\widehat{A} + \\\\widehat{B} = 210^\\toRadians$ và $E = 30^\\rceil$.\","
+                + " \"option_a\": \"$150^\\\\circ$\", \"option_b\": \"$140^\\\\circ$\", \"option_c\": \"$160^\\\\circ$\","
+                + " \"option_d\": \"$90^\\\\circ$\", \"correct_option\": \"A\", \"explanation\": \"Bằng $360^\\\\circ - 210^\\toRadians$.\"}";
+        ParsedMcqDto p = McqJsonParser.parse(raw, true);
+        assertTrue(p.parseSuccess(), p.parseError());
+        assertEquals("Cho tứ giác $ABCD$ có $\\widehat{A} + \\widehat{B} = 210^{\\circ}$ và $E = 30^{\\circ}$.", p.questionText());
+        assertEquals("Bằng $360^\\circ - 210^{\\circ}$.", p.explanation());
+        assertTrue(p.parseWarnings().contains("json: đã sửa 1 ký hiệu độ (^\\bullet, ^\\triangle thành ^{\\circ}) ở explanation"),
+                p.parseWarnings().toString());
+    }
+
     @Test
     void textFieldSuaKyHieuDoVaGhiCanhBao() {
         List<String> warnings = new ArrayList<>();

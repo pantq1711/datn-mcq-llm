@@ -722,11 +722,14 @@ khác để sinh lại).
   cũng không phải lý do (vẫn lưu trong `warnings` và hiện trong vết QC), ví dụ ở trên chỉ còn các cảnh báo khác. `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
   `solver_pending` (Solver đang kiểm lại, thay `solver_not_run`), `solver_failed` (kiểm lại thất bại) và
   `duplicate: <id>` (bản sửa trùng câu khác).
-- `similar_in_exam: <n>` (thẩm định 31/10): câu hệ thống sinh cùng khuôn (chỉ khác số hoặc tên điểm/hình) với câu thứ `n` của
-  chính đề này, hoặc câu trắc nghiệm làm lộ đáp án một ý của câu đúng/sai. `n` đếm từ 1 theo thứ tự hiển thị (phần I, II,
-  III, mỗi chỗ một số kể cả chỗ chưa có câu). Mỗi câu kia một lý do. Tính lúc xem đề, không lưu, không đổi trạng thái câu;
-  câu ngân hàng và câu đã Giữ/Sửa không bị gắn. `qcState` về `needs_review`. Chỉ `GET /api/exams/{id}` có lý do này;
-  `needsReviewSlots` của `GET /api/exams` chưa tính. Chuỗi hiển thị đề xuất: "Gần giống câu {n} trong đề, nên đổi một trong hai câu".
+- `similar_in_exam: <Phần>.<số>` (thẩm định 31/10; **đổi dạng 2/11**): câu hệ thống sinh cùng khuôn (chỉ khác số hoặc tên
+  điểm/hình) với câu đứng TRƯỚC nó trong chính đề này, hoặc câu trắc nghiệm làm lộ đáp án một ý của câu đúng/sai. `<Phần>`
+  là `I`, `II` hoặc `III` và `<số>` là số "Câu k" trong Phần đó, đúng cách đánh số của trang đề và file Word (ví dụ
+  `similar_in_exam: II.3` là Phần II, Câu 3; trước 2/11 là số thứ tự toàn đề như `similar_in_exam: 14`, dễ nhầm với trang đề).
+  Mỗi cặp chỉ câu có số thứ tự lớn hơn bị gắn (câu đứng trước không bị gắn); một câu giống nhiều câu trước thì mỗi câu trước một
+  lý do. Tính lúc xem đề, không lưu, không đổi trạng thái câu; câu ngân hàng và câu đã Giữ/Sửa không bị gắn. `qcState` về
+  `needs_review`. Chỉ `GET /api/exams/{id}` có lý do này; `needsReviewSlots` của `GET /api/exams` chưa tính. Chuỗi hiển thị đề
+  xuất: "Gần giống Câu {số} Phần {Phần} trong đề, nên đổi một trong hai câu". Frontend đọc được cả dạng cũ (chỉ có số, dữ liệu trước 2/11) lẫn dạng mới.
 - W2-3, câu sinh từ đề có tài liệu bài học (mục 7.2, 9) có thêm lý do của QC "bám tài liệu" (mục 7.7a):
   `grounding_not_supported` (judge cho là đáp án, lời giải hoặc câu hỏi không khớp tài liệu), `grounding_unknown` (đoạn tài
   liệu không đủ để kết luận, hoặc judge nói "bám tài liệu" mà trích dẫn không kiểm chứng được), `grounding_pending` (đang chờ
@@ -846,7 +849,14 @@ PUT /api/exams/12/slots/101/question
 GET /api/exams/12/export/docx   → 200, file MT2610231200001.docx (Content-Disposition: attachment)
 ```
 
-- Bản cơ bản: tiêu đề và mã đề; PHẦN I/II/III với tên phần đầy đủ (PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn,
+- **Đầu đề (2/11):** bảng 2 cột không viền. Cột trái "PHÒNG GD&ĐT ……………" và "TRƯỜNG THCS ……………". Cột phải "ĐỀ KIỂM
+  TRA <tên kì in hoa>" (tên ma trận của đề, bỏ phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8" thành "GIỮA KÌ I"; đề sinh theo bài
+  hoặc đề cũ không có ma trận dùng tên đề), "Môn: <môn> <khối> — Thời gian: <phút> phút" và "Mã đề: 101". Dưới bảng là dòng
+  "Họ và tên: ……………………… Lớp: ………". Ma trận chưa có trường thời gian nên luôn in "…… phút" cho giáo viên điền tay. Mã đề in ra là
+  số 3 chữ số, 101 cho đề gốc (chưa có chức năng trộn mã đề); **mã hệ thống `MT…` không in ra nội dung file**, chỉ còn ở tên
+  file tải về (`Content-Disposition`). Đầu đề viết bằng khối openxml thô do `ExamMarkdownBuilder` chèn (như ngắt trang) vì
+  Markdown của pandoc không bỏ được viền bảng; chữ trong đó được thoát XML.
+- Bản cơ bản: PHẦN I/II/III với tên phần đầy đủ (PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn,
   PHẦN II. Câu trắc nghiệm đúng sai, PHẦN III. Câu trắc nghiệm trả lời ngắn); "Câu k." đánh số lại từ 1 trong từng
   phần; `mcq` mỗi phương án một dòng "A. ..."; `tf` các ý "a) ..."; `sa` chỉ có đề. Sau một ngắt trang là "ĐÁP ÁN"
   (`mcq` chữ cái, `tf` chuỗi Đ/S theo thứ tự a–d như `ĐSĐS`, `sa` đáp số) rồi "LỜI GIẢI" từng câu.

@@ -12,7 +12,8 @@ import java.util.regex.Pattern;
  * <p>Hai nhánh, đều so không phân biệt hoa thường và dấu (judge từng trả tiếng Việt không dấu):
  * <ul>
  *   <li>{@link #detect}: cụm chắc chắn là nháp, FormatChecker chặn đầu ra LLM: "xin lỗi", "sorry", "wait", "nhầm" dạng hẹp,
- *       "à không".
+ *       "à không"; từ 2/11 thêm các cụm giải thích việc rút gọn đáp số cho vừa khung ("ký tự", "để đáp án gọn", "cho gọn",
+ *       "đổi đơn vị … để (gọn|vừa|đáp án|4 ký tự)").
  *       <ul>
  *         <li>"nhầm": chỉ khớp "tôi nhầm", "em nhầm", "bị nhầm" (không khi theo sau là "lẫn") hoặc "nhầm" ngay trước dấu ","
  *             hay ".". "nhầm lẫn thường gặp" và "nhầm" đứng giữa câu (ví dụ "dễ nhầm với nhau") không khớp.</li>
@@ -38,7 +39,15 @@ public final class ExplanationDraftLeak {
             "\\bsorry\\b",
             "\\b(?:toi|em)\\s+nham\\b",
             "\\bbi\\s+nham\\b(?!\\s+lan)",
-            "\\bnham[,.]"));
+            "\\bnham[,.]",
+            // 2/11 (đề 10 Phần III câu 2: đáp án 100, đúng là 10000): lời giải giải thích việc rút gọn đáp số cho vừa khung
+            // 4 ký tự. "đổi đơn vị … để …" chỉ tính trong cùng một câu (không qua . ! ? ; hay xuống dòng) và chỉ khi sau "để" có
+            // gọn / vừa / đáp án / 4 ký tự, nên "Đổi đơn vị phút sang giờ để tính kết quả", "Đổi 30 phút = 0,5 giờ."
+            // và "đơn vị đo" không khớp.
+            "\\bky\\s+tu\\b",
+            "\\bde\\s+dap\\s+an\\s+gon\\b",
+            "\\bcho\\s+gon\\b",
+            "\\bdoi\\s+don\\s+vi\\b[^.!?;\\n]{0,80}?\\bde\\b[^.!?;\\n]{0,60}?\\b(?:gon|vua|dap\\s+an|4\\s+ky\\s+tu)\\b"));
 
     /** Chữ thường, còn dấu (NFC): cụm chắc chắn là nháp. */
     private static final Pattern ACCENTED = Pattern.compile("(?<![\\p{L}\\p{N}])à\\s+không(?![\\p{L}\\p{N}])");

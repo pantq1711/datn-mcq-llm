@@ -148,7 +148,7 @@ class ExamSimilarInExamTest extends ExamFlowTestBase {
     // ---------- Lớp 2: cờ similar_in_exam khi xem đề ----------
 
     @Test
-    void haiCauCungKhuonTrongDeBiGanCoHaiPhiaKhongDoiTrangThai() throws Exception {
+    void haiCauCungKhuonTrongDeChiCauSauBiGanKhongDoiTrangThai() throws Exception {
         int matrixId = createMatrix(mcqCell("Đa thức", "Đơn thức", 1), mcqCell("Phân thức", "Rút gọn", 1));
         examId = build(matrixId).get("examId").asInt();
         settle(examId);
@@ -158,13 +158,13 @@ class ExamSimilarInExamTest extends ExamFlowTestBase {
 
         JsonNode view = view();
         List<JsonNode> items = items(view);
-        assertEquals(List.of("similar_in_exam: 2"), reasons(items.get(0)));
-        assertEquals(List.of("similar_in_exam: 1"), reasons(items.get(1)));
-        for (JsonNode item : items) {
-            assertTrue(item.get("needsReview").asBoolean());
-            assertEquals("needs_review", item.get("qcState").asText());
-        }
-        assertEquals(2, view.get("needsReviewCount").asInt());
+        // 2/11: lý do ghi Phần và số trong Phần (trang đề đánh số theo Phần); mỗi cặp chỉ câu sau bị gắn.
+        assertEquals(List.of(), reasons(items.get(0)), "câu đứng trước không bị gắn");
+        assertFalse(items.get(0).get("needsReview").asBoolean());
+        assertEquals(List.of("similar_in_exam: I.1"), reasons(items.get(1)));
+        assertTrue(items.get(1).get("needsReview").asBoolean());
+        assertEquals("needs_review", items.get(1).get("qcState").asText());
+        assertEquals(1, view.get("needsReviewCount").asInt());
 
         view();
         assertEquals(List.of("qc_passed", "qc_passed"), jdbc.queryForList(
@@ -185,7 +185,21 @@ class ExamSimilarInExamTest extends ExamFlowTestBase {
         assertFalse(items.get(0).get("needsReview").asBoolean(), "câu ngân hàng không bị gắn cờ");
         assertEquals(List.of(), reasons(items.get(0)));
         assertEquals("generated", items.get(1).get("source").asText());
-        assertEquals(List.of("similar_in_exam: 1"), reasons(items.get(1)));
+        assertEquals(List.of("similar_in_exam: I.1"), reasons(items.get(1)));
+    }
+
+    @Test
+    void cauSauTroVeMoiCauTruocCungKhuonTangDan() throws Exception {
+        int matrixId = createMatrix(mcqCell("Đa thức", "Đơn thức", 1), mcqCell("Phân thức", "Rút gọn", 1),
+                mcqCell("Tứ giác", "Hình thang", 1));
+        examId = build(matrixId).get("examId").asInt();
+        settle(examId);
+
+        List<JsonNode> items = items(view());
+        assertEquals(List.of(), reasons(items.get(0)));
+        assertEquals(List.of("similar_in_exam: I.1"), reasons(items.get(1)));
+        assertEquals(List.of("similar_in_exam: I.1", "similar_in_exam: I.2"), reasons(items.get(2)));
+        assertEquals(2, view().get("needsReviewCount").asInt());
     }
 
     @Test

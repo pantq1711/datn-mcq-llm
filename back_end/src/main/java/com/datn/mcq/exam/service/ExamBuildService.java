@@ -338,7 +338,12 @@ public class ExamBuildService {
         }
         GeneratedQuestion q = generationService.getQuestionById(job.getQuestionId());
         switch (q.getStatus()) {
-            case QC_PASSED, IN_BANK -> useQuestion(slot, q.getId());
+            case IN_BANK -> useQuestion(slot, q.getId());
+            case QC_PASSED -> {
+                if (!retryForSameLabel(slot, q)) {
+                    useQuestion(slot, q.getId());
+                }
+            }
             case GENERATED -> {
                 // W2-4b: tách ERROR (Solver lỗi kỹ thuật, đang chờ job answer_check hoặc đã failed) với INCONSISTENT.
                 Optional<GenerationJob> check = generationService.latestAnswerCheckJob(q.getId());
@@ -351,13 +356,35 @@ public class ExamBuildService {
                     slot.setFallbackQuestionId(q.getId());
                     slot.setSolverRetries(slot.getSolverRetries() + 1);
                     enqueueRetry(slot);
-                } else {
+                } else if (!retryForSameLabel(slot, q)) {
                     useQuestion(slot, q.getId());
                 }
             }
             default -> retryOrFail(slot);
         }
         slotRepository.save(slot);
+    }
+
+    /** Cảnh báo "4 ý cùng nhãn" đã lưu của câu tf (V5), nếu có. */
+    private Optional<String> sameLabelWarning(GeneratedQuestion q) {
+        if (q.getQuestionType() != QuestionType.TF) {
+            return Optional.empty();
+        }
+        return qcSummaryService.summarize(q.getId()).sameLabelWarning();
+    }
+
+    /**
+     * Câu tf có 4 ý cùng nhãn (2/11, thẩm định UX đề 10) còn lượt thì sinh lại chỗ, giữ câu này làm dự phòng như câu lệch
+     * Solver ({@code failOrUseFallback}): hết lượt hoặc lần sinh lại hỏng thì dùng lại câu đó, cảnh báo vẫn hiện thành cờ
+     * "cần xem kỹ". Không dùng lỗi chặn ở bước format vì câu format_failed không Giữ được và hết lượt thì chỗ hỏng.
+     */
+    private boolean retryForSameLabel(ExamSlot slot, GeneratedQuestion q) {
+        if (slot.getAttempts() >= MAX_ATTEMPTS || sameLabelWarning(q).isEmpty()) {
+            return false;
+        }
+        slot.setFallbackQuestionId(q.getId());
+        enqueueRetry(slot);
+        return true;
     }
 
     private void retryOrFail(ExamSlot slot) {
@@ -480,6 +507,9 @@ public class ExamBuildService {
             GeneratedQuestion q = generationService.getQuestionById(previous.get().getQuestionId());
             if (q.getStatus() == QuestionStatus.FORMAT_FAILED) {
                 addLine(lines, MatrixPromptDraftV0.retryHint(qcSummaryService.formatErrors(q.getId())));
+            } else {
+                sameLabelWarning(q).ifPresent(w -> addLine(lines, MatrixPromptDraftV0.retryHint(
+                        List.of(w + " (ít nhất một ý phải có nhãn khác; nhãn phải theo đúng/sai thật của khẳng định)"))));
             }
         }
         addLine(lines, MatrixPromptDraftV0.teacherBlock(instruction));

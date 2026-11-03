@@ -545,7 +545,8 @@ class ExamQuestionEditTest {
         int version = item.get("questionId").asInt();
         assertEquals("$5$", question(version).get("option_a"));
         assertEquals("$5$", item.get("optionA").asText());
-        assertTrue(texts(item.get("reviewReasons")).contains("warning: option_a: đã tự đóng $"), item.toString());
+        assertFalse(texts(item.get("reviewReasons")).contains("warning: option_a: đã tự đóng $"),
+                "2/11: tự đóng $ là hệ thống tự sửa chắc chắn, không bật cờ (cảnh báo vẫn được lưu bên dưới): " + item);
         String warnings = jdbc.queryForObject("SELECT warnings::text FROM quality_check_result WHERE question_id = ?"
                 + " AND check_type = 'format'", String.class, version);
         assertTrue(warnings.contains("option_a: đã tự đóng $"), warnings);

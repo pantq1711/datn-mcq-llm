@@ -1,6 +1,6 @@
 {
   "name": "Giữa kì I – Toán 8",
-  "source": "MA TRẬN, BẢN ĐẶC TẢ ĐỀ KT GIỮA K1 TOÁN 8.docx (bản đặc tả, phần II). Mức: Biết = easy, Hiểu = medium, Vận dụng = hard.",
+  "source": "MA TRẬN, BẢN ĐẶC TẢ ĐỀ KT GIỮA K1 TOÁN 8.docx (bản đặc tả, phần II).",
   "gradeLevel": 8,
   "cells": [
     {"part": "I", "questionType": "mcq", "difficulty": "easy", "questionCount": 4,
@@ -47,7 +47,6 @@
   ],
   "notes": [
     "Phần I: 12 câu (C1-C12), phần II: 2 câu (C13, C14), phần III: 4 câu (C15-C18) theo bản đặc tả. Tự luận (C19-C21) ngoài phạm vi.",
-    "Bảng ma trận tổng và bản đặc tả trong file gốc không khớp hoàn toàn về mức của phần III; mẫu này theo bản đặc tả. Cần giáo viên xác nhận.",
     "Câu chủ đề Tứ giác phải làm được không cần hình vẽ (ví dụ cho số đo các góc bằng lời)."
   ]
 }

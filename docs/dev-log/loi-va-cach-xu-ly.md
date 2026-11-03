@@ -69,21 +69,29 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-53 | Dedup: `similarity` null do chốt chặn số liệu; câu fallback của ô đang sinh lại không là ứng viên (bổ sung 31/10) | QC | Trung bình | Đã sửa |
 | L-54 | Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (thẩm định 31/10) | QC | Cao | Đã sửa (v4 bắt 7/9 và 5/9, không báo nhầm) |
 | L-55 | Nhiều câu cùng khuôn (chỉ khác số, tên đỉnh) trong một đề; mcq lộ đáp án ý đúng/sai (thẩm định 31/10) | QC | Cao | Đã sửa (chờ đối chiếu dữ liệu thật) |
+| L-57 | Đáp án câu Trả lời ngắn bị đổi đơn vị cho vừa 4 ký tự: đề 10 Phần III câu 2 lưu 100, đúng là 10000 (bổ sung 2/11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
+| L-58 | Lệnh LaTeX nằm ngoài `$...$` trong lời giải và các trường khác: đề 10 Phần I câu 2 (bổ sung 2/11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
+| L-59 | Câu Đúng/Sai có 4 ý cùng nhãn chỉ bị cảnh báo, không được sinh lại (bổ sung 2/11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
+| L-60 | Cờ "gần giống" ghi số câu toàn đề, trang đề đánh số theo Phần; cả hai câu của một cặp bị gắn (bổ sung 2/11) | QC | Trung bình | Đã sửa (frontend chưa cập nhật) |
+| L-61 | File Word không có đầu đề đề thi, in mã hệ thống MT… (bổ sung 2/11) | Xuất file | Trung bình | Đã sửa (chưa kiểm bằng Word thật) |
+| L-62 | Từ tiếng Anh lẫn trong câu sinh ra; ghi chú nội bộ trong ma trận mẫu hiện cho giáo viên (bổ sung 2/11) | LLM & parse | Thấp | Đã sửa |
 
-**Thống kê theo nhóm** (53 mục):
+| L-63 | "210^\toRadians" thay cho độ qua QC không cờ; cảnh báo bước format không được lưu (bổ sung 2/11, đề 11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
+
+**Thống kê theo nhóm** (60 mục; bảng chưa có dòng cho L-56 nên con số này cộng thêm đúng 7 mục L-57…L-63 vào số cũ):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
 | Môi trường | 11 | 11 | 0 | 0 |
 | Dữ liệu/DB | 5 | 5 | 0 | 0 |
 | Quy trình git | 2 | 2 | 0 | 0 |
-| LLM & parse | 14 | 13 | 0 | 1 |
-| QC | 12 | 11 | 0 | 1 |
+| LLM & parse | 19 | 18 | 0 | 1 |
+| QC | 13 | 12 | 0 | 1 |
 | Hàng đợi/đồng thời | 8 | 7 | 0 | 1 |
-| Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **53** | **50** | **0** | **3** |
+| Xuất file | 2 | 2 | 0 | 0 |
+| **Tổng** | **60** | **57** | **0** | **3** |
 
-Theo mức độ: Cao 13, Trung bình 26, Thấp 14.
+Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
 
 ---
 
@@ -625,6 +633,61 @@ Theo mức độ: Cao 13, Trung bình 26, Thấp 14.
   không so trực tiếp được vì lần đo này có 6 chỗ dùng hết 3 lần thử.
 - Trạng thái: Đã sửa trong code và test; chưa đo lại bằng đề thật.
 
+### L-57 Đáp án câu Trả lời ngắn bị đổi đơn vị cho vừa 4 ký tự: đề 10 Phần III câu 2 lưu 100, đúng là 10000 (bổ sung 2/11)
+- Nhóm: LLM & parse
+- Triệu chứng: thẩm định UX 2/11 trên đề 10 (DB `datn_mcq_e2e`): Phần III câu 2 có đáp án lưu `100`, đáp số đúng là `10000`; lời giải ghi "Đổi đơn vị … thành trăm để đáp án gọn trong 4 ký tự". Đáp án sai thật nhưng khớp khung 4 ký tự nên qua QC (Solver giải theo đề đã đổi đơn vị).
+- Nguyên nhân gốc: quy tắc của prompt ma trận `sa` thêm ở commit `6d8a582` ("ask matrix short-answer prompt to rescale large results") dặn "kết quả lớn hơn 4 ký tự thì đề phải đổi đơn vị" kèm ví dụ "10000 đồng thì đề hỏi theo nghìn đồng và đáp án 10". Model làm theo nhưng đổi đơn vị trong lời giải mà không đổi đề, nên đáp số lệch. Bộ chặn lời giải còn nháp (`ExplanationDraftLeak`) không có mẫu nào bắt kiểu "giải thích việc rút gọn đáp số".
+- Cách phát hiện: giáo viên/người dùng xem đề 10 (thẩm định UX), đọc lời giải câu Phần III.
+- Cách sửa (không migration):
+  - `MatrixPromptDraftV0.SA_ANSWER_RULES`: bỏ hai gạch đầu dòng "làm tròn rõ ràng" và "đổi đơn vị", thay bằng "Chọn số liệu ngay từ đầu để đáp số đúng tự nhiên là số nguyên hoặc thập phân tối đa 4 ký tự. TUYỆT ĐỐI không đổi đơn vị, không chia/nhân kết quả, không làm tròn để rút gọn đáp số. Nếu đề cần làm tròn thì câu dẫn phải ghi rõ làm tròn đến đâu." Nâng `matrix-sa-v6-draft` lên `matrix-sa-v7-draft`.
+  - `ExplanationDraftLeak` (nhánh chặn, đầu ra LLM của cả 3 dạng; giáo viên chỉ cảnh báo): thêm mẫu "ký tự", "để đáp án gọn", "cho gọn", "đổi đơn vị … để" (cùng một câu, tối đa 80 ký tự giữa hai cụm), so không phân biệt hoa thường và dấu.
+- Chống tái phát: `MatrixPromptDraftV0Test.promptSaDanDapAnSoNguyenHoacThapPhanToiDa4KyTu` (có quy tắc mới, không còn chữ của quy tắc cũ), `phienBanVaThongSoOLuuDuoc` (v7); `FormatCheckerExplanationDraftTest.loiGiaiGiaiThichDoiDonViChoGonDapAnBiBat`, `caumToanHopLeCoChuDonViKhongBiBatNham` ("đơn vị đo", "Đổi 30 phút = 0,5 giờ." không bị bắt), `loiGiaiDoiDonViDeGonCaBaDangDauRaLlmBiFormatFailedChuGiaoVienChiCanhBao`.
+- Hạn chế: (1) chưa đo bằng Gemini thật (không gọi mạng trong lần sửa này): chưa biết model có thôi đổi đơn vị chưa; (2) bản đầu của mẫu "đổi đơn vị … để" chặn cả lời giải hợp lệ kiểu "Đổi đơn vị phút sang giờ để tính vận tốc"; **đã thu hẹp cùng ngày (2/11, lượt sau)**: chỉ bắt khi sau "để" (cùng câu) có gọn / vừa / đáp án / 4 ký tự ("kết quả" bị bỏ khỏi danh sách vì "Đổi đơn vị phút sang giờ để tính kết quả" là lời giải hợp lệ) (`FormatCheckerExplanationDraftTest.caumToanHopLeCoChuDonViKhongBiBatNham`); (3) **đã sửa cùng ngày**: `ShortAnswerValue.MSG_SA_ANSWER_FORMAT` (ghi chú sinh lại khi đáp án sai dạng) đổi thành "Đáp số phải là số nguyên hoặc thập phân tối đa 4 ký tự. Hãy chọn lại số liệu của đề để đáp số tự nhiên thỏa điều kiện; không đổi đơn vị, không nhân/chia hay làm tròn kết quả để rút gọn." Chỗ so khớp nguyên văn: chỉ `ShortAnswerValueTest` (cập nhật; các test khác dùng hằng số). Frontend (`exam.utils.ts`) nhận theo phần đầu "Đáp số phải là" / "đáp án phải là" (dữ liệu cũ) và hiện chữ của frontend. Dữ liệu `quality_check_result.errors` cũ vẫn giữ chuỗi cũ.
+- Trạng thái: Đã sửa (chờ đo trên đề mới).
+
+### L-58 Lệnh LaTeX nằm ngoài `$...$` trong lời giải và các trường khác: đề 10 Phần I câu 2 (bổ sung 2/11)
+- Nhóm: LLM & parse
+- Triệu chứng: đề 10 Phần I câu 2: lời giải có `\frac{5x + y}{xy}` không nằm trong `$`, hiện nguyên chữ lệnh cho giáo viên.
+- Nguyên nhân gốc: (1) lỗi LaTeX của lời giải chỉ là cảnh báo (quyết định 22/10, Việc 2), nên câu vẫn qua bước format; câu hỏi và phương án có lỗi này thì `format_failed` nhưng không có bước tự sửa. (2) Bộ kiểm tra LaTeX chỉ nhận ra `\lệnh` ngoài `$`, không nhận `^{`/`_{`.
+- Cách phát hiện: thẩm định UX 2/11.
+- Cách sửa (không migration):
+  - `LlmOutputRepair.wrapLatexOutsideMath` (chế độ sửa của parser mcq/sa/tf, mọi trường văn bản trừ `answer` của sa): mỏ neo là lệnh trong danh sách cho phép của `LatexValidationRules` (trừ `\text`, `\begin`, `\end`) hoặc `^{`/`_{` ngoài `$`; mở rộng sang hai phía qua các "từ" (tách theo khoảng trắng ngoài ngoặc nhọn) trông như công thức (không chữ có dấu tiếng Việt, không từ chỉ gồm ≥2 chữ cái ASCII, không lệnh lạ, ngoặc cân, không qua dấu hết câu), bọc `$...$`, dấu câu cuối nằm ngoài. Cảnh báo mới `<trường>: đã tự bọc $ quanh công thức LaTeX nằm ngoài $` (bật cờ "cần xem kỹ" như "đã tự đóng $"). Không chắc (số `$` lẻ, ngoặc lệch, lệnh lạ) thì giữ nguyên. `\n` (gạch rồi n) không là lệnh.
+  - `LatexValidationRules`: nhận `^{`/`_{` ngoài `$` như lệnh ngoài `$` (một lỗi mỗi trường); công khai `MSG_COMMAND_OUTSIDE`, `isAllowedCommand`.
+  - `FormatChecker.validateExplanationLatex`: lời giải của đầu ra LLM có lệnh LaTeX ngoài `$` mà không bọc được là lỗi chặn (sinh lại); lời giải giáo viên viết/sửa và các lỗi LaTeX khác của lời giải vẫn chỉ cảnh báo.
+- Chống tái phát: `LatexOutsideMathWrapTest` (17 test: ví dụ "Ta có \frac{a}{b} = 2", chữ đã trong `$` không đổi, dấu câu, mũ/chỉ số, chữ Việt/Anh chặn đoạn, nhiều lệnh một lần bọc, không sinh `$$`, `\$`, `\n`, các ca không chắc, từng trường mcq/sa/tf, `answer` không bị bọc, ca lời giải đề 10), `LatexValidationRulesTest.superscriptOrSubscriptBraceOutsideMathIsReported`, `ExamBuildTest.loiGiaiCoLatexNgoaiCongThucDuocBocVaGiuNguyenSauKhiGiu` (cập nhật từ ca đề 2 chỗ 20), `ExamBuildTest.loiGiaiLatexNgoaiDolaKhongBocDuocThiSinhLai`.
+- Hạn chế: bọc theo heuristic: biểu thức nối với chữ cái đơn ("x \frac{1}{2}") được kéo vào chung một cặp `$`; lệnh ngoài danh sách cho phép (ví dụ `\alpha`) không bọc mà chuyển thành lỗi sinh lại. Lời giải của đầu ra LLM trước đây không bao giờ làm câu `format_failed` vì LaTeX; nay có thể (tốn thêm lượt sinh).
+- Trạng thái: Đã sửa (chờ đo trên đề mới).
+
+### L-59 Câu Đúng/Sai có 4 ý cùng nhãn chỉ bị cảnh báo, không được sinh lại (bổ sung 2/11)
+- Nhóm: LLM & parse
+- Triệu chứng: đề 10: câu Đúng/Sai có cả 4 ý cùng một nhãn (khác ý đồ phân bố đáp án) chỉ có cờ `warning: label: 4 ý cùng nhãn T`.
+- Nguyên nhân gốc: quyết định 22/10 giữ "4 nhãn giống nhau" là cảnh báo, nên không có đường sinh lại.
+- Cách phát hiện: thẩm định UX 2/11.
+- Cách sửa (không migration, không đổi prompt): **không** đổi thành lỗi chặn ở `FormatChecker` vì lỗi chặn đưa câu về `format_failed` (không Giữ được: `AssistedKeepService` từ chối; hết lượt thì chỗ hỏng), trái với "hết lượt thì giữ câu kèm cờ". Thay vào đó `ExamBuildService.reconcileSlot` coi cảnh báo `label: 4 ý cùng nhãn` của câu `qc_passed`/`generated` là lý do sinh lại: chỗ còn lượt (`attempts` < 3) thì lưu câu làm dự phòng (`fallback_question_id`, như câu lệch Solver) và xếp job sinh lại; `promptNote` của job có dòng "Lần sinh trước bị loại vì: label: 4 ý cùng nhãn T (ít nhất một ý phải có nhãn khác; …)". Hết lượt hoặc lần sinh lại hỏng thì dùng lại câu đó kèm cờ như cũ. Hằng `FormatChecker.SAME_LABEL_WARNING_PREFIX` và `QcSummary.sameLabelWarning()` (exam chỉ phụ thuộc `qc.service`).
+- Nhánh `fix/tf-solution-first` (chỉ đọc, không merge; 3 commit `8d688ca`, `cf7d5fb`, `ab60183`, L-50 của nhánh trùng số với L-50 đã có ở `main`, chưa đo hiệu quả): (a) đáng dùng lại sau: `ExamBuildService.actualTfPattern/latestTfPattern` đọc nhãn thật từ `generated_question_statement` thay vì mẫu mục tiêu trong `prompt_note`, giúp câu sinh lại không lặp nhãn thật của câu vừa bị bỏ (kể cả TTTT); (b) không dùng lại: đổi thứ tự JSON (lời giải trước) và nâng `matrix-tf-v4-draft` xung đột phiên bản với `matrix-tf-v7-draft` hiện tại, và chưa đo.
+- Chống tái phát: `ExamTfSameLabelRegenTest` (3 test: TTTT sinh lại một lần rồi dùng câu TFTF không cờ, `promptNote` có lý do; TTTT mãi thì đúng 3 lượt rồi giữ câu kèm cờ, không `format_failed`; nhãn đa dạng không sinh lại), `FormatCheckerTrueFalseTest.bonNhanGiongNhauChiCanhBao` (vẫn cảnh báo, không chặn).
+- Hạn chế: mỗi lần sinh lại tốn thêm một lượt Gemini cho Solver trên câu bị bỏ (câu đã qua QC đầy đủ trước khi đối soát thấy); không có chỉ số sau-sửa vì chưa đo.
+- Trạng thái: Đã sửa (chờ đo trên đề mới).
+
+### L-62 Từ tiếng Anh lẫn trong câu sinh ra; ghi chú nội bộ trong ma trận mẫu hiện cho giáo viên (bổ sung 2/11)
+- Nhóm: LLM & parse
+- Triệu chứng: thẩm định UX 2/11: câu sinh ra đôi khi có "and", "or", "is"… đứng riêng ngoài công thức; ma trận mẫu "Giữa kì I – Toán 8" hiện cho giáo viên dòng nguồn "Mức: Biết = easy, Hiểu = medium, Vận dụng = hard." và ghi chú "… Cần giáo viên xác nhận."
+- Cách sửa (không migration): `EnglishWordLeak` + `FormatChecker`: cảnh báo `<trường>: có từ tiếng Anh ngoài công thức (<từ>)` cho `and/or/the/is/true/false` đứng riêng ngoài `$...$` trong đề dẫn, phương án, ý, lời giải của đầu ra LLM (không loại câu, bật cờ). Mẫu `docs/sample/matrix_giuaki1_toan8.json` và bản chép `back_end/src/main/resources/samples/…` bỏ phần "Mức: …" khỏi `source` và bỏ ghi chú số 2 ("… Cần giáo viên xác nhận.") khỏi `notes`.
+- Chống tái phát: `EnglishWordLeakTest` (5 test), `MatrixApiTest.mauKhongConGhiChuNoiBoTrongTruongHienChoGiaoVien`.
+- Hạn chế: ma trận đã tạo từ mẫu trước 2/11 vẫn giữ chữ cũ trong `exam_matrix.source`/`notes` (không sửa dữ liệu DB); "true/false" trong lời giải đúng/sai bị cảnh báo dù có thể là cố ý.
+- Trạng thái: Đã sửa.
+
+### L-63 "210^\toRadians", "30^\rceil" thay cho độ qua QC không cờ; cảnh báo bước format không được lưu (bổ sung 2/11, đề 11)
+- Nhóm: LLM & parse
+- Triệu chứng: đề 11 (đo bằng Gemini thật) câu 190 và 192: đề dẫn hiện "bằng 210^\toRadians" / "210^\rceil" thay cho 210°, câu `qc_passed`, không cờ "cần xem kỹ".
+- Nguyên nhân gốc: (1) model viết `^\circ` thành lệnh lạ; bước chuẩn hóa ký hiệu độ (31/10) chỉ biết `\bullet`/`\triangle`. (2) **Lưới an toàn không chạy:** `FormatChecker` có ghi cảnh báo "Lệnh \toRadians không hỗ trợ…" nhưng nằm ở `FormatCheckOutcome.warnings()`, còn `QcOrchestrator.evaluateAndSave` (`QcOrchestrator.java:117`) chỉ lưu `answerWarnings()` (cảnh báo giải mã, nhãn tf, đáp số) vào `quality_check_result.warnings`; nhóm `warnings()` (lệnh LaTeX không hỗ trợ, môi trường không hỗ trợ, lời giải có "tính lại/làm lại/sửa lại", từ tiếng Anh, lỗi LaTeX của lời giải) bị bỏ. `QcSummaryService.reviewReasons` (`QcSummaryService.java:117-126`) không lọc các cảnh báo này (chỉ bỏ `json: đã sửa…` và `label: khác mẫu…`); chúng chưa từng đến được đó. Hệ quả kéo dài: lý do `explanation_draft_suspect` (31/10) và cảnh báo từ tiếng Anh (L-62) trước bản sửa này không bao giờ hiện trong đề thật; các test cũ chỉ kiểm `FormatChecker` và `QcSummaryService` rời nhau.
+- Cách sửa (không migration): `LlmOutputRepair.fixDegreeSymbol`: sau chữ số hoặc `}`, `^\X` / `^{\X}` với X thuộc bullet, triangle, toRadians, rceil, lceil, degree, deg, circle, o, cdot thành `^{\circ}` (giữ `^{\prime}`, `^\circ`, mọi `^` sau chữ cái, `\triangle ABC`). `QcOrchestrator.storedWarnings` lưu cả hai nhóm (answerWarnings trước, rồi warnings, bỏ trùng); mọi cảnh báo này bật cờ `warning: …` hoặc `explanation_draft_suspect`.
+- Chống tái phát: `LlmOutputRepairTest` (`kyHieuDoMoRongToRadiansRceilVaCacBienThe`, `kyHieuDoMoRongGiuNguyenCacDangKhongPhaiDo`, `cauMcqDe11ToRadiansVaRceilDuocSuaThanhDo`), `ExamBuildTest.lenhLatexKhongHoTroTrongCongThucBatCanXemKy` (qua đối soát và xem đề thật), `loiGiaiCoTinhLaiVaTuTiengAnhBatCanXemKy`.
+- Phân nhóm cờ (cùng ngày, lượt sau): vì lưu đủ cảnh báo làm số cờ tăng, `QcSummaryService.AUTO_FIXED_WARNING_PATTERNS` tách nhóm KHÔNG bật cờ (hệ thống đã tự sửa chắc chắn: `json: đã sửa…` gồm cả ký hiệu độ, `đã tự đóng $`, `đã tự bọc $…`, `đã bỏ tiền tố…`, cộng `label: khác mẫu…`) khỏi nhóm BẬT cờ (còn lại, kể cả cảnh báo chưa biết). `đã tự đóng $` trước đây bật cờ, nay không. Cảnh báo vẫn lưu và hiện ở vết QC. Test: `QcSummaryReviewReasonsTest` (10 test).
+- Đo lại bằng Gemini thật (3/11, đề 13 `MT261103000334735`, ma trận 4, một backend duy nhất; lần đo đề 11 và 12 bị nhiễm vì còn một backend cũ chạy worker trên cùng DB e2e): 4/18 câu bị cờ, 18/18 `ready`. I.9 và I.10: `Lệnh \widehat không hỗ trợ…` ở đề dẫn và lời giải (cảnh báo nhầm: `\widehat` là lệnh KaTeX hợp lệ nhưng chưa có trong danh sách cho phép của `LatexValidationRules`); I.10 thêm `similar_in_exam: I.9`; I.12 `similar_in_exam: I.11`; II.2 `label: 4 ý cùng nhãn F` sau 3 lượt sinh (cơ chế sinh lại chạy thật: 3 job, hết lượt giữ câu kèm cờ; toán và nhãn của câu đúng). Không còn `^\toRadians`/`^\rceil`; Phần III đáp số 100, −8, 57 đều đúng và tự nhiên. Không thấy câu sai thật bị lọt; chưa cờ nhưng đáng chú ý: I.4 phương án C `(x²−2x+1)/(x−1)` rút gọn được thành `x−1`, III.3 đề dẫn thừa dòng "(Nhập đáp án dưới dạng số nguyên hoặc số thập phân gọn nhất)". Đã làm (3/11): `LatexValidationRules` thêm 20 lệnh KaTeX hay dùng ở THCS vào danh sách cho phép: widehat, hat, overline, overrightarrow, vec, parallel, perp, cong, sim, backsim, Leftarrow, subset, emptyset, mathbb, approx, mp, mathrm, qquad, dfrac, prime (các lệnh còn lại trong danh sách yêu cầu đã có sẵn). `\toRadians`, `\rceil` vẫn cảnh báo; hai test dùng `\widehat` làm ví dụ lệnh lạ đổi sang `\toRadians`.
+- Hạn chế: số câu bị cờ "cần xem kỹ" sẽ tăng (các cảnh báo cũ nay hiện); câu cũ đã lưu không có cảnh báo vẫn không cờ (không sửa dữ liệu). `qcReport.answerWarnings` (đọc lại từ cột) nay gồm cả nhóm `warnings`. Cảnh báo bọc ký hiệu độ vẫn ghi chữ "(^\bullet, ^\triangle thành ^{\circ})".
+- Trạng thái: Đã sửa (chờ đo trên đề mới).
+
 ## QC
 
 ### L-28 Câu được `qc_passed` dù Solver lệch hoặc lỗi (bổ sung từ repo)
@@ -963,6 +1026,15 @@ Theo mức độ: Cao 13, Trung bình 26, Thấp 14.
 - Hạn chế: (1) "tôi nhầm lẫn" bị chặn nhưng "đã nhầm" thì không; (2) **lời giải sai mà không có cụm nháp vẫn lọt** (4 trên 5 lỗi Toán còn lại của báo cáo thẩm định nằm ở lời giải, Solver không đọc lời giải): cần một bước kiểm "lời giải khớp đề và đáp án" (đề xuất F.1 của báo cáo thẩm định). **Để sau, chưa làm**; (3) cờ `explanation_draft_suspect` có thể bật với lời giải bình thường (ví dụ "thử tính lại bằng cách khác"): giáo viên chỉ phải đọc lại, câu không bị loại; chưa đo tỉ lệ bật nhầm trên dữ liệu thật; (4) chưa sinh lại đề để đo hiệu quả của hai quy tắc prompt.
 - Trạng thái: Đã sửa (chờ đo trên đề mới).
 
+### L-60 Cờ "gần giống" ghi số câu toàn đề, trang đề đánh số theo Phần; cả hai câu của một cặp đều bị gắn (bổ sung 2/11)
+- Nhóm: QC
+- Triệu chứng: đề 10: cờ `similar_in_exam: 14` trỏ "câu 14" trong khi trang đề đánh "Câu k" lại từ 1 ở từng Phần, giáo viên không tìm được câu; cả hai câu của một cặp cùng bị gắn nên một cặp thành hai cờ.
+- Nguyên nhân gốc: `ExamQuestionSimilarity.findSimilar` đếm vị trí toàn đề (L-55) và trả cả hai phía của cặp.
+- Cách sửa (không migration; **đổi hợp đồng JSON của lý do**): `similar_in_exam: <Phần>.<số>` (ví dụ `similar_in_exam: II.3`), một chuỗi ghép để giữ nguyên kiểu `reviewReasons: string[]`; mỗi cặp chỉ gắn câu có số thứ tự lớn hơn, trỏ về câu đứng trước (câu ngân hàng và câu đã Giữ/Sửa vẫn không bị gắn). `ExamQuestionSimilarity.flag/reason` (hàm thuần, kiểm được không cần DB); `ExamViewService` chỉ gọi lại. `docs/contract/enums.md` và `docs/api/README.md` cập nhật.
+- Frontend (đã làm lượt sau cùng ngày, `front_end/src/utils/exam.utils.ts`): `describeReviewReason` đọc `^(I{1,3})\.(\d+)$` và hiện "Gần giống câu {số} Phần {Phần} trong đề, nên đổi một trong hai câu"; dạng cũ `similar_in_exam: 14` vẫn đọc được. `describeFormatIssue` thêm "đã tự bọc $ …" ("Hệ thống đã tự sửa cách gõ công thức ở {chỗ}. Thầy/cô xem lại.") và "có từ tiếng Anh …" ("Câu có từ tiếng Anh lẫn vào, thầy/cô xem lại câu chữ."). `npm run build` đạt; chưa có test frontend (không có khung test), mới chạy thử tay các chuỗi qua node.
+- Chống tái phát: `ExamQuestionSimilarityTest` (chỉ câu sau có khóa, nhiều câu trước tăng dần, thứ tự quyết định bên bị gắn, `gianCoTheoPhanVaSoTrongPhanChiGanCauSau` qua nhiều Phần, `lyDoMangPhanVaSoTrongPhan`), `ExamSimilarInExamTest` (mức tích hợp: `I.1`, `I.1 + I.2`, câu ngân hàng làm câu trước).
+- Trạng thái: Đã sửa (frontend chưa cập nhật).
+
 ## Hàng đợi/đồng thời
 
 ### L-33 Đổi câu ở chỗ TF vi phạm `chk_es_ready`
@@ -1145,6 +1217,14 @@ Theo mức độ: Cao 13, Trung bình 26, Thấp 14.
 - Bài học: xuất file cho phần mềm khác dùng tiếp thì phải kiểm cả siêu dữ liệu của file, không chỉ nội dung.
 - Trạng thái: Đã sửa. Chưa kiểm bằng Word và MathType thật sau bản sửa; mới kiểm XML bên trong file. Tiêu đề (Heading)
   vẫn dùng font theme của pandoc.
+
+### L-61 File Word không có đầu đề đề thi, in mã hệ thống MT… (bổ sung 2/11)
+- Nhóm: Xuất file
+- Triệu chứng: file xuất chỉ có tiêu đề và dòng "Mã đề: MT2610231200001" (mã hệ thống); giáo viên in ra phải tự dựng đầu đề.
+- Cách sửa (không migration): `ExamHeader` + `ExamMarkdownBuilder.headerBlock`: bảng 2 cột không viền (khối openxml thô, vì Markdown của pandoc không bỏ được viền): trái "PHÒNG GD&ĐT ……………" / "TRƯỜNG THCS ……………"; phải "ĐỀ KIỂM TRA <tên kì in hoa>" / "Môn: <môn> <khối> — Thời gian: <phút> phút" / "Mã đề: 101"; dưới bảng "Họ và tên: ……………………… Lớp: ………". Tên kì là tên ma trận bỏ hậu tố "– Môn Khối" ("Giữa kì I – Toán 8" thành "GIỮA KÌ I"); đề sinh theo bài hoặc đề cũ dùng tên đề. `ExamExportService` đọc ma trận và môn. Mã hiển thị 101 (đề gốc; `ExamHeader.displayCode` cho 102… khi có trộn mã đề, hiện chưa có chức năng này). Mã hệ thống chỉ còn ở tên file. Giữ nguyên `--sandbox` và mọi kiểm tra của `PandocSandboxTest`.
+- Chống tái phát: `ExamHeaderTest` (5), `ExamMarkdownBuilderTest` (bảng 2 cột, 1 dòng, không viền, không còn "MT2", thoát XML, chữ ký cũ), `ExamBuildTest.xuatDeRaWordTenFileTheoMaDe` (đọc `document.xml` của file thật: có các dòng đầu đề, không còn "MT2" và không có mã hệ thống; tên file vẫn theo mã đề).
+- Hạn chế: **thời gian làm bài luôn in "…… phút"** vì ma trận chưa có trường thời gian (cần migration và API riêng, chưa làm); chưa mở bằng Word thật để xem bố cục.
+- Trạng thái: Đã sửa (chưa kiểm bằng Word thật).
 
 ---
 
