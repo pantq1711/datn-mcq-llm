@@ -1321,10 +1321,46 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
   Editor 3.0". Đây là hành vi của Word với mọi đối tượng MathType khi thiếu MathType, file vẫn đúng. Vì vậy mặc định để
   `omml`, và frontend cần ghi chú khi cho chọn MathType.
 - Còn mở:
-  - `\widehat` trên một chữ cái thành `\hat` (66/876 công thức);
+  - `\widehat` trên một chữ cái thành `\hat` (66/876 công thức): không phải lỗi, xem mục bổ sung 3/11 bên dưới;
   - tên kiểu trong `\1CompObj` là "MathType 6.0 Equation", MathType 7 ghi "7.0" (chép từ spike; MathType vẫn đọc được);
   - file nặng do ảnh PNG 600 dpi;
   - chưa chạy thử trong container Linux.
+- **Bổ sung 3/11 – công thức tràn lề, công thức giữa câu, `\widehat`, menu frontend** (xuất đề 14 trên `datn_mcq_e2e` đã
+  chạy end-to-end: 218/218 công thức thành `Equation.DSMT4`). Nguyên tắc chốt: ở chế độ `mathtype` MỌI công thức là đối tượng
+  MathType, không giữ Equation vì lý do bố cục (giáo viên không có MathType trả phí thì không Convert Equations được);
+  `X-Equation-Kept-Omml` chỉ > 0 khi chuyển MTEF thất bại thật.
+  - **Tràn lề (P0):** đối tượng OLE không tự xuống dòng; đề 14 có 2 công thức trong lời giải rộng 726pt và 561pt so với lề
+    chữ 468pt nên bị cắt khi in. Sửa: `PageGeometry` (lề chữ từ `sectPr`; `reference.docx` không khai báo `pgSz`/`pgMar` nên
+    dùng mặc định Word 12240 × 15840, lề 1440 twips; trừ thụt lề đoạn trực tiếp, của danh sách đánh số và của kiểu đoạn),
+    `FormulaBreaker` (ngắt tại dấu quan hệ cấp ngoài cùng, rồi `+`/`−` hai ngôi; không ngắt trong ngoặc, phân số, căn, chỉ số,
+    `\left…\right`, `\begin…\end`; dấu âm đứng đầu hoặc sau toán tử không ngắt), `ParagraphLines` (mỗi dòng công thức một
+    đoạn canh giữa; chữ trước ở lại, chữ sau sang đoạn mới), thu nhỏ kích thước hiển thị khi không ngắt được (header mới
+    `X-Equation-Scaled`, mở qua CORS). Bề rộng công thức đo bằng chính phép dựng ảnh xem trước (`PreviewRenderer.widthPt`).
+  - **Lỗi phát hiện khi xuất đề 14 thật:** lần chạy đầu bộ ngắt vẫn thu nhỏ công thức 726pt thay vì ngắt. Nguyên nhân:
+    pandoc gắn chỉ số vào ngoặc đóng (`(3x−2)^2` thành `(`, `3`, `x`, `−`, `2`, `sSup[")" mũ 2]`), nên bên Equation dấu `(`
+    không bao giờ đóng và không tìm được chỗ ngắt, trong khi bên LaTeX có. Test đơn vị với `m:r` rời không thấy được lỗi này;
+    chỉ test chạy pandoc thật với đúng công thức đề 14 mới đỏ. Sửa: ngoặc đóng nằm trong thân `sSup`/`sSub`/`sSubSup` được
+    tính là đóng ngoặc ở cấp ngoài. Chống tái phát: `MathTypeLayoutTest.congThucRongCuaDe14NgatTaiDauBangKhongThuNho`,
+    `FormulaBreakerTest.ngoacDongNamTrongThanChiSoVanDongNgoacMo`.
+  - **Đo trên đề 14 (3/11, app chạy `datn_mcq_e2e`, worker tắt, GV1, curl):** `equation=omml`: 218 Equation, 0 OLE. `equation=mathtype`:
+    218 công thức thành 224 đối tượng OLE (hai công thức 726pt và 561pt mỗi công thức thành 4 dòng), 0 Equation còn lại,
+    `X-Equation-Kept-Omml: 0`, `X-Equation-Scaled: 0`; đối tượng rộng nhất 421,08pt so với lề chữ 468pt (trước sửa 725,65pt).
+    Mở bằng Word 16 thật: `omml` 7 trang, `mathtype` 8 trang (ComputeStatistics); trang lời giải có hai công thức từng tràn lề
+    hiển thị đủ trong lề. Lần chạy đầu (trước khi sửa lỗi ngoặc đóng trong chỉ số) cho `X-Equation-Scaled: 1`, công thức 726pt bị thu nhỏ ×0,645.
+  - **Chưa làm được:** xuất PDF bằng Word COM (`ExportAsFixedFormat` rồi `SaveAs2`) đều treo trên máy kiểm nên số trang lấy từ
+    Word thay cho PDF; không bấm thử menu frontend trong trình duyệt và không chụp ảnh thông báo (phiên làm việc không có công
+    cụ trình duyệt); `npm run build` đạt. Nhận xét hiển thị: dấu câu đứng ngay sau công thức bị tách (ví dụ ". Khẳng định
+    này Đúng." thành dòng chữ riêng sau các dòng công thức) — chưa xử lý.
+  - **Công thức giữa câu (P1):** kiểm bằng `document.xml` của "Cho $x = 3$." và "Tính $(3)$": công thức vẫn nằm trong
+    đoạn, chữ "Cho ." và "Tính " đúng một dấu cách do pandoc, không thêm khoảng trắng nào trước/sau công thức. Code cũ đã
+    đúng; chỉ thêm test khóa (`MathTypeLayoutTest.congThucGiuaCauNamTrongDongChuKhongKhoangTrangThua`).
+  - **`\widehat` (P1):** pandoc đổi cả `\widehat` và `\hat` thành `m:acc` dấu mũ. Bộ chuyển đã phân biệt theo nền: nền một
+    ký tự dùng dấu mũ gắn vào ký tự (embellishment `EMB_HAT`), nền nhiều ký tự (`ABC`) dùng mẫu mũ rộng `tmHAT` của MathType
+    (đã có trong bộ so với MathType 7.12, `exprs10`). Chỉ có `\widehat{x}` một ký tự ra mũ thường (không phân biệt được với
+    `\hat{x}` sau pandoc; hai dạng hiển thị giống nhau). Thêm test khóa (`MathTypeLayoutTest.muRongChoNenNhieuKyTuMuThuongChoMotKyTu`).
+  - **Frontend:** nút "Xuất file Word" có mũi tên mở menu "Công thức Word (Equation)" (mặc định) và "Công thức MathType
+    (thử nghiệm)"; tên file `<tên đề>-mathtype.docx`; thông báo số công thức không chuyển được và số công thức bị thu nhỏ.
+    Trang đề hiện không có hộp xác nhận cho câu "cần xem kỹ" nên không có gì để giữ nguyên; khóa khi đề đang soạn giữ nguyên.
 - Bài học: với định dạng của phần mềm đóng, kiểm ở ba mức: cấu trúc (so với file do phần mềm sinh), đọc ngược trên dữ
   liệu thật, và mở bằng chính phần mềm đó. Mức sau không thay được mức trước.
 - Trạng thái: Đã kiểm, dùng được. Còn các mục mở ở trên.

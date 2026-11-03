@@ -1039,6 +1039,7 @@ class ExamBuildTest {
             assertTrue(xml.contains("m:oMath"), "công thức là Equation gốc của Word");
             assertFalse(xml.contains("Equation.DSMT4"), "mặc định không có đối tượng MathType");
             assertNull(response.getHeader("X-Equation-Kept-Omml"), "header chỉ có khi xuất MathType");
+            assertNull(response.getHeader("X-Equation-Scaled"), "header chỉ có khi xuất MathType");
             for (String part : List.of("PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn", "ĐÁP ÁN", "LỜI GIẢI",
                     "Chưa có câu – cần sinh lại")) {
                 assertTrue(xml.contains(part), "docx thiếu: " + part);
@@ -1073,6 +1074,9 @@ class ExamBuildTest {
             assertNotNull(kept, "header số công thức giữ Equation");
             assertEquals(xml.split("<m:oMath[ >]", -1).length - 1, Integer.parseInt(kept),
                     "header khớp số Equation còn lại trong file");
+            assertNotNull(response.getHeader("X-Equation-Scaled"), "header số công thức bị thu nhỏ cho vừa lề");
+            assertEquals(0, Integer.parseInt(response.getHeader("X-Equation-Scaled")),
+                    "đề thử toàn công thức ngắn: không công thức nào bị thu nhỏ");
             assertTrue(xml.contains("PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn") && xml.contains("ĐÁP ÁN"));
         } else {
             assertEquals(503, response.getStatus());

@@ -30,8 +30,17 @@ public final class PreviewRenderer {
     private PreviewRenderer() {
     }
 
-    /** @throws RuntimeException JLaTeXMath không dựng được LaTeX này (bên gọi giữ công thức dạng OMML) */
-    public static Preview render(String latex) {
+    /**
+     * Bề rộng (pt) của ảnh xem trước công thức này, đo bằng đúng phép dựng của {@link #render} nhưng không vẽ ảnh.
+     * Dùng để quyết định ngắt dòng/thu nhỏ khi công thức rộng hơn lề chữ.
+     *
+     * @throws RuntimeException JLaTeXMath không dựng được LaTeX này
+     */
+    public static double widthPt(String latex) {
+        return icon(latex).getIconWidth() * (72.0 / DPI);
+    }
+
+    private static TeXIcon icon(String latex) {
         float px = FONT_PT * DPI / 72f;
         TeXFormula formula = new TeXFormula(latex);
         // STYLE_DISPLAY: phân số cỡ đầy đủ như MathType vẽ (STYLE_TEXT thu nhỏ \frac)
@@ -39,6 +48,12 @@ public final class PreviewRenderer {
         int pad = Math.round(DPI / 72f); // ~1pt mỗi bên, như lề MathType để lại
         icon.setInsets(new Insets(pad, pad, pad, pad));
         icon.setForeground(Color.BLACK);
+        return icon;
+    }
+
+    /** @throws RuntimeException JLaTeXMath không dựng được LaTeX này (bên gọi giữ công thức dạng OMML) */
+    public static Preview render(String latex) {
+        TeXIcon icon = icon(latex);
         int w = icon.getIconWidth();
         int h = icon.getIconHeight();
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);

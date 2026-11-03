@@ -45,6 +45,8 @@ public class ExamController {
 
     /** Header của xuất Word dạng MathType; SecurityConfig mở header này cho frontend đọc (CORS). */
     public static final String EQUATION_KEPT_HEADER = "X-Equation-Kept-Omml";
+    /** Số công thức dài không ngắt được nên bị thu nhỏ cho vừa lề (xuất MathType); cũng mở qua CORS. */
+    public static final String EQUATION_SCALED_HEADER = "X-Equation-Scaled";
 
     private final ExamBuildService examBuildService;
     private final ExamViewService examViewService;
@@ -104,6 +106,9 @@ public class ExamController {
                         ContentDisposition.attachment().filename(file.fileName()).build().toString());
         if (file.equationsKeptOmml() != null) {
             response.header(EQUATION_KEPT_HEADER, Integer.toString(file.equationsKeptOmml()));
+        }
+        if (file.equationsScaled() != null) {
+            response.header(EQUATION_SCALED_HEADER, Integer.toString(file.equationsScaled()));
         }
         return response.body(file.content());
     }

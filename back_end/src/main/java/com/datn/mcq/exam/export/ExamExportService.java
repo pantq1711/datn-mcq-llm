@@ -26,9 +26,12 @@ public class ExamExportService {
 
     /**
      * @param fileName          tên file theo mã đề, ví dụ "MT2610231200001.docx"
-     * @param equationsKeptOmml khi xuất MathType: số công thức giữ dạng Equation của Word; null khi xuất Equation
+     * @param equationsKeptOmml khi xuất MathType: số công thức giữ dạng Equation của Word (chuyển MTEF thất bại thật);
+     *                          null khi xuất Equation
+     * @param equationsScaled   khi xuất MathType: số công thức dài không ngắt được nên bị thu nhỏ cho vừa lề; null khi
+     *                          xuất Equation
      */
-    public record DocxFile(String fileName, byte[] content, Integer equationsKeptOmml) {}
+    public record DocxFile(String fileName, byte[] content, Integer equationsKeptOmml, Integer equationsScaled) {}
 
     private final ExamViewService viewService;
     private final PandocRunner pandocRunner;
@@ -49,7 +52,8 @@ public class ExamExportService {
     public DocxFile docx(Integer examId, Integer actorId, EquationFormat format) {
         ExamViewDto view = viewService.view(examId, actorId);
         PandocRunner.Docx docx = pandocRunner.markdownToDocx(ExamMarkdownBuilder.build(view, header(view)), format);
-        return new DocxFile(fileName(view), docx.content(), docx.equationsKeptOmml());
+        return new DocxFile(fileName(view), docx.content(), docx.equationsKeptOmml(),
+                docx.equationsScaled());
     }
 
     /**

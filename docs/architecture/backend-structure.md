@@ -51,8 +51,9 @@ com.datn.mcq
 └── mathtype/               không có bảng: đổi Equation (OMML) trong docx thành đối tượng MathType (OLE), thư viện lá
     ├── mtef/               OmmlToMtef, MtefWriter (chuyển từ spikes/mathtype-ole)
     ├── ole/                MathTypeOle (POIFS)
-    ├── preview/            PreviewRenderer (PNG bằng JLaTeXMath)
-    └── docx/               DocxPackage, OleObjectRun
+    ├── preview/            PreviewRenderer (PNG và bề rộng ảnh bằng JLaTeXMath)
+    ├── layout/             FormulaBreaker (chỗ ngắt dòng công thức rộng: quan hệ rồi +/−, cấp ngoài cùng)
+    └── docx/               DocxPackage, OleObjectRun, PageGeometry (lề chữ, thụt lề), ParagraphLines (tách dòng công thức)
 ```
 
 ## Hướng phụ thuộc (không được tạo vòng)

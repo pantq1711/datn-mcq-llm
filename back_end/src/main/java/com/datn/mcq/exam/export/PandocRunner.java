@@ -70,9 +70,12 @@ public class PandocRunner {
      * File docx và kết quả đổi công thức.
      *
      * @param mathTypeObjects   số công thức thành đối tượng MathType (0 khi xuất Equation)
-     * @param equationsKeptOmml số công thức giữ dạng Equation của Word khi xuất MathType; null khi xuất Equation
+     * @param equationsKeptOmml số công thức giữ dạng Equation của Word khi xuất MathType (chỉ khi chuyển MTEF thất bại
+     *                          thật); null khi xuất Equation
+     * @param equationsScaled   số công thức dài không ngắt được nên bị thu nhỏ cho vừa lề khi xuất MathType; null khi
+     *                          xuất Equation
      */
-    public record Docx(byte[] content, int mathTypeObjects, Integer equationsKeptOmml) {}
+    public record Docx(byte[] content, int mathTypeObjects, Integer equationsKeptOmml, Integer equationsScaled) {}
 
     /** Công thức là Equation gốc của Word (OMML). */
     public byte[] markdownToDocx(String markdown) {
@@ -122,7 +125,7 @@ public class PandocRunner {
                     "--reference-doc=reference.docx", "-o", "exam.docx");
             byte[] docx = Files.readAllBytes(dir.resolve("exam.docx"));
             if (format != EquationFormat.MATHTYPE) {
-                return new Docx(docx, 0, null);
+                return new Docx(docx, 0, null, null);
             }
             List<String> latex;
             try {
@@ -131,7 +134,7 @@ public class PandocRunner {
             } catch (DocumentExportException | IOException | UncheckedIOException e) {
                 log.warn("Xuất MathType: không lấy được LaTeX bằng pandoc -t json ({}), trả file Equation",
                         e.getMessage());
-                return new Docx(docx, 0, MathTypeDocxConverter.countEquations(docx));
+                return new Docx(docx, 0, MathTypeDocxConverter.countEquations(docx), 0);
             }
             return toMathType(docx, latex);
         } catch (IOException e) {
@@ -184,10 +187,13 @@ public class PandocRunner {
                 log.info("Xuất MathType: {} công thức giữ Equation của Word", r.keptOmml());
                 log.debug("Công thức giữ Equation: {}", r.notes());
             }
-            return new Docx(r.docx(), r.converted(), r.keptOmml());
+            if (r.scaled() > 0) {
+                log.info("Xuất MathType: {} công thức dài không ngắt được, đã thu nhỏ cho vừa lề", r.scaled());
+            }
+            return new Docx(r.docx(), r.converted(), r.keptOmml(), r.scaled());
         } catch (RuntimeException e) {
             log.warn("Xuất MathType không thành, trả file Equation của Word: {}", e.toString());
-            return new Docx(docx, 0, MathTypeDocxConverter.countEquations(docx));
+            return new Docx(docx, 0, MathTypeDocxConverter.countEquations(docx), 0);
         }
     }
 

@@ -861,7 +861,7 @@ PUT /api/exams/12/slots/101/question
 
 ```http
 GET /api/exams/12/export/docx                    → 200, file MT2610231200001.docx (Content-Disposition: attachment)
-GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đối tượng MathType; header X-Equation-Kept-Omml: 0
+GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đối tượng MathType; header X-Equation-Kept-Omml: 0, X-Equation-Scaled: 0
 GET /api/exams/12/export/docx?equation=abc       → 400
 ```
 
@@ -889,14 +889,44 @@ GET /api/exams/12/export/docx?equation=abc       → 400
     ảnh xem trước PNG để Word hiển thị và in. Bấm đúp sửa bằng MathType, kể cả MathType Lite. Máy không cài MathType vẫn
     xem và in được, nhưng bấm đúp thì Word đề nghị đổi sang Office Math.
   - Giá trị khác: 400.
+  - **Nguyên tắc (3/11): ở chế độ `mathtype`, MỌI công thức là đối tượng MathType; không giữ Equation của Word cho công
+    thức nào vì lý do bố cục** (giáo viên không có MathType trả phí thì không chạy được Convert Equations). Công thức chỉ ở
+    lại dạng Equation khi chuyển sang MTEF thất bại thật (cấu trúc hoặc ký hiệu chưa hỗ trợ, JLaTeXMath không dựng được
+    ảnh xem trước).
   - Header `X-Equation-Kept-Omml` (chỉ có khi `equation=mathtype`, đã mở qua CORS): số công thức vẫn là Equation của Word
-    vì bộ chuyển chưa hỗ trợ cấu trúc hoặc ký hiệu đó. Không đổi được cả file (số công thức lệch, lỗi bất ngờ) thì trả file
-    Equation, header bằng tổng số công thức, ghi log WARN, không trả 500.
+    vì chuyển MTEF thất bại thật như trên, nên **chỉ > 0 khi có thất bại thật**. Không đổi được cả file (số công thức lệch,
+    lỗi bất ngờ) thì trả file Equation, header bằng tổng số công thức, ghi log WARN, không trả 500.
+  - Header `X-Equation-Scaled` (chỉ có khi `equation=mathtype`, đã mở qua CORS): số công thức dài không ngắt dòng được nên
+    đã bị thu nhỏ kích thước hiển thị cho vừa lề chữ (xem mục bố cục dưới). 0 khi không có công thức nào bị thu nhỏ.
+  - **Bố cục công thức rộng (3/11):** đối tượng OLE không tự xuống dòng, nên công thức rộng hơn lề chữ bị cắt khi in. Bề rộng
+    lề chữ = khổ giấy − lề trái − lề phải (đọc từ `sectPr` của file, vốn chép từ `reference.docx`; `reference.docx` không
+    khai báo `pgSz`/`pgMar` nên dùng mặc định của Word: Letter, lề 1 inch, chữ rộng 468pt) − thụt lề trái/phải của đoạn
+    (khai báo trực tiếp, trong cấp độ danh sách đánh số, hoặc trong kiểu đoạn). Bề rộng công thức là bề rộng ảnh xem trước
+    (cùng phép đo dựng ảnh). Công thức rộng hơn thì:
+    1. Ngắt tại dấu quan hệ CẤP NGOÀI CÙNG (`=`, `≠`, `≤`, `≥`, `<`, `>`, `⇔`, `⇒`, `≈`…), không ngắt trong ngoặc, phân số,
+       căn, chỉ số, `\left…\right`, `\begin…\end`. Mỗi đoạn là một đối tượng MathType trên một dòng riêng (đoạn văn riêng,
+       canh giữa); từ dòng thứ hai bắt đầu bằng chính dấu quan hệ.
+    2. Đoạn vẫn rộng hơn lề thì ngắt tiếp tại `+`/`−` hai ngôi cấp ngoài cùng (dấu đứng đầu, hoặc sau dấu quan hệ/toán tử
+       nhân, là dấu âm/dương, không ngắt); dòng sau bắt đầu bằng dấu đó.
+    3. Khối không ngắt được thì thu nhỏ kích thước hiển thị của riêng đối tượng đó cho vừa lề (`w:dxaOrig`/`w:dyaOrig` giữ
+       kích thước gốc; vẫn là đối tượng OLE, bấm đúp sửa được); đếm vào `X-Equation-Scaled`.
+    4. Công thức nằm giữa câu mà quá rộng: tách thành các dòng công thức như trên; chữ đứng trước giữ trong đoạn gốc, chữ đứng
+       sau sang đoạn mới (khoảng trắng ở rìa đoạn được cắt). Công thức vừa lề không đổi gì, vẫn nằm trong dòng chữ.
+    Chỗ ngắt được tìm song song trên LaTeX (để dựng ảnh từng đoạn) và trên cây Equation (để dựng MTEF từng đoạn); hai bên ra
+    số chỗ ngắt khác nhau thì không ngắt ở tầng đó mà chuyển xuống tầng sau (không đoán).
+  - **Hạn chế đã biết:** `\hat{x}` (một ký tự) dùng dấu mũ thường, `\widehat{ABC}` (nền nhiều ký tự) dùng mẫu mũ rộng của
+    MathType (`tmHAT`); `\widehat{x}` một ký tự cũng ra mũ thường vì pandoc gộp `\hat` và `\widehat` thành cùng một dấu
+    (hai trường hợp này giống nhau trên màn hình). Khi MathType mở lại và vẽ lại đối tượng đã thu nhỏ, kích thước có thể
+    trở về cỡ gốc (chưa kiểm bằng MathType thật).
   - Cách làm: chạy thêm `pandoc -t json` trên cùng file Markdown để lấy LaTeX từng công thức đúng thứ tự (vẽ ảnh xem trước),
     trong cùng thư mục tạm và cùng lượt giữ Semaphore của pandoc.
   - Chi phí (đo 01/11 trên 4 bộ đề thật khoảng 40 câu): file nặng khoảng 1,5–2 MB (Equation khoảng 20 KB) do ảnh xem trước
     600 dpi; thời gian xuất tăng khoảng 2–3 giây với đề nhiều công thức, trong thời gian đó vẫn giữ Semaphore.
-  - Frontend: nên ghi rõ "Chỉ chọn MathType nếu máy đã cài MathType".
+  - Frontend (trang đề): nút "Xuất file Word" có mũi tên mở menu hai mục: "Công thức Word (Equation)" (mặc định, bấm nút
+    chính cũng xuất mục này) và "Công thức MathType (thử nghiệm)" (gọi `?equation=mathtype`, tên file tải về
+    `<tên đề>-mathtype.docx`). Nút khóa khi đề đang soạn. Sau khi tải: `X-Equation-Kept-Omml > 0` hiện "N công thức không
+    chuyển được sang MathType, vẫn ở dạng công thức Word"; `X-Equation-Scaled > 0` hiện "N công thức dài đã được thu nhỏ
+    cho vừa trang". Nên ghi rõ "Chỉ chọn MathType nếu máy đã cài MathType" khi hướng dẫn giáo viên.
 - **Phòng thủ (D4):** `--sandbox` (cần pandoc từ 2.15, cùng yêu cầu với đọc docx tài liệu) để pandoc chỉ đọc các file nêu
   trong dòng lệnh, nên nội dung câu hỏi chứa `![](/etc/passwd)` hay chỉ thị include không lấy được file của máy chủ. Ngoài công
   thức, `ExamMarkdownBuilder` thoát mọi ký tự đặc biệt của Markdown gồm `\` và `` ` ``, nên `` ` ``, `` `{=openxml}` `` hay khối
