@@ -1,0 +1,10 @@
+\frac{3}{4}
+\sqrt{x^2+1}
+x_1
+2^{10}
+\widehat{ABC}=60^\circ
+\Delta ABC
+a\ne b
+\left(x+\frac12\right)^2
+\begin{cases}x+y=3\\x-y=1\end{cases}
+\pi r^2

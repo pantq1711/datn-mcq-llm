@@ -80,6 +80,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-64 | Soát ngoài trước deploy lần 2 (nhánh `fix/pre-deploy-2`, 3/11): câu dự phòng bị ghi đè không theo chất lượng; tự đóng `$` không phân biệt số dấu; Solver `options_verdict` hỏng cho qua; hạn mức ngày Gemini; tắt app tính lỗi job; và các mục nhỏ | Nhiều nhóm | Cao | Đã sửa (đo F-07 chờ thực hiện trên `datn_mcq_e2e`) |
 | L-65 | Tài liệu giáo án .docx mất gần hết công thức MathType khi trích chữ (pandoc bỏ đối tượng OLE): 116/118 công thức mất (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (đo trên file thật qua HTTP: giữ 102/118) |
 | L-66 | Nhập ngân hàng câu từ Word: các bẫy khi đưa lõi tools/bank-import vào backend (câu nhập bị đếm là lượt gọi Gemini, ảnh trong mc:AlternateContent bị bỏ sót, nạp mọi ảnh vào bộ nhớ, fixture MathType thật) (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (nhập thử 1 bộ qua HTTP trên `datn_mcq_e2e`) |
+| L-67 | Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11) | Xuất file | – | Đã kiểm (còn mục mở) |
 
 **Thống kê theo nhóm** (60 mục; bảng chưa có dòng cho L-56 nên con số này cộng thêm đúng 7 mục L-57…L-63 vào số cũ):
 
@@ -1304,6 +1305,29 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
 - Chống tái phát: `ExamHeaderTest` (5), `ExamMarkdownBuilderTest` (bảng 2 cột, 1 dòng, không viền, không còn "MT2", thoát XML, chữ ký cũ), `ExamBuildTest.xuatDeRaWordTenFileTheoMaDe` (đọc `document.xml` của file thật: có các dòng đầu đề, không còn "MT2" và không có mã hệ thống; tên file vẫn theo mã đề).
 - Hạn chế: **thời gian làm bài luôn in "…… phút"** vì ma trận chưa có trường thời gian (cần migration và API riêng, chưa làm); chưa mở bằng Word thật để xem bố cục.
 - Trạng thái: Đã sửa (chưa kiểm bằng Word thật).
+
+### L-67 Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11)
+- Nhóm: Xuất file
+- Triệu chứng: không phải lỗi. Đây là ghi nhận kiểm chứng tính năng mới `?equation=mathtype` (commit `c78862d`).
+- Cách kiểm:
+  - Bước 0 (30/10): 876 công thức thật của 4 bộ đề, bộ chuyển đổi được 876/876, 116/116 câu đổi được toàn bộ. Đọc ngược
+    bằng bộ đọc MTEF của `tools/bank-import`: 786 giống LaTeX gốc, 88 tương đương, 2 bộ đọc không dịch được.
+  - Test tự động: `MtefGoldenTest` so cấu trúc MTEF với MTEF do MathType 7.12 sinh (10, 49 và 65 biểu thức mẫu);
+    `MathTypeOleTest`, `MathTypeDocxConverterTest`, `PandocRunnerTest`, `ExamBuildTest.xuatDeRaWordCongThucMathType`.
+  - Xuất thật (01/11): 4 bộ đề qua đúng `ExamMarkdownBuilder` → `PandocRunner` (không qua DB, vì DB dev trống), kết quả
+    310/350/1/221 đối tượng MathType, 0 công thức giữ Equation. Word mở được, đếm đúng số đối tượng, xuất được PDF.
+  - Kiểm tay (người dùng, 02/11): mở bằng MathType, bấm đúp sửa, lưu, mở lại; MathType Lite; in ra giấy: đạt.
+- Ghi nhận khi kiểm: trên máy không có MathType, bấm đúp thì Word hiện "Chuyển đổi công thức sang Office Math … Equation
+  Editor 3.0". Đây là hành vi của Word với mọi đối tượng MathType khi thiếu MathType, file vẫn đúng. Vì vậy mặc định để
+  `omml`, và frontend cần ghi chú khi cho chọn MathType.
+- Còn mở:
+  - `\widehat` trên một chữ cái thành `\hat` (66/876 công thức);
+  - tên kiểu trong `\1CompObj` là "MathType 6.0 Equation", MathType 7 ghi "7.0" (chép từ spike; MathType vẫn đọc được);
+  - file nặng do ảnh PNG 600 dpi;
+  - chưa chạy thử trong container Linux.
+- Bài học: với định dạng của phần mềm đóng, kiểm ở ba mức: cấu trúc (so với file do phần mềm sinh), đọc ngược trên dữ
+  liệu thật, và mở bằng chính phần mềm đó. Mức sau không thay được mức trước.
+- Trạng thái: Đã kiểm, dùng được. Còn các mục mở ở trên.
 
 ---
 

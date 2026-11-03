@@ -29,3 +29,5 @@ __pycache__/
 *.py[cod]
 data/private/
 back_end/.test-selection
+# Ghi chú công việc cá nhân
+/task/
