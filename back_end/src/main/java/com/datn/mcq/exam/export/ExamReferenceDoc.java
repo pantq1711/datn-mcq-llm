@@ -49,7 +49,7 @@ public final class ExamReferenceDoc {
         // sectPr cuối thân tài liệu là section ĐÁP ÁN (đánh số lại từ 1, chân trang "Đáp án mã đề"); section đề do
         // ExamMarkdownBuilder đóng bằng sectPr trong đoạn HẾT, chân trang của nó do ExamSections thêm sau pandoc.
         // Id riêng: "rIdMT<n>" là Id của bộ chuyển MathType (đối tượng OLE, ảnh) và pandoc giữ nguyên Id của chân trang.
-        pkg.put("word/footerAnswer.xml", footerXml(ANSWER_FOOTER_SUFFIX).getBytes(StandardCharsets.UTF_8));
+        pkg.put("word/footerAnswer.xml", footerXml(ANSWER_FOOTER_LEFT).getBytes(StandardCharsets.UTF_8));
         pkg.ensureOverrideContentType("/word/footerAnswer.xml", FOOTER_TYPE);
         pkg.addRelationship(ExamPage.ANSWER_FOOTER_REL_ID, FOOTER_REL, "footerAnswer.xml");
         patchSection(pkg.document());
@@ -58,8 +58,8 @@ public final class ExamReferenceDoc {
 
     // ---------------------------------------------------------------- trang
 
-    static final String EXAM_FOOTER_SUFFIX = " – Mã đề " + ExamHeader.ORIGINAL_CODE;
-    static final String ANSWER_FOOTER_SUFFIX = " – Đáp án mã đề " + ExamHeader.ORIGINAL_CODE;
+    static final String EXAM_FOOTER_LEFT = "Mã đề " + ExamHeader.ORIGINAL_CODE;
+    static final String ANSWER_FOOTER_LEFT = "Đáp án mã đề " + ExamHeader.ORIGINAL_CODE;
     static final String FOOTER_REL_TYPE = FOOTER_REL;
     static final String FOOTER_CONTENT_TYPE = FOOTER_TYPE;
 
@@ -79,14 +79,19 @@ public final class ExamReferenceDoc {
         }
     }
 
-    /** Chân trang "Trang x/y{suffix}" căn giữa: x = PAGE, y = SECTIONPAGES (số trang của riêng section). */
-    static String footerXml(String suffix) {
+    /**
+     * Chân trang theo footer1.xml của mẫu: đường kẻ trên, {@code left} ở trái, tab phải tại lề phải rồi "Trang x/y"
+     * (x = PAGE, y = SECTIONPAGES: số trang của riêng section), giãn dòng đơn.
+     */
+    static String footerXml(String left) {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
                 + "<w:ftr xmlns:w=\"" + W + "\" xmlns:r=\"" + R + "\"><w:p><w:pPr><w:pStyle w:val=\"ExamFooter\"/>"
-                + "<w:jc w:val=\"center\"/></w:pPr>"
-                + "<w:r><w:t xml:space=\"preserve\">Trang </w:t></w:r>" + field("PAGE")
-                + "<w:r><w:t>/</w:t></w:r>" + field("SECTIONPAGES")
-                + "<w:r><w:t xml:space=\"preserve\">" + suffix + "</w:t></w:r></w:p></w:ftr>";
+                + "<w:pBdr><w:top w:val=\"single\" w:sz=\"6\" w:space=\"1\" w:color=\"auto\"/></w:pBdr>"
+                + "<w:tabs><w:tab w:val=\"right\" w:pos=\"" + ExamPage.TEXT_WIDTH_TWIPS + "\"/></w:tabs>"
+                + "<w:spacing w:line=\"240\" w:lineRule=\"auto\"/></w:pPr>"
+                + "<w:r><w:t>" + left + "</w:t></w:r>"
+                + "<w:r><w:tab/><w:t xml:space=\"preserve\">Trang </w:t></w:r>" + field("PAGE")
+                + "<w:r><w:t>/</w:t></w:r>" + field("SECTIONPAGES") + "</w:p></w:ftr>";
     }
 
     private static String field(String instruction) {
@@ -203,20 +208,24 @@ public final class ExamReferenceDoc {
 
     /** Các kiểu đoạn riêng của đề; số đo thụt lề lấy từ {@link ExamPage}. */
     private static String[] customStyles() {
-        int q = ExamPage.QUESTION_INDENT_TWIPS;
-        int optLeft = ExamPage.OPTION_LABEL_START_TWIPS + ExamPage.OPTION_HANGING_TWIPS;
         int after = ExamPage.PARAGRAPH_AFTER_TWIPS;
+        // Câu hỏi và phương án không thụt lề treo (mẫu của trường): dòng sau về lề trái; phương án đi tới mốc tab 283 bằng
+        // một tab đầu dòng (xem ExamTabs).
         return new String[]{
+                style("ExamPartHeading", "<w:keepNext/><w:spacing w:before=\"" + after + "\" w:after=\"" + after + "\"/>",
+                        "<w:b/><w:bCs/>"),
                 style("ExamInstruction", "<w:keepNext/><w:spacing w:before=\"" + after + "\" w:after=\"" + after + "\"/>", ""),
                 style("ExamQuestion", "<w:keepNext/><w:keepLines/><w:spacing w:before=\"" + after + "\" w:after=\"" + after
-                        + "\"/><w:ind w:left=\"" + q + "\" w:hanging=\"" + q + "\"/>", ""),
-                style("ExamQuestionCont", "<w:spacing w:before=\"0\" w:after=\"" + after + "\"/><w:ind w:left=\"" + q + "\"/>",
-                        ""),
-                style("ExamOption", "<w:keepLines/><w:spacing w:before=\"0\" w:after=\"0\"/><w:ind w:left=\"" + optLeft
-                        + "\" w:hanging=\"" + ExamPage.OPTION_HANGING_TWIPS + "\"/>", ""),
+                        + "\"/>", ""),
+                style("ExamQuestionCont", "<w:spacing w:before=\"0\" w:after=\"" + after + "\"/>", ""),
+                style("ExamOption", "<w:keepLines/><w:spacing w:before=\"0\" w:after=\"0\"/>", ""),
                 style("ExamCenter", "<w:spacing w:before=\"" + after + "\" w:after=\"" + after + "\"/><w:jc w:val=\"center\"/>",
                         ""),
                 style("ExamHeaderCell", "<w:spacing w:before=\"0\" w:after=\"0\"/><w:jc w:val=\"center\"/>", ""),
+                // bảng Mã đề / Điểm bài thi / Mã phách: dòng cao đúng 360 twips như mẫu
+                style("ExamBoxCell", "<w:spacing w:before=\"0\" w:after=\"0\" w:line=\"360\" w:lineRule=\"exact\"/>"
+                        + "<w:jc w:val=\"center\"/>", ""),
+                style("ExamGap", "<w:spacing w:before=\"0\" w:after=\"0\" w:line=\"240\" w:lineRule=\"exact\"/>", ""),
                 style("ExamTableCell", "<w:spacing w:before=\"20\" w:after=\"20\" w:line=\"240\" w:lineRule=\"auto\"/>"
                         + "<w:jc w:val=\"center\"/>", ""),
                 style("ExamSubHeading", "<w:keepNext/><w:spacing w:before=\"" + after + "\" w:after=\"" + after + "\"/>",
@@ -224,7 +233,7 @@ public final class ExamReferenceDoc {
                 style("ExamNote", "<w:spacing w:before=\"" + after + "\" w:after=\"" + after + "\"/>", ""),
                 style("ExamSpacer", "<w:spacing w:before=\"0\" w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/>",
                         "<w:sz w:val=\"8\"/><w:szCs w:val=\"8\"/>"),
-                style("ExamFooter", "<w:spacing w:before=\"0\" w:after=\"0\"/><w:jc w:val=\"center\"/>", ""),
+                style("ExamFooter", "<w:spacing w:before=\"0\" w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/>", ""),
         };
     }
 

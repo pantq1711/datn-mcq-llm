@@ -865,30 +865,39 @@ GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đố
 GET /api/exams/12/export/docx?equation=abc       → 400
 ```
 
-- **Khuôn đề kiểm tra THCS (4/11):** tham số tùy chọn `durationMinutes` (số nguyên 5–180, ngoài khoảng hoặc không phải số
-  là 400) điền "Thời gian làm bài: N phút, không kể thời gian phát đề"; không truyền thì "……". File khổ A4 (lề trên/dưới 1,5 cm,
-  trái 2 cm, phải 1,5 cm; hằng số ở `ExamPage`), Times New Roman 13 cho mọi kiểu kể cả tiêu đề (đậm, đen), giãn dòng 1,15,
-  cách đoạn ≤ 3 pt. Hai section A4 cùng lề: section đề (chân trang "Trang x/y – Mã đề 101", "(Đề có N trang)" ở đầu đề; trường
-  PAGE/SECTIONPAGES nên N chỉ tính trang của phần đề) và section đáp án (ngắt section trước "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM", đánh số
-  trang lại từ 1, chân trang "Trang x/y – Đáp án mã đề 101"). Mỗi phần một dòng hướng dẫn ("PHẦN I. …
-  Thí sinh trả lời từ câu 1 đến câu N. …"), "Câu k." đậm thụt lề treo, cuối đề "------ HẾT ------". Phương án A–D xếp bằng
-  tab (không dùng bảng): mọi phương án ≤ W/4 − 20pt thì 1 dòng 4 cột, ≤ W/2 − 20pt thì 2 dòng 2 cột, còn lại mỗi phương án một
-  dòng (W = bề rộng dòng sau thụt lề phương án = 446,1pt; `OptionLayout`). Phương án và ý đúng/sai thêm dấu chấm cuối nếu
+- **Khuôn đề kiểm tra THCS (4/11, theo mẫu của một trường):** tham số tùy chọn `durationMinutes` (số nguyên 5–180, ngoài khoảng
+  hoặc không phải số là 400) điền "(Thời gian làm bài N phút không kể thời gian giao đề)"; không truyền thì "……". File khổ A4
+  (lề trái 2 cm = 1134 twips, phải/trên/dưới 1 cm = 567, đầu trang 283, chân trang 567; hằng số ở `ExamPage`), Times New Roman 12
+  cho mọi kiểu kể cả tiêu đề (đậm, đen), giãn dòng 1,15, cách đoạn ≤ 3 pt. Hai section A4 cùng lề (bề rộng chữ 10205 twips =
+  510,25 pt, bộ ngắt dòng MathType đọc đúng số này): section đề và section đáp án (ngắt section trước "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM",
+  đánh số trang lại từ 1). Chân trang cả hai section: đường kẻ trên, chữ trái "Mã đề 101" (section đáp án: "Đáp án mã đề
+  101"), tab phải tại lề phải rồi "Trang x/y" (trường PAGE/SECTIONPAGES, y chỉ tính trang của section). Không còn dòng "(Đề có N
+  trang)". Đầu mỗi phần là tiêu đề đậm in hoa kèm tổng điểm = điểm một câu × số câu theo `app.exam.scoring` (phần II: điểm đúng cả
+  4 ý), ví dụ "PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN (3,0 điểm)", rồi một dòng hướng dẫn nghiêng ("Học sinh chọn một đáp án đúng duy
+  nhất từ câu 1 đến câu N." / "Học sinh trả lời Đúng (Đ) hoặc Sai (S) cho từng ý a), b), c), d) trong mỗi câu." / "Học sinh viết
+  câu trả lời ngắn gọn (kết quả số) từ câu 1 đến câu N."). "Câu k." đậm, KHÔNG thụt lề treo (dòng sau về lề trái); cuối đề
+  "------ HẾT ------" đậm nghiêng. Phương án A–D và ý a)–d) mở đầu bằng một tab tới mốc 283 (nhãn "A." / "a)" đậm); phương án
+  xếp cột bằng tab (không dùng bảng): mọi phương án ≤ W/4 − 20pt thì 1 dòng 4 cột (tab tại 283, 2764, 5244, 7725), ≤ W/2 − 20pt
+  thì 2 dòng 2 cột (283, 5244), còn lại mỗi phương án một dòng (W = bề rộng dòng sau mốc 283 = 496,1pt; `OptionLayout`; mẫu
+  trường dùng bước 2622 cho bề rộng chữ cũ nên được co lại để cột cuối vừa lề phải). Phương án và ý đúng/sai thêm dấu chấm cuối nếu
   chưa có dấu kết câu; câu dẫn "…là:" thành "…là" (chỉ trong file xuất). Sang trang mới: "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101"
   với bảng đáp án từng phần (phần I 12 câu mỗi bảng, phần II "Câu | Ý | Đáp án", phần III 6 câu mỗi bảng) và điểm lấy từ
   `app.exam.scoring`; rồi "LỜI GIẢI CHI TIẾT" ("Câu k. Chọn C." / "a) Đúng." / "Câu k. Đáp án: 10." đậm, lấy từ dữ liệu đáp án;
-  câu không có lời giải chỉ còn dòng nhãn). Mô tả chi tiết đầu đề ở mục kế (bản 2/11, nay có thêm dòng năm học, môn in hoa và ô
-  "Mã đề 101" có viền).
-- **Đầu đề (2/11):** bảng 2 cột không viền. Cột trái "PHÒNG GD&ĐT ……………" và "TRƯỜNG THCS ……………". Cột phải "ĐỀ KIỂM
-  TRA <tên kì in hoa>" (tên ma trận của đề, bỏ phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8" thành "GIỮA KÌ I"; đề sinh theo bài
-  hoặc đề cũ không có ma trận dùng tên đề), "Môn: <môn> <khối> — Thời gian: <phút> phút" và "Mã đề: 101". Dưới bảng là dòng
-  "Họ và tên: ……………………… Lớp: ………". Ma trận chưa có trường thời gian nên luôn in "…… phút" cho giáo viên điền tay. Mã đề in ra là
-  số 3 chữ số, 101 cho đề gốc (chưa có chức năng trộn mã đề); **mã hệ thống `MT…` không in ra nội dung file**, chỉ còn ở tên
+  câu không có lời giải chỉ còn dòng nhãn). Mô tả chi tiết đầu đề ở mục kế.
+- **Đầu đề (theo mẫu trường, 4/11):** bảng 2 cột không viền (cột 4194 : 6011 twips). Cột trái, đậm, căn giữa: "UBND PHƯỜNG
+  ……………" và "TRƯỜNG THCS ……………". Cột phải, căn giữa: "Thứ..... ngày........ tháng..... năm <năm hiện tại>" (nghiêng), "ĐỀ KIỂM
+  TRA <tên kì in hoa>" (đậm; tên ma trận của đề, bỏ phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8" thành "GIỮA KÌ I"; đề sinh
+  theo bài hoặc đề cũ không có ma trận dùng tên đề), "NĂM HỌC <y> - <y+1>" (đậm; y = năm hiện tại nếu tháng ≥ 8, ngược lại năm
+  trước), "Môn: <môn>, Lớp: <khối>." (đậm; thiếu thì "……") và "(Thời gian làm bài <N> phút không kể thời gian giao đề)" (nghiêng).
+  Dưới đó là bảng có viền 3 cột bằng nhau, toàn chiều rộng: hàng tiêu đề đậm căn giữa "Mã đề | Điểm bài thi | Mã phách", hàng 2
+  cao 1440 twips (như mẫu) với mã đề đậm căn giữa ở ô 1, hai ô còn lại để trống. Không còn dòng "Họ và tên/Lớp" và "(Đề có N
+  trang)". Mã đề in ra là số 3 chữ số, 101 cho đề gốc (chưa có chức năng trộn mã đề); **mã hệ thống `MT…` không in ra nội dung
+  file**, chỉ còn ở tên
   file tải về (`Content-Disposition`). Đầu đề viết bằng khối openxml thô do `ExamMarkdownBuilder` chèn (như ngắt trang) vì
   Markdown của pandoc không bỏ được viền bảng; chữ trong đó được thoát XML.
-- Bản cơ bản: PHẦN I/II/III với tên phần đầy đủ (PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn,
-  PHẦN II. Câu trắc nghiệm đúng sai, PHẦN III. Câu trắc nghiệm trả lời ngắn); "Câu k." đánh số lại từ 1 trong từng
-  phần; `mcq` mỗi phương án một dòng "A. ..."; `tf` các ý "a) ..."; `sa` chỉ có đề. Sau một ngắt trang là "ĐÁP ÁN"
+- Bản cơ bản: PHẦN I/II/III (PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN, PHẦN II. TRẮC NGHIỆM ĐÚNG/SAI,
+  PHẦN III. TRẮC NGHIỆM TRẢ LỜI NGẮN); "Câu k." đánh số lại từ 1 trong từng
+  phần; `mcq` các phương án "A. ..." xếp cột bằng tab; `tf` các ý "a) ..."; `sa` chỉ có đề. Sau một ngắt section là "ĐÁP ÁN"
   (`mcq` chữ cái, `tf` chuỗi Đ/S theo thứ tự a–d như `ĐSĐS`, `sa` đáp số) rồi "LỜI GIẢI" từng câu.
 - Đáp án đúng trong phần đề CHƯA đánh dấu (tùy chọn gạch chân cho phần mềm trộn đề làm sau).
 - Chỉ xuất nội dung các chỗ đã có câu (`ready`, `kept`, `edited`); chỗ `failed` ghi "[Chưa có câu – cần sinh lại]",

@@ -29,6 +29,7 @@ import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +63,12 @@ class ExamDocxFormatTest {
             new BigDecimal("0.5"), new BigDecimal("1.0")));
 
     private static final String ANSWER_TITLE = "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101";
+    private static final java.time.LocalDate TODAY = java.time.LocalDate.of(2026, 11, 4);
+
+    /** Số đo lấy từ mẫu đề của trường (pgMar, footer1.xml, tab của phương án): lề trái 2 cm, các lề khác 1 cm. */
+    private static final int LEFT = 1134;
+    private static final int OTHER = 567;
+    private static final int TEXT_WIDTH = 11906 - LEFT - OTHER;
 
     // ---------------------------------------------------------------- dữ liệu đề
 
@@ -133,7 +140,8 @@ class ExamDocxFormatTest {
         Optional<String> found = PandocTestSupport.find();
         assumeTrue(found.isPresent(), "máy không có pandoc: bỏ qua");
         pandoc = found.get();
-        String markdown = ExamMarkdownBuilder.build(exam(), ExamHeader.of("Giữa kì I – Toán 9", "Toán", 9, 90), SCORING);
+        String markdown = ExamMarkdownBuilder.build(exam(), ExamHeader.of("Giữa kì I – Toán 9", "Toán", 9, 90), SCORING,
+                TODAY);
         for (EquationFormat format : EquationFormat.values()) {
             docx.put(format, new PandocRunner(pandoc).markdownToDocx(markdown, format).content());
         }
@@ -317,35 +325,41 @@ class ExamDocxFormatTest {
             assertEquals("11906", pgSz.getAttributeNS(W, "w"), "595,3pt");
             assertEquals("16838", pgSz.getAttributeNS(W, "h"), "841,9pt");
             Element pgMar = child(sect, "pgMar");
-            assertEquals("850", pgMar.getAttributeNS(W, "top"), "1,5 cm");
-            assertEquals("850", pgMar.getAttributeNS(W, "bottom"), "1,5 cm");
+            assertEquals("567", pgMar.getAttributeNS(W, "top"), "1 cm");
+            assertEquals("567", pgMar.getAttributeNS(W, "bottom"), "1 cm");
             assertEquals("1134", pgMar.getAttributeNS(W, "left"), "2 cm");
-            assertEquals("850", pgMar.getAttributeNS(W, "right"), "1,5 cm");
+            assertEquals("567", pgMar.getAttributeNS(W, "right"), "1 cm");
+            assertEquals("283", pgMar.getAttributeNS(W, "header"));
+            assertEquals("567", pgMar.getAttributeNS(W, "footer"));
         }
-        assertEquals(ExamPage.MARGIN_TOP_TWIPS, 850);
+        assertEquals(ExamPage.MARGIN_TOP_TWIPS, 567);
         assertEquals(ExamPage.MARGIN_LEFT_TWIPS, 1134);
+        assertEquals(10205, ExamPage.TEXT_WIDTH_TWIPS);
         assertEquals(ExamPage.PAGE_WIDTH_TWIPS, 11906);
         assertEquals(595.3, ExamPage.PAGE_WIDTH_TWIPS / 20.0, 0.001);
         assertEquals(841.9, ExamPage.PAGE_HEIGHT_TWIPS / 20.0, 0.001);
     }
 
-    /** Bộ ngắt dòng MathType đọc lề chữ từ sectPr của file xuất nên phải ra 496,1pt (A4 − 2cm − 1,5cm), không còn 468pt. */
+    /** Bộ ngắt dòng MathType đọc lề chữ từ sectPr của file xuất nên phải ra 510,25pt (A4 − 2cm − 1cm). */
     @ParameterizedTest
     @EnumSource(EquationFormat.class)
     void leChuCuaBoNgatDongTheoKhoMoi(EquationFormat format) throws Exception {
-        assertEquals(496.1, PageGeometry.textWidthPt(DocxPackage.read(docx.get(format))), 0.001);
+        assertEquals(510.25, PageGeometry.textWidthPt(DocxPackage.read(docx.get(format))), 0.001);
     }
 
     @ParameterizedTest
     @EnumSource(EquationFormat.class)
     void chanTrangHaiSectionTrangXTrenYSectionPages(EquationFormat format) throws Exception {
         Document doc = parse(docx.get(format), "word/document.xml");
-        assertFooter(format, examSection(doc), "– Mã đề 101");
-        assertFooter(format, answerSection(doc), "– Đáp án mã đề 101");
+        assertFooter(format, examSection(doc), "Mã đề 101");
+        assertFooter(format, answerSection(doc), "Đáp án mã đề 101");
     }
 
-    /** Chân trang của section: "Trang {PAGE}/{SECTIONPAGES} <hậu tố>" căn giữa, đúng thứ tự, không dùng NUMPAGES. */
-    private void assertFooter(EquationFormat format, Element sect, String suffix) throws Exception {
+    /**
+     * Chân trang theo footer1.xml của mẫu: đường kẻ trên (pBdr top single sz 6 space 1), chữ trái, tab PHẢI tại lề phải
+     * (10205), rồi "Trang {PAGE}/{SECTIONPAGES}"; giãn dòng đơn; không căn giữa; không dùng NUMPAGES.
+     */
+    private void assertFooter(EquationFormat format, Element sect, String left) throws Exception {
         Element ref = child(sect, "footerReference");
         assertNotNull(ref, "sectPr phải trỏ tới chân trang");
         String rid = ref.getAttributeNS(R, "id");
@@ -359,17 +373,28 @@ class ExamDocxFormatTest {
             }
         }
         assertNotNull(target, "quan hệ " + rid);
-        String footer = PandocTestSupport.entry(docx.get(format), "word/" + target);
-        int trang = footer.indexOf(">Trang <");
-        int page = footer.indexOf("PAGE");
-        int slash = footer.indexOf(">/<");
-        int sectionPages = footer.indexOf("SECTIONPAGES");
-        int code = footer.indexOf(suffix);
-        assertTrue(trang > 0 && page > trang && slash > page && sectionPages > slash && code > sectionPages,
-                "Trang {PAGE}/{SECTIONPAGES} " + suffix + " đúng thứ tự: " + footer);
-        assertFalse(footer.contains("NUMPAGES"), "y là số trang của section, không phải của cả file");
-        assertTrue(footer.contains("w:val=\"center\""), "căn giữa");
-        assertTrue(footer.contains("fldChar"), "dùng trường PAGE/SECTIONPAGES");
+        Document footer = parse(docx.get(format), "word/" + target);
+        Element p = children(footer.getDocumentElement(), W, "p").get(0);
+        Element pPr = child(p, "pPr");
+        Element top = child(child(pPr, "pBdr"), "top");
+        assertNotNull(top, "đường kẻ trên của chân trang");
+        assertEquals("single", top.getAttributeNS(W, "val"));
+        assertEquals("6", top.getAttributeNS(W, "sz"));
+        assertEquals("1", top.getAttributeNS(W, "space"));
+        Element tab = child(child(pPr, "tabs"), "tab");
+        assertEquals("right", tab.getAttributeNS(W, "val"), "tab phải");
+        assertEquals(Integer.toString(TEXT_WIDTH), tab.getAttributeNS(W, "pos"), "tại lề phải của chữ");
+        Element spacing = child(pPr, "spacing");
+        assertEquals("240", spacing.getAttributeNS(W, "line"));
+        assertEquals("auto", spacing.getAttributeNS(W, "lineRule"));
+        Element jc = child(pPr, "jc");
+        assertTrue(jc == null || !"center".equals(val(jc)), "chữ trái, không căn giữa");
+        assertEquals(left + TAB + "Trang 1/1", text(p), "chữ trái, tab, \"Trang x/y\" (x, y là kết quả tạm của trường)");
+        String xml = PandocTestSupport.entry(docx.get(format), "word/" + target);
+        int page = xml.indexOf("> PAGE <");
+        int sectionPages = xml.indexOf("> SECTIONPAGES <");
+        assertTrue(page > 0 && sectionPages > page, "trường PAGE rồi SECTIONPAGES: " + xml);
+        assertFalse(xml.contains("NUMPAGES"), "y là số trang của section, không phải của cả file");
     }
 
     /** Section đề kết thúc ở sectPr trong đoạn "------ HẾT ------"; section đáp án là sectPr cuối thân tài liệu. */
@@ -402,13 +427,13 @@ class ExamDocxFormatTest {
         List<Element> body = body(doc);
         assertEquals(body.indexOf(paragraphEqual(body, "------ HẾT ------")) + 1,
                 body.indexOf(paragraphEqual(body, ANSWER_TITLE)), "tiêu đề đáp án là đoạn đầu của section mới");
-        assertEquals(496.1, PageGeometry.textWidthPt(DocxPackage.read(docx.get(format))), 0.001,
+        assertEquals(510.25, PageGeometry.textWidthPt(DocxPackage.read(docx.get(format))), 0.001,
                 "bộ ngắt dòng MathType đọc đúng lề");
     }
 
     @ParameterizedTest
     @EnumSource(EquationFormat.class)
-    void phongTimesNewRoman13KhongThemeKhongMauXanh(EquationFormat format) throws Exception {
+    void phongTimesNewRoman12KhongThemeKhongMauXanh(EquationFormat format) throws Exception {
         String styles = PandocTestSupport.entry(docx.get(format), "word/styles.xml");
         assertFalse(styles.contains("asciiTheme") || styles.contains("hAnsiTheme") || styles.contains("majorHAnsi")
                 || styles.contains("minorHAnsi"), "bỏ phông theme");
@@ -423,9 +448,9 @@ class ExamDocxFormatTest {
         }
         Matcher sizes = Pattern.compile("<w:sz w:val=\"(\\d+)\"").matcher(styles);
         while (sizes.find()) {
-            assertTrue(Integer.parseInt(sizes.group(1)) <= 26, "không có cỡ chữ lớn hơn 13 (kể cả tiêu đề): " + sizes.group());
+            assertTrue(Integer.parseInt(sizes.group(1)) <= 24, "không có cỡ chữ lớn hơn 12 (kể cả tiêu đề): " + sizes.group());
         }
-        assertTrue(PandocTestSupport.normalIsTimesNewRoman13(styles));
+        assertTrue(PandocTestSupport.normalIsTimesNewRoman12(styles));
         Matcher heading = Pattern.compile("(?s)<w:style\\s[^>]*w:styleId=\"Heading1\"[^>]*>(.*?)</w:style>").matcher(styles);
         assertTrue(heading.find());
         assertTrue(Pattern.compile("<w:b\\s*/>").matcher(heading.group(1)).find(), "tiêu đề đậm");
@@ -438,83 +463,125 @@ class ExamDocxFormatTest {
 
     @ParameterizedTest
     @EnumSource(EquationFormat.class)
-    void dauDeBangHaiCotKhongVienVaODeMaCoVien(EquationFormat format) throws Exception {
+    void dauDeBangHaiCotKhongVienVaBangBaCotMaDeDiemMaPhach(EquationFormat format) throws Exception {
         Document doc = parse(docx.get(format), "word/document.xml");
+        Document styles = parse(docx.get(format), "word/styles.xml");
         List<Element> tables = body(doc).stream().filter(e -> !isParagraph(e)).toList();
         Element head = tables.get(0);
-        assertEquals(2, children(child(head, "tblGrid"), W, "gridCol").size(), "bảng đầu đề 2 cột");
-        assertEquals(ExamPage.TEXT_WIDTH_TWIPS, children(child(head, "tblGrid"), W, "gridCol").stream()
-                .mapToInt(c -> Integer.parseInt(c.getAttributeNS(W, "w"))).sum(), "bảng rộng đúng bề rộng chữ");
-        assertTrue(Integer.parseInt(children(child(head, "tblGrid"), W, "gridCol").get(1).getAttributeNS(W, "w")) >= 6200,
-                "cột phải đủ rộng cho dòng \"Thời gian làm bài: …, không kể thời gian phát đề\"");
+        List<Integer> grid = children(child(head, "tblGrid"), W, "gridCol").stream()
+                .map(c -> Integer.parseInt(c.getAttributeNS(W, "w"))).toList();
+        assertEquals(List.of(4194, 6011), grid, "tỉ lệ cột theo mẫu (4194 : 6011)");
+        assertEquals(TEXT_WIDTH, grid.stream().mapToInt(Integer::intValue).sum(), "bảng rộng đúng bề rộng chữ");
         for (String side : List.of("top", "left", "bottom", "right", "insideH", "insideV")) {
             assertEquals("nil", val(child(child(child(head, "tblPr"), "tblBorders"), side)), "không viền: " + side);
         }
-        List<List<String>> cells = table(head);
-        assertEquals(1, cells.size());
-        String left = cells.get(0).get(0);
-        String right = cells.get(0).get(1);
-        assertTrue(left.contains("PHÒNG GD&ĐT ……………") && left.contains("TRƯỜNG THCS ……………")
-                && left.contains("(Đề có") && left.contains(" trang)"), left);
-        assertTrue(right.contains("ĐỀ KIỂM TRA GIỮA KÌ I") && right.contains("NĂM HỌC …… – ……")
-                && right.contains("Môn: TOÁN 9")
-                && right.contains("Thời gian làm bài: 90 phút, không kể thời gian phát đề"), right);
-        Element leftCell = children(children(head, W, "tr").get(0), W, "tc").get(0);
-        Element rightCell = children(children(head, W, "tr").get(0), W, "tc").get(1);
+        Element row = children(head, W, "tr").get(0);
+        Element leftCell = children(row, W, "tc").get(0);
+        Element rightCell = children(row, W, "tc").get(1);
         List<Element> lp = children(leftCell, W, "p");
-        assertTrue(runs(lp.get(1)).stream().allMatch(ExamDocxFormatTest::runIsBold), "TRƯỜNG THCS đậm");
-        assertTrue(runs(lp.get(2)).stream().allMatch(ExamDocxFormatTest::runIsItalic), "(Đề có … trang) nghiêng");
-        String xmlText = PandocTestSupport.documentXml(docx.get(format));
-        assertTrue(xmlText.contains("SECTIONPAGES"), "số trang của phần đề là trường SECTIONPAGES");
-        assertFalse(xmlText.contains("NUMPAGES"), "không đếm cả trang đáp án");
+        assertEquals(List.of("UBND PHƯỜNG ……………", "TRƯỜNG THCS ……………"), lp.stream().map(ExamDocxFormatTest::text).toList());
+        for (Element p : lp) {
+            assertTrue(runs(p).stream().allMatch(ExamDocxFormatTest::runIsBold), "cột trái đậm: " + text(p));
+            assertTrue(isCentered(p, styles), "cột trái căn giữa: " + text(p));
+        }
         List<Element> rp = children(rightCell, W, "p");
-        assertTrue(runs(rp.get(0)).stream().allMatch(ExamDocxFormatTest::runIsBold), "ĐỀ KIỂM TRA... đậm");
-        assertTrue(runs(rp.get(3)).stream().allMatch(ExamDocxFormatTest::runIsItalic), "dòng thời gian nghiêng");
+        assertEquals(List.of("Thứ..... ngày........ tháng..... năm 2026", "ĐỀ KIỂM TRA GIỮA KÌ I", "NĂM HỌC 2026 - 2027",
+                "Môn: Toán, Lớp: 9.", "(Thời gian làm bài 90 phút không kể thời gian giao đề)"),
+                rp.stream().map(ExamDocxFormatTest::text).toList());
+        boolean[] bold = {false, true, true, true, false};
+        boolean[] italic = {true, false, false, false, true};
+        for (int i = 0; i < rp.size(); i++) {
+            for (Element run : runs(rp.get(i))) {
+                assertEquals(bold[i], runIsBold(run), "đậm dòng " + i + ": " + text(rp.get(i)));
+                assertEquals(italic[i], runIsItalic(run), "nghiêng dòng " + i + ": " + text(rp.get(i)));
+            }
+            assertTrue(isCentered(rp.get(i), styles), "cột phải căn giữa: " + text(rp.get(i)));
+        }
+        String xmlText = PandocTestSupport.documentXml(docx.get(format));
+        assertFalse(xmlText.contains("SECTIONPAGES") || xmlText.contains("Đề có"), "bỏ \"(Đề có N trang)\"");
+        assertFalse(xmlText.contains("Họ và tên"), "bỏ dòng Họ và tên / Lớp");
 
-        // dòng dưới: họ tên, lớp và ô "Mã đề 101" có viền
-        Element second = tables.get(1);
-        List<List<String>> row = table(second);
-        assertEquals("Họ và tên: …………………………………  Lớp: ………  ", row.get(0).get(0));
-        assertEquals("Mã đề 101", row.get(0).get(1));
-        Element codeCell = children(children(second, W, "tr").get(0), W, "tc").get(1);
-        Element borders = child(child(codeCell, "tcPr"), "tcBorders");
-        assertNotNull(borders, "ô Mã đề có viền");
-        assertEquals("single", val(child(borders, "right")), "viền bên phải");
-        Element nameCell = children(children(second, W, "tr").get(0), W, "tc").get(0);
-        assertTrue(child(nameCell, "tcPr") == null || child(child(nameCell, "tcPr"), "tcBorders") == null
-                || "nil".equals(val(child(child(child(nameCell, "tcPr"), "tcBorders"), "right"))), "ô họ tên không viền");
+        // bảng có viền 3 cột bằng nhau, toàn chiều rộng: tiêu đề đậm căn giữa, hàng 2 cao như mẫu, mã đề ở ô 1
+        Element box = tables.get(1);
+        List<Integer> boxGrid = children(child(box, "tblGrid"), W, "gridCol").stream()
+                .map(c -> Integer.parseInt(c.getAttributeNS(W, "w"))).toList();
+        assertEquals(3, boxGrid.size());
+        assertEquals(TEXT_WIDTH, boxGrid.stream().mapToInt(Integer::intValue).sum(), "toàn chiều rộng");
+        assertTrue(Collections.max(boxGrid) - Collections.min(boxGrid) <= 1, "ba cột bằng nhau: " + boxGrid);
+        for (String side : List.of("top", "left", "bottom", "right", "insideH", "insideV")) {
+            assertEquals("single", val(child(child(child(box, "tblPr"), "tblBorders"), side)), "có viền: " + side);
+        }
+        List<List<String>> cells = table(box);
+        assertEquals(List.of(List.of("Mã đề", "Điểm bài thi", "Mã phách"), List.of("101", "", "")), cells);
+        Element headRow = children(box, W, "tr").get(0);
+        for (Element tc : children(headRow, W, "tc")) {
+            Element p = children(tc, W, "p").get(0);
+            assertTrue(runs(p).stream().allMatch(ExamDocxFormatTest::runIsBold), "tiêu đề đậm");
+            assertTrue(isCentered(p, styles), "tiêu đề căn giữa");
+        }
+        Element codeRow = children(box, W, "tr").get(1);
+        assertEquals("1440", val(child(child(codeRow, "trPr"), "trHeight")), "hàng 2 cao 4 dòng × 360 như mẫu");
+        Element codeParagraph = children(children(codeRow, W, "tc").get(0), W, "p").stream()
+                .filter(p -> text(p).equals("101")).findFirst().orElseThrow();
+        assertTrue(runs(codeParagraph).stream().allMatch(ExamDocxFormatTest::runIsBold), "mã đề đậm");
+        assertTrue(isCentered(codeParagraph, styles), "mã đề căn giữa");
+    }
+
+    /** Đoạn căn giữa: jc=center trực tiếp hoặc ở kiểu đoạn. */
+    private static boolean isCentered(Element p, Document styles) {
+        Element pPr = child(p, "pPr");
+        if (pPr != null && child(pPr, "jc") != null) {
+            return "center".equals(val(child(pPr, "jc")));
+        }
+        String id = style(p);
+        NodeList list = styles.getElementsByTagNameNS(W, "style");
+        for (int i = 0; id != null && i < list.getLength(); i++) {
+            Element s = (Element) list.item(i);
+            if (id.equals(s.getAttributeNS(W, "styleId"))) {
+                Element stylePPr = child(s, "pPr");
+                return stylePPr != null && child(stylePPr, "jc") != null && "center".equals(val(child(stylePPr, "jc")));
+            }
+        }
+        return false;
     }
 
     // ---------------------------------------------------------------- 3. dòng hướng dẫn, HẾT
 
     @ParameterizedTest
     @EnumSource(EquationFormat.class)
-    void dongHuongDanMoiPhanDamPhanTenThuongPhanSau(EquationFormat format) throws Exception {
+    void tieuDePhanDamInHoaCoTongDiemVaDongHuongDanNghieng(EquationFormat format) throws Exception {
         List<Element> body = body(parse(docx.get(format), "word/document.xml"));
-        List<String> expected = List.of(
-                "PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn.| Thí sinh trả lời từ câu 1 đến câu 14. "
-                        + "Mỗi câu hỏi thí sinh chỉ chọn một phương án.",
-                "PHẦN II. Câu trắc nghiệm đúng sai.| Thí sinh trả lời từ câu 1 đến câu 2. "
-                        + "Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai.",
-                "PHẦN III. Câu trắc nghiệm trả lời ngắn.| Thí sinh trả lời từ câu 1 đến câu 2.");
-        List<Element> lines = body.stream().filter(e -> isParagraph(e) && "ExamInstruction".equals(style(e))).toList();
-        assertEquals(3, lines.size());
+        // đề mẫu: 14 câu phần I × 0,25 = 3,5; 2 câu phần II × 1,0 = 2,0; 2 câu phần III × 0,5 = 1,0
+        List<String> headings = List.of("PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN (3,5 điểm)",
+                "PHẦN II. TRẮC NGHIỆM ĐÚNG/SAI (2,0 điểm)", "PHẦN III. TRẮC NGHIỆM TRẢ LỜI NGẮN (1,0 điểm)");
+        List<String> instructions = List.of("Học sinh chọn một đáp án đúng duy nhất từ câu 1 đến câu 14.",
+                "Học sinh trả lời Đúng (Đ) hoặc Sai (S) cho từng ý a), b), c), d) trong mỗi câu.",
+                "Học sinh viết câu trả lời ngắn gọn (kết quả số) từ câu 1 đến câu 2.");
+        Document styles = parse(docx.get(format), "word/styles.xml");
         for (int i = 0; i < 3; i++) {
-            StringBuilder boldPart = new StringBuilder();
-            StringBuilder plainPart = new StringBuilder();
-            for (Element run : runs(lines.get(i))) {
-                (runIsBold(run) ? boldPart : plainPart).append(runText(run));
-            }
-            assertEquals(expected.get(i), boldPart + "|" + plainPart, "bold = tên phần, thường = phần sau, cùng một đoạn");
+            Element heading = paragraphEqual(body, headings.get(i));
+            assertEquals("ExamPartHeading", style(heading));
+            assertTrue(styleIsBold(styles, "ExamPartHeading") || runs(heading).stream().allMatch(ExamDocxFormatTest::runIsBold),
+                    "tiêu đề phần đậm");
+            Element line = body.get(body.indexOf(heading) + 1);
+            assertEquals(instructions.get(i), text(line), "dòng hướng dẫn ngay sau tiêu đề phần");
+            assertEquals("ExamInstruction", style(line));
+            assertTrue(runs(line).stream().allMatch(ExamDocxFormatTest::runIsItalic), "dòng hướng dẫn nghiêng");
+            assertFalse(runs(line).stream().anyMatch(ExamDocxFormatTest::runIsBold), "dòng hướng dẫn không đậm");
         }
+        assertEquals(3, body.stream().filter(e -> isParagraph(e) && "ExamPartHeading".equals(style(e))).count());
     }
 
-    private static String runText(Element run) {
-        StringBuilder sb = new StringBuilder();
-        for (Element t : children(run, W, "t")) {
-            sb.append(t.getTextContent());
+    private static boolean styleIsBold(Document styles, String styleId) {
+        NodeList list = styles.getElementsByTagNameNS(W, "style");
+        for (int i = 0; i < list.getLength(); i++) {
+            Element s = (Element) list.item(i);
+            if (styleId.equals(s.getAttributeNS(W, "styleId"))) {
+                Element rPr = child(s, "rPr");
+                return rPr != null && child(rPr, "b") != null;
+            }
         }
-        return sb.toString();
+        return false;
     }
 
     private static boolean runIsItalic(Element run) {
@@ -530,7 +597,8 @@ class ExamDocxFormatTest {
         assertEquals("ExamCenter", style(end));
         assertTrue(PandocTestSupport.entry(docx.get(format), "word/styles.xml").matches(
                 "(?s).*w:styleId=\"ExamCenter\".*?<w:jc w:val=\"center\".*"), "căn giữa");
-        int lastQuestion = body.indexOf(paragraphStarting(body, "Câu 2.⇥Tính"));
+        assertTrue(runs(end).stream().allMatch(r -> runIsBold(r) && runIsItalic(r)), "đậm nghiêng");
+        int lastQuestion = body.indexOf(paragraphStarting(body, "Câu 2. Tính"));
         assertTrue(body.indexOf(end) > lastQuestion, "HẾT sau câu cuối");
         assertTrue(body.indexOf(end) < body.indexOf(paragraphEqual(body, ANSWER_TITLE)), "HẾT trước trang đáp án");
     }
@@ -539,25 +607,26 @@ class ExamDocxFormatTest {
 
     @ParameterizedTest
     @EnumSource(EquationFormat.class)
-    void cauHoiThutLeTreoNhanDamCauDanSauTab(EquationFormat format) throws Exception {
+    void cauHoiNhanDamKhongThutLeTreo(EquationFormat format) throws Exception {
         byte[] file = docx.get(format);
         List<Element> body = body(parse(file, "word/document.xml"));
-        Element q1 = paragraphStarting(body, "Câu 1.⇥Bậc của đơn thức");
+        Element q1 = paragraphStarting(body, "Câu 1. Bậc của đơn thức");
         assertEquals("ExamQuestion", style(q1));
         assertEquals("Câu 1.", runs(q1).get(0).getTextContent());
         assertTrue(runIsBold(runs(q1).get(0)), "nhãn Câu k. đậm");
-        assertEquals("Câu 1.⇥Bậc của đơn thức " + FORMULA + " là", text(q1), "\"là:\" thành \"là\"");
+        assertFalse(runs(q1).stream().skip(1).anyMatch(ExamDocxFormatTest::runIsBold), "câu dẫn không đậm");
+        assertEquals("Câu 1. Bậc của đơn thức " + FORMULA + " là", text(q1), "\"là:\" thành \"là\"; không tab sau nhãn");
+        assertFalse(text(q1).contains(TAB), "nhãn Câu k. cách câu dẫn bằng dấu cách, không tab");
         Document styles = parse(file, "word/styles.xml");
-        Element question = styleIndent(styles, "ExamQuestion");
-        assertEquals("1000", question.getAttributeNS(W, "left"));
-        assertEquals("1000", question.getAttributeNS(W, "hanging"),
-                "thụt lề treo: câu dẫn thẳng hàng sau nhãn, dòng sau thẳng chữ đầu câu dẫn");
-        Element option = styleIndent(styles, "ExamOption");
-        assertEquals("1320", option.getAttributeNS(W, "left"));
-        assertEquals("320", option.getAttributeNS(W, "hanging"));
+        for (String id : List.of("ExamQuestion", "ExamQuestionCont", "ExamOption")) {
+            Element ind = styleIndent(styles, id);
+            assertTrue(ind == null || ((ind.getAttributeNS(W, "left").isEmpty() || "0".equals(ind.getAttributeNS(W, "left")))
+                    && ind.getAttributeNS(W, "hanging").isEmpty() && ind.getAttributeNS(W, "firstLine").isEmpty()),
+                    "không thụt lề treo, dòng sau về lề trái như mẫu: " + id);
+        }
         assertFalse(PandocTestSupport.documentXml(file).contains("là:"), "không còn \"là:\"");
-        assertEquals("Câu 2.⇥Biểu thức nào sau đây bằng " + FORMULA + " :",
-                text(paragraphStarting(body, "Câu 2.⇥Biểu thức nào sau đây bằng")),
+        assertEquals("Câu 2. Biểu thức nào sau đây bằng " + FORMULA + " :",
+                text(paragraphStarting(body, "Câu 2. Biểu thức nào sau đây bằng")),
                 "dấu hai chấm không đứng sau \"là\" thì giữ nguyên");
     }
 
@@ -565,39 +634,40 @@ class ExamDocxFormatTest {
 
     @ParameterizedTest
     @EnumSource(EquationFormat.class)
-    void soNganBonCotMotDongTabDungTaiW4W2Ba4W(EquationFormat format) throws Exception {
+    void soNganBonCotMotDongMocDau283TabDungTaiBaMoc(EquationFormat format) throws Exception {
         List<Element> body = body(parse(docx.get(format), "word/document.xml"));
-        List<Element> options = optionParagraphsAfter(body, paragraphStarting(body, "Câu 1.⇥Bậc của đơn thức"));
+        List<Element> options = optionParagraphsAfter(body, paragraphStarting(body, "Câu 1. Bậc của đơn thức"));
         assertEquals(1, options.size(), "4 cột = một dòng");
-        assertEquals("A. ∎.⇥B. ∎.⇥C. ∎.⇥D. ∎.".replace("∎", FORMULA), text(options.get(0)));
-        assertEquals(List.of(3231, 5461, 7692), tabStops(options.get(0)));
-        assertTrue(runIsBold(runs(options.get(0)).get(0)) && "A.".equals(runs(options.get(0)).get(0).getTextContent()),
-                "nhãn A. đậm");
+        assertEquals("⇥A. ∎.⇥B. ∎.⇥C. ∎.⇥D. ∎.".replace("∎", FORMULA), text(options.get(0)),
+                "tab đầu dòng tới mốc 283, nhãn A. rồi các tab giữa cột");
+        assertEquals(List.of(283, 2764, 5244, 7725), tabStops(options.get(0)));
+        Element label = runs(options.get(0)).stream().filter(r -> "A.".equals(r.getTextContent())).findFirst().orElseThrow();
+        assertTrue(runIsBold(label), "nhãn A. đậm");
     }
 
     @ParameterizedTest
     @EnumSource(EquationFormat.class)
     void bieuThucVuaHaiDongHaiCotTabDungTaiW2(EquationFormat format) throws Exception {
         List<Element> body = body(parse(docx.get(format), "word/document.xml"));
-        List<Element> options = optionParagraphsAfter(body, paragraphStarting(body, "Câu 2.⇥Biểu thức nào"));
+        List<Element> options = optionParagraphsAfter(body, paragraphStarting(body, "Câu 2. Biểu thức nào"));
         assertEquals(2, options.size(), "2 cột = hai dòng A,B / C,D");
-        assertEquals("A. ∎.⇥B. ∎.".replace("∎", FORMULA), text(options.get(0)));
-        assertEquals("C. ∎.⇥D. ∎.".replace("∎", FORMULA), text(options.get(1)));
-        assertEquals(List.of(5461), tabStops(options.get(0)));
-        assertEquals(List.of(5461), tabStops(options.get(1)));
+        assertEquals("⇥A. ∎.⇥B. ∎.".replace("∎", FORMULA), text(options.get(0)));
+        assertEquals("⇥C. ∎.⇥D. ∎.".replace("∎", FORMULA), text(options.get(1)));
+        assertEquals(List.of(283, 5244), tabStops(options.get(0)));
+        assertEquals(List.of(283, 5244), tabStops(options.get(1)));
     }
 
     @ParameterizedTest
     @EnumSource(EquationFormat.class)
-    void cauChuDaiMoiPhuongAnMotDongKhongTab(EquationFormat format) throws Exception {
+    void cauChuDaiMoiPhuongAnMotDongChiTabDauDong(EquationFormat format) throws Exception {
         List<Element> body = body(parse(docx.get(format), "word/document.xml"));
-        List<Element> options = optionParagraphsAfter(body, paragraphStarting(body, "Câu 3.⇥Khẳng định nào"));
+        List<Element> options = optionParagraphsAfter(body, paragraphStarting(body, "Câu 3. Khẳng định nào"));
         assertEquals(4, options.size());
-        assertEquals("A. Hai đường thẳng song song thì không có điểm chung nào cả.", text(options.get(0)));
-        assertEquals("D. Hai đường thẳng chéo nhau thì không nằm trong cùng một mặt phẳng.", text(options.get(3)));
+        assertEquals("⇥A. Hai đường thẳng song song thì không có điểm chung nào cả.", text(options.get(0)));
+        assertEquals("⇥D. Hai đường thẳng chéo nhau thì không nằm trong cùng một mặt phẳng.", text(options.get(3)));
         for (Element p : options) {
-            assertFalse(text(p).contains(TAB), "không tab trong " + text(p));
-            assertTrue(tabStops(p).isEmpty());
+            assertEquals(1, text(p).chars().filter(c -> c == '⇥').count(), "chỉ tab đầu dòng trong " + text(p));
+            assertEquals(List.of(283), tabStops(p));
         }
     }
 
@@ -606,7 +676,7 @@ class ExamDocxFormatTest {
     void khongDungBangDeXepCotVaKhongConMaGiuCho(EquationFormat format) throws Exception {
         String xml = PandocTestSupport.documentXml(docx.get(format));
         List<Element> body = body(parse(docx.get(format), "word/document.xml"));
-        int firstOption = body.indexOf(paragraphStarting(body, "Câu 1.⇥Bậc của đơn thức"));
+        int firstOption = body.indexOf(paragraphStarting(body, "Câu 1. Bậc của đơn thức"));
         int lastOption = body.indexOf(paragraphEqual(body, "------ HẾT ------"));
         assertTrue(body.subList(firstOption, lastOption).stream().noneMatch(e -> !isParagraph(e)),
                 "phần đề không có bảng nào (công cụ trộn đề đọc theo tab)");
@@ -619,14 +689,19 @@ class ExamDocxFormatTest {
     @EnumSource(EquationFormat.class)
     void phuongAnVaYDungSaiCoDauChamCuoi(EquationFormat format) throws Exception {
         List<Element> body = body(parse(docx.get(format), "word/document.xml"));
-        Element tf1 = paragraphStarting(body, "Câu 1.⇥Cho hàm số");
+        Element tf1 = paragraphStarting(body, "Câu 1. Cho hàm số");
         List<Element> statements = optionParagraphsAfter(body, tf1);
         assertEquals(4, statements.size());
-        assertEquals("a) Đồ thị là một parabol.", text(statements.get(0)));
-        assertEquals("b) Hàm số đồng biến trên " + FORMULA + ".", text(statements.get(1)), "dấu chấm sau công thức");
-        assertEquals("c) Giá trị nhỏ nhất bằng " + FORMULA + ".", text(statements.get(2)));
-        assertEquals("d) Đồ thị đi qua " + FORMULA + ".", text(statements.get(3)), "đã có dấu chấm thì không thêm");
-        List<Element> long3 = optionParagraphsAfter(body, paragraphStarting(body, "Câu 3.⇥Khẳng định"));
+        assertEquals("⇥a) Đồ thị là một parabol.", text(statements.get(0)));
+        assertEquals("⇥b) Hàm số đồng biến trên " + FORMULA + ".", text(statements.get(1)), "dấu chấm sau công thức");
+        assertEquals("⇥c) Giá trị nhỏ nhất bằng " + FORMULA + ".", text(statements.get(2)));
+        assertEquals("⇥d) Đồ thị đi qua " + FORMULA + ".", text(statements.get(3)), "đã có dấu chấm thì không thêm");
+        for (Element p : statements) {
+            assertEquals(List.of(283), tabStops(p), "ý a)–d): một tab tới mốc 283 như mẫu");
+            Element label = runs(p).stream().filter(r -> r.getTextContent().matches("[a-d]\\)")).findFirst().orElseThrow();
+            assertTrue(runIsBold(label), "nhãn ý đậm như mẫu");
+        }
+        List<Element> long3 = optionParagraphsAfter(body, paragraphStarting(body, "Câu 3. Khẳng định"));
         assertTrue(text(long3.get(1)).endsWith("duy nhất."));
     }
 
@@ -777,15 +852,15 @@ class ExamDocxFormatTest {
 
     // ---------------------------------------------------------------- bộ ngắt dòng MathType theo khổ A4
 
-    /** Công thức rộng trong (468pt, 496,1pt] vừa lề chữ A4 nên không bị ngắt hay thu nhỏ (trước đây lề 468pt sẽ ngắt). */
+    /** Công thức rộng trong (496,1pt, 510,25pt] vừa lề chữ của mẫu trường (lề phải 1 cm) nên không bị ngắt hay thu nhỏ. */
     @Test
-    void congThucRong480ptVuaLeA4KhongBiNgatHayThuNho() throws Exception {
+    void congThucRong505ptVuaLeMoiKhongBiNgatHayThuNho() throws Exception {
         assumeTrue(pandoc != null);
-        String latex = formulaOfWidth(478, 494);
+        String latex = formulaOfWidth(498, 509);
         double width = PreviewRenderer.widthPt(latex);
         PandocRunner.Docx out = new PandocRunner(pandoc).markdownToDocx("$" + latex + "$\n", EquationFormat.MATHTYPE);
         assertEquals(0, out.equationsKeptOmml());
-        assertEquals(0, out.equationsScaled(), "vừa lề A4 (496,1pt) nên không thu nhỏ: " + width);
+        assertEquals(0, out.equationsScaled(), "vừa lề chữ (510,25pt) nên không thu nhỏ: " + width);
         Document doc = parse(out.content(), "word/document.xml");
         assertEquals(1, doc.getElementsByTagNameNS(W, "object").getLength(), "một đối tượng, không ngắt dòng");
         Element shape = (Element) doc.getElementsByTagNameNS("urn:schemas-microsoft-com:vml", "shape").item(0);
@@ -794,7 +869,7 @@ class ExamDocxFormatTest {
         assertEquals(width, Double.parseDouble(m.group(1)), 0.02, "hiển thị đủ kích thước gốc");
     }
 
-    /** Công thức rộng hơn 496,1pt vẫn bị ngắt/thu nhỏ để không vượt lề mới. */
+    /** Công thức rộng hơn 510,25pt vẫn bị ngắt/thu nhỏ để không vượt lề. */
     @Test
     void congThucRongHonLeA4VanBiNgat() throws Exception {
         assumeTrue(pandoc != null);
@@ -807,7 +882,7 @@ class ExamDocxFormatTest {
         for (int i = 0; i < shapes.getLength(); i++) {
             Matcher m = Pattern.compile("width:([0-9.]+)pt").matcher(((Element) shapes.item(i)).getAttribute("style"));
             assertTrue(m.find());
-            assertTrue(Double.parseDouble(m.group(1)) <= 496.1 + 0.05, "vượt lề: " + m.group(1));
+            assertTrue(Double.parseDouble(m.group(1)) <= 510.25 + 0.05, "vượt lề: " + m.group(1));
         }
     }
 

@@ -69,8 +69,8 @@ public final class PandocTestSupport {
                 + " w:uri=\"http://schemas.microsoft.com/office/word\" w:val=\"15\"\\s*/>\\s*</w:compat>.*");
     }
 
-    /** Kiểu Normal dùng Times New Roman cỡ 13 (sz = 26 nửa điểm). */
-    public static boolean normalIsTimesNewRoman13(String stylesXml) {
+    /** Kiểu Normal dùng Times New Roman cỡ 12 (sz = 24 nửa điểm), như mẫu đề của trường. */
+    public static boolean normalIsTimesNewRoman12(String stylesXml) {
         // Thứ tự thuộc tính của w:style không cố định (file mẫu được vá bằng DOM), nên không dựa vào thứ tự đó.
         java.util.regex.Matcher m = java.util.regex.Pattern.compile(
                 "(?s)<w:style\\s([^>]*w:styleId=\"Normal\"[^>]*)>(.*?)</w:style>").matcher(stylesXml);
@@ -79,6 +79,6 @@ public final class PandocTestSupport {
         }
         String normal = m.group(2);
         return normal.contains("w:ascii=\"Times New Roman\"") && normal.contains("w:hAnsi=\"Times New Roman\"")
-                && normal.contains("<w:sz w:val=\"26\"");
+                && normal.contains("<w:sz w:val=\"24\"");
     }
 }

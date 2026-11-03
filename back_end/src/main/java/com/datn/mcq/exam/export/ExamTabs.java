@@ -21,10 +21,10 @@ import java.util.regex.Pattern;
 
 /**
  * Tab của đề (4/11). Markdown không biểu diễn được tab, nên {@link ExamMarkdownBuilder} đặt mã giữ chỗ duy nhất
- * (số ở giữa hai ký tự vùng riêng, ví dụ U+E000 "3231" U+E001) giữa các phương án cùng dòng và sau nhãn "Câu k.".
- * Sau pandoc (và sau bước MathType nếu có), {@link #apply} thay mỗi mã bằng {@code <w:tab/>} và thêm {@code w:tabs} vào
- * {@code w:pPr} của đoạn chứa nó, với vị trí dừng (twips từ lề trái) lấy từ chính các mã đó. Mã không có số (tab sau nhãn
- * câu) chỉ thành {@code <w:tab/>}: rơi vào mốc thụt lề treo của kiểu đoạn.
+ * (số ở giữa hai ký tự vùng riêng, ví dụ U+E000 "2764" U+E001) ở đầu mỗi dòng phương án / ý đúng-sai (mốc 283 của mẫu) và
+ * giữa các phương án cùng dòng. Sau pandoc (và sau bước MathType nếu có), {@link #apply} thay mỗi mã bằng
+ * {@code <w:tab/>} và thêm {@code w:tabs} vào {@code w:pPr} của đoạn chứa nó, với vị trí dừng (twips từ lề trái) lấy từ
+ * chính các mã đó. Mã không có số chỉ thành {@code <w:tab/>}.
  *
  * <p>KHÔNG dùng bảng để xếp cột: công cụ trộn đề của giáo viên đọc phương án theo tab.
  */
@@ -45,11 +45,6 @@ public final class ExamTabs {
     /** Mã giữ chỗ tab dừng tại {@code posTwips}. */
     public static String token(int posTwips) {
         return OPEN + Integer.toString(posTwips) + CLOSE;
-    }
-
-    /** Mã giữ chỗ tab không khai báo điểm dừng (tab sau nhãn "Câu k." rơi vào mốc thụt lề treo). */
-    public static String labelToken() {
-        return Character.toString(OPEN) + CLOSE;
     }
 
     /** Bỏ hai ký tự vùng riêng khỏi chữ của đề để nội dung không giả được mã giữ chỗ. */

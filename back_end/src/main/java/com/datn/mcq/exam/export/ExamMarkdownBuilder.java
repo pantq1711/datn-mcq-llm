@@ -10,6 +10,8 @@ import com.datn.mcq.exam.dto.ExamViewDtos.PartDto;
 import com.datn.mcq.exam.entity.ExamSlot;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -21,13 +23,14 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Markdown (pandoc) của đề ở chế độ giáo viên, để {@link PandocRunner} chuyển sang Word, theo khuôn đề kiểm tra THCS
- * (4/11):
+ * Markdown (pandoc) của đề ở chế độ giáo viên, để {@link PandocRunner} chuyển sang Word, theo mẫu đề kiểm tra của một
+ * trường THCS (4/11):
  * <ul>
- *   <li>đầu đề: hai bảng không viền ({@link ExamHeader}), dòng "Họ và tên … Lớp …" và ô "Mã đề 101" có viền;</li>
- *   <li>mỗi phần một dòng hướng dẫn (tên phần đậm, phần sau thường, cùng đoạn); phần không có câu thì bỏ;</li>
- *   <li>"Câu k." đậm, thụt lề treo (kiểu {@code ExamQuestion}); mcq xếp cột bằng tab ({@link OptionLayout}); ý đúng/sai
- *       "a)" "b)"... thụt như phương án; cuối đề dòng "------ HẾT ------";</li>
+ *   <li>đầu đề: bảng 2 cột không viền rồi bảng có viền "Mã đề | Điểm bài thi | Mã phách" ({@link ExamHeader});</li>
+ *   <li>mỗi phần có tiêu đề đậm in hoa kèm tổng điểm ("PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN (3,0 điểm)") và một dòng hướng
+ *       dẫn nghiêng; phần không có câu thì bỏ;</li>
+ *   <li>"Câu k." đậm, không thụt lề treo; mcq xếp cột bằng tab ({@link OptionLayout}); ý đúng/sai "a)" "b)"... đi tới
+ *       mốc tab 283 như phương án; cuối đề dòng "------ HẾT ------" đậm nghiêng;</li>
  *   <li>sang trang mới: "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101" với bảng đáp án từng phần và điểm (lấy từ
  *       {@link ExamScoringProperties}), rồi "LỜI GIẢI CHI TIẾT".</li>
  * </ul>
@@ -44,9 +47,10 @@ import java.util.stream.Collectors;
 public final class ExamMarkdownBuilder {
 
     static final Map<String, String> PART_NAMES = Map.of(
-            "I", "PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn",
-            "II", "PHẦN II. Câu trắc nghiệm đúng sai",
-            "III", "PHẦN III. Câu trắc nghiệm trả lời ngắn");
+            "I", "PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN",
+            "II", "PHẦN II. TRẮC NGHIỆM ĐÚNG/SAI",
+            "III", "PHẦN III. TRẮC NGHIỆM TRẢ LỜI NGẮN");
+    private static final ZoneId VIETNAM = ZoneId.of("Asia/Ho_Chi_Minh");
     static final String MISSING_FAILED = "[Chưa có câu – cần sinh lại]";
     static final String MISSING_GENERATING = "[Chưa có câu – đang sinh]";
     static final String NONE = "—";
@@ -88,20 +92,29 @@ public final class ExamMarkdownBuilder {
         return build(exam, header, DEFAULT_SCORING);
     }
 
+    /** Ngày xuất là ngày hiện tại ở Việt Nam (năm học và năm trong đầu đề lấy từ đây). */
     public static String build(ExamViewDto exam, ExamHeader header, ExamScoringProperties scoring) {
+        return build(exam, header, scoring, LocalDate.now(VIETNAM));
+    }
+
+    /** @param today ngày xuất; cho phép cố định ngày khi kiểm thử */
+    public static String build(ExamViewDto exam, ExamHeader header, ExamScoringProperties scoring, LocalDate today) {
         List<String> blocks = new ArrayList<>();
-        blocks.add(headerBlock(header));
+        blocks.add(headerBlock(header, today));
         List<PartDto> parts = exam.parts().stream().filter(p -> !p.items().isEmpty()).toList();
         for (PartDto part : parts) {
-            blocks.add(div("ExamInstruction", instruction(part)));
+            blocks.add(raw(paragraph("ExamPartHeading", partHeading(part, scoring), false)));
+            blocks.add(raw("<w:p><w:pPr><w:pStyle w:val=\"ExamInstruction\"/></w:pPr>" + run(instruction(part), false, true)
+                    + "</w:p>"));
             int k = 1;
             for (ExamItemDto item : part.items()) {
                 question(blocks, k++, item);
             }
         }
-        // Dòng HẾT kết thúc section đề (sectPr trong pPr của đoạn này); đáp án là section mới, sang trang mới, số trang từ 1.
+        // Dòng HẾT (đậm nghiêng) kết thúc section đề (sectPr trong pPr của đoạn này); đáp án là section mới, sang trang mới,
+        // số trang từ 1.
         blocks.add(raw("<w:p><w:pPr><w:pStyle w:val=\"ExamCenter\"/>"
-                + ExamPage.sectionProperties(ExamPage.EXAM_FOOTER_REL_ID, false) + "</w:pPr>" + plainRun(END_OF_EXAM)
+                + ExamPage.sectionProperties(ExamPage.EXAM_FOOTER_REL_ID, false) + "</w:pPr>" + run(END_OF_EXAM, true, true)
                 + "</w:p>"));
 
         blocks.add(raw(paragraph("Heading1", ANSWER_TITLE, false)));
@@ -122,16 +135,29 @@ public final class ExamMarkdownBuilder {
 
     // ---------------------------------------------------------------- dòng hướng dẫn, câu hỏi
 
+    /** "PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN (3,0 điểm)": tổng điểm = điểm một câu × số câu (phần lạ không ghi điểm). */
+    private static String partHeading(PartDto part, ExamScoringProperties scoring) {
+        int n = part.items().size();
+        BigDecimal perQuestion = switch (part.part()) {
+            case "I" -> scoring.mcqPerQuestion();
+            case "II" -> scoring.tfScore(4);
+            case "III" -> scoring.saPerQuestion();
+            default -> null;
+        };
+        String name = PART_NAMES.getOrDefault(part.part(), "PHẦN " + part.part());
+        return perQuestion == null ? name : name + " (" + totalPoints(perQuestion.multiply(BigDecimal.valueOf(n)))
+                + " điểm)";
+    }
+
+    /** Dòng hướng dẫn nghiêng dưới tiêu đề phần. */
     private static String instruction(PartDto part) {
         int n = part.items().size();
-        String name = PART_NAMES.getOrDefault(part.part(), "PHẦN " + part.part());
-        String rest = "Thí sinh trả lời từ câu 1 đến câu " + n + ".";
-        rest += switch (part.part()) {
-            case "I" -> " Mỗi câu hỏi thí sinh chỉ chọn một phương án.";
-            case "II" -> " Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai.";
-            default -> "";
+        return switch (part.part()) {
+            case "I" -> "Học sinh chọn một đáp án đúng duy nhất từ câu 1 đến câu " + n + ".";
+            case "II" -> "Học sinh trả lời Đúng (Đ) hoặc Sai (S) cho từng ý a), b), c), d) trong mỗi câu.";
+            case "III" -> "Học sinh viết câu trả lời ngắn gọn (kết quả số) từ câu 1 đến câu " + n + ".";
+            default -> "Học sinh trả lời từ câu 1 đến câu " + n + ".";
         };
-        return "**" + name + ".** " + rest;
     }
 
     private static String label(int k) {
@@ -144,12 +170,12 @@ public final class ExamMarkdownBuilder {
 
     private static void question(List<String> blocks, int k, ExamItemDto item) {
         if (!hasQuestion(item)) {
-            blocks.add(div("ExamQuestion", label(k) + ExamTabs.labelToken()
+            blocks.add(div("ExamQuestion", label(k) + " "
                     + inline(ExamSlot.FAILED.equals(item.state()) ? MISSING_FAILED : MISSING_GENERATING)));
             return;
         }
         List<String> stem = stemParagraphs(item.questionText());
-        blocks.add(div("ExamQuestion", label(k) + ExamTabs.labelToken() + (stem.isEmpty() ? "" : stem.get(0))));
+        blocks.add(div("ExamQuestion", label(k) + (stem.isEmpty() ? "" : " " + stem.get(0))));
         if (stem.size() > 1) {
             blocks.add(div("ExamQuestionCont", String.join("\n\n", stem.subList(1, stem.size()))));
         }
@@ -158,7 +184,8 @@ public final class ExamMarkdownBuilder {
             case TF -> {
                 List<String> lines = new ArrayList<>();
                 for (ItemStatementDto s : statements(item)) {
-                    lines.add(s.key().getDbValue() + "\\) " + inline(endWithPeriod(oneLine(s.text()))));
+                    lines.add(ExamTabs.token(ExamPage.OPTION_LABEL_START_TWIPS) + "**" + s.key().getDbValue() + ")** "
+                            + inline(endWithPeriod(oneLine(s.text()))));
                 }
                 if (!lines.isEmpty()) {
                     blocks.add(div("ExamOption", String.join("\n\n", lines)));
@@ -196,7 +223,8 @@ public final class ExamMarkdownBuilder {
         int[] stops = layout.stopsTwips();
         List<String> paragraphs = new ArrayList<>();
         for (int from = 0; from < cells.size(); from += layout.columns) {
-            StringBuilder line = new StringBuilder();
+            // mẫu: mỗi dòng phương án mở đầu bằng tab tới mốc 283 rồi mới tới nhãn "A."
+            StringBuilder line = new StringBuilder(ExamTabs.token(ExamPage.OPTION_LABEL_START_TWIPS));
             for (int c = 0; c < layout.columns && from + c < cells.size(); c++) {
                 if (c > 0) {
                     line.append(ExamTabs.token(stops[c - 1]));
@@ -277,6 +305,15 @@ public final class ExamMarkdownBuilder {
             return NONE;
         }
         return item.saAnswer().strip().replace("$", "");
+    }
+
+    /** Tổng điểm của phần: dấu phẩy thập phân, ít nhất một chữ số thập phân: 3,0; 0,5; 0,75. */
+    static String totalPoints(BigDecimal value) {
+        BigDecimal v = value.stripTrailingZeros();
+        if (v.scale() < 1) {
+            v = v.setScale(1);
+        }
+        return v.toPlainString().replace('.', ',');
     }
 
     /** Điểm theo dấu phẩy thập phân, bỏ số 0 thừa: 0,25; 0,5; 1. */
@@ -369,50 +406,52 @@ public final class ExamMarkdownBuilder {
 
     // ---------------------------------------------------------------- đầu đề (khối openxml thô)
 
-    static final String HEADER_LEFT_1 = "PHÒNG GD&ĐT ……………";
+    static final String HEADER_LEFT_1 = "UBND PHƯỜNG ……………";
     static final String HEADER_LEFT_2 = "TRƯỜNG THCS ……………";
 
-    /**
-     * Cột trái 3700 twips (185pt) đủ cho "TRƯỜNG THCS ……………" đậm; cột phải 6222 (311pt) đủ cho dòng "Thời gian làm bài: …,
-     * không kể thời gian phát đề" (nghiêng, khoảng 295pt) nằm trọn một dòng. Bảng đầu đề không có lề ô (đo trên Word 4/11).
-     */
-    private static final int HEADER_LEFT_WIDTH = 3700;
+    /** Cột trái / phải của bảng đầu đề, tỉ lệ 4194 : 6011 như mẫu (cộng lại đúng bề rộng chữ). */
+    static final int HEADER_LEFT_WIDTH = 4194;
+    static final int HEADER_RIGHT_WIDTH = 6011;
+    /** Hàng 2 của bảng "Mã đề | Điểm bài thi | Mã phách" cao 4 dòng × 360 twips như mẫu. */
+    static final int CODE_ROW_HEIGHT = 1440;
+    private static final List<String> BOX_TITLES = List.of("Mã đề", "Điểm bài thi", "Mã phách");
 
     /**
-     * Đầu đề: bảng 2 cột không viền (trái PHÒNG GD&ĐT, TRƯỜNG THCS, "(Đề có … trang)"; phải tên kì, năm học, môn, thời gian
-     * làm bài), rồi bảng dòng dưới: "Họ và tên … Lớp …" và ô "Mã đề 101" có viền. Số trang là trường NUMPAGES.
+     * Đầu đề theo mẫu của trường: bảng 2 cột không viền (trái: UBND PHƯỜNG, TRƯỜNG THCS đậm căn giữa; phải căn giữa: dòng
+     * "Thứ… ngày… tháng… năm <năm>", tên kì, năm học, môn và lớp, thời gian làm bài), rồi bảng có viền 3 cột bằng nhau,
+     * toàn chiều rộng: hàng tiêu đề "Mã đề | Điểm bài thi | Mã phách", hàng 2 cao như mẫu ghi mã đề ở ô 1.
      */
-    static String headerBlock(ExamHeader header) {
-        String left = headerParagraph(HEADER_LEFT_1, false, false) + headerParagraph(HEADER_LEFT_2, true, false)
-                + pageCountParagraph();
-        String right = headerParagraph(header.titleLine(), true, false) + headerParagraph(header.yearLine(), false, false)
-                + headerParagraph(header.subjectLine(), false, false) + headerParagraph(header.durationLine(), false, true);
-        int rightWidth = ExamPage.TEXT_WIDTH_TWIPS - HEADER_LEFT_WIDTH;
-        int codeWidth = 2300;
+    static String headerBlock(ExamHeader header, LocalDate today) {
+        String left = headerParagraph(HEADER_LEFT_1, true, false) + headerParagraph(HEADER_LEFT_2, true, false);
+        String right = headerParagraph(header.dateLine(today), false, true)
+                + headerParagraph(header.titleLine(), true, false)
+                + headerParagraph(header.yearLine(today), true, false)
+                + headerParagraph(header.subjectLine(), true, false)
+                + headerParagraph(header.durationLine(), false, true);
         String noBorders = "<w:tblBorders><w:top w:val=\"nil\"/><w:left w:val=\"nil\"/><w:bottom w:val=\"nil\"/>"
                 + "<w:right w:val=\"nil\"/><w:insideH w:val=\"nil\"/><w:insideV w:val=\"nil\"/></w:tblBorders>";
-        String box = "<w:tcBorders><w:top w:val=\"single\" w:sz=\"8\" w:space=\"0\" w:color=\"auto\"/>"
-                + "<w:left w:val=\"single\" w:sz=\"8\" w:space=\"0\" w:color=\"auto\"/>"
-                + "<w:bottom w:val=\"single\" w:sz=\"8\" w:space=\"0\" w:color=\"auto\"/>"
-                + "<w:right w:val=\"single\" w:sz=\"8\" w:space=\"0\" w:color=\"auto\"/></w:tcBorders>";
+        int third = (ExamPage.TEXT_WIDTH_TWIPS + 2) / 3;
+        int[] boxGrid = {third, third, ExamPage.TEXT_WIDTH_TWIPS - 2 * third};
+        StringBuilder titleRow = new StringBuilder("<w:tr>");
+        StringBuilder codeRow = new StringBuilder("<w:tr><w:trPr><w:trHeight w:val=\"" + CODE_ROW_HEIGHT + "\"/></w:trPr>");
+        for (int c = 0; c < 3; c++) {
+            titleRow.append(boxCell(boxGrid[c], boxParagraph(BOX_TITLES.get(c), true)));
+            codeRow.append(boxCell(boxGrid[c], boxParagraph(c == 0 ? header.code() : "", c == 0)));
+        }
         return "```{=openxml}\n"
                 + "<w:tbl><w:tblPr><w:tblW w:w=\"" + ExamPage.TEXT_WIDTH_TWIPS + "\" w:type=\"dxa\"/>" + noBorders
                 + "<w:tblLayout w:type=\"fixed\"/><w:tblCellMar><w:left w:w=\"0\" w:type=\"dxa\"/><w:right w:w=\"0\" w:type=\"dxa\"/>"
                 + "</w:tblCellMar><w:tblLook w:val=\"0000\"/></w:tblPr>"
-                + "<w:tblGrid><w:gridCol w:w=\"" + HEADER_LEFT_WIDTH + "\"/><w:gridCol w:w=\"" + rightWidth + "\"/></w:tblGrid>"
+                + "<w:tblGrid><w:gridCol w:w=\"" + HEADER_LEFT_WIDTH + "\"/><w:gridCol w:w=\"" + HEADER_RIGHT_WIDTH + "\"/></w:tblGrid>"
                 + "<w:tr><w:tc><w:tcPr><w:tcW w:w=\"" + HEADER_LEFT_WIDTH + "\" w:type=\"dxa\"/></w:tcPr>" + left + "</w:tc>"
-                + "<w:tc><w:tcPr><w:tcW w:w=\"" + rightWidth + "\" w:type=\"dxa\"/></w:tcPr>" + right + "</w:tc></w:tr></w:tbl>\n"
-                + spacer() + "\n"
-                + "<w:tbl><w:tblPr><w:tblW w:w=\"" + ExamPage.TEXT_WIDTH_TWIPS + "\" w:type=\"dxa\"/>" + noBorders
+                + "<w:tc><w:tcPr><w:tcW w:w=\"" + HEADER_RIGHT_WIDTH + "\" w:type=\"dxa\"/></w:tcPr>" + right
+                + "</w:tc></w:tr></w:tbl>\n"
+                + gap() + "\n"
+                + "<w:tbl><w:tblPr><w:tblW w:w=\"" + ExamPage.TEXT_WIDTH_TWIPS + "\" w:type=\"dxa\"/>" + TABLE_BORDERS
                 + "<w:tblLayout w:type=\"fixed\"/><w:tblLook w:val=\"0000\"/></w:tblPr>"
-                + "<w:tblGrid><w:gridCol w:w=\"" + (ExamPage.TEXT_WIDTH_TWIPS - codeWidth) + "\"/><w:gridCol w:w=\""
-                + codeWidth + "\"/></w:tblGrid>"
-                + "<w:tr><w:tc><w:tcPr><w:tcW w:w=\"" + (ExamPage.TEXT_WIDTH_TWIPS - codeWidth) + "\" w:type=\"dxa\"/>"
-                + "<w:vAlign w:val=\"center\"/></w:tcPr>"
-                + "<w:p><w:pPr><w:spacing w:before=\"60\" w:after=\"60\"/></w:pPr><w:r><w:t xml:space=\"preserve\">"
-                + xml(header.nameLine()) + "</w:t></w:r></w:p></w:tc>"
-                + "<w:tc><w:tcPr><w:tcW w:w=\"" + codeWidth + "\" w:type=\"dxa\"/>" + box + "<w:vAlign w:val=\"center\"/></w:tcPr>"
-                + headerParagraph(header.codeLine(), true, false) + "</w:tc></w:tr></w:tbl>\n"
+                + "<w:tblGrid><w:gridCol w:w=\"" + boxGrid[0] + "\"/><w:gridCol w:w=\"" + boxGrid[1]
+                + "\"/><w:gridCol w:w=\"" + boxGrid[2] + "\"/></w:tblGrid>"
+                + titleRow + "</w:tr>" + codeRow + "</w:tr></w:tbl>\n"
                 + spacer() + "\n"
                 + "```";
     }
@@ -421,19 +460,20 @@ public final class ExamMarkdownBuilder {
         return "<w:p><w:pPr><w:pStyle w:val=\"ExamHeaderCell\"/></w:pPr>" + run(text, bold, italic) + "</w:p>";
     }
 
-    /**
-     * "(Đề có … trang)" nghiêng; số trang là trường SECTIONPAGES, tức số trang của riêng phần đề (không tính trang đáp án);
-     * kết quả tạm "…" cho tới khi Word cập nhật.
-     */
-    private static String pageCountParagraph() {
-        String rPr = "<w:rPr><w:i/><w:iCs/></w:rPr>";
-        return "<w:p><w:pPr><w:pStyle w:val=\"ExamHeaderCell\"/></w:pPr>" + run("(Đề có ", false, true)
-                + "<w:r>" + rPr + "<w:fldChar w:fldCharType=\"begin\"/></w:r>"
-                + "<w:r>" + rPr + "<w:instrText xml:space=\"preserve\"> SECTIONPAGES </w:instrText></w:r>"
-                + "<w:r>" + rPr + "<w:fldChar w:fldCharType=\"separate\"/></w:r>"
-                + run("…", false, true)
-                + "<w:r>" + rPr + "<w:fldChar w:fldCharType=\"end\"/></w:r>"
-                + run(" trang)", false, true) + "</w:p>";
+    private static String boxCell(int width, String paragraph) {
+        return "<w:tc><w:tcPr><w:tcW w:w=\"" + width + "\" w:type=\"dxa\"/><w:vAlign w:val=\"center\"/></w:tcPr>" + paragraph
+                + "</w:tc>";
+    }
+
+    /** Đoạn trong bảng Mã đề / Điểm / Mã phách: căn giữa, dòng cao 360 twips như mẫu. */
+    private static String boxParagraph(String text, boolean bold) {
+        return "<w:p><w:pPr><w:pStyle w:val=\"ExamBoxCell\"/></w:pPr>" + (text.isEmpty() ? "" : run(text, bold, false))
+                + "</w:p>";
+    }
+
+    /** Khoảng trống giữa hai bảng đầu đề (Word gộp hai bảng kề nhau nếu giữa không có đoạn nào). */
+    private static String gap() {
+        return "<w:p><w:pPr><w:pStyle w:val=\"ExamGap\"/></w:pPr></w:p>";
     }
 
     // ---------------------------------------------------------------- khối openxml: đoạn, bảng
