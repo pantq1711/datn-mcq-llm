@@ -164,6 +164,59 @@ class FormatCheckerExplanationDraftTest {
         }
     }
 
+    /**
+     * 2/11 (thẩm định UX đề 10): đề 10 Phần III câu 2 có đáp án 100 (đúng là 10000), lời giải viết "Đổi đơn vị … thành trăm
+     * để đáp án gọn trong 4 ký tự". Các cụm này chứng tỏ lời giải đang giải thích việc đổi đáp số cho vừa khung, nên chặn.
+     */
+    @Test
+    void loiGiaiGiaiThichDoiDonViChoGonDapAnBiBat() {
+        for (String text : List.of(
+                "Đổi đơn vị từ đồng thành trăm đồng để đáp án gọn trong 4 ký tự.",
+                "Để đáp án gọn, ta lấy kết quả chia cho 100.",
+                "Chọn đáp số để đáp án gọn: $100$.",
+                "Viết lại cho gọn, đáp số là $5$.",
+                "Đáp án tối đa 4 ký tự nên ta ghi $100$.",
+                "ĐỔI ĐƠN VỊ sang nghìn đồng, sau đó tính tiếp để đáp số vừa khung.",
+                "Doi don vi thanh tram de dap an gon.",
+                "Đổi đơn vị sang trăm để đáp án gọn.",
+                "Đổi đơn vị, chia cho 100 để kết quả vừa 4 chữ số.",
+                "Đổi đơn vị thành nghìn để vừa khung.")) {
+            assertTrue(ExplanationDraftLeak.detect(text), "phải bị chặn: " + text);
+        }
+    }
+
+    @Test
+    void caumToanHopLeCoChuDonViKhongBiBatNham() {
+        for (String text : List.of(
+                "Đơn vị đo của diện tích là $\\text{cm}^2$ nên đáp số là $12$.",
+                "Hệ số tự do là đơn vị của đa thức. Ta có $P = 1$.",
+                "Đổi 30 phút = $0{,}5$ giờ. Vận tốc là $40$ km/h.",
+                "Đổi đơn vị 30 phút thành giờ. Vận tốc là $40$ km/h.",
+                "Đổi đơn vị phút sang giờ để tính vận tốc.",
+                "Đổi đơn vị phút sang giờ để tính kết quả.",
+                "Đổi đơn vị cm sang m để cùng đơn vị với chiều rộng, rồi tính diện tích.",
+                "Đổi đơn vị. Để đáp số đúng, ta kiểm tra lại.",
+                "Thu gọn đa thức, ta được kết quả gọn hơn: $x + 1$.",
+                "Đáp án là $4$ vì ký hiệu $x$ là ẩn.",
+                "Ta có đơn vị của $x$ là phút, đề cho trong 4 giờ.")) {
+            assertFalse(ExplanationDraftLeak.detect(text), "không được chặn nhầm: " + text);
+        }
+    }
+
+    @Test
+    void loiGiaiDoiDonViDeGonCaBaDangDauRaLlmBiFormatFailedChuGiaoVienChiCanhBao() {
+        String text = "Đổi đơn vị thành trăm để đáp án gọn trong 4 ký tự: $100$.";
+        for (Function<String, QuestionQcInput> make : ALL_TYPES) {
+            QuestionQcInput llm = make.apply(text).withLlmOutput(true);
+            FormatChecker.FormatCheckOutcome out = checker.check(llm);
+            assertFalse(out.passed(), llm.questionType().name());
+            assertEquals(List.of(MESSAGE), out.errors(), llm.questionType().name());
+            FormatChecker.FormatCheckOutcome teacher = checker.check(make.apply(text));
+            assertTrue(teacher.passed(), teacher.errors().toString());
+            assertTrue(teacher.warnings().contains(MESSAGE), teacher.warnings().toString());
+        }
+    }
+
     @Test
     void khongCoLoiGiaiThiKhongBat() {
         assertFalse(ExplanationDraftLeak.detect(null));

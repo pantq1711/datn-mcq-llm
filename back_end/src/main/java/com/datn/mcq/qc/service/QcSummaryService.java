@@ -10,6 +10,7 @@ import com.datn.mcq.generation.parser.LlmOutputRepair;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.ExplanationDraftLeak;
+import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.GroundingVerdict;
 import com.datn.mcq.qc.dto.TfJudgement;
 import com.datn.mcq.qc.entity.QualityCheckResult;
@@ -23,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Tóm tắt kết quả QC đã lưu của một câu, dùng cho cờ "cần xem kỹ" ở chế độ giáo viên (phần C mục 3). Chỉ đọc. Không
@@ -50,6 +52,32 @@ public class QcSummaryService {
     public static final String GROUNDING_NOT_SUPPORTED = "grounding_not_supported";
     /** W2-3: QC "bám tài liệu" không kết luận được (đoạn tài liệu không đủ, hoặc bằng chứng không kiểm chứng được). */
     public static final String GROUNDING_UNKNOWN = "grounding_unknown";
+
+    /**
+     * Nhóm cảnh báo format KHÔNG bật cờ "cần xem kỹ" (2/11, sau đo đề 11): hệ thống đã tự sửa và việc sửa chắc chắn không đổi
+     * nghĩa câu, nên giáo viên không cần soát lại. Cảnh báo vẫn được lưu ở {@code quality_check_result.warnings} và vẫn hiện
+     * trong "Kết quả tự kiểm tra" (vết QC). Mọi cảnh báo KHÔNG khớp nhóm này, kể cả cảnh báo chưa biết, bật cờ: thà thừa một
+     * cờ còn hơn lọt câu lỗi. Khi thêm một việc tự sửa mới, thêm mẫu vào đây CHỈ khi sửa đó chắc chắn đúng.
+     * <ul>
+     *   <li>{@code json: đã sửa …}: nhân đôi "\" của lệnh LaTeX, gỡ vỏ {@code \text{}} ngoài $, đổi ký hiệu độ sai thành
+     *       {@code ^{\circ}} (cùng tiền tố {@link LlmOutputRepair#ESCAPE_WARNING_PREFIX}).</li>
+     *   <li>{@code <trường>: đã tự đóng $}: "$" quên đóng ở cuối trường, chỉ khi phần sau trông như công thức.</li>
+     *   <li>{@code <trường>: đã tự bọc $ quanh … LaTeX nằm ngoài $}: biểu thức LaTeX liền mạch ngoài $ được bọc $.</li>
+     *   <li>{@code statement_x: đã bỏ tiền tố …}: bỏ "a)", "b." thừa ở đầu ý tf.</li>
+     * </ul>
+     * Nhãn tf lệch mẫu mục tiêu ({@link TfLabelPattern#isDeviationWarning}) cũng không bật cờ nhưng do model chọn nhãn, không
+     * phải việc tự sửa, nên nằm riêng.
+     */
+    static final List<Pattern> AUTO_FIXED_WARNING_PATTERNS = List.of(
+            Pattern.compile("^" + Pattern.quote(LlmOutputRepair.ESCAPE_WARNING_PREFIX) + ".*", Pattern.DOTALL),
+            Pattern.compile("^[a-z_]+: đã tự đóng \\$$"),
+            Pattern.compile("^[a-z_]+: đã tự bọc \\$ quanh .*", Pattern.DOTALL),
+            Pattern.compile("^statement_[a-d]: đã bỏ tiền tố .*", Pattern.DOTALL));
+
+    /** True khi cảnh báo thuộc nhóm hệ thống đã tự sửa chắc chắn ({@link #AUTO_FIXED_WARNING_PATTERNS}), không bật cờ. */
+    public static boolean isAutoFixedWarning(String warning) {
+        return warning != null && AUTO_FIXED_WARNING_PATTERNS.stream().anyMatch(p -> p.matcher(warning).matches());
+    }
 
     /**
      * @param answerCheckPassed null khi không có dòng answer_check (Solver chưa chạy hoặc lỗi)
@@ -80,6 +108,11 @@ public class QcSummaryService {
         public QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
                          boolean hasUndecidable, List<String> warnings) {
             this(dedupRan, answerCheckPassed, judgeSaKind, hasUndecidable, warnings, null, null);
+        }
+
+        /** Cảnh báo "label: 4 ý cùng nhãn T|F" của câu Đúng/Sai (2/11: đối soát đề sinh lại chỗ có câu này); rỗng nếu không có. */
+        public Optional<String> sameLabelWarning() {
+            return warnings.stream().filter(w -> w.startsWith(FormatChecker.SAME_LABEL_WARNING_PREFIX)).findFirst();
         }
 
         /** Lý do "cần xem kỹ"; rỗng khi câu qua QC sạch. */
@@ -115,12 +148,12 @@ public class QcSummaryService {
                 reasons.add(DEDUP_NOT_RUN);
             }
             for (String w : warnings) {
-                // Ngày 23/10: cảnh báo đã sửa escape LaTeX không bật cờ; "đã tự đóng $" và các cảnh báo khác vẫn bật.
-                // Từ 26/10: nhãn tf lệch mẫu mục tiêu là hợp lệ, cũng không bật cờ (vẫn lưu ở warnings và hiện trong vết QC).
-                // Từ 31/10: lời giải có "tính lại"/"làm lại"/"sửa lại" bật mã riêng thay vì "warning: ...".
+                // Mọi cảnh báo đều được lưu và hiện ở vết QC; chỉ nhóm AUTO_FIXED_WARNING_PATTERNS (hệ thống đã tự sửa chắc
+                // chắn) và nhãn tf lệch mẫu mục tiêu (26/10) không bật cờ. Mọi cảnh báo còn lại, kể cả cảnh báo chưa biết,
+                // bật cờ (2/11). Từ 31/10: lời giải có "tính lại"/"làm lại"/"sửa lại" bật mã riêng thay vì "warning: ...".
                 if (ExplanationDraftLeak.SUSPECT_WARNING.equals(w)) {
                     reasons.add(EXPLANATION_DRAFT_SUSPECT);
-                } else if (!w.startsWith(LlmOutputRepair.ESCAPE_WARNING_PREFIX) && !TfLabelPattern.isDeviationWarning(w)) {
+                } else if (!isAutoFixedWarning(w) && !TfLabelPattern.isDeviationWarning(w)) {
                     reasons.add(WARNING_PREFIX + w);
                 }
             }

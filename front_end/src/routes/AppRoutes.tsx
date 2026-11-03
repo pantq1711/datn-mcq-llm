@@ -9,7 +9,6 @@ import GenerateExamPage from "../features/exam/pages/GenerateExamPage";
 import ExamListPage from "../features/exam/pages/ExamListPage";
 import ExamDetailPage from "../features/exam/pages/ExamDetailPage";
 import ExamMatrixListPage from "../features/exam-matrix/pages/ExamMatrixListPage";
-import TestKaTeX from "../features/test-katex/pages/TestKaTeX";
 import ExamMatrixFormPage from "../features/exam-matrix/pages/ExamMatrixFormPage";
 import MaterialListPage from "../features/materials/pages/MaterialListPage";
 import { RequireAuth } from "../components/common/RequireAuth/RequireAuth";
@@ -39,7 +38,6 @@ export default function AppRoutes() {
                     <Route path="exam-matrices/new" element={<ExamMatrixFormPage />} />
                     <Route path="exam-matrices/:id/edit" element={<ExamMatrixFormPage />} />
                     <Route path="materials" element={<MaterialListPage />} />
-                    <Route path="test-katex" element={<TestKaTeX />} />
                 </Route>
             </Route>
 

@@ -34,10 +34,10 @@ class FormatCheckerLatexSeverityTest {
     @Test
     void commandOutsideAllowlistPassesFormatWithWarning() {
         FormatChecker.FormatCheckOutcome outcome =
-                formatChecker.check(mathInput("Cho tam giác đều $ABC$. Tính $\\widehat{ABC}$."));
+                formatChecker.check(mathInput("Cho tam giác đều $ABC$. Tính $\\toRadians{ABC}$.")); // 3/11: \widehat đã hợp lệ
         assertTrue(outcome.passed(), () -> "Cảnh báo không được làm format_failed: " + outcome.errors());
         assertTrue(outcome.errors().isEmpty(), () -> outcome.errors().toString());
-        assertTrue(outcome.warnings().stream().anyMatch(w -> w.startsWith("question_text:") && w.contains("\\widehat")),
+        assertTrue(outcome.warnings().stream().anyMatch(w -> w.startsWith("question_text:") && w.contains("\\toRadians")),
                 () -> outcome.warnings().toString());
     }
 

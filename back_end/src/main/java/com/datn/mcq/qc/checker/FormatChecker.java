@@ -72,9 +72,18 @@ public class FormatChecker {
             validateFieldLatex("option_b", input.optionB(), errors, warnings);
             validateFieldLatex("option_c", input.optionC(), errors, warnings);
             validateFieldLatex("option_d", input.optionD(), errors, warnings);
-            // Việc 2 (22/10): lỗi LaTeX của lời giải chỉ là cảnh báo, không làm câu format_failed;
+            // Việc 2 (22/10): lỗi LaTeX của lời giải chỉ là cảnh báo, không làm câu format_failed (trừ lệnh LaTeX ngoài $
+            // của đầu ra LLM, xem validateExplanationLatex);
             // khi chép vào ngân hàng, lời giải còn lỗi nghiêm trọng được lưu NULL (AssistedKeepService).
-            validateFieldLatex("explanation", input.explanation(), warnings, warnings);
+            validateExplanationLatex(input, errors, warnings);
+        }
+        if (input.llmOutput()) {
+            checkEnglishWords("question_text", input.questionText(), warnings);
+            checkEnglishWords("option_a", input.optionA(), warnings);
+            checkEnglishWords("option_b", input.optionB(), warnings);
+            checkEnglishWords("option_c", input.optionC(), warnings);
+            checkEnglishWords("option_d", input.optionD(), warnings);
+            checkEnglishWords("explanation", input.explanation(), warnings);
         }
 
         // Ngày 23/10: cảnh báo từ bước giải mã ở chế độ sửa (đã sửa escape LaTeX, đã tự đóng $).
@@ -124,12 +133,23 @@ public class FormatChecker {
             if (input.saAnswerIsString() && !answerRejected) {
                 validateFieldLatex("answer", answer, errors, warnings);
             }
-            validateFieldLatex("explanation", input.explanation(), warnings, warnings);
+            validateExplanationLatex(input, errors, warnings);
+        }
+        if (input.llmOutput()) {
+            checkEnglishWords("question_text", input.questionText(), warnings);
+            checkEnglishWords("explanation", input.explanation(), warnings);
         }
         return new FormatCheckOutcome(errors.isEmpty(), errors, warnings, answerWarnings);
     }
 
     private static final List<String> TF_KEYS = List.of("a", "b", "c", "d");
+
+    /**
+     * Tiền tố cảnh báo "4 ý cùng nhãn T|F" của câu Đúng/Sai. Vẫn chỉ là cảnh báo ở bước format (câu không bị format_failed,
+     * nên vẫn Giữ được); từ 2/11 đối soát đề thấy cảnh báo này thì sinh lại chỗ ({@code ExamBuildService}), hết lượt thì giữ
+     * câu kèm cờ.
+     */
+    public static final String SAME_LABEL_WARNING_PREFIX = "label: 4 ý cùng nhãn ";
 
     /**
      * Câu Đúng/Sai (V4, GĐ3): đề dẫn, 4 ý, lời giải không trống; 4 nhãn là T hoặc F (sau trim, không phân biệt hoa
@@ -187,7 +207,7 @@ public class FormatChecker {
             }
         }
         if (labels.stream().allMatch(l -> l != null) && new HashSet<>(labels).size() == 1) {
-            answerWarnings.add("label: 4 ý cùng nhãn " + labels.get(0).getDbValue());
+            answerWarnings.add(SAME_LABEL_WARNING_PREFIX + labels.get(0).getDbValue());
         }
 
         if (input.validateLatex()) {
@@ -195,7 +215,14 @@ public class FormatChecker {
             for (int i = 0; i < TF_KEYS.size(); i++) {
                 validateFieldLatex("statement_" + TF_KEYS.get(i), statements.get(i), errors, warnings);
             }
-            validateFieldLatex("explanation", input.explanation(), warnings, warnings);
+            validateExplanationLatex(input, errors, warnings);
+        }
+        if (input.llmOutput()) {
+            checkEnglishWords("question_text", input.questionText(), warnings);
+            for (int i = 0; i < TF_KEYS.size(); i++) {
+                checkEnglishWords("statement_" + TF_KEYS.get(i), statements.get(i), warnings);
+            }
+            checkEnglishWords("explanation", input.explanation(), warnings);
         }
         return new FormatCheckOutcome(errors.isEmpty(), errors, warnings, answerWarnings);
     }
@@ -223,6 +250,34 @@ public class FormatChecker {
     private void checkNonBlank(String fieldName, String value, List<String> errors) {
         if (value == null || value.isBlank()) {
             errors.add(fieldName + ": nội dung trống");
+        }
+    }
+
+    /**
+     * Lỗi LaTeX của lời giải (22/10) chỉ là cảnh báo, trừ một ca của đầu ra LLM (2/11, thẩm định UX đề 10): lệnh LaTeX nằm
+     * ngoài $...$ mà bước giải mã không bọc được ({@link com.datn.mcq.generation.parser.LlmOutputRepair#wrapLatexOutsideMath})
+     * là lỗi chặn, để câu được sinh lại. Chữ giáo viên viết hoặc sửa vẫn chỉ là cảnh báo.
+     */
+    private void validateExplanationLatex(QuestionQcInput input, List<String> errors, List<String> warnings) {
+        String value = input.explanation();
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        LatexValidationRules.Result result = LatexValidationRules.check(value);
+        for (String err : result.errors()) {
+            boolean outside = input.llmOutput() && LatexValidationRules.MSG_COMMAND_OUTSIDE.equals(err);
+            (outside ? errors : warnings).add("explanation: " + err);
+        }
+        for (String warning : result.warnings()) {
+            warnings.add("explanation: " + warning);
+        }
+    }
+
+    /** Từ tiếng Anh đứng riêng ngoài $...$ (2/11): chỉ cảnh báo, câu không bị loại. */
+    private void checkEnglishWords(String fieldName, String value, List<String> warnings) {
+        List<String> words = EnglishWordLeak.find(value);
+        if (!words.isEmpty()) {
+            warnings.add(fieldName + ": có từ tiếng Anh ngoài công thức (" + String.join(", ", words) + ")");
         }
     }
 

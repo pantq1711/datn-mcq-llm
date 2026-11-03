@@ -76,9 +76,7 @@ export default function QuestionTable({
                 <Space direction="vertical" size={2}>
                     <Text strong>{record.subject || "—"}</Text>
                     {record.gradeLevel && (
-                        <Tag color="geekblue" style={{ fontSize: 11, marginRight: 0 }}>
-                            Khối {record.gradeLevel}
-                        </Tag>
+                        <Text type="secondary">Khối {record.gradeLevel}</Text>
                     )}
                 </Space>
             ),
@@ -90,9 +88,9 @@ export default function QuestionTable({
             width: 130,
             align: "center",
             render: (type?: QuestionType) => {
-                if (type === "tf") return <Tag color="cyan">Đúng / Sai</Tag>;
-                if (type === "sa") return <Tag color="purple">Trả lời ngắn</Tag>;
-                return <Tag color="blue">Trắc nghiệm</Tag>;
+                if (type === "tf") return <Text>Đúng / Sai</Text>;
+                if (type === "sa") return <Text>Trả lời ngắn</Text>;
+                return <Text>Trắc nghiệm</Text>;
             },
         },
         {
@@ -113,12 +111,7 @@ export default function QuestionTable({
                     return "Theo từng ý";
                 }
                 // Mức thiếu hoặc lạ (dữ liệu cũ): "Chưa phân loại", không hiện mã thô hay ô trống
-                const config = describeLevel(record.difficulty);
-                return (
-                    <Tag color={config.color}>
-                        {config.label}
-                    </Tag>
-                );
+                return <Text>{describeLevel(record.difficulty).label}</Text>;
             },
         },
         {
@@ -136,7 +129,7 @@ export default function QuestionTable({
                     <Space size={4}>
                         <Text>{usageCount ?? 0}</Text>
                         {record.origin?.edited && (
-                            <Tag color="blue" style={{ fontSize: 10, marginRight: 0, padding: "0 4px" }}>
+                            <Tag color="gold" style={{ marginRight: 0 }}>
                                 Đã sửa
                             </Tag>
                         )}

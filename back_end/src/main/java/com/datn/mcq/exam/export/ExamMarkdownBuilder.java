@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 
 /**
  * Markdown (pandoc) của đề ở chế độ giáo viên, để {@link PandocRunner} chuyển sang Word (ngày 23/10, bản cơ bản):
- * tiêu đề và mã đề; PHẦN I/II/III với tên phần đầy đủ, "Câu k." đánh số lại từ 1 trong từng phần; mcq mỗi phương án
+ * đầu đề ({@link ExamHeader}, bảng 2 cột không viền; mã đề in ra là 101, không in mã hệ thống MT…); PHẦN I/II/III với tên phần đầy đủ, "Câu k." đánh số lại từ 1 trong từng phần; mcq mỗi phương án
  * một dòng "A. ..."; tf các ý "a) ..."; sa chỉ có đề. Sau một ngắt trang: "ĐÁP ÁN" (mcq chữ cái, tf chuỗi Đ/S theo thứ
  * tự a–d, sa đáp số) rồi "LỜI GIẢI" từng câu. Đáp án đúng trong phần đề chưa đánh dấu. Chỗ chưa có câu ghi rõ trạng thái.
  *
@@ -45,10 +45,14 @@ public final class ExamMarkdownBuilder {
 
     private ExamMarkdownBuilder() {}
 
+    /** Đầu đề chỉ có tên đề (không có thông tin ma trận): môn và thời gian để trống. */
     public static String build(ExamViewDto exam) {
+        return build(exam, ExamHeader.blank(exam.title()));
+    }
+
+    public static String build(ExamViewDto exam, ExamHeader header) {
         List<String> blocks = new ArrayList<>();
-        blocks.add("# " + inline(exam.title()));
-        blocks.add("**Mã đề:** " + inline(exam.examCode()));
+        blocks.add(headerBlock(header));
         List<PartDto> parts = exam.parts().stream().filter(p -> !p.items().isEmpty()).toList();
         for (PartDto part : parts) {
             blocks.add("## " + PART_NAMES.getOrDefault(part.part(), "PHẦN " + part.part()));
@@ -76,6 +80,40 @@ public final class ExamMarkdownBuilder {
             }
         }
         return String.join("\n\n", blocks) + "\n";
+    }
+
+    static final String HEADER_LEFT_1 = "PHÒNG GD&ĐT ……………";
+    static final String HEADER_LEFT_2 = "TRƯỜNG THCS ……………";
+    static final String HEADER_NAME_LINE = "Họ và tên: ………………………  Lớp: ………";
+
+    /**
+     * Đầu đề (2/11): bảng 2 cột không viền, trái là "PHÒNG GD&ĐT … / TRƯỜNG THCS …", phải là tên kì, môn và thời gian, mã đề
+     * hiển thị; dưới bảng là dòng "Họ và tên … Lớp …". Viết bằng khối openxml thô (như {@link #PAGE_BREAK}) vì Markdown của
+     * pandoc không tắt được viền bảng; nội dung chữ được thoát XML.
+     */
+    static String headerBlock(ExamHeader header) {
+        String left = headerParagraph(HEADER_LEFT_1, false) + headerParagraph(HEADER_LEFT_2, true);
+        String right = headerParagraph(header.titleLine(), true) + headerParagraph(header.subjectLine(), false)
+                + headerParagraph(header.codeLine(), true);
+        return "```{=openxml}\n"
+                + "<w:tbl><w:tblPr><w:tblW w:w=\"5000\" w:type=\"pct\"/><w:tblBorders><w:top w:val=\"nil\"/>"
+                + "<w:left w:val=\"nil\"/><w:bottom w:val=\"nil\"/><w:right w:val=\"nil\"/><w:insideH w:val=\"nil\"/>"
+                + "<w:insideV w:val=\"nil\"/></w:tblBorders><w:tblLayout w:type=\"fixed\"/><w:tblLook w:val=\"0000\"/>"
+                + "</w:tblPr><w:tblGrid><w:gridCol w:w=\"4300\"/><w:gridCol w:w=\"5300\"/></w:tblGrid>"
+                + "<w:tr><w:tc><w:tcPr><w:tcW w:w=\"4300\" w:type=\"dxa\"/></w:tcPr>" + left + "</w:tc>"
+                + "<w:tc><w:tcPr><w:tcW w:w=\"5300\" w:type=\"dxa\"/></w:tcPr>" + right + "</w:tc></w:tr></w:tbl>\n"
+                + "<w:p><w:pPr><w:spacing w:before=\"240\" w:after=\"240\"/></w:pPr><w:r><w:t xml:space=\"preserve\">"
+                + xml(HEADER_NAME_LINE) + "</w:t></w:r></w:p>\n"
+                + "```";
+    }
+
+    private static String headerParagraph(String text, boolean bold) {
+        return "<w:p><w:pPr><w:spacing w:after=\"0\"/><w:jc w:val=\"center\"/></w:pPr><w:r>"
+                + (bold ? "<w:rPr><w:b/></w:rPr>" : "") + "<w:t xml:space=\"preserve\">" + xml(text) + "</w:t></w:r></w:p>";
+    }
+
+    private static String xml(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 
     private static String label(int k) {

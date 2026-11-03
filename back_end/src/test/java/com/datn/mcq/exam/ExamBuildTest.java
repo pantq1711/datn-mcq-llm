@@ -111,6 +111,12 @@ class ExamBuildTest {
         int unclosedMcq;
         /** Số câu mcq tiếp theo có lệnh LaTeX nằm ngoài $...$ trong lời giải (lỗi LaTeX của lời giải). */
         int rawLatexExplanationMcq;
+        /** Số câu mcq tiếp theo có lệnh LaTeX lạ ({@code \foo}) ngoài $...$ trong lời giải: bước giải mã không bọc được. */
+        int unwrappableExplanationMcq;
+        /** Nếu khác null: đề dẫn (đã thoát JSON) của câu mcq kế tiếp, dùng một lần. */
+        String nextMcqQuestion;
+        /** Nếu khác null: lời giải (đã thoát JSON) của câu mcq kế tiếp, dùng một lần. */
+        String nextMcqExplanation;
         /** null: theo mẫu nhãn bắt buộc trong prompt (không có mẫu thì T,F,T,F). */
         String[] tfLabels;
         static String lastTfLabels = "T,F,T,F";
@@ -141,16 +147,28 @@ class ExamBuildTest {
                 rawLatexExplanationMcq--;
                 // JSON thoát đúng; sau giải mã là \frac{5x + 3}{y} nằm ngoài $...$.
                 explanation = "Ta có \\\\frac{5x + 3}{y} khi $y \\\\neq 0$.";
+            } else if (unwrappableExplanationMcq > 0) {
+                unwrappableExplanationMcq--;
+                explanation = "Ta có \\\\foo{5x + 3} khi $y$.";
             } else if (escapeMcq > 0) {
                 escapeMcq--;
                 explanation = "Số mũ của x, góc $90^\\circ$.";
+            }
+            if (nextMcqExplanation != null) {
+                explanation = nextMcqExplanation;
+                nextMcqExplanation = null;
             }
             String optionA = "$" + (k + 1) + "$";
             if (unclosedMcq > 0 && explanation.equals("Số mũ của x.")) {
                 unclosedMcq--;
                 optionA = "$" + (k + 1);
             }
-            return new LlmCallResult("{\"question_text\": \"Bậc của đơn thức $" + (k + 1) + "x^" + k + "$ là:\","
+            String questionText = "Bậc của đơn thức $" + (k + 1) + "x^" + k + "$ là:";
+            if (nextMcqQuestion != null) {
+                questionText = nextMcqQuestion;
+                nextMcqQuestion = null;
+            }
+            return new LlmCallResult("{\"question_text\": \"" + questionText + "\","
                     + " \"option_a\": \"" + optionA + "\", \"option_b\": \"$" + k + "$\", \"option_c\": \"$0$\","
                     + " \"option_d\": \"$" + (k + 2) + "$\", \"correct_option\": \"B\", \"explanation\": \""
                     + explanation + "\"}", 10, 1.0, 0.0, modelName);
@@ -358,7 +376,7 @@ class ExamBuildTest {
                 + " AND bank_item_id IS NOT NULL", Integer.class, examId));
         List<Map<String, Object>> runs = jdbc.queryForList("SELECT * FROM experiment_run WHERE prompt_version LIKE"
                 + " 'matrix-%' ORDER BY id");
-        assertEquals(List.of("matrix-mcq-v5-draft", "matrix-tf-v7-draft", "matrix-sa-v6-draft"),
+        assertEquals(List.of("matrix-mcq-v5-draft", "matrix-tf-v7-draft", "matrix-sa-v7-draft"),
                 runs.stream().map(r -> r.get("prompt_version")).toList());
         for (Map<String, Object> run : runs) {
             assertEquals("production", run.get("purpose"));
@@ -1022,9 +1040,17 @@ class ExamBuildTest {
             assertFalse(xml.contains("Equation.DSMT4"), "mặc định không có đối tượng MathType");
             assertNull(response.getHeader("X-Equation-Kept-Omml"), "header chỉ có khi xuất MathType");
             for (String part : List.of("PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn", "ĐÁP ÁN", "LỜI GIẢI",
-                    "Chưa có câu – cần sinh lại", code)) {
+                    "Chưa có câu – cần sinh lại")) {
                 assertTrue(xml.contains(part), "docx thiếu: " + part);
             }
+            // 2/11: đầu đề (bảng 2 cột không viền) và mã đề hiển thị 101; mã hệ thống MT... chỉ ở tên file, không in ra file.
+            for (String part : List.of("PHÒNG GD&amp;ĐT ……………", "TRƯỜNG THCS ……………", "ĐỀ KIỂM TRA ĐỀ THỬ MA TRẬN",
+                    "Môn: Toán 8 — Thời gian: …… phút", "Mã đề: 101", "Họ và tên: ………………………", "Lớp: ………", "<w:tbl>")) {
+                assertTrue(xml.contains(part), "đầu đề docx thiếu: " + part);
+            }
+            assertTrue(xml.contains("<w:top w:val=\"nil\"/>"), "bảng đầu đề không viền");
+            assertFalse(xml.contains("MT2"), "mã hệ thống không in ra file");
+            assertFalse(xml.contains(code), "mã hệ thống không in ra file");
         } else {
             assertEquals(503, response.getStatus());
             assertTrue(response.getContentAsString(StandardCharsets.UTF_8).contains("pandoc"));
@@ -1083,19 +1109,25 @@ class ExamBuildTest {
         assertNotEquals(List.of(required.split("")), expected);
     }
 
-    /** Đợt A bổ sung 4 (đề 2, chỗ 20): lời giải có lệnh LaTeX ngoài $...$ vẫn còn sau khi Giữ và khi xem đề. */
+    /**
+     * Đợt A bổ sung 4 (đề 2, chỗ 20), cập nhật 2/11 (đề 10 Phần I câu 2): lời giải có biểu thức LaTeX ngoài $...$ nay được
+     * tự bọc $...$ khi giải mã (cảnh báo "đã tự bọc $", bật cờ "cần xem kỹ"); câu giữ nguyên qua Giữ và xem đề.
+     */
     @Test
-    void loiGiaiCoLatexNgoaiCongThucVanConSauKhiGiu() throws Exception {
+    void loiGiaiCoLatexNgoaiCongThucDuocBocVaGiuNguyenSauKhiGiu() throws Exception {
         generator.rawLatexExplanationMcq = 1;
         int examId = readyExam();
         int slot = slotId(examId, "mcq", 1);
-        String expected = "Ta có \\frac{5x + 3}{y} khi $y \\neq 0$.";
+        String expected = "Ta có $\\frac{5x + 3}{y}$ khi $y \\neq 0$.";
         int questionId = jdbc.queryForObject("SELECT generated_question_id FROM exam_slot WHERE id = ?", Integer.class,
                 slot);
         assertEquals(expected, jdbc.queryForObject("SELECT explanation FROM generated_question WHERE id = ?",
                 String.class, questionId));
         assertEquals(Boolean.TRUE, jdbc.queryForObject("SELECT passed FROM quality_check_result WHERE question_id = ?"
-                + " AND check_type = 'format'", Boolean.class, questionId), "lỗi LaTeX của lời giải không làm hỏng format");
+                + " AND check_type = 'format'", Boolean.class, questionId), "bọc $ xong thì không còn lỗi format");
+        assertTrue(jdbc.queryForObject("SELECT warnings::text FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type = 'format'", String.class, questionId)
+                .contains("explanation: đã tự bọc $ quanh công thức LaTeX nằm ngoài $"), "ghi cảnh báo mã mới");
 
         JsonNode kept = json(action(examId, slot, "keep").andExpect(status().isOk()));
         assertEquals(expected, kept.get("explanation").asText(), "Giữ trả lời giải");
@@ -1107,8 +1139,64 @@ class ExamBuildTest {
         assertEquals(expected, item.get("explanation").asText(), "xem đề trả lời giải của câu đã Giữ");
     }
 
+    /** 2/11: lời giải LaTeX ngoài $ mà không bọc được (lệnh lạ) là lỗi định dạng của đầu ra LLM: câu bị loại và sinh lại. */
     @Test
-    void canhBaoSuaEscapeKhongBatCanXemKyConTuDongDongDoLaVanBat() throws Exception {
+    void loiGiaiLatexNgoaiDolaKhongBocDuocThiSinhLai() throws Exception {
+        generator.unwrappableExplanationMcq = 1;
+        int examId = readyExam();
+        assertEquals("ready", progress(examId).get("status").asText());
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM generated_question WHERE status = 'format_failed'",
+                Integer.class), "đúng một câu bị loại");
+        String errors = jdbc.queryForObject("SELECT r.errors::text FROM quality_check_result r JOIN generated_question g"
+                + " ON g.id = r.question_id WHERE g.status = 'format_failed' AND r.check_type = 'format'", String.class);
+        assertTrue(errors.contains("explanation: Có lệnh LaTeX nằm ngoài"), errors);
+    }
+
+    /** Lý do "cần xem kỹ" của câu mcq đầu tiên của đề có lý do chứa {@code part}. */
+    private List<String> reasonsContaining(int examId, String part) throws Exception {
+        JsonNode items = json(perform(get("/api/exams/" + examId)).andExpect(status().isOk()))
+                .get("parts").get(0).get("items");
+        for (JsonNode item : items) {
+            List<String> reasons = new ArrayList<>();
+            item.get("reviewReasons").forEach(r -> reasons.add(r.asText()));
+            if (reasons.stream().anyMatch(r -> r.contains(part))) {
+                assertTrue(item.get("needsReview").asBoolean());
+                return reasons;
+            }
+        }
+        throw new AssertionError("không câu mcq nào có lý do chứa \"" + part + "\"");
+    }
+
+    /**
+     * 2/11 (đề 11, câu 190 và 192 qua QC không cờ): cảnh báo của bước format ngoài nhóm answerWarnings (lệnh LaTeX không hỗ
+     * trợ trong $...$, lời giải có thể còn nháp, từ tiếng Anh) trước đây KHÔNG được lưu (QcOrchestrator chỉ lưu answerWarnings)
+     * nên không bao giờ thành lý do "cần xem kỹ". Nay lưu cả hai nhóm.
+     */
+    @Test
+    void lenhLatexKhongHoTroTrongCongThucBatCanXemKy() throws Exception {
+        generator.nextMcqQuestion = "Cho $x^\\\\toRadians$ thì bậc là:";
+        int examId = readyExam();
+        List<String> reasons = reasonsContaining(examId, "toRadians");
+        assertTrue(reasons.stream().anyMatch(r -> r.startsWith("warning: question_text: Lệnh \\toRadians không hỗ trợ")),
+                reasons.toString());
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM quality_check_result WHERE check_type = 'format'"
+                + " AND warnings::text LIKE '%toRadians%'", Integer.class), "cảnh báo được lưu ở cột warnings");
+    }
+
+    @Test
+    void loiGiaiCoTinhLaiVaTuTiengAnhBatCanXemKy() throws Exception {
+        generator.nextMcqExplanation = "Thử tính lại bằng cách khác: $1 + 1 = 2$.";
+        int examId = readyExam();
+        assertTrue(reasonsContaining(examId, "explanation_draft_suspect").contains("explanation_draft_suspect"));
+
+        generator.nextMcqExplanation = "Kết quả is đúng.";
+        int second = readyExam();
+        assertTrue(reasonsContaining(second, "tiếng Anh")
+                .contains("warning: explanation: có từ tiếng Anh ngoài công thức (is)"));
+    }
+
+    @Test
+    void canhBaoTuSuaChacChanKhongBatCanXemKyNhungVanDuocLuu() throws Exception {
         generator.escapeMcq = 1;
         generator.unclosedMcq = 1;
         int examId = build("{\"matrixId\": " + matrixId + "}").get("examId").asInt();
@@ -1132,7 +1220,7 @@ class ExamBuildTest {
             } else if (warnings != null && warnings.contains("option_a: đã tự đóng $")) {
                 assertEquals("$" + item.get("optionB").asText().replace("$", "").transform(s -> Integer.parseInt(s) + 1)
                         + "$", item.get("optionA").asText());
-                assertEquals(List.of("warning: option_a: đã tự đóng $"), reasons, "tự đóng $ vẫn bật cần xem kỹ");
+                assertEquals(List.of(), reasons, "tự đóng $ là hệ thống tự sửa chắc chắn: lưu cảnh báo, không bật cờ (2/11)");
                 checked++;
             }
         }

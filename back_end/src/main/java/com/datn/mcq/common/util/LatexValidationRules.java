@@ -48,9 +48,24 @@ public final class LatexValidationRules {
             "Rightarrow", "Leftrightarrow", "rightarrow", "leftrightarrow",
             "dots", "ldots", "cdots",
             "pi", "angle", "triangle", "circ", "infty", "in", "notin", "cup", "cap",
-            "text", "sin", "cos", "tan", "cot", "quad");
+            "text", "sin", "cos", "tan", "cot", "quad",
+            // 3/11 (đo đề 13: \widehat bị cảnh báo nhầm): lệnh KaTeX hỗ trợ hay dùng ở THCS, thêm vào danh sách
+            "widehat", "hat", "overline", "overrightarrow", "vec", "parallel", "perp", "cong", "sim", "backsim",
+            "Leftarrow", "subset", "emptyset", "mathbb", "approx", "mp", "mathrm", "qquad", "dfrac", "prime");
 
     private static final Set<String> ALLOWED_ENVIRONMENTS = Set.of("matrix", "cases", "aligned");
+
+    /**
+     * Thông báo lỗi khi có lệnh LaTeX (hoặc mũ/chỉ số viết bằng ngoặc nhọn, "^" hay "_" liền sau là "{") nằm ngoài cặp $...$.
+     * Mỗi trường chỉ báo một lần. Công khai để FormatChecker nhận ra lỗi này riêng (lời giải của đầu ra LLM coi là lỗi chặn).
+     */
+    public static final String MSG_COMMAND_OUTSIDE =
+            "Có lệnh LaTeX nằm ngoài cặp $...$ (thiếu dấu $ bao quanh công thức)";
+
+    /** True khi {@code name} (không có dấu "\") là lệnh trong danh sách cho phép. */
+    public static boolean isAllowedCommand(String name) {
+        return ALLOWED_COMMANDS.contains(name);
+    }
 
     /** Dấu phân cách hợp lệ sau \left / \right (ngoài ra còn \{ \} \|); '.' là dấu vô hình. */
     private static final String PLAIN_DELIMITERS = "()[]|.";
@@ -107,7 +122,7 @@ public final class LatexValidationRules {
             if (c == '\\') {
                 if (!inMath) {
                     if (!commandOutsideReported && i + 1 < n && Character.isLetter(text.charAt(i + 1))) {
-                        errors.add("Có lệnh LaTeX nằm ngoài cặp $...$ (thiếu dấu $ bao quanh công thức)");
+                        errors.add(MSG_COMMAND_OUTSIDE);
                         commandOutsideReported = true;
                     }
                     i += 2;
@@ -140,6 +155,10 @@ public final class LatexValidationRules {
                 inMath = false;
                 i += (display && doubleDollar) ? 2 : 1;
                 continue;
+            }
+            if (!inMath && (c == '^' || c == '_') && i + 1 < n && text.charAt(i + 1) == '{' && !commandOutsideReported) {
+                errors.add(MSG_COMMAND_OUTSIDE);
+                commandOutsideReported = true;
             }
             if (inMath) {
                 if (c == '\n') {

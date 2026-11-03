@@ -85,7 +85,6 @@ const GENERIC_FORMAT_WARNING = "Có điểm trình bày cần xem lại";
 
 // Đầu câu các lỗi đáp số (ShortAnswerValue) đã đủ rõ cho giáo viên, không cần dịch lại
 const readableAnswerErrors = [
-    "đáp án phải là",
     "không phân tích được",
     "dấu chấm có thể",
     "có chữ số 0",
@@ -94,6 +93,13 @@ const readableAnswerErrors = [
     "số dưới dấu căn",
     "mẫu số bằng 0",
 ];
+
+// Lỗi dạng đáp số (quá 4 ký tự, phân số, căn, đơn vị…): nhận ra theo phần đầu của thông báo backend ("Đáp số phải là"
+// từ 2/11, "đáp án phải là" ở dữ liệu cũ), không theo phần còn lại, và hiện chữ của frontend để đổi câu chữ backend
+// không làm mất chỗ nhận.
+const ANSWER_FORMAT_START = /^đáp (?:số|án) phải là/i;
+const ANSWER_FORMAT_MESSAGE =
+    "Đáp số phải là số nguyên hoặc thập phân tối đa 4 ký tự. Thầy/cô chọn lại số liệu của đề để đáp số vừa khung.";
 
 // Tên trường backend nhắc tới trong cảnh báo định dạng → chỗ trong câu, nói theo giáo viên
 const warningFieldLabels: Record<string, string> = {
@@ -197,10 +203,19 @@ export function describeFormatIssue(issue: string): string {
     if (detail.startsWith("đã tự đóng")) {
         return `Công thức ở ${place} chưa đóng đủ nên hệ thống đã tự sửa. Thầy/cô xem lại công thức.`;
     }
+    if (detail.startsWith("đã tự bọc")) {
+        return `Hệ thống đã tự sửa cách gõ công thức ở ${place}. Thầy/cô xem lại.`;
+    }
+    if (detail.startsWith("có từ tiếng Anh")) {
+        return "Câu có từ tiếng Anh lẫn vào, thầy/cô xem lại câu chữ.";
+    }
     if (detail.startsWith("Lệnh ")) {
         return `Công thức ở ${place} có ký hiệu lạ, có thể gõ sai. Thầy/cô xem lại công thức.`;
     }
     if (field === "answer") {
+        if (ANSWER_FORMAT_START.test(detail)) {
+            return ANSWER_FORMAT_MESSAGE;
+        }
         // Lỗi đáp số do backend viết sẵn bằng tiếng Việt dễ hiểu: bỏ tiền tố "answer:" rồi giữ nguyên câu
         if (readableAnswerErrors.some((start) => detail.startsWith(start))) {
             return detail.charAt(0).toUpperCase() + detail.slice(1);
@@ -220,7 +235,12 @@ export function describeReviewReason(reason: string): string {
     }
     if (reason.startsWith("similar_in_exam:")) {
         const position = reason.slice("similar_in_exam:".length).trim();
-        // n là số thứ tự câu trong đề; không đọc được số thì không đoán
+        // Từ 2/11: "II.3" = câu 3 của Phần II (đánh số như trang đề)
+        const byPart = /^(I{1,3})\.(\d+)$/.exec(position);
+        if (byPart) {
+            return `Gần giống câu ${byPart[2]} Phần ${byPart[1]} trong đề, nên đổi một trong hai câu.`;
+        }
+        // Dữ liệu cũ: n là số thứ tự câu trong cả đề; không đọc được số thì không đoán
         if (/^\d+$/.test(position)) {
             return `Gần giống câu ${position} trong đề, nên đổi một trong hai câu.`;
         }

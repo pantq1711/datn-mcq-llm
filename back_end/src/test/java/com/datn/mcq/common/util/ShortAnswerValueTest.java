@@ -316,8 +316,20 @@ class ShortAnswerValueTest {
     @Test
     void thongBaoDapAnNoiRoCachSua() {
         assertTrue(ShortAnswerValue.MSG_SA_ANSWER_FORMAT.contains("tối đa 4 ký tự"));
-        assertTrue(ShortAnswerValue.MSG_SA_ANSWER_FORMAT.contains("phân số/căn"));
-        assertTrue(ShortAnswerValue.MSG_SA_ANSWER_FORMAT.contains("làm tròn"));
+        assertTrue(ShortAnswerValue.MSG_SA_ANSWER_FORMAT.contains("chọn lại số liệu"));
+    }
+
+    /**
+     * 2/11 (sau thẩm định đề 10): thông báo này là ghi chú sinh lại gửi cho model, nên chỉ dặn CHỌN LẠI SỐ LIỆU, không gợi đổi
+     * đơn vị hay co giãn kết quả (đã làm đáp án 10000 thành 100).
+     */
+    @Test
+    void thongBaoDapAnDanChonLaiSoLieuKhongGoiDoiDonVi() {
+        assertEquals("Đáp số phải là số nguyên hoặc thập phân tối đa 4 ký tự. Hãy chọn lại số liệu của đề để đáp số tự nhiên "
+                + "thỏa điều kiện; không đổi đơn vị, không nhân/chia hay làm tròn kết quả để rút gọn.",
+                ShortAnswerValue.MSG_SA_ANSWER_FORMAT);
+        assertFalse(ShortAnswerValue.MSG_SA_ANSWER_FORMAT.contains("làm tròn đến hàng nào"));
+        assertFalse(ShortAnswerValue.MSG_SA_ANSWER_FORMAT.contains("nếu kết quả lẻ"));
     }
 
     /** Đáp án Solver đọc ở LENIENT: vẫn đọc phân số/căn để so giá trị với đáp án câu (thập phân). */

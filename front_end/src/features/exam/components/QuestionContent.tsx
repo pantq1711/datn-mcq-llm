@@ -1,4 +1,4 @@
-import { Tag, Typography } from "antd";
+import { Typography } from "antd";
 import { BulbOutlined } from "@ant-design/icons";
 import type { ExamQuestionItem } from "../types/exam.types";
 import { describeLevel, resolveQuestionType } from "../../../utils/exam.utils";
@@ -41,13 +41,14 @@ export default function QuestionContent({ question, showExplanation = true }: Qu
                                     <div key={statement.key} className="exam-question-option">
                                         <div className="exam-question-option-label"><Text strong>{statement.key})</Text></div>
                                         <Text className="exam-question-option-text"><MathText text={statement.text} /></Text>
-                                        <Tag color={statementDifficulty.color}>{statementDifficulty.label}</Tag>
-                                        <Tag
-                                            color={statement.label === "T" ? "success" : "error"}
+                                        <Text type="secondary">{statementDifficulty.label}</Text>
+                                        <Text
+                                            strong
+                                            type={statement.label === "T" ? "success" : "danger"}
                                             className="exam-question-option-answer"
                                         >
                                             {statement.label === "T" ? "Đúng" : "Sai"}
-                                        </Tag>
+                                        </Text>
                                     </div>
                                 );
                             })}
@@ -76,7 +77,7 @@ export default function QuestionContent({ question, showExplanation = true }: Qu
                                     <div className="exam-question-option-label"><Text strong>{label}.</Text></div>
                                     <Text className="exam-question-option-text"><MathText text={optionsMap[label]} /></Text>
                                     {isCorrect && (
-                                        <Tag color="success" className="exam-question-option-answer">Đáp án đúng</Tag>
+                                        <Text strong type="success" className="exam-question-option-answer">Đáp án đúng</Text>
                                     )}
                                 </div>
                             );

@@ -26,26 +26,29 @@
     justify-content: center;
     padding: 32px 24px;
 
-    background-image:
-        linear-gradient(rgba(0, 0, 0, 0.35),
-            rgba(0, 0, 0, 0.35)),
-        url("/images/auth-background.jpg");
-
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
+    /* Nền trơn, không ảnh và không kính mờ */
+    background: #f0f2f5;
 }
 
 .auth-layout-card {
     width: 100%;
     max-width: 440px;
     padding: 32px;
-    background: rgba(255, 255, 255, 0.5);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    font-size: 16px;
+}
+
+/* Chữ 16px cho nhãn, ô nhập, nút và dòng ghi chú */
+.auth-layout-card .ant-form-item-label > label,
+.auth-layout-card .ant-input,
+.auth-layout-card .ant-input-affix-wrapper,
+.auth-layout-card .ant-btn,
+.auth-layout-card .ant-alert,
+.auth-layout-card .ant-typography {
+    font-size: 16px;
 }
 
 @media (max-width: 576px) {

@@ -44,12 +44,9 @@ public final class MatrixPromptDraftV0 {
             - Đáp án là MỘT số nguyên hoặc MỘT số thập phân viết bằng dấu phẩy, tối đa 4 ký tự tính cả dấu "-" (chỉ ở \
             đầu) và dấu phẩy, ví dụ "2,75", "-12", "0,5". Viết trần, không bọc trong $...$.
             - Không phân số, hỗn số, căn, đơn vị; không viết "x =".
-            - Nếu kết quả tính ra không gọn trong 4 ký tự (số vô tỉ, phân số không viết gọn được bằng số thập phân hữu \
-            hạn, số quá dài) thì đề bài phải yêu cầu làm tròn rõ ràng (ví dụ "làm tròn đến hàng phần mười") và đáp án \
-            là giá trị đã làm tròn đúng yêu cầu đó.
-            - Nếu kết quả là số lớn hơn 4 ký tự (ví dụ tiền, dân số, khối lượng) thì đề bài phải đổi đơn vị cho đáp án \
-            gọn trong 4 ký tự (ví dụ "tính theo nghìn đồng", "đơn vị: triệu người", "đơn vị: tấn"). Ví dụ: \
-            10000 đồng thì đề hỏi theo nghìn đồng và đáp án "10".
+            - Chọn số liệu ngay từ đầu để đáp số đúng tự nhiên là số nguyên hoặc thập phân tối đa 4 ký tự. TUYỆT ĐỐI \
+            không đổi đơn vị, không chia/nhân kết quả, không làm tròn để rút gọn đáp số. Nếu đề cần làm tròn thì câu \
+            dẫn phải ghi rõ làm tròn đến đâu.
             - Không viết chữ số 0 thừa ở đầu (viết 5, không viết 05); không viết -0.
             - Đề chỉ có một cách hiểu và một đáp án duy nhất.
             """;
@@ -80,13 +77,16 @@ public final class MatrixPromptDraftV0 {
      * ({@link #slotLine(int, int, List)}). mcq v5, sa v6, tf v7 (ngày 31/10, thẩm định đề 5-7: lời giải sai tăng từ 1 lên 4
      * câu, câu 82 tự viết "Xin lỗi, tính lại…"; ô C17 cả 3 đề vẫn ra bài tìm x): thêm {@link #EXPLANATION_RULE} cho cả 3
      * dạng, thay {@link #FACTORING_CELL_RULE} (sa) bằng dạng tính nhanh giá trị biểu thức và thay quy tắc của tf bằng
-     * {@link #FACTORING_CELL_RULE_TF} (ý là khẳng định về kết quả phân tích hoặc tính nhanh). Run cũ là v0 (tf: v0, v1,
-     * v2, v3, v4, v5, v6; mcq: v1, v2, v3, v4; sa: v1, v2, v3, v4, v5).
+     * {@link #FACTORING_CELL_RULE_TF} (ý là khẳng định về kết quả phân tích hoặc tính nhanh). sa v7 (ngày 2/11, thẩm định
+     * UX đề 10: Phần III câu 2 lưu đáp án 100, đúng là 10000, lời giải "đổi đơn vị … thành trăm để đáp án gọn"): bỏ quy tắc
+     * đổi đơn vị cho đáp án gọn (commit 6d8a582), thay bằng "chọn số liệu ngay từ đầu, không đổi đơn vị, không chia/nhân
+     * kết quả, không làm tròn để rút gọn" trong {@link #SA_ANSWER_RULES}. Run cũ là v0 (tf: v0, v1, v2, v3, v4, v5, v6;
+     * mcq: v1, v2, v3, v4; sa: v1, v2, v3, v4, v5, v6).
      */
     public static String promptVersion(QuestionType type) {
         String version = switch (type) {
             case TF -> "-v7-draft";
-            case SA -> "-v6-draft";
+            case SA -> "-v7-draft";
             case MCQ -> "-v5-draft";
         };
         return VERSION_PREFIX + type.getDbValue() + version;

@@ -77,12 +77,18 @@ class MatrixPromptDraftV0Test {
     void promptSaDanDapAnSoNguyenHoacThapPhanToiDa4KyTu() {
         String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.SA, "Chuyển động", null));
         for (String part : List.of("tối đa 4 ký tự", "\"2,75\"", "\"-12\"", "\"0,5\"", "dấu phẩy",
-                "Không phân số, hỗn số, căn, đơn vị", "làm tròn đến hàng phần mười",
-                // 27/10: kết quả lớn hơn 4 ký tự thì đề phải đổi đơn vị (tiền, dân số, khối lượng)
-                "số lớn hơn 4 ký tự", "đề bài phải đổi đơn vị", "\"tính theo nghìn đồng\"",
-                "\"đơn vị: triệu người\"", "\"đơn vị: tấn\"",
-                "10000 đồng thì đề hỏi theo nghìn đồng và đáp án \"10\"")) {
+                "Không phân số, hỗn số, căn, đơn vị")) {
             assertTrue(p.contains(part), "Prompt thiếu: " + part);
+        }
+        // 2/11 (thẩm định UX đề 10): không đổi đơn vị / chia nhân kết quả để đáp án gọn (đề 10 câu 2: đáp án lưu 100, đúng là 10000)
+        for (String part : List.of("Chọn số liệu ngay từ đầu để đáp số đúng tự nhiên là số nguyên hoặc thập phân tối đa 4 ký tự",
+                "TUYỆT ĐỐI không đổi đơn vị, không chia/nhân kết quả, không làm tròn để rút gọn đáp số",
+                "Nếu đề cần làm tròn thì câu dẫn phải ghi rõ làm tròn đến đâu")) {
+            assertTrue(p.contains(part), "Prompt thiếu: " + part);
+        }
+        for (String gone : List.of("đề bài phải đổi đơn vị", "\"tính theo nghìn đồng\"", "\"đơn vị: triệu người\"",
+                "\"đơn vị: tấn\"", "10000 đồng thì đề hỏi theo nghìn đồng", "yêu cầu làm tròn rõ ràng")) {
+            assertFalse(p.contains(gone), "quy tắc rescale cũ còn trong prompt: " + gone);
         }
         assertFalse(p.contains(SaPromptDraftV0.ANSWER_RULES.strip()), "không dùng quy tắc cũ (cho phép phân số, căn)");
         assertFalse(p.contains("phân số $\\frac{a}{b}$; hoặc"), p);
@@ -103,7 +109,7 @@ class MatrixPromptDraftV0Test {
     void phienBanVaThongSoOLuuDuoc() {
         assertEquals("matrix-mcq-v5-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
         assertEquals("matrix-tf-v7-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
-        assertEquals("matrix-sa-v6-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
+        assertEquals("matrix-sa-v7-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion("sa-v1-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion(null));

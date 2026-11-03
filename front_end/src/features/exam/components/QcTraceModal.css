@@ -82,7 +82,7 @@
 }
 
 .qc-trace-modal__subtitle {
-    color: #8c8c8c;
+    color: rgba(0, 0, 0, 0.65);
     font-size: 12px;
     font-weight: 400;
 }
@@ -115,7 +115,7 @@
 }
 
 .qc-trace-modal__context-label {
-    color: #8c8c8c;
+    color: rgba(0, 0, 0, 0.65);
     font-size: 12px;
 }
 
@@ -198,7 +198,7 @@
     border: 1px solid #d9d9d9;
     border-radius: 50%;
     background: #ffffff;
-    color: #8c8c8c;
+    color: rgba(0, 0, 0, 0.65);
     font-size: 15px;
 }
 
@@ -309,12 +309,12 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 7px;
-    color: #8c8c8c;
+    color: rgba(0, 0, 0, 0.65);
     font-size: 12px;
 }
 
 .qc-trace-modal__step-time .anticon {
-    color: #8c8c8c;
+    color: rgba(0, 0, 0, 0.65);
 }
 
 .qc-trace-modal__step-time .ant-typography {
