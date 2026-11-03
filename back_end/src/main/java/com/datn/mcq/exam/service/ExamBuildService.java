@@ -305,6 +305,12 @@ public class ExamBuildService {
      * trùng. Gọi trong transaction của nơi gọi.
      */
     void reconcile(Integer examId) {
+        // F-07: đề không còn chỗ generating thì không có gì để đối soát: bỏ qua, KHÔNG khóa. Kiểm bằng truy vấn không khóa;
+        // nếu một chỗ vừa chuyển sang generating ngay sau đây (Đổi câu của request khác) thì lần xem kế tiếp sẽ đối soát nó.
+        if (!slotRepository.existsByExamIdAndState(examId, ExamSlot.GENERATING)) {
+            return;
+        }
+        // Có chỗ generating: khóa như cũ rồi đọc lại state SAU khi khóa (có thể đã đổi giữa hai bước).
         for (ExamSlot slot : slotRepository.lockByExamId(examId)) {
             if (ExamSlot.GENERATING.equals(slot.getState())) {
                 reconcileSlot(slot);

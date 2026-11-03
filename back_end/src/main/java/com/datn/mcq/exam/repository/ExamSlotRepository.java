@@ -17,6 +17,9 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
     /** Các chỗ của nhiều đề (danh sách đề của tôi, chỉ đọc). */
     List<ExamSlot> findByExamIdIn(Collection<Integer> examIds);
 
+    /** Đề còn chỗ ở trạng thái {@code state} không (truy vấn KHÔNG khóa; dùng để quyết định có cần khóa khi đối soát). */
+    boolean existsByExamIdAndState(Integer examId, String state);
+
     /** Khóa các chỗ của một đề khi đối soát, để hai lần đối soát đồng thời không tạo job trùng. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM ExamSlot s WHERE s.examId = :examId ORDER BY s.cellId, s.slotNo")
