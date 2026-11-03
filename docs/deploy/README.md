@@ -369,6 +369,11 @@ nhận cookie Secure qua http).
 - **Trích PDF của tài liệu bài học (W2-3):** PDFBox không có trần bộ nhớ cho luồng nén; một PDF độc có thể làm `app` hết heap và thoát (`ExitOnOutOfMemoryError`). Chi tiết và cách đã giảm rủi ro: `docs/api/README.md` mục 9.4.
 - **Kích thước image backend ~742 MB** (chưa tối ưu): chưa rõ phần nào chiếm nhiều (lớp Ubuntu, font, pandoc, JRE).
   Layered jar (Spring Boot `jarmode=tools`) có thể giảm lượng phải kéo mỗi lần cập nhật — chưa kiểm với Boot 4.1.1.
-- JLaTeXMath: image đã có font và `java.awt.headless=true`; cần smoke test vẽ ảnh công thức khi thêm dependency.
+- Xuất Word dạng MathType (`?equation=mathtype`) dùng Apache POI 5.4.1 (Apache-2.0) và JLaTeXMath 1.0.7 (GPL-2.0 kèm
+  Classpath Exception: được liên kết vào ứng dụng mà không buộc ứng dụng theo GPL; phải ghi rõ trong tài liệu đồ án).
+  Image đã có font và `java.awt.headless=true`. **Chưa chạy thử trong container Linux**: mới kiểm trên Windows. Sau khi
+  deploy cần xuất một đề với `?equation=mathtype` và mở bằng Word.
+- File MathType nặng khoảng 2 MB mỗi đề (Equation khoảng 20 KB) và xuất chậm hơn khoảng 2–3 giây, trong lúc đó vẫn giữ
+  Semaphore của pandoc. Máy chủ 2 GB RAM: theo dõi bộ nhớ khi nhiều người xuất cùng lúc.
 - `update.sh` và kéo image từ GHCR: chưa chạy được vì chưa có image trên GHCR.
 - Tự động deploy sau khi merge — chưa làm, quyết định deploy thủ công trong giai đoạn dùng thử.

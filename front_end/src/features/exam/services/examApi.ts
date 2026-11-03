@@ -76,12 +76,39 @@ export const getExamProgress = async (examId: string) => {
     return data; // kiểu ExamProgress cần khai báo trong exam.types.ts
 };
 
-export const getExamExportDocx = async (examId: string): Promise<Blob> => {
+/** Cách ghi công thức trong file Word: Equation gốc của Word (mặc định) hoặc đối tượng MathType. */
+export type ExportEquationFormat = 'omml' | 'mathtype';
+
+export interface ExportDocxResult {
+    blob: Blob;
+    /** Số công thức không chuyển được sang MathType, vẫn ở dạng công thức Word (chỉ khi xuất MathType). */
+    keptOmml: number;
+    /** Số công thức dài không ngắt dòng được nên đã thu nhỏ cho vừa trang (chỉ khi xuất MathType). */
+    scaled: number;
+}
+
+/** Số nguyên dương trong header phản hồi; thiếu hoặc sai định dạng thì 0. */
+const headerCount = (value: unknown): number => {
+    const n = Number.parseInt(String(value ?? ''), 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+export const getExamExportDocx = async (
+    examId: string,
+    equation: ExportEquationFormat = 'omml'
+): Promise<ExportDocxResult> => {
     const resp = await axiosInstance.get(
         `/api/exams/${examId}/export/docx`,
-        { responseType: 'blob' }   // nhận dữ liệu dạng binary
+        {
+            responseType: 'blob',   // nhận dữ liệu dạng binary
+            ...(equation === 'mathtype' ? { params: { equation } } : {}),
+        }
     );
-    return resp.data;   // Blob .docx
+    return {
+        blob: resp.data,   // Blob .docx
+        keptOmml: headerCount(resp.headers['x-equation-kept-omml']),
+        scaled: headerCount(resp.headers['x-equation-scaled']),
+    };
 };
 
 export const getQcTrace = async (examId: string, slotId: string) => {

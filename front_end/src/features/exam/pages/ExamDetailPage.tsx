@@ -1,12 +1,12 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Alert, Button, Card, Progress, Spin, Space, Tag, Tooltip, Typography, message } from "antd";
-import { ArrowLeftOutlined, FileWordOutlined, SyncOutlined, WarningOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Dropdown, Progress, Spin, Space, Tag, Tooltip, Typography, message } from "antd";
+import { ArrowLeftOutlined, DownOutlined, FileWordOutlined, SyncOutlined, WarningOutlined } from "@ant-design/icons";
 
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
 import type { ExamPreviewData, ExamProgress, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
 import { examKindConfig, examStatusConfig } from "../../../utils/exam.utils";
-import { keepQuestion, replaceQuestion, getExamDetail, getExamProgress, getExamExportDocx, getCatalogSubjects } from '../services/examApi';
+import { keepQuestion, replaceQuestion, getExamDetail, getExamProgress, getExamExportDocx, getCatalogSubjects, type ExportEquationFormat } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
 import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
 
@@ -17,6 +17,13 @@ import EditQuestionModal from "../components/EditQuestionModal";
 import { QcTraceModal } from '../components/QcTraceModal';
 
 const { Title, Text } = Typography;
+
+/** Tên file an toàn từ tên đề: bỏ ký tự Windows không cho phép trong tên file; rỗng thì dùng {@code fallback}. */
+function toFileName(title: string | undefined, fallback: string): string {
+    // eslint-disable-next-line no-control-regex
+    const cleaned = (title ?? "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().replace(/[. ]+$/, "");
+    return cleaned || fallback;
+}
 
 const POLL_INTERVAL_MS = 8000;
 const MAX_CONSECUTIVE_ERRORS = 3;
@@ -243,18 +250,27 @@ export default function ExamDetailPage() {
     );
 
     // === Hàm xử lý xuất file Word đã được tách riêng ===
-    const handleExportWord = async () => {
+    const handleExportWord = async (equation: ExportEquationFormat = 'omml') => {
         if (!examId) return;
         try {
             setExportLoading(true);
-            const blob = await getExamExportDocx(examId); // Trả về Blob .docx
+            const { blob, keptOmml, scaled } = await getExamExportDocx(examId, equation);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `exam-${examId}.docx`;
+            a.download = equation === 'mathtype'
+                ? `${toFileName(detail?.title, `exam-${examId}`)}-mathtype.docx`
+                : `exam-${examId}.docx`;
             a.click();
             window.URL.revokeObjectURL(url);
             message.success('Xuất file Word thành công!');
+            // Chỉ có khi xuất MathType (backend không gửi header ở chế độ Equation)
+            if (keptOmml > 0) {
+                message.warning(`${keptOmml} công thức không chuyển được sang MathType, vẫn ở dạng công thức Word`, 8);
+            }
+            if (scaled > 0) {
+                message.info(`${scaled} công thức dài đã được thu nhỏ cho vừa trang`, 8);
+            }
         } catch (err: any) {
             message.error(err?.response?.data?.error ?? 'Không xuất được file');
         } finally {
@@ -394,15 +410,37 @@ export default function ExamDetailPage() {
                         <Tooltip title={isGenerating ? "Đề đang được soạn, chờ xong rồi xuất Word." : undefined}>
                             {/* Nút bị khóa không nhận chuột nên bọc span để tooltip vẫn hiện */}
                             <span>
-                                <Button
-                                    type="primary"
-                                    icon={<FileWordOutlined />}
-                                    loading={exportLoading}
-                                    disabled={isGenerating}
-                                    onClick={handleExportWord}
-                                >
-                                    Xuất file Word
-                                </Button>
+                                {/* Bấm nút chính: xuất công thức Word (Equation) như trước; mũi tên mở menu chọn cách ghi công thức */}
+                                <Space.Compact>
+                                    <Button
+                                        type="primary"
+                                        icon={<FileWordOutlined />}
+                                        loading={exportLoading}
+                                        disabled={isGenerating}
+                                        onClick={() => handleExportWord('omml')}
+                                    >
+                                        Xuất file Word
+                                    </Button>
+                                    <Dropdown
+                                        trigger={["click"]}
+                                        disabled={isGenerating || exportLoading}
+                                        menu={{
+                                            items: [
+                                                { key: "omml", label: "Công thức Word (Equation)" },
+                                                { key: "mathtype", label: "Công thức MathType (thử nghiệm)" },
+                                            ],
+                                            selectedKeys: ["omml"],
+                                            onClick: ({ key }) => handleExportWord(key === "mathtype" ? "mathtype" : "omml"),
+                                        }}
+                                    >
+                                        <Button
+                                            type="primary"
+                                            icon={<DownOutlined />}
+                                            disabled={isGenerating || exportLoading}
+                                            aria-label="Chọn cách ghi công thức khi xuất Word"
+                                        />
+                                    </Dropdown>
+                                </Space.Compact>
                             </span>
                         </Tooltip>
                     </Space>
