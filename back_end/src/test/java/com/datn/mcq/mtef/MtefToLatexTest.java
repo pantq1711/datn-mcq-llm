@@ -306,14 +306,20 @@ class MtefToLatexTest {
         assertOk("1", MtefConverter.fromMtef(mtefOfLine(nested)));
     }
 
+    /**
+     * Đối tượng OLE lấy nguyên từ file tự soạn {@code spikes/mathtype-ole/KIEM_TRA_mo_rong.docx}
+     * ({@code word/embeddings/oleObjectMT<n>.bin}, giữ tên gốc để truy lại). Không dùng file của bộ đề thương mại.
+     * Hệ phương trình (cases) không có trong file này; đã có test MTEF dựng tay ở trên.
+     */
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
-            "real-1.bin|\\frac{5}{3}",
-            "real-3.bin|x_{1}",
-            "real-5.bin|\\widehat{ABC}=60^{\\circ}",
-            "real-8.bin|\\left(x+\\frac{1}{2}\\right)^{2}",
-            "real-9.bin|\\begin{cases}x+y=3\\\\x-y=1\\end{cases}"})
-    void fileMathTypeThat(String file, String expected) throws IOException {
+            "oleObjectMT37.bin|\\frac{1}{x}",
+            "oleObjectMT102.bin|x_{1}^{2}",
+            "oleObjectMT8.bin|\\tan 30^{\\circ}=\\frac{\\sqrt{3}}{3}",
+            "oleObjectMT103.bin|\\left(\\frac{1}{2}\\right)",
+            "oleObjectMT1.bin|\\sqrt[3]{27}",
+            "oleObjectMT4.bin|x_{1{,}2}=\\frac{-b\\pm\\sqrt{\\Delta}}{2a}"})
+    void fileMathTypeTuSoan(String file, String expected) throws IOException {
         try (InputStream in = getClass().getResourceAsStream("/mtef/" + file)) {
             assertNotNull(in, file);
             assertOk(expected, MtefConverter.fromOle(in.readAllBytes()));
@@ -321,9 +327,9 @@ class MtefToLatexTest {
     }
 
     @Test
-    void fileMathTypeThatCoCanVaLuyThua() throws IOException {
-        try (InputStream in = getClass().getResourceAsStream("/mtef/real-2.bin")) {
-            assertOk("\\sqrt{x^{1}+1}", MtefConverter.fromOle(in.readAllBytes()));   // biểu thức đã được sửa trong MathType
+    void fileMathTypeTuSoanCoCanVaPhanSo() throws IOException {
+        try (InputStream in = getClass().getResourceAsStream("/mtef/oleObjectMT30.bin")) {
+            assertOk("\\sqrt{\\frac{a}{b}}=\\frac{\\sqrt{a}}{\\sqrt{b}}", MtefConverter.fromOle(in.readAllBytes()));
         }
     }
 }

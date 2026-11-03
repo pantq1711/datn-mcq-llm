@@ -90,6 +90,9 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | POST | `/api/materials` | Tải tài liệu bài học (.docx, .pdf, .txt; multipart, tối đa 10 MB). Chỉ lưu văn bản đã trích (mục 9) |
 | GET | `/api/materials` | Tài liệu của tôi, mới nhất trước, có phân trang, không kèm văn bản (mục 9) |
 | GET, DELETE | `/api/materials/{id}` | Chi tiết kèm 500 ký tự đầu của văn bản / xóa tài liệu của tôi (mục 9) |
+| POST | `/api/bank-imports` | Nhập ngân hàng câu từ Word: tải bộ câu hỏi .docx → bản xem trước kèm cờ (mục 10). Không gọi AI |
+| GET, DELETE | `/api/bank-imports/{id}` | Xem lại / hủy một lần nhập của tôi (mục 10) |
+| POST | `/api/bank-imports/{id}/confirm` | Đưa các câu chọn vào ngân hàng RIÊNG TƯ của tôi (mục 10) |
 | GET | `/api/exams/{id}/progress` | Tiến độ theo ô |
 | GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
@@ -1282,3 +1285,46 @@ Mã lỗi (body `{"error", "code"}`):
   > *"Tài liệu sẽ được gửi tới dịch vụ AI bên thứ ba để sinh câu hỏi. Tôi xác nhận tài liệu không chứa thông tin cá nhân của học sinh và tôi có quyền sử dụng tài liệu này."*
 
   Nút "Tải lên" chỉ được kích hoạt (enable) khi người dùng đã tích chọn ô xác nhận này.
+
+## 10. Nhập ngân hàng câu từ Word (V26, 3/11)
+
+Chỉ giáo viên. Lô nhập thuộc người tải; lô của người khác (hoặc không có) trả 404 `IMPORT_NOT_FOUND`. Câu đã xác nhận vào
+ngân hàng **riêng tư** của chính người tải (`/api/bank-items` của người khác không thấy, tạo đề của người khác không dùng).
+Không gọi AI ở bất kỳ bước nào, không chạy Solver, không tính vào giới hạn sinh câu (mục 7.2b). Không lưu file gốc và tên
+file gốc. Cờ và lý do bỏ câu: xem `docs/contract/enums.md` mục 3 ("Nhập ngân hàng câu từ Word").
+
+### 10.1. Tải lên → bản xem trước
+
+```
+POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic)
+```
+
+- File .docx (nhận dạng theo nội dung), tối đa 10 MB và 200 câu. Định dạng: "PHẦN I/II/III", đầu câu "Câu N." hoặc nhãn mức
+  `[NB]`/`[TH]`/`[VD]`/`[VDC]`, đáp án mcq tô vàng, tf tô vàng hoặc dòng "Đáp án: Đ S S Đ", sa dòng "Đáp số: ...".
+- Khối, chủ đề lấy từ tên file mẫu "KHỐI 8 - CHƯƠNG 1 - BÀI 2 - Tên bài - GV ..." (phần "GV ..." bị bỏ); `gradeLevel`, `topic`
+  ghi đè. Môn là Toán.
+- 201 → lô: `{id, displayName, status: "preview", subjectId, gradeLevel, topic, createdAt, expiresAt (24 giờ), confirmedAt,
+  questionCount, importableCount, blockedCount, importedCount, skipped: {has_image: 3, ...}, skippedItems: [{locator, type,
+  reason}], items: [...]}`. Mỗi `items[]`: `{key ("mcq-007"), type, locator ("Phần I, câu thứ 7"), levelRaw, level, stem,
+  options [{key, text}], correctOption, statements [{key, text, label}], saAnswer, explanation, flags [...], blocking}`.
+- Bản đầu bỏ (và đếm) câu có ảnh, câu có công thức chưa chuyển được, câu có bảng dữ liệu. Không có sửa câu trong bản xem
+  trước: câu có `blocking = true` phải sửa trong file Word rồi tải lại.
+- Lỗi: 400 `EMPTY_FILE`, `MISSING_FILE`, `IMPORT_TOPIC_INVALID`; 409 `IMPORT_PENDING_LIMIT` (đã có 3 lô chờ xác nhận); 413
+  `FILE_TOO_LARGE`; 415 `UNSUPPORTED_FILE_TYPE`; 422 `INVALID_FILE`, `IMPORT_LESSON_UNKNOWN`, `IMPORT_GRADE_INVALID`,
+  `IMPORT_NO_QUESTIONS`, `IMPORT_TOO_MANY_QUESTIONS`, `IMPORT_DATA_INVALID` (dữ liệu vi phạm ràng buộc DB; thông báo chỉ nêu
+  tên ràng buộc); 429 `TOO_MANY_UPLOADS` (30 lần/giờ); 503 `EXTRACTOR_BUSY`. Trần 3 lô chờ được kiểm cùng transaction với lúc
+  lưu lô, có khóa theo người tải, nên tải đồng thời cũng không vượt trần.
+
+### 10.2. Xem lại, xác nhận, hủy
+
+- `GET /api/bank-imports/{id}` → lô như trên; lô đã xác nhận không còn `items` (nội dung đã vào ngân hàng). Quá hạn: 410
+  `IMPORT_EXPIRED` (nội dung bị xóa).
+- `POST /api/bank-imports/{id}/confirm` thân `{"keys": ["mcq-001", "tf-002"]}` → 200 `{batchId, imported, bankItemIds}`. Một
+  transaction: lỗi thì không ghi câu nào. Lỗi: 400 `IMPORT_KEYS_INVALID` (rỗng, lặp, không có trong lô); 409
+  `IMPORT_NOT_PREVIEW` (đã xác nhận), `IMPORT_CONFLICT` (trùng khóa / khóa ngoại do thao tác đồng thời); 410 `IMPORT_EXPIRED`;
+  422 `IMPORT_ITEM_BLOCKED` (thông báo nêu mã các câu còn cờ chặn), `IMPORT_DATA_INVALID` (vi phạm CHECK/NOT NULL; không ghi
+  câu nào).
+- `DELETE /api/bank-imports/{id}` → 204 (hủy lô chưa xác nhận); lô đã xác nhận: 409 `IMPORT_NOT_PREVIEW`.
+- Trong ngân hàng: `origin.type = "import"`, lọc bằng `GET /api/bank-items?origin=import`. Câu không có lời giải có
+  `explanation = null`; khi xuất đề ra Word, phần LỜI GIẢI bỏ câu đó.
+- Hạn chế: câu tf nhận chung một mức cho cả 4 ý (file chỉ ghi một mức cho câu).

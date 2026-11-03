@@ -79,6 +79,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-63 | "210^\toRadians" thay cho độ qua QC không cờ; cảnh báo bước format không được lưu (bổ sung 2/11, đề 11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
 | L-64 | Soát ngoài trước deploy lần 2 (nhánh `fix/pre-deploy-2`, 3/11): câu dự phòng bị ghi đè không theo chất lượng; tự đóng `$` không phân biệt số dấu; Solver `options_verdict` hỏng cho qua; hạn mức ngày Gemini; tắt app tính lỗi job; và các mục nhỏ | Nhiều nhóm | Cao | Đã sửa (đo F-07 chờ thực hiện trên `datn_mcq_e2e`) |
 | L-65 | Tài liệu giáo án .docx mất gần hết công thức MathType khi trích chữ (pandoc bỏ đối tượng OLE): 116/118 công thức mất (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (đo trên file thật qua HTTP: giữ 102/118) |
+| L-66 | Nhập ngân hàng câu từ Word: các bẫy khi đưa lõi tools/bank-import vào backend (câu nhập bị đếm là lượt gọi Gemini, ảnh trong mc:AlternateContent bị bỏ sót, nạp mọi ảnh vào bộ nhớ, fixture MathType thật) (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (nhập thử 1 bộ qua HTTP trên `datn_mcq_e2e`) |
 
 **Thống kê theo nhóm** (60 mục; bảng chưa có dòng cho L-56 nên con số này cộng thêm đúng 7 mục L-57…L-63 vào số cũ):
 
@@ -720,6 +721,50 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
 - Chống tái phát: `DocxMathTypeTest` (16 test với pandoc thật: công thức đúng chỗ giữa câu, riêng dòng `$$`, trong bảng/run đậm/tô màu, 12 công thức không lẫn mã, bin rác, `Equation.3`, quan hệ thiếu/thoát gốc/liên kết ngoài, OLE > 1 MB, > 2000 công thức, rels có DOCTYPE, docx không MathType giống hệt pandoc thuần), `MtefToLatexTest` + `MtefCleanTest` (45, kèm 6 file `real-*.bin`), `DocxTextExtractorTest` và `MaterialApiTest` đã cập nhật theo cảnh báo mới.
 - Đo trên file thật (`KIEM_TRA_mo_rong.docx`, 116 MathType + 2 OMML): trước sửa giữ 2/118; sau sửa giữ 102/118 (100 MathType + 2 OMML), 16 công thức là `[công thức]`. File này cố ý chứa nhiều cấu trúc lạ (phần C) nên 16 không đọc được là đúng thiết kế (bộ đọc không đoán). Bộ đề thật của bank-import chuyển đúng 876/876.
 - Hạn chế: chỉ xử lý `w:object` trong `word/document.xml` (đối tượng nằm trong `w:pict`, chân trang, chú thích vẫn bị pandoc bỏ; loại `w:pict` được tính vào số "không đọc được"). Kiểm HTTP thật 3/11: app chạy trên `datn_mcq_e2e` (worker tắt), `POST /api/materials` bằng giáo viên e2e trả 201, `charCount` 3008 (trước sửa: 1133), cảnh báo `MATHTYPE_UNREADABLE` 16/116. Lưu ý khi đo lại: tải lại đúng file bằng cùng giáo viên trả 200 kèm bản cũ đã lưu (cùng sha256), không chạy code mới; phải dùng giáo viên khác hoặc xóa bản cũ.
+- Trạng thái: Đã sửa.
+
+### L-66 Nhập ngân hàng câu từ Word: bẫy khi đưa lõi tools/bank-import vào backend (bổ sung 3/11)
+- Nhóm: LLM & parse (đầu vào bộ câu hỏi .docx); nhánh `feature/bank-import-api`, V26, `/api/bank-imports`.
+- Triệu chứng/rủi ro tìm thấy khi khảo sát và viết:
+  1. Bộ đếm hạn mức Gemini khởi tạo lúc khởi động bằng `countLlmGeneratedSince` (mọi `generated_question` có
+     `edited_from_question_id IS NULL`): nếu câu nhập nằm trong `generated_question` mà không có cột phân biệt, nhập 161 câu rồi
+     khởi động lại sẽ "tiêu" 161/480 lượt Gemini của cả hệ thống.
+  2. `DocxReader` của tool: `mc:AlternateContent` lọc nhánh `Choice` theo namespace `w` nên không bao giờ khớp, ảnh nằm trong
+     `mc:AlternateContent` bị bỏ qua; đối tượng OLE không phải công thức mà không có ảnh xem trước và `w:drawing` không có
+     `a:blip` cũng mất. Với phạm vi "chỉ nhập câu không ảnh", câu có hình sẽ lọt vào ngân hàng thiếu hình.
+  3. Tool nạp MỌI `word/media/*` và `word/embeddings/*` bằng `readAllBytes`, không giới hạn; DOM của document.xml không có trần.
+  4. Fixture `src/test/resources/mtef/real-*.bin` không rõ nguồn (có thể lấy từ bộ đề thương mại).
+- Cách sửa:
+  1. V26 thêm `generated_question.origin` (`llm`/`import`) + `import_batch_id`; `countLlmGeneratedSince` và các file thống kê
+     (`docs/thong-ke/*.sql`, `docs/experiments/trial/queries.sql`) lọc `origin = 'llm'`. Test
+     `BankImportApiTest.nhapNamMuoiCauRoiKhoiDongLaiBoDemGeminiKhongDoi`.
+  2. `DocxReader` bản backend lấy `Choice` theo namespace `mc`, coi mọi đối tượng vẽ/hình (kể cả không có ảnh nhúng) là ảnh;
+     `DocParser` đăng ký thêm ảnh trong bảng bố cục và giữa "Trả lời"/"Đáp số". Câu có ảnh bị bỏ và đếm (`has_image`).
+  3. Không nạp ảnh; chỉ nạp embedding của công thức gặp trong thân tài liệu, trần 1 MiB/tệp (lớn hơn thì công thức coi như
+     không chuyển được) và 64 MiB tổng (quá thì 422); XML qua `DocxInputGuard.guardedXml` (chặn DOCTYPE/ENTITY, trần 16 MiB);
+     zip qua `ZipSafetyScanner` dùng chung với tài liệu bài học; parse trong permit `PandocLimiter`.
+  4. Thay bằng 7 đối tượng `oleObjectMT*.bin` lấy từ file tự soạn `spikes/mathtype-ole/KIEM_TRA_mo_rong.docx`
+     (`MtefToLatexTest`, `DocxMathTypeTest` cập nhật kỳ vọng). File tự soạn không có hệ phương trình (cases); cases vẫn được
+     test bằng MTEF dựng tay.
+- Chống tái phát: `BankImportParseTest` (15), `BankImportApiTest` (20: riêng tư, rollback, không gọi `LlmClient`, zip bomb,
+  DOCTYPE, quá cỡ, quá nhiều câu, hết hạn, log không chứa nội dung câu), `ExamMarkdownBuilderTest.cauKhongLoiGiaiBiBoKhoiPhanLoiGiai`.
+- Đo trên file thật (3/11, app chạy `datn_mcq_e2e`, worker tắt, giáo viên GV1, bộ k8c3b1): 40 câu đọc được, 26 vào bản xem
+  trước (0 cờ chặn; 24 không có lời giải, 7 cảnh báo LaTeX), bỏ 14 câu có ảnh; xác nhận 26 câu vào ngân hàng riêng tư. Khớp
+  `report.json` offline (`usable_text_only` = 26). Log chỉ có số liệu và id.
+- Bổ sung cùng ngày (sau review): (5) thông báo lỗi ràng buộc của PostgreSQL có "Failing row contains (…)" kèm nội dung
+  câu, và Hibernate ghi nguyên thông báo đó (Hibernate 7: logger `org.hibernate.orm.jdbc.error`, HHH000247, mức WARN; bản cũ:
+  `SqlExceptionHelper`). Khi lưu lô và khi xác nhận: bắt
+  `DataIntegrityViolationException`/`ConstraintViolationException`, chỉ log tên ràng buộc + SQLState + mã lô
+  (`ImportDbErrors`), trả 422 `IMPORT_DATA_INVALID` (CHECK/NOT NULL) hoặc 409 `IMPORT_CONFLICT` (trùng khóa/khóa ngoại); log
+  `org.hibernate.orm.jdbc.*` và `org.hibernate.engine.jdbc.*` bị chặn CHỈ trong phạm vi thao tác nhập (`ImportLogGuard`, turbo
+  filter logback theo MDC). Lưu ý khi viết test log: console đổi bảng mã chữ tiếng Việt, nên so chuỗi ASCII (ví dụ
+  `\frac{3}{4}` trong đề) chứ không so chữ có dấu.
+  (6) Trần 3 lô chờ trước đây kiểm và lưu ở hai transaction khác nhau: nay `ImportBatchWriter.savePreview` lấy
+  `pg_advisory_xact_lock(0x42494D50, ownerId)` rồi kiểm và lưu trong một transaction. Test
+  `viPhamCheckKhiXacNhanTra422VaLogChiCoTenRangBuoc`, `viPhamCheckKhiLuuLoTra422VaLogKhongCoNoiDung`,
+  `luuLoDongThoiKhongVuotTranLoCho` (6 luồng cùng lúc → đúng 3 lô).
+- Hạn chế: chặn log Hibernate chỉ có hiệu lực trong thân phương thức (bước xác nhận flush ngay cuối để mọi lỗi nổ ra trước
+  commit). Câu tf nhận chung một mức cho 4 ý.
 - Trạng thái: Đã sửa.
 
 ## QC

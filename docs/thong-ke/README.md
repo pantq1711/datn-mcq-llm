@@ -19,7 +19,8 @@ câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên databa
 1. **Chỉ đề chế độ giáo viên**: `exam.mode = 'teacher'` (đề tạo theo ma trận, `/api/exams/**`). Không có đề thủ công.
 2. **Chỉ đầu ra của LLM**: câu thuộc run production của ma trận (`experiment_run.prompt_version LIKE 'matrix-%'`) và
    `generated_question.edited_from_question_id IS NULL` (quy tắc bắt buộc của W1-2: bản giáo viên sửa không phải đầu ra
-   LLM, xem `docs/contract/enums.md`). Kết cục của một câu LLM được gom theo cả chuỗi bản sửa của nó.
+   LLM, xem `docs/contract/enums.md`) và `generated_question.origin = 'llm'` (V26: câu nhập từ Word không phải đầu ra LLM).
+   Kết cục của một câu LLM được gom theo cả chuỗi bản sửa của nó.
 3. **Loại tài khoản của nhóm phát triển**: mỗi file có CTE `dev_users` lấy theo email trong mảng `ARRAY[]::text[]`
    (mặc định rỗng). **Điền email của nhóm vào mảng trước khi chạy** để số liệu không lẫn thao tác thử của nhóm.
 4. Các file 02 và 04 chỉ tính câu đã nằm (hoặc từng nằm) trong một chỗ của đề giáo viên, nên câu sinh ra nhưng chưa vào đề

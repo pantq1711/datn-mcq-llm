@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 import static com.datn.mcq.material.extract.MathTypeDocx.bold;
 import static com.datn.mcq.material.extract.MathTypeDocx.objectRun;
 import static com.datn.mcq.material.extract.MathTypeDocx.oleWithPadding;
-import static com.datn.mcq.material.extract.MathTypeDocx.real;
+import static com.datn.mcq.material.extract.MathTypeDocx.selfMade;
 import static com.datn.mcq.material.extract.MathTypeDocx.t;
 import static com.datn.mcq.mtef.MtefBuilder.mtef;
 import static com.datn.mcq.mtef.MtefBuilder.num;
@@ -85,20 +85,21 @@ class DocxMathTypeTest {
     @Test
     void congThucMauThatGiuaCau() {
         MathTypeDocx d = new MathTypeDocx();
-        byte[] docx = d.p(t("Tỉ số bằng "), d.eq(real(1)), t(" và góc "), d.eq(real(5)), t(" xong"))
+        byte[] docx = d.p(t("Tỉ số bằng "), d.eq(selfMade(37)), t(" và góc "), d.eq(selfMade(8)), t(" xong"))
                 .build();
         ExtractedText r = extractor().extract(docx);
-        assertTrue(r.text().contains("Tỉ số bằng $\\frac{5}{3}$ và góc $\\widehat{ABC}=60^{\\circ}$ xong"), r.text());
+        assertTrue(r.text().contains("Tỉ số bằng $\\frac{1}{x}$ và góc $\\tan 30^{\\circ}=\\frac{\\sqrt{3}}{3}$ xong"),
+                r.text());
     }
 
     @Test
     void congThucRiengMotDongThanhHaiDola() {
         MathTypeDocx d = new MathTypeDocx();
-        byte[] docx = d.p(t("Giải hệ phương trình sau")).p(d.eq(real(9))).p(t("Đáp số cuối cùng")).build();
+        byte[] docx = d.p(t("Công thức nghiệm sau")).p(d.eq(selfMade(4))).p(t("Đáp số cuối cùng")).build();
         ExtractedText r = extractor().extract(docx);
         List<String> lines = r.text().lines().toList();
-        assertTrue(lines.contains("$$\\begin{cases}x+y=3\\\\x-y=1\\end{cases}$$"), r.text());
-        assertTrue(r.text().contains("Giải hệ phương trình sau"), r.text());
+        assertTrue(lines.contains("$$x_{1{,}2}=\\frac{-b\\pm\\sqrt{\\Delta}}{2a}$$"), r.text());
+        assertTrue(r.text().contains("Công thức nghiệm sau"), r.text());
         assertTrue(r.text().contains("Đáp số cuối cùng"), r.text());
     }
 
@@ -106,14 +107,14 @@ class DocxMathTypeTest {
     void congThucTrongBangVaTrongRunDamToMauKhongBiBienDang() {
         MathTypeDocx d = new MathTypeDocx();
         byte[] docx = d.p(t("Bảng giá trị"))
-                .tableRow(new String[]{t("Cạnh "), d.eq(real(1))},
-                        new String[]{d.eq("Equation.DSMT4", real(3), true, true), t(" khác")},
-                        new String[]{bold("đậm "), d.eq("Equation.DSMT4", real(8), true, false)})
+                .tableRow(new String[]{t("Cạnh "), d.eq(selfMade(37))},
+                        new String[]{d.eq("Equation.DSMT4", selfMade(102), true, true), t(" khác")},
+                        new String[]{bold("đậm "), d.eq("Equation.DSMT4", selfMade(103), true, false)})
                 .build();
         ExtractedText r = extractor().extract(docx);
-        assertTrue(r.text().contains("$\\frac{5}{3}$"), r.text());
-        assertTrue(r.text().contains("$x_{1}$"), r.text());
-        assertTrue(r.text().contains("$\\left(x+\\frac{1}{2}\\right)^{2}$"), r.text());
+        assertTrue(r.text().contains("$\\frac{1}{x}$"), r.text());
+        assertTrue(r.text().contains("$x_{1}^{2}$"), r.text());
+        assertTrue(r.text().contains("$\\left(\\frac{1}{2}\\right)$"), r.text());
         assertFalse(r.text().contains("⟦"), r.text());
         assertNull(warning(r, "MATHTYPE_UNREADABLE"), r.warnings().toString());
     }
@@ -165,10 +166,10 @@ class DocxMathTypeTest {
     @Test
     void equation3VaProgIdKhongHoTroThanhCongThucKhongDoanNoiDung() {
         MathTypeDocx d = new MathTypeDocx();
-        byte[] docx = d.p(t("A "), d.eq("Equation.3", real(1), false, false), t(" B "),
-                d.eq("Equation.DSMT4", real(1), false, false)).build();
+        byte[] docx = d.p(t("A "), d.eq("Equation.3", selfMade(37), false, false), t(" B "),
+                d.eq("Equation.DSMT4", selfMade(37), false, false)).build();
         ExtractedText r = extractor().extract(docx);
-        assertTrue(r.text().contains("A " + UNREADABLE + " B $\\frac{5}{3}$"), r.text());
+        assertTrue(r.text().contains("A " + UNREADABLE + " B $\\frac{1}{x}$"), r.text());
         ExtractionWarning w = warning(r, "MATHTYPE_UNREADABLE");
         assertEquals(1, w.count());
         assertEquals(2, w.total());
@@ -203,8 +204,8 @@ class DocxMathTypeTest {
     @Test
     void docxChiCoCongThucDocDuocLaVanBanHopLe() {
         MathTypeDocx d = new MathTypeDocx();
-        ExtractedText r = extractor().extract(d.p(d.eq(real(1))).build());
-        assertEquals("$$\\frac{5}{3}$$", r.text());
+        ExtractedText r = extractor().extract(d.p(d.eq(selfMade(37))).build());
+        assertEquals("$$\\frac{1}{x}$$", r.text());
     }
 
     // ---------- giới hạn an toàn ----------
@@ -212,11 +213,11 @@ class DocxMathTypeTest {
     @Test
     void oleVuotTranMotMbBiBoQuaAnToanConDuoiTranVanDoc() {
         MathTypeDocx d = new MathTypeDocx();
-        byte[] big = oleWithPadding(real(1), 1_100_000);
-        byte[] ok = oleWithPadding(real(1), 700_000);
+        byte[] big = oleWithPadding(selfMade(37), 1_100_000);
+        byte[] ok = oleWithPadding(selfMade(37), 700_000);
         assertTrue(big.length > 1 << 20 && ok.length < 1 << 20, big.length + " / " + ok.length);
         ExtractedText r = extractor().extract(d.p(t("Lớn "), d.eq(big), t(" vừa "), d.eq(ok), t(" hết")).build());
-        assertTrue(r.text().contains("Lớn " + UNREADABLE + " vừa $\\frac{5}{3}$ hết"), r.text());
+        assertTrue(r.text().contains("Lớn " + UNREADABLE + " vừa $\\frac{1}{x}$ hết"), r.text());
         assertEquals(1, warning(r, "MATHTYPE_UNREADABLE").count());
     }
 
@@ -241,7 +242,7 @@ class DocxMathTypeTest {
     @Test
     void quanHeCoDoctypeBiTuChoiKhongGiaiMaThucThe() {
         MathTypeDocx d = new MathTypeDocx();
-        byte[] docx = d.p(t("Có "), d.eq(real(1))).relsXml("<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY x \"y\">]>"
+        byte[] docx = d.p(t("Có "), d.eq(selfMade(37))).relsXml("<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY x \"y\">]>"
                 + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>").build();
         ApiErrorException ex = assertThrows(ApiErrorException.class, () -> extractor().extract(docx));
         assertEquals("INVALID_FILE", ex.getCode());

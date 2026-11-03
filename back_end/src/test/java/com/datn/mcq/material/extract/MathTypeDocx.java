@@ -15,7 +15,8 @@ import java.util.Random;
 /**
  * Dựng docx có đối tượng MathType nhúng (OLE) cho test trích văn bản: document.xml, quan hệ
  * word/_rels/document.xml.rels và các file word/embeddings/oleObjectN.bin. Chỉ chứa nội dung GIẢ hoặc mẫu ngắn của
- * công thức (src/test/resources/mtef/real-*.bin). Không phải test (tên không khớp mẫu của surefire).
+ * công thức lấy từ file tự soạn (src/test/resources/mtef/oleObjectMT*.bin). Không phải test (tên không khớp mẫu của
+ * surefire).
  */
 final class MathTypeDocx {
 
@@ -114,11 +115,14 @@ final class MathTypeDocx {
 
     // ---------- file mẫu ----------
 
-    /** Một trong sáu đối tượng OLE mẫu (real-1, 2, 3, 5, 8, 9). */
-    static byte[] real(int n) {
-        try (InputStream in = MathTypeDocx.class.getResourceAsStream("/mtef/real-" + n + ".bin")) {
+    /**
+     * Một đối tượng OLE mẫu lấy từ file tự soạn {@code spikes/mathtype-ole/KIEM_TRA_mo_rong.docx}
+     * ({@code oleObjectMT<n>.bin}; có 1, 4, 8, 30, 37, 102, 103).
+     */
+    static byte[] selfMade(int n) {
+        try (InputStream in = MathTypeDocx.class.getResourceAsStream("/mtef/oleObjectMT" + n + ".bin")) {
             if (in == null) {
-                throw new IllegalStateException("thiếu /mtef/real-" + n + ".bin");
+                throw new IllegalStateException("thiếu /mtef/oleObjectMT" + n + ".bin");
             }
             return in.readAllBytes();
         } catch (IOException e) {
