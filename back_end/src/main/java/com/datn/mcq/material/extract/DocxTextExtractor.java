@@ -21,9 +21,11 @@ import java.util.stream.Stream;
 /**
  * Trích văn bản từ docx bằng pandoc ("-f docx -t markdown+tex_math_dollars"): Equation gốc của Word (OMML) thành
  * {@code $...$}. Thứ tự: ghi file vào thư mục tạm riêng (tên cố định, không dùng tên client gửi), quét zip, kiểm cấu trúc
- * docx, đếm công thức, rồi mới chạy pandoc ({@code --sandbox}, trần heap, giới hạn thời gian). Đối tượng MathType nhúng
- * (OLE) bị pandoc bỏ qua: được đếm và báo trong warnings, không im lặng. Dùng chung đường dẫn pandoc với xuất Word
- * ({@code app.export.pandoc-path}); không gọi sang module exam.
+ * docx, đếm công thức, đổi công thức MathType nhúng (OLE) thành LaTeX, rồi mới chạy pandoc ({@code --sandbox}, trần
+ * heap, giới hạn thời gian). Pandoc bỏ qua đối tượng OLE nên {@link MathTypeInliner} thay chúng bằng mã giữ chỗ trước
+ * pandoc và đổi mã thành {@code $latex$} sau pandoc; công thức không chuyển được thành "[công thức]", được đếm và báo
+ * trong warnings, không im lặng. Dùng chung đường dẫn pandoc với xuất Word ({@code app.export.pandoc-path}); không gọi
+ * sang module exam.
  */
 @Component
 public class DocxTextExtractor {
@@ -69,10 +71,16 @@ public class DocxTextExtractor {
             List<String> entries = scanner.scan(in);
             requireDocxEntries(entries);
             FormulaStats stats = counter.count(in);
-            String markdown = runPandoc(dir);
+            MathTypeInliner.Prepared prepared = MathTypeInliner.prepare(in, dir.resolve("mathtype.docx"));
+            String markdown = MathTypeInliner.restore(runPandoc(dir, prepared.docx().getFileName().toString()),
+                    prepared);
             String text = TextNormalizer.checked(props, cleanMarkdown(markdown), NO_TEXT_MESSAGE);
+            if (prepared.unreadable() > 0 && TextNormalizer.normalize(text.replace(MathTypeInliner.UNREADABLE_TEXT, ""))
+                    .isBlank()) {
+                throw MaterialErrors.noText(NO_TEXT_MESSAGE);    // chỉ toàn "[công thức]": vẫn là không có chữ
+            }
             return new ExtractedText(text, LessonMaterial.MIME_DOCX, LessonMaterial.METHOD_PANDOC, null,
-                    warnings(stats));
+                    warnings(stats, prepared));
         } catch (IOException e) {
             throw MaterialErrors.failed("Lỗi ghi hoặc đọc file tạm khi đọc file Word.");
         } finally {
@@ -88,13 +96,13 @@ public class DocxTextExtractor {
         }
     }
 
-    private String runPandoc(Path dir) throws IOException {
+    private String runPandoc(Path dir, String docxName) throws IOException {
         Path log = dir.resolve("pandoc.log");
         Path out = dir.resolve("out.md");
         Process process;
         try {
             process = new ProcessBuilder(pandocPath, "+RTS", "-M" + props.getPandocHeapMb() + "m", "-RTS", "--sandbox",
-                    "-f", "docx", "-t", PANDOC_FORMAT, "--wrap=none", "in.docx", "-o", "out.md")
+                    "-f", "docx", "-t", PANDOC_FORMAT, "--wrap=none", docxName, "-o", "out.md")
                     .directory(dir.toFile())
                     .redirectErrorStream(true)
                     .redirectOutput(log.toFile())
@@ -138,17 +146,25 @@ public class DocxTextExtractor {
         return MarkdownCleaner.clean(s);
     }
 
-    private List<ExtractionWarning> warnings(FormulaStats stats) {
+    /**
+     * Cảnh báo chỉ khi có công thức MathType không đọc được (K &gt; 0); công thức chuyển hết thì không cảnh báo. Đối tượng
+     * MathType mà bộ chuyển không thấy (ví dụ nằm trong w:pict, không trong w:object) vẫn bị pandoc bỏ nên tính vào K.
+     */
+    private List<ExtractionWarning> warnings(FormulaStats stats, MathTypeInliner.Prepared prepared) {
         List<ExtractionWarning> out = new ArrayList<>();
-        if (stats.mathType() > 0) {
-            int total = stats.formulas();
-            String ratio = stats.mathType() + "/" + total;
-            out.add(new ExtractionWarning("MATHTYPE_FORMULAS_DROPPED", stats.mathType(), total,
-                    "Có " + ratio + " công thức MathType (đối tượng nhúng) chưa đọc được nên bị bỏ khỏi văn bản trích."));
-            if ((double) stats.mathType() / total >= props.getFormulaLossWarnRatio()) {
-                out.add(new ExtractionWarning("FORMULA_LOSS_HIGH", stats.mathType(), total,
-                        "Phần lớn công thức (" + ratio + ") bị mất: câu hỏi sinh ra có thể thiếu hoặc sai công thức. "
-                                + "Hãy lưu công thức dạng Equation của Word hoặc dán nội dung vào file .txt."));
+        int unseen = Math.max(0, stats.mathType() - prepared.total());
+        int mathType = prepared.total() + unseen;
+        int unreadable = prepared.unreadable() + unseen;
+        if (unreadable > 0) {
+            int total = mathType + stats.omml();
+            String ratio = unreadable + "/" + total;
+            out.add(new ExtractionWarning("MATHTYPE_UNREADABLE", unreadable, mathType,
+                    "Đã chuyển " + (mathType - unreadable) + "/" + mathType + " công thức MathType; " + unreadable
+                            + " công thức không đọc được."));
+            if ((double) unreadable / total >= props.getFormulaLossWarnRatio()) {
+                out.add(new ExtractionWarning("FORMULA_LOSS_HIGH", unreadable, total,
+                        "Phần lớn công thức (" + ratio + ") không đọc được: câu hỏi sinh ra có thể thiếu hoặc sai "
+                                + "công thức. Hãy lưu công thức dạng Equation của Word hoặc dán nội dung vào file .txt."));
             }
         }
         if (stats.images() > 0) {

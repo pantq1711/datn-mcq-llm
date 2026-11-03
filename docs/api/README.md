@@ -390,7 +390,8 @@ câu bằng Giữ / Đổi / Sửa trong màn đề (mục 7). Số mục giữ 
 **Sửa đầu ra LLM ở run production (ngày 23/10).** Trước khi giải mã JSON, dấu `\` của lệnh LaTeX chưa nhân đôi trong
 chuỗi được nhân đôi (ví dụ `"$75^\circ$"` một dấu gạch); sau khi giải mã, trường có `$` lẻ mà phần sau `$` cuối trông
 như công thức được tự đóng `$` ở cuối trường, trước dấu câu. Mỗi lần sửa ghi cảnh báo vào `answerWarnings`/`warnings`
-(`json: đã sửa 1 escape LaTeX (\circ)`, `statement_b: đã tự đóng $`). `$` lẻ ở giữa câu vẫn là lỗi format. MCQ
+(`json: đã sửa 1 escape LaTeX (\circ)`, `statement_b: đã tự đóng $`; từ 3 dấu `$` chưa thoát trở lên cảnh báo là
+`statement_b: đã tự đóng $ khi chuỗi có N dấu $ (có thể đóng sai chỗ)` và bật cờ "cần xem kỹ"). `$` lẻ ở giữa câu vẫn là lỗi format. MCQ
 production gọi Gemini kèm schema JSON như `sa`/`tf`. Lý do format không qua (kể cả lỗi giải mã JSON) lưu ở
 `quality_check_result.errors` (V8). Run `experiment` không áp dụng; chi tiết ở `enums.md` mục 3.
 
@@ -678,6 +679,12 @@ môi trường (`app.generation-limits.*`, xem `docs/deploy/README.md`):
   tiếp." Không có `Retry-After`: frontend hiện thông báo, cho thử lại sau khi đề đang soạn xong.
 - `DAILY_GENERATION_LIMIT`: `error` nêu trần, số đã dùng, số còn lại, số câu yêu cầu cần và thời điểm được tạo tiếp (từ 0
   giờ ngày hôm sau, giờ Việt Nam); khi trần ngày đã hết, kiểm trần ngày trước trần hàng đợi.
+- **Hết lượt gọi Gemini trong ngày của cả hệ thống (F-18):** trước khi trừ hạn mức giáo viên và xếp job, `build`,
+  `build-by-lesson` và `replace` (sinh mới) kiểm hạn mức ngày của Gemini dùng chung (`app.llm.daily-quota`, đặt lại 00:00
+  giờ Thái Bình Dương; 429 của Gemini có `PerDay`/`RequestsPerDay` cũng đánh dấu hết hạn mức ngày). Hết thì **429**
+  `LLM_DAILY_QUOTA_EXHAUSTED` kèm `Retry-After` (giây tới lúc mở lại), KHÔNG trừ hạn mức giáo viên, không để lại gì (không
+  đề, không job, chỗ giữ nguyên). Đề đủ câu từ ngân hàng (không cần sinh) và Đổi bằng `source = bank` không bị chặn.
+  Frontend hiện "Hệ thống đã dùng hết lượt soạn câu hôm nay, thầy/cô thử lại sau HH:MM" (giờ Việt Nam, từ `Retry-After`).
 - Hai request song song của cùng giáo viên được tuần tự hóa (khóa dòng `generation_quota` của giáo viên trong transaction
   tạo job), nên không thể cùng lọt trần. Hạn chế: bộ đếm ngày chỉ ghi khi tạo job; không hoàn lại khi job sau đó lỗi.
 
@@ -773,7 +780,11 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
 - Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`, `edit`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại
   khỏi chỉ số của form chấm mù cũ (`answer_correct`, duyệt không sửa).
 - **Chưa có:** sửa câu đã nằm trong ngân hàng, ráp đề, trộn mã đề, đề dự phòng, xuất PDF.
-- **Đổi bằng câu ngân hàng (W1-4, D5-B):** `POST .../replace` nhận `{"source": "bank" | "generate", "instruction"?}`. Bỏ
+- **Lý do Đổi (B7, V25):** `POST .../replace` nhận thêm trường tùy chọn `reason` ∈ `wrong_answer`, `ambiguous_options`,
+  `off_matrix`, `duplicate_pattern`, `latex_format`, `too_hard`, `too_easy`, `other` (không phân biệt hoa thường), lưu ở
+  `exam_slot_action.replace_reason`. Bỏ trống thì không ghi lý do; giá trị khác thì 400 `INVALID_REQUEST` trước mọi thay
+  đổi. Dùng cho thống kê dùng thử: `docs/experiments/trial/queries.sql`.
+- **Đổi bằng câu ngân hàng (W1-4, D5-B):** `POST .../replace` nhận `{"source": "bank" | "generate", "instruction"?, "reason"?}`. Bỏ
   trống `source` (hoặc không gửi body) là `generate`: giữ nguyên hành vi cũ (sinh mới qua hàng đợi), nên client cũ không vỡ.
   - `bank`: lấy ngay câu ngân hàng khớp ô, cùng tiêu chí và xếp hạng mềm như lúc tạo đề (mục 7.2; đề theo bài: 7.2a).
     Không có job, không gọi LLM. Trả câu như 7.4 với `state = ready`, `source = bank`, `bankItemId`, không có cờ. Chỗ
@@ -1182,7 +1193,7 @@ Content-Type: multipart/form-data   (phần "file")
 ```json
 {"id": 12, "fileName": "bai3.docx", "kind": "docx", "sizeBytes": 48211, "charCount": 5120, "pageCount": null,
  "sha256": "9f2c…", "extractMethod": "pandoc",
- "warnings": [{"code": "MATHTYPE_FORMULAS_DROPPED", "count": 12, "total": 15, "message": "Có 12/15 công thức MathType …"}],
+ "warnings": [{"code": "MATHTYPE_UNREADABLE", "count": 2, "total": 118, "message": "Đã chuyển 116/118 công thức MathType; 2 công thức không đọc được."}],
  "createdAt": "2026-10-25T21:30:00"}
 ```
 
@@ -1190,8 +1201,9 @@ Content-Type: multipart/form-data   (phần "file")
 
 | `code` | Ý nghĩa |
 |---|---|
-| `MATHTYPE_FORMULAS_DROPPED` | docx có `count` công thức MathType (đối tượng nhúng) trong tổng `total` công thức mà hệ thống chưa đọc được; chúng KHÔNG có trong văn bản trích |
-| `FORMULA_LOSS_HIGH` | như trên nhưng từ 30% công thức trở lên bị mất: câu hỏi sinh ra có thể thiếu hoặc sai công thức. Frontend nên cảnh báo rõ |
+| `MATHTYPE_UNREADABLE` | chỉ có khi `count` > 0: docx có `total` công thức MathType (đối tượng nhúng), trong đó `count` công thức không đọc được (message: "Đã chuyển N/M công thức MathType; K công thức không đọc được."). Chúng hiện là `[công thức]` trong văn bản trích; phần còn lại đã thành `$latex$`. Thay cho `MATHTYPE_FORMULAS_DROPPED` |
+| `FORMULA_LOSS_HIGH` | `count` công thức không đọc được trong tổng `total` công thức (MathType + Equation gốc) từ 30% trở lên: câu hỏi sinh ra có thể thiếu hoặc sai công thức. Frontend nên cảnh báo rõ |
+| `MATHTYPE_FORMULAS_DROPPED` | **không còn được sinh ra.** Chỉ còn trong `warnings` của tài liệu tải lên trước khi hệ thống đọc được MathType (nghĩa cũ: `count` công thức bị bỏ hẳn khỏi văn bản). Frontend vẫn phải hiển thị được mã này |
 | `FORMULA_IMAGES_NOT_READ` | docx có `count` ảnh ngoài đối tượng công thức (có thể là công thức dạng ảnh); không OCR |
 | `PDF_TEXT_QUALITY_LOW` | pdf có nhiều ký tự lỗi (thường do công thức hoặc font đặc biệt) |
 
@@ -1203,7 +1215,7 @@ Mã lỗi (body `{"error", "code"}`):
 | 409 | `MATERIAL_QUOTA_EXCEEDED` | đã lưu đủ 50 tài liệu (xóa bớt rồi tải lại; tải lại file đã có vẫn được 200) |
 | 413 | `FILE_TOO_LARGE` | quá giới hạn (mặc định 10 MB; thông báo ghi rõ "tối đa N MB", lấy từ `spring.servlet.multipart.max-file-size`) |
 | 415 | `UNSUPPORTED_FILE_TYPE` | không phải docx, pdf hay txt UTF-8 (thông báo nói rõ với `.doc`, UTF-16, sai bảng mã) |
-| 422 | `NO_EXTRACTABLE_TEXT` | không có chữ: PDF scan (không OCR), docx chỉ có ảnh hoặc công thức MathType, txt rỗng |
+| 422 | `NO_EXTRACTABLE_TEXT` | không có chữ: PDF scan (không OCR), docx chỉ có ảnh hoặc công thức MathType không đọc được, txt rỗng |
 | 422 | `INVALID_FILE`, `EXTRACTION_FAILED` | file hỏng, nghi zip bomb, XML có DTD; pandoc không đọc được |
 | 422 | `TEXT_TOO_LONG`, `TOO_MANY_PAGES` | quá 300.000 ký tự hoặc 200 trang (không cắt âm thầm) |
 | 422 | `MATERIAL_ENCRYPTED` | pdf có mật khẩu hoặc cấm sao chép nội dung |
@@ -1223,9 +1235,17 @@ Mã lỗi (body `{"error", "code"}`):
 
 ### 9.3. Văn bản trích
 
-- docx đọc bằng pandoc: công thức Equation gốc của Word (OMML) thành `$...$`. **Công thức MathType (đối tượng nhúng) bị
-  bỏ**, được đếm và báo trong `warnings`; tách từng công thức ra văn bản là việc của một bước sau (dùng bộ đọc MTEF của
-  `tools/bank-import`).
+- docx đọc bằng pandoc: công thức Equation gốc của Word (OMML) thành `$...$`.
+- **Công thức MathType (đối tượng nhúng OLE, ProgID `Equation.DSMT*`) được đổi thành LaTeX `$...$`** (`$$...$$` khi công
+  thức đứng riêng một dòng), vì pandoc bỏ qua đối tượng OLE. Backend xử lý TRƯỚC pandoc (`MathTypeInliner`): thay mỗi
+  đối tượng bằng một mã giữ chỗ duy nhất, đọc file `word/embeddings/oleObjectN.bin` (luồng "Equation Native", MTEF v5) bằng
+  gói `com.datn.mcq.mtef` (chỉ đọc; bản chép từ `tools/bank-import`, thêm thư viện Apache POI `poi` 5.4.1), rồi đổi mã
+  thành công thức sau khi pandoc trích xong. Công thức không chuyển được (MTEF lỗi hoặc chưa hỗ trợ, `Equation.3` và ProgID
+  `Equation.*` khác `DSMT`, thiếu file oleObject, file oleObject lớn hơn 1 MB, công thức thứ 2001 trở đi trong một tài
+  liệu) thành `[công thức]` và được đếm trong `warnings` (`MATHTYPE_UNREADABLE`). Lỗi của một công thức không làm hỏng
+  công thức khác hay cả tài liệu. docx không có MathType được xử lý đúng như trước. Docx chỉ gồm `[công thức]` mà không có
+  chữ nào vẫn là 422 `NO_EXTRACTABLE_TEXT`. Đối tượng MathType nằm ngoài `w:object` (ví dụ trong `w:pict`) và công thức trong
+  chân trang/chú thích vẫn chưa đọc được; loại thứ nhất được tính vào số "không đọc được".
 - pdf đọc bằng PDFBox, không OCR. Công thức trong PDF thường bị méo khi trích.
 - Văn bản chuẩn hóa Unicode NFC, bỏ ký tự điều khiển và ký tự ẩn (bidi, độ rộng bằng không).
 - **docx được làm sạch markdown ngay khi trích (W2-3 bước 5)**: `extracted_text` lưu trong DB là văn bản thường, không còn `**`,

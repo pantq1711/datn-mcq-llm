@@ -736,6 +736,44 @@ public class GenerationJobProcessor {
         return generationJobRepository.save(job);
     }
 
+    /**
+     * F-09: job đang gọi Gemini thì ứng dụng tắt (cờ running = false hoặc luồng bị interrupt): trả về {@code pending} chạy
+     * lại ngay lúc khởi động sau, xóa {@code started_at} và hoàn lại lượt {@code attempt} đã tăng lúc nhận job (không tính
+     * lỗi, không backoff). Rào bằng {@link #holdsClaim} như {@link #deferJobOnQuotaExhausted}.
+     */
+    @Transactional
+    public GenerationJob releaseJobOnShutdown(ClaimedJobContext ctx, String reason) {
+        boolean owned = holdsClaim(ctx);
+        GenerationJob job = generationJobRepository.findById(ctx.jobId())
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generation_job id=" + ctx.jobId()));
+        if (!owned) {
+            LOG.warn("stale finish: job {} (claim_seq {}) không còn running với claim_seq này, bỏ việc trả job khi tắt app",
+                    ctx.jobId(), ctx.claimSeq());
+            return job;
+        }
+        int currentAttempt = job.getAttempt() != null ? job.getAttempt() : 1;
+        job.setStatus(JobStatus.PENDING);
+        job.setAttempt(Math.max(0, currentAttempt - 1));
+        job.setNextRunAt(LocalDateTime.now());
+        job.setStartedAt(null);
+        job.setLastError(TextClip.clip("shutdown: " + reason, MAX_SOLVER_ERROR));
+        job.setUpdatedAt(LocalDateTime.now());
+        return generationJobRepository.save(job);
+    }
+
+    /** F-27: ID đề của chỗ {@code examSlotId} để gắn nhật ký; null khi không có chỗ hoặc không tra được. Không ném lỗi. */
+    public Integer examIdForSlot(Integer examSlotId) {
+        if (examSlotId == null || slotContext == null) {
+            return null;
+        }
+        try {
+            SlotDedupContext context = slotContext.getIfAvailable();
+            return context == null ? null : context.examIdForSlot(examSlotId);
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
     public static boolean isMathSubject(String subjectName) {
         if (subjectName == null) {
             return true;

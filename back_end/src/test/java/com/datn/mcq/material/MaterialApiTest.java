@@ -268,21 +268,22 @@ class MaterialApiTest {
         byte[] docx = minimalDocx(paragraph("Cau 1. Tinh gia tri") + oleEquation("Equation.DSMT4")
                 + oleEquation("Equation.3") + omml("x+1"));
         JsonNode m = uploadOk(teacher, "mathtype.docx", LessonMaterial.MIME_DOCX, docx);
-        JsonNode dropped = null;
+        JsonNode unreadable = null;
         boolean high = false;
         for (JsonNode w : m.path("warnings")) {
-            if (w.path("code").asText().equals("MATHTYPE_FORMULAS_DROPPED")) {
-                dropped = w;
+            if (w.path("code").asText().equals("MATHTYPE_UNREADABLE")) {
+                unreadable = w;
             }
             high |= w.path("code").asText().equals("FORMULA_LOSS_HIGH");
         }
-        assertEquals(2, dropped.path("count").asInt());
-        assertEquals(3, dropped.path("total").asInt());
-        assertTrue(dropped.path("message").asText().contains("2/3"));
+        assertEquals(2, unreadable.path("count").asInt());
+        assertEquals(2, unreadable.path("total").asInt());
+        assertTrue(unreadable.path("message").asText().contains("Đã chuyển 0/2 công thức MathType; 2 công thức không "
+                + "đọc được"));
         assertTrue(high, "2/3 vượt ngưỡng cảnh báo mất nhiều");
         String stored = jdbc.queryForObject("SELECT warnings::text FROM lesson_material WHERE id = ?", String.class,
                 m.path("id").asInt());
-        assertTrue(stored.contains("MATHTYPE_FORMULAS_DROPPED"), stored);
+        assertTrue(stored.contains("MATHTYPE_UNREADABLE"), stored);
     }
 
     // ---------- danh sách, chi tiết, xóa ----------

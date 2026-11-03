@@ -76,6 +76,12 @@
 			<artifactId>pdfbox</artifactId>
 			<version>3.0.8</version>
 		</dependency>
+		<!-- Đọc công thức MathType trong tài liệu bài học (module mtef): POIFS mở file OLE oleObjectN.bin (Apache 2.0). -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi</artifactId>
+			<version>5.4.1</version>
+		</dependency>
 
 		<dependency>
 			<groupId>org.postgresql</groupId>

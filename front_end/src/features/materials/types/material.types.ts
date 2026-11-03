@@ -1,8 +1,12 @@
 export type MaterialKind = "docx" | "pdf" | "txt";
 
-/** Mã cảnh báo trích xuất (docs/api mục 9). */
+/**
+ * Mã cảnh báo trích xuất (docs/api mục 9). MATHTYPE_FORMULAS_DROPPED không còn được sinh ra nhưng tài liệu tải lên trước
+ * đó vẫn lưu mã này, nên giữ để hiển thị.
+ */
 export type MaterialWarningCode =
-    "MATHTYPE_FORMULAS_DROPPED" | "FORMULA_LOSS_HIGH" | "FORMULA_IMAGES_NOT_READ" | "PDF_TEXT_QUALITY_LOW";
+    "MATHTYPE_UNREADABLE" | "MATHTYPE_FORMULAS_DROPPED" | "FORMULA_LOSS_HIGH" | "FORMULA_IMAGES_NOT_READ"
+    | "PDF_TEXT_QUALITY_LOW";
 
 export interface MaterialWarning {
     code: string;

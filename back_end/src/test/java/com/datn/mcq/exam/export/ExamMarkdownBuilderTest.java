@@ -219,6 +219,22 @@ class ExamMarkdownBuilderTest {
         assertFalse(markdown.contains("MT2"));
     }
 
+    /** F-05: trong $...$ mọi kiểu xuống dòng thành khoảng trắng, để không dòng nào của công thức bắt đầu bằng ``` hay <. */
+    @Test
+    void xuongDongTrongCongThucThanhKhoangTrang() {
+        String out = ExamMarkdownBuilder.inline("Cho $a\n```{=openxml}\n<w:p/>\r\n```\n\rb$ hết");
+        assertEquals("Cho $a ```{=openxml} <w:p/> ``` b$ hết", out);
+        assertFalse(out.matches("(?s).*\\R.*"), "không còn ký tự xuống dòng nào");
+        assertEquals("$x^2$", ExamMarkdownBuilder.inline("$x^2$"));
+    }
+
+    /** F-05: dòng tiêu đề đề không được chứa xuống dòng (khối openxml của đầu đề sẽ bị đóng sớm bởi dòng ```). */
+    @Test
+    void tenDeNhieuDongKhongPhaBoKhoiDauDe() {
+        String block = ExamMarkdownBuilder.headerBlock(ExamHeader.blank("Đề A\n```\n\n# X"));
+        assertEquals(2, block.split("(?m)^```", -1).length - 1, "chỉ dòng mở và dòng đóng khối openxml: " + block);
+    }
+
     @Test
     void thoatKyTuMarkdownNgoaiCongThucGiuNguyenTrongCongThuc() {
         assertEquals("a\\*b\\_c \\#1 \\[x\\] $a_1 * b_2$ 5\\$ \\<br\\> \\@ref", ExamMarkdownBuilder.inline(

@@ -191,9 +191,30 @@ public final class LlmOutputRepair {
         return true;
     }
 
-    /** Cảnh báo khi đã tự đóng "$", ví dụ {@code statement_b: đã tự đóng $}. */
-    public static String dollarWarning(String field) {
-        return field + ": đã tự đóng $";
+    /** Số dấu "$" chưa thoát (không tính "\$") trong {@code text}. */
+    static int unescapedDollars(String text) {
+        int count = 0;
+        for (int i = 0; text != null && i < text.length(); i++) {
+            if (text.charAt(i) == '$' && (i == 0 || text.charAt(i - 1) != '\\')) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** Tiền tố chung của mọi cảnh báo tự đóng "$" (sau tên trường). */
+    static final String DOLLAR_WARNING_SUFFIX = ": đã tự đóng $";
+
+    /**
+     * Cảnh báo khi đã tự đóng "$". F-02: chuỗi gốc {@code original} có ĐÚNG 1 dấu "$" chưa thoát (quên đóng một công thức) thì
+     * là {@code statement_b: đã tự đóng $}, thuộc nhóm tự sửa chắc chắn, KHÔNG bật cờ "cần xem kỹ". Từ 3 dấu trở lên, vị trí
+     * đóng có thể sai nên cảnh báo mang tên khác ({@code statement_b: đã tự đóng $ khi chuỗi có 3 dấu $ (có thể đóng sai
+     * chỗ)}) và bật cờ.
+     */
+    public static String dollarWarning(String field, String original) {
+        int count = unescapedDollars(original);
+        return count <= 1 ? field + DOLLAR_WARNING_SUFFIX
+                : field + DOLLAR_WARNING_SUFFIX + " khi chuỗi có " + count + " dấu $ (có thể đóng sai chỗ)";
     }
 
     /** @param text văn bản sau khi sửa; {@code removed} là số {@code \text{...}} đã gỡ vỏ */
@@ -297,9 +318,10 @@ public final class LlmOutputRepair {
 
     /**
      * Lệnh model hay viết thay cho {@code \circ} (31/10: bullet, triangle; 2/11, đề 11 câu 190 và 192: toRadians, rceil, và
-     * các biến thể lceil, degree, deg, circle, o, cdot). Không gồm {@code prime} và {@code circ}.
+     * các biến thể lceil, degree, deg, circle, o). Không gồm {@code prime}, {@code circ} và {@code cdot} (F-02: "\cdot" là
+     * dấu nhân, "30^\cdot" có thể là lũy thừa chưa viết xong; đổi thành độ sẽ đổi nghĩa mà không bật cờ).
      */
-    private static final String WRONG_DEGREE_COMMANDS = "(?:bullet|triangle|toRadians|rceil|lceil|degree|deg|circle|o|cdot)";
+    private static final String WRONG_DEGREE_COMMANDS = "(?:bullet|triangle|toRadians|rceil|lceil|degree|deg|circle|o)";
 
     /** Chữ số hoặc "}" rồi "^" rồi một lệnh trong {@link #WRONG_DEGREE_COMMANDS}, có hoặc không có {...} và khoảng trắng. */
     private static final Pattern WRONG_DEGREE = Pattern.compile(
@@ -309,7 +331,7 @@ public final class LlmOutputRepair {
     /**
      * Đổi ký hiệu độ viết sai thành {@code ^{\circ}} (31/10, thẩm định nội dung: "75•", "85△" ở 6 câu). CHỈ bên trong cặp
      * $...$ và chỉ khi ngay sau một chữ số hoặc "}" là "^" rồi một lệnh trong {@link #WRONG_DEGREE_COMMANDS} (bullet,
-     * triangle, từ 2/11 thêm toRadians, rceil, lceil, degree, deg, circle, o, cdot; dạng {@code ^\X} hoặc {@code ^{\X}},
+     * triangle, từ 2/11 thêm toRadians, rceil, lceil, degree, deg, circle, o; dạng {@code ^\X} hoặc {@code ^{\X}},
      * cho phép khoảng trắng quanh "^"): "$75^\bullet$" thành "$75^{\circ}$". Ngoài ngữ cảnh đó giữ nguyên
      * ({@code \triangle ABC}, {@code a^\bullet}, {@code x^{\prime}}, {@code \bullet} ngoài công thức). Cách xác định trong/ngoài $ như
      * {@link #stripTextOutsideMath}; công thức không có "$" đóng thì không đụng tới.
@@ -638,7 +660,7 @@ public final class LlmOutputRepair {
             }
             DollarRepair d = closeTrailingDollar(s);
             if (d.closed()) {
-                warnings.add(dollarWarning(field));
+                warnings.add(dollarWarning(field, s));
                 s = d.text();
             }
             DegreeRepair g = fixDegreeSymbol(s);

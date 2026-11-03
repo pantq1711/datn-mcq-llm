@@ -4,6 +4,8 @@ import type { MaterialWarningCode } from "../features/materials/types/material.t
 
 // Nhãn và mức độ cảnh báo trích xuất (docs/api mục 9); chỉ FORMULA_LOSS_HIGH là nghiêm trọng
 export const materialWarningConfig: Record<MaterialWarningCode, { label: string; severity: "error" | "warning" }> = {
+    MATHTYPE_UNREADABLE: { label: "Có công thức MathType không đọc được", severity: "warning" },
+    // Mã cũ (tài liệu tải lên trước khi hệ thống đọc được MathType): vẫn hiển thị
     MATHTYPE_FORMULAS_DROPPED: { label: "Thiếu công thức MathType", severity: "warning" },
     FORMULA_LOSS_HIGH: { label: "Mất nhiều công thức", severity: "error" },
     FORMULA_IMAGES_NOT_READ: { label: "Có ảnh chưa đọc được", severity: "warning" },

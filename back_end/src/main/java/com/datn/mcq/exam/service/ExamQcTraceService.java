@@ -28,7 +28,6 @@ import com.datn.mcq.exam.repository.ExamSlotActionRepository;
 import com.datn.mcq.exam.repository.ExamSlotRepository;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GenerationJob;
-import com.datn.mcq.generation.parser.LlmOutputRepair;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
@@ -58,8 +57,6 @@ import java.util.Set;
  */
 @Service
 public class ExamQcTraceService {
-
-    private static final String AUTO_CLOSE_SUFFIX = ": đã tự đóng $";
 
     private final ExamBuildService buildService;
     private final ExamSlotRepository slotRepository;
@@ -282,7 +279,8 @@ public class ExamQcTraceService {
         List<String> repairs = new ArrayList<>();
         List<String> others = new ArrayList<>();
         for (String w : f.warnings()) {
-            if (w.startsWith(LlmOutputRepair.ESCAPE_WARNING_PREFIX) || w.endsWith(AUTO_CLOSE_SUFFIX)) {
+            // F-12: cùng một hàm phân loại với lý do "cần xem kỹ" (QcSummaryService), để hai nơi không lệch nhau.
+            if (QcSummaryService.isAutoFixedWarning(w)) {
                 repairs.add(w);
             } else {
                 others.add(w);

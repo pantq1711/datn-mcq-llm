@@ -69,18 +69,24 @@ class DocxTextExtractorTest {
     }
 
     @Test
-    void mathTypeBiBoQuaNenCanhBaoSoLuongVaMatCaoThiCanhBaoRo() {
+    void mathTypeKhongDocDuocThanhCongThucVaCanhBaoSoLuongVaMatCaoThiCanhBaoRo() {
         assumeTrue(pandoc != null, "máy không có pandoc: bỏ qua");
+        // oleEquation không có quan hệ tới file oleObject nào: không đọc được
         byte[] docx = minimalDocx(paragraph("Cau 1. Tinh gia tri bieu thuc") + oleEquation("Equation.DSMT4")
                 + oleEquation("Equation.DSMT4") + oleEquation("Equation.3") + omml("x+1"));
         ExtractedText r = extractor(pandoc).extract(docx);
         assertTrue(r.text().contains("Cau 1. Tinh gia tri bieu thuc"));
-        ExtractionWarning dropped = warning(r, "MATHTYPE_FORMULAS_DROPPED");
-        assertNotNull(dropped, r.warnings().toString());
-        assertEquals(3, dropped.count());
-        assertEquals(4, dropped.total(), "3 MathType + 1 Equation gốc");
+        assertEquals(3, r.text().split("\\[công thức]", -1).length - 1, "mỗi công thức không đọc được là [công thức]: "
+                + r.text());
+        ExtractionWarning unreadable = warning(r, "MATHTYPE_UNREADABLE");
+        assertNotNull(unreadable, r.warnings().toString());
+        assertEquals(3, unreadable.count());
+        assertEquals(3, unreadable.total(), "tổng công thức MathType");
+        assertTrue(unreadable.message().contains("Đã chuyển 0/3 công thức MathType; 3 công thức không đọc được"),
+                unreadable.message());
         ExtractionWarning high = warning(r, "FORMULA_LOSS_HIGH");
         assertNotNull(high, "3/4 công thức mất: vượt ngưỡng " + props.getFormulaLossWarnRatio());
+        assertEquals(4, high.total(), "3 MathType + 1 Equation gốc");
         assertTrue(high.message().contains("3/4"), high.message());
     }
 
@@ -93,10 +99,10 @@ class DocxTextExtractorTest {
             body.append(omml("x" + i));
         }
         ExtractedText r = extractor(pandoc).extract(minimalDocx(body.toString()));
-        ExtractionWarning dropped = warning(r, "MATHTYPE_FORMULAS_DROPPED");
-        assertNotNull(dropped);
-        assertEquals(1, dropped.count());
-        assertEquals(10, dropped.total());
+        ExtractionWarning unreadable = warning(r, "MATHTYPE_UNREADABLE");
+        assertNotNull(unreadable);
+        assertEquals(1, unreadable.count());
+        assertEquals(1, unreadable.total());
         assertEquals(null, warning(r, "FORMULA_LOSS_HIGH"), "1/10 chưa tới ngưỡng");
     }
 

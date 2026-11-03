@@ -3,6 +3,8 @@ package com.datn.mcq.exam.service;
 import com.datn.mcq.common.exception.ApiErrorException;
 import com.datn.mcq.config.GenerationLimitProperties;
 import com.datn.mcq.exam.repository.GenerationQuotaRepository;
+import com.datn.mcq.llm.client.GeminiRateLimiter;
+import com.datn.mcq.llm.client.QuotaExhaustedException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -41,28 +43,44 @@ public class GenerationQuotaService {
     private final GenerationQuotaRepository repository;
     private final GenerationLimitProperties limits;
     private final Clock clock;
+    private final GeminiRateLimiter geminiRateLimiter;
 
     @Autowired
-    public GenerationQuotaService(GenerationQuotaRepository repository, GenerationLimitProperties limits) {
-        this(repository, limits, Clock.systemUTC());
+    public GenerationQuotaService(GenerationQuotaRepository repository, GenerationLimitProperties limits,
+                                  @Autowired(required = false) GeminiRateLimiter geminiRateLimiter) {
+        this(repository, limits, Clock.systemUTC(), geminiRateLimiter);
     }
 
     GenerationQuotaService(GenerationQuotaRepository repository, GenerationLimitProperties limits, Clock clock) {
+        this(repository, limits, clock, null);
+    }
+
+    private GenerationQuotaService(GenerationQuotaRepository repository, GenerationLimitProperties limits, Clock clock,
+                                   GeminiRateLimiter geminiRateLimiter) {
         this.repository = repository;
         this.limits = limits;
         this.clock = clock;
+        this.geminiRateLimiter = geminiRateLimiter;
     }
 
     /**
      * Giữ chỗ {@code newJobs} câu cần sinh cho giáo viên: kiểm trần ngày rồi trần job chờ, đạt thì cộng vào bộ đếm ngày.
      *
+     * <p>F-18: hạn mức NGÀY của Gemini ({@link GeminiRateLimiter}, dùng chung toàn hệ thống) được kiểm TRƯỚC, để khi hệ thống
+     * đã hết lượt gọi thì không trừ hạn mức của giáo viên và không xếp job không thể chạy. Hết thì ném
+     * {@link QuotaExhaustedException} (429 {@code LLM_DAILY_QUOTA_EXHAUSTED} kèm Retry-After, xem ApiExceptionHandler).
+     *
      * @throws ApiErrorException 429 {@value #DAILY_LIMIT} (kèm Retry-After tới 0 giờ giờ Việt Nam) hoặc 429
      *                           {@value #QUEUE_LIMIT}
+     * @throws QuotaExhaustedException hệ thống đã hết hạn mức gọi Gemini trong ngày
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void reserve(Integer userId, int newJobs) {
         if (newJobs <= 0) {
             return;
+        }
+        if (geminiRateLimiter != null) {
+            geminiRateLimiter.requireDailyQuota();
         }
         LocalDate today = today(clock);
         repository.ensureRow(userId, today);

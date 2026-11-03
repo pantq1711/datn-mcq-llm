@@ -56,6 +56,7 @@ public class GenerationJobWorkerLifecycle implements SmartLifecycle {
         if (!running.compareAndSet(false, true)) {
             return;
         }
+        poller.setShuttingDown(false);
         AtomicInteger threadNo = new AtomicInteger();
         executor = Executors.newFixedThreadPool(concurrency, r -> {
             Thread t = new Thread(r, "generation-job-worker-" + threadNo.incrementAndGet());
@@ -107,6 +108,8 @@ public class GenerationJobWorkerLifecycle implements SmartLifecycle {
         if (!running.compareAndSet(true, false)) {
             return;
         }
+        // F-09: lỗi mạng của lời gọi Gemini đang chạy từ đây không còn tính là lỗi của job (xem GenerationJobPoller).
+        poller.setShuttingDown(true);
         synchronized (idleMonitor) {
             idleMonitor.notifyAll();
         }

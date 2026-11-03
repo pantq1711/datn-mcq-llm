@@ -470,7 +470,9 @@ class TrueFalseFlowTest {
         JsonNode fixed = generateTf(tfJson("Cho $R = x^2$.", List.of(STATEMENTS.get(0), STATEMENTS.get(1),
                 STATEMENTS.get(2), "Giá trị của $R$ tại $x = 3$ bằng $9."), List.of("T", "T", "F", "F")), false);
         assertTrue(fixed.get("qcReport").get("formatPassed").asBoolean(), fixed.toString());
-        assertEquals("[\"statement_d: đã tự đóng $\"]", fixed.get("qcReport").get("answerWarnings").toString());
+        // F-02: chuỗi gốc có 5 dấu "$" (hai công thức đủ cặp và một công thức quên đóng): cảnh báo mang tên khác và bật cờ.
+        assertEquals("[\"statement_d: đã tự đóng $ khi chuỗi có 5 dấu $ (có thể đóng sai chỗ)\"]",
+                fixed.get("qcReport").get("answerWarnings").toString());
         assertNull(jdbc.queryForObject("SELECT errors::text FROM quality_check_result WHERE question_id = ?"
                 + " AND check_type = 'format'", String.class, fixed.get("question").get("id").asInt()));
     }

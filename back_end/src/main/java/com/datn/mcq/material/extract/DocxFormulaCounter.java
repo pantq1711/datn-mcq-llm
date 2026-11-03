@@ -32,7 +32,7 @@ public class DocxFormulaCounter {
     }
 
     static final String DOCUMENT_XML = "word/document.xml";
-    private static final long MAX_XML_BYTES = 100L * 1024 * 1024;
+    static final long MAX_XML_BYTES = 100L * 1024 * 1024;
 
     private static final String NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     private static final String NS_O = "urn:schemas-microsoft-com:office:office";
@@ -54,14 +54,19 @@ public class DocxFormulaCounter {
         }
     }
 
-    private static FormulaStats parse(InputStream in) throws XMLStreamException {
+    /** Bộ phân tích XML đã tắt DTD và thực thể ngoài; dùng chung với {@link MathTypeInliner}. */
+    static XMLInputFactory secureFactory() {
         XMLInputFactory factory = XMLInputFactory.newFactory();
         factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
         factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
         factory.setProperty(XMLInputFactory.IS_NAMESPACE_AWARE, true);
         trySet(factory, XMLConstants.ACCESS_EXTERNAL_DTD);
         trySet(factory, XMLConstants.ACCESS_EXTERNAL_SCHEMA);
-        XMLStreamReader reader = factory.createXMLStreamReader(in);
+        return factory;
+    }
+
+    private static FormulaStats parse(InputStream in) throws XMLStreamException {
+        XMLStreamReader reader = secureFactory().createXMLStreamReader(in);
         int mathType = 0;
         int omml = 0;
         int images = 0;
@@ -137,7 +142,7 @@ public class DocxFormulaCounter {
      * Đọc XML có giới hạn dung lượng; từ chối khi thấy {@code <!DOCTYPE} hoặc {@code <!ENTITY} (quét toàn bộ luồng, không
      * chỉ phần đầu) hoặc khi XML không phải UTF-8 (UTF-16 làm chuỗi quét không khớp).
      */
-    private static final class MarkupGuard extends FilterInputStream {
+    static final class MarkupGuard extends FilterInputStream {
         private static final byte[] DOCTYPE = "<!DOCTYPE".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
         private static final byte[] ENTITY = "<!ENTITY".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
 
