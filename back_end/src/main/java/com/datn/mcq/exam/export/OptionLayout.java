@@ -12,14 +12,14 @@ import java.util.List;
 
 /**
  * Cách xếp bốn phương án A–D của câu trắc nghiệm (khuôn đề kiểm tra THCS, 4/11). Đo bề rộng hiển thị từng phương án rồi
- * chọn theo W = bề rộng dòng sau thụt lề phương án ({@link ExamPage#optionLineWidthPt()}):
+ * chọn theo W = bề rộng dòng sau mốc tab đầu 283 ({@link ExamPage#optionLineWidthPt()}, 496,1 pt):
  * <ul>
- *   <li>mọi phương án ≤ W/4 − đệm: một dòng bốn cột (tab dừng tại W/4, W/2, 3W/4);</li>
+ *   <li>mọi phương án ≤ W/4 − đệm: một dòng bốn cột (tab dừng tại 283 + W/4, + W/2, + 3W/4);</li>
  *   <li>mọi phương án ≤ W/2 − đệm: hai dòng, "A, B" rồi "C, D" (tab dừng tại W/2);</li>
  *   <li>còn lại: mỗi phương án một dòng.</li>
  * </ul>
  *
- * <p>Đo chữ bằng số đo phông Times New Roman 13 (trên máy chủ Linux là Liberation Serif, cùng metric); đo công thức bằng
+ * <p>Đo chữ bằng số đo phông Times New Roman 12(trên máy chủ Linux là Liberation Serif, cùng metric); đo công thức bằng
  * đúng phép đo ảnh xem trước MathType ({@link PreviewRenderer#widthPt}) cho cả hai dạng công thức, để bố cục Equation và
  * MathType giống nhau. Công thức không đo được coi là rất rộng (xuống mức ít cột hơn), không báo lỗi.
  */
@@ -49,8 +49,8 @@ public enum OptionLayout {
     }
 
     /**
-     * Tab dừng (twips, tính từ lề trái trang, như w:tab w:pos) giữa các cột: điểm bắt đầu nhãn + k × W/cột.
-     * Rỗng khi mỗi phương án một dòng.
+     * Tab dừng (twips, tính từ lề trái chữ, như w:tab w:pos) giữa các cột: mốc đầu 283 của mẫu + k × W/cột (cột cuối kết
+     * thúc đúng ở lề phải). Rỗng khi mỗi phương án một dòng (chỉ còn tab đầu dòng tới mốc 283).
      */
     public int[] stopsTwips() {
         if (columns == 1) {

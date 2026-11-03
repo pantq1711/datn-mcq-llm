@@ -1,5 +1,6 @@
 package com.datn.mcq.exam.export;
 
+import java.time.LocalDate;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -77,30 +78,39 @@ public record ExamHeader(String periodName, String subjectName, Integer gradeLev
         return name.isEmpty() ? "ĐỀ KIỂM TRA" : "ĐỀ KIỂM TRA " + name.toUpperCase(VI);
     }
 
-    /** "NĂM HỌC …… – ……" (giáo viên điền tay). */
-    public String yearLine() {
-        return "NĂM HỌC " + BLANK + " – " + BLANK;
+    /** Tháng bắt đầu năm học (tháng 8). */
+    static final int SCHOOL_YEAR_START_MONTH = 8;
+
+    /** "Thứ..... ngày........ tháng..... năm 2026": giáo viên điền tay thứ, ngày, tháng; năm lấy từ ngày xuất. */
+    public String dateLine(LocalDate today) {
+        return "Thứ..... ngày........ tháng..... năm " + today.getYear();
     }
 
-    /** "Môn: TOÁN 9". */
+    /** "NĂM HỌC 2026 - 2027": từ tháng 8 là năm nay – năm sau, trước tháng 8 là năm trước – năm nay. */
+    public String yearLine(LocalDate today) {
+        int start = today.getMonthValue() >= SCHOOL_YEAR_START_MONTH ? today.getYear() : today.getYear() - 1;
+        return "NĂM HỌC " + start + " - " + (start + 1);
+    }
+
+    /** "Môn: Toán, Lớp: 9." (thiếu môn hoặc khối thì "……"). */
     public String subjectLine() {
-        String subject = subjectName == null || subjectName.isBlank() ? BLANK
-                : subjectName.strip().toUpperCase(VI) + (gradeLevel != null ? " " + gradeLevel : "");
-        return "Môn: " + subject;
+        String subject = subjectName == null || subjectName.isBlank() ? BLANK : subjectName.strip();
+        String grade = gradeLevel != null ? gradeLevel.toString() : BLANK;
+        return "Môn: " + subject + ", Lớp: " + grade + ".";
     }
 
-    /** "Thời gian làm bài: 90 phút, không kể thời gian phát đề". */
+    /** "(Thời gian làm bài 90 phút không kể thời gian giao đề)". */
     public String durationLine() {
-        return "Thời gian làm bài: " + (durationMinutes != null ? durationMinutes : BLANK)
-                + " phút, không kể thời gian phát đề";
+        return "(Thời gian làm bài " + (durationMinutes != null ? durationMinutes : BLANK)
+                + " phút không kể thời gian giao đề)";
     }
 
-    /** "Họ và tên: ………………………………… Lớp: ………" (giáo viên in cho học sinh điền). */
-    public String nameLine() {
-        return "Họ và tên: …………………………………  Lớp: ………  ";
+    /** "101": mã đề trong ô của bảng "Mã đề | Điểm bài thi | Mã phách". */
+    public String code() {
+        return ORIGINAL_CODE;
     }
 
-    /** "Mã đề 101". */
+    /** "Mã đề 101" (chân trang). */
     public String codeLine() {
         return "Mã đề " + ORIGINAL_CODE;
     }

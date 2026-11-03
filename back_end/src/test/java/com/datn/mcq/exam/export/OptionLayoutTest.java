@@ -11,13 +11,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Chọn cách xếp phương án A–D (khuôn đề kiểm tra THCS, 4/11): đo bề rộng hiển thị từng phương án (chữ: số đo phông
- * Times New Roman 13; công thức: phép đo của ảnh xem trước MathType), W = bề rộng dòng sau thụt lề phương án.
+ * Times New Roman 12; công thức: phép đo của ảnh xem trước MathType), W = bề rộng dòng sau thụt lề phương án.
  * Mọi phương án ≤ W/4 − đệm → 1 dòng 4 cột; ≤ W/2 − đệm → 2 dòng 2 cột; còn lại mỗi phương án một dòng.
  */
 class OptionLayoutTest {
 
-    /** W = (9922 − 1000) / 20 = 446,1 pt. */
-    private static final double W = 446.1;
+    /** W = (10205 − 283) / 20 = 496,1 pt (bề rộng chữ A4 lề trái 2 cm, phải 1 cm, trừ mốc tab đầu 283 của mẫu). */
+    private static final double W = 496.1;
     private static final double PAD = OptionLayout.PADDING_PT;
 
     // Ba bộ mẫu. Phương án đã được chuẩn hóa dấu chấm cuối (bước chuẩn hóa chạy trước phép đo).
@@ -86,7 +86,7 @@ class OptionLayoutTest {
         double label = OptionLayout.widthPt('A', "");
         double withFormula = OptionLayout.widthPt('A', "$\\frac{1}{2}$");
         assertEquals(PreviewRenderer.widthPt("\\frac{1}{2}"), withFormula - label, 0.01);
-        assertTrue(label > 8 && label < 30, "nhãn \"A. \" đậm cỡ 13 rộng khoảng 16pt: " + label);
+        assertTrue(label > 8 && label < 30, "nhãn \"A. \" đậm cỡ 12 rộng khoảng 15pt: " + label);
         assertTrue(OptionLayout.widthPt('B', "abc") < OptionLayout.widthPt('B', "abcdef"));
         assertEquals(OptionLayout.widthPt('B', "abc") + OptionLayout.widthPt('B', "abc") - OptionLayout.widthPt('B', ""),
                 OptionLayout.widthPt('B', "abcabc"), 0.5, "chữ cộng dồn theo bề rộng ký tự");
@@ -99,12 +99,16 @@ class OptionLayoutTest {
                 OptionLayout.choose(List.of("$1$.", "$\\notacommand{x$.", "$0$.", "$2$.")));
     }
 
-    /** Tab dừng tính từ lề trái trang: điểm bắt đầu nhãn (1000) + k × W/4 hoặc W/2 (W = 8922 twips). */
+    /**
+     * Tab dừng tính từ lề trái chữ: mốc đầu của mẫu (283) rồi cộng k × W/4 hoặc W/2 (W = 9922 twips); cột cuối kết thúc
+     * đúng ở lề phải. Mẫu của trường có mốc 283, 2906, 5528, 8150 (bước 2622) cho bề rộng chữ cũ 10489.
+     */
     @Test
-    void tabDungTaiMotPhanTuHaiPhanTuBaPhanTuW() {
-        assertArrayEquals(new int[]{3231, 5461, 7692}, OptionLayout.FOUR_COLUMNS.stopsTwips());
-        assertArrayEquals(new int[]{5461}, OptionLayout.TWO_COLUMNS.stopsTwips());
+    void tabDungTaiMocDau283CongMotPhanTuHaiPhanTuBaPhanTuW() {
+        assertEquals(283, ExamPage.OPTION_LABEL_START_TWIPS);
+        assertArrayEquals(new int[]{2764, 5244, 7725}, OptionLayout.FOUR_COLUMNS.stopsTwips());
+        assertArrayEquals(new int[]{5244}, OptionLayout.TWO_COLUMNS.stopsTwips());
         assertEquals(0, OptionLayout.ONE_PER_LINE.stopsTwips().length);
-        assertEquals(446.1, ExamPage.optionLineWidthPt(), 0.001);
+        assertEquals(496.1, ExamPage.optionLineWidthPt(), 0.001);
     }
 }

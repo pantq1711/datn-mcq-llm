@@ -50,11 +50,11 @@ class PandocRunnerTest {
             assertEquals(before, s.filter(p -> p.getFileName().toString().startsWith(PandocRunner.TEMP_PREFIX)).count(),
                     "dọn thư mục tạm sau khi xong");
         }
-        // Đợt A bổ sung 3: không mở ở Compatibility Mode (để MathType Convert Equations chạy), font Times New Roman 13.
+        // Đợt A bổ sung 3: không mở ở Compatibility Mode (để MathType Convert Equations chạy), font Times New Roman 12.
         assertTrue(PandocTestSupport.hasCompatibilityMode15(PandocTestSupport.entry(docx, "word/settings.xml")),
                 "settings.xml khai báo compatibilityMode = 15");
-        assertTrue(PandocTestSupport.normalIsTimesNewRoman13(PandocTestSupport.entry(docx, "word/styles.xml")),
-                "kiểu Normal là Times New Roman 13");
+        assertTrue(PandocTestSupport.normalIsTimesNewRoman12(PandocTestSupport.entry(docx, "word/styles.xml")),
+                "kiểu Normal là Times New Roman 12");
     }
 
     /** Chỉ chạy khi máy có pandoc: công thức thành đối tượng MathType, công thức chưa hỗ trợ (⌊ ⌋) giữ Equation. */
@@ -127,8 +127,10 @@ class PandocRunnerTest {
             reference = in.readAllBytes();
         }
         assertTrue(PandocTestSupport.hasCompatibilityMode15(PandocTestSupport.entry(reference, "word/settings.xml")));
-        String styles = PandocTestSupport.entry(reference, "word/styles.xml");
-        assertTrue(PandocTestSupport.normalIsTimesNewRoman13(styles));
+        // cỡ chữ của đề (12, theo mẫu của trường) do ExamReferenceDoc vá lúc xuất; file trong resources chỉ cần đúng phông
+        byte[] patched = ExamReferenceDoc.build(reference);
+        String styles = PandocTestSupport.entry(patched, "word/styles.xml");
+        assertTrue(PandocTestSupport.normalIsTimesNewRoman12(styles));
         assertFalse(styles.substring(styles.indexOf("<w:rPrDefault>"), styles.indexOf("</w:rPrDefault>"))
                 .contains("asciiTheme"), "mặc định của tài liệu không dùng font theo theme");
     }

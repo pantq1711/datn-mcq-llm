@@ -33,7 +33,7 @@ final class ExamSections {
             if (!referencesExamFooter(pkg)) {
                 return docx;
             }
-            pkg.put(PART, ExamReferenceDoc.footerXml(ExamReferenceDoc.EXAM_FOOTER_SUFFIX).getBytes(StandardCharsets.UTF_8));
+            pkg.put(PART, ExamReferenceDoc.footerXml(ExamReferenceDoc.EXAM_FOOTER_LEFT).getBytes(StandardCharsets.UTF_8));
             pkg.ensureOverrideContentType("/" + PART, ExamReferenceDoc.FOOTER_CONTENT_TYPE);
             pkg.addRelationship(ExamPage.EXAM_FOOTER_REL_ID, ExamReferenceDoc.FOOTER_REL_TYPE, "footerExam.xml");
             return pkg.write();
