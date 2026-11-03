@@ -26,6 +26,14 @@ public record ParsedMcqDto(
         parseWarnings = parseWarnings == null ? List.of() : List.copyOf(parseWarnings);
     }
 
+    /** Bản sao có thêm một cảnh báo ở cuối {@code parseWarnings}. */
+    public ParsedMcqDto withParseWarning(String warning) {
+        List<String> all = new java.util.ArrayList<>(parseWarnings);
+        all.add(warning);
+        return new ParsedMcqDto(parseSuccess, questionText, optionA, optionB, optionC, optionD, correctOption, explanation,
+                parseError, all);
+    }
+
     /** Không có cảnh báo giải mã. */
     public ParsedMcqDto(boolean parseSuccess, String questionText, String optionA, String optionB, String optionC,
                         String optionD, Option correctOption, String explanation, String parseError) {

@@ -26,6 +26,13 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
     List<ExamSlot> lockByExamId(@Param("examId") Integer examId);
 
     /**
+     * Chữ đáp án đúng (A-D) của các câu ngân hàng mcq, để chia đều chữ đáp án toàn đề (3/11); mỗi dòng là
+     * {@code [id, correct_option]}. Truy vấn native chỉ đọc bank_item (cùng ngoại lệ như {@link #findBankCandidates}).
+     */
+    @Query(value = "SELECT id, correct_option FROM bank_item WHERE id IN (:ids)", nativeQuery = true)
+    List<Object[]> findBankCorrectOptions(@Param("ids") Collection<Integer> ids);
+
+    /**
      * Câu ngân hàng khớp một ô (phần C mục 2): cùng môn, cùng dạng, cùng mức (tf: cùng 4 mức theo thứ tự a-d), cùng chủ
      * đề (so sau trim, không phân biệt hoa thường, theo topic của template gốc); nếu câu được sinh từ một ô ma trận thì
      * còn phải cùng nội dung. Bỏ câu đã nằm trong đề này; mỗi câu chỉ ra một lần dù template được nhiều ô dùng chung.

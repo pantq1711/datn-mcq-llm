@@ -7,6 +7,7 @@ import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.generation.parser.LlmOutputRepair;
+import com.datn.mcq.llm.prompt.McqAnswerPlan;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.ExplanationDraftLeak;
@@ -68,7 +69,8 @@ public class QcSummaryService {
      *   <li>{@code statement_x: đã bỏ tiền tố …}: bỏ "a)", "b." thừa ở đầu ý tf.</li>
      * </ul>
      * Nhãn tf lệch mẫu mục tiêu ({@link TfLabelPattern#isDeviationWarning}) cũng không bật cờ nhưng do model chọn nhãn, không
-     * phải việc tự sửa, nên nằm riêng.
+     * phải việc tự sửa, nên nằm riêng. Chữ đúng của câu mcq khác chữ đã giao ({@link McqAnswerPlan#isDeviationWarning}, 3/11) cũng
+     * không bật cờ: câu vẫn đúng toán học, chỉ lệch vị trí đáp án; cảnh báo chỉ để thống kê mức tuân thủ.
      */
     static final List<Pattern> AUTO_FIXED_WARNING_PATTERNS = List.of(
             Pattern.compile("^" + Pattern.quote(LlmOutputRepair.ESCAPE_WARNING_PREFIX) + ".*", Pattern.DOTALL),
@@ -155,7 +157,8 @@ public class QcSummaryService {
                 // bật cờ (2/11). Từ 31/10: lời giải có "tính lại"/"làm lại"/"sửa lại" bật mã riêng thay vì "warning: ...".
                 if (ExplanationDraftLeak.SUSPECT_WARNING.equals(w)) {
                     reasons.add(EXPLANATION_DRAFT_SUSPECT);
-                } else if (!isAutoFixedWarning(w) && !TfLabelPattern.isDeviationWarning(w)) {
+                } else if (!isAutoFixedWarning(w) && !TfLabelPattern.isDeviationWarning(w)
+                        && !McqAnswerPlan.isDeviationWarning(w)) {
                     reasons.add(WARNING_PREFIX + w);
                 }
             }

@@ -84,6 +84,12 @@ public class FormatChecker {
             checkEnglishWords("option_c", input.optionC(), warnings);
             checkEnglishWords("option_d", input.optionD(), warnings);
             checkEnglishWords("explanation", input.explanation(), warnings);
+            checkWording("question_text", input.questionText(), warnings);
+            checkWording("option_a", input.optionA(), warnings);
+            checkWording("option_b", input.optionB(), warnings);
+            checkWording("option_c", input.optionC(), warnings);
+            checkWording("option_d", input.optionD(), warnings);
+            checkWording("explanation", input.explanation(), warnings);
         }
 
         // Ngày 23/10: cảnh báo từ bước giải mã ở chế độ sửa (đã sửa escape LaTeX, đã tự đóng $).
@@ -138,6 +144,12 @@ public class FormatChecker {
         if (input.llmOutput()) {
             checkEnglishWords("question_text", input.questionText(), warnings);
             checkEnglishWords("explanation", input.explanation(), warnings);
+            checkWording("question_text", input.questionText(), warnings);
+            // Góp ý giáo viên 3/11: phiếu trả lời đã có hướng dẫn điền, câu dẫn không ghi "(Nhập đáp án dưới dạng…)".
+            if (QuestionWordingCheck.hasAnswerInputHint(input.questionText())) {
+                warnings.add(QuestionWordingCheck.answerInputWarning("question_text"));
+            }
+            checkWording("explanation", input.explanation(), warnings);
         }
         return new FormatCheckOutcome(errors.isEmpty(), errors, warnings, answerWarnings);
     }
@@ -223,6 +235,11 @@ public class FormatChecker {
                 checkEnglishWords("statement_" + TF_KEYS.get(i), statements.get(i), warnings);
             }
             checkEnglishWords("explanation", input.explanation(), warnings);
+            checkWording("question_text", input.questionText(), warnings);
+            for (int i = 0; i < TF_KEYS.size(); i++) {
+                checkWording("statement_" + TF_KEYS.get(i), statements.get(i), warnings);
+            }
+            checkWording("explanation", input.explanation(), warnings);
         }
         return new FormatCheckOutcome(errors.isEmpty(), errors, warnings, answerWarnings);
     }
@@ -278,6 +295,13 @@ public class FormatChecker {
         List<String> words = EnglishWordLeak.find(value);
         if (!words.isEmpty()) {
             warnings.add(fieldName + ": có từ tiếng Anh ngoài công thức (" + String.join(", ", words) + ")");
+        }
+    }
+
+    /** Thuật ngữ sai dễ gặp (góp ý giáo viên 3/11, ví dụ "cạnh biên"): chỉ cảnh báo, bật cờ "cần xem kỹ". */
+    private void checkWording(String fieldName, String value, List<String> warnings) {
+        for (QuestionWordingCheck.WrongTerm term : QuestionWordingCheck.wrongTerms(value)) {
+            warnings.add(QuestionWordingCheck.wrongTermWarning(fieldName, term));
         }
     }
 

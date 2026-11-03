@@ -12,6 +12,7 @@ import com.datn.mcq.generation.parser.TfJsonParser;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.llm.prompt.McqProductionSchema;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
+import com.datn.mcq.llm.prompt.McqAnswerPlan;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
@@ -405,6 +406,12 @@ public class GenerationJobPoller {
             parseError = parsedSa.parseError();
         } else {
             ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText(), production);
+            // 3/11: chỗ mcq của đề theo ma trận được giao trước chữ đáp án đúng; chữ khác chỉ cảnh báo (không bật cờ, chưa sinh lại).
+            String letterMismatch = parsed.parseSuccess() && parsed.correctOption() != null
+                    ? McqAnswerPlan.mismatchWarning(ctx.mcqAnswerLetter(), parsed.correctOption().getDbValue()) : null;
+            if (letterMismatch != null) {
+                parsed = parsed.withParseWarning(letterMismatch);
+            }
             savedQuestion = processor.saveGeneratedQuestionFromJob(ctx, llmResult, parsed);
             qcInput = GenerationService.mcqQcInput(
                     savedQuestion.getId(), parsed, ctx.validateLatex(), runAnswerCheck);
