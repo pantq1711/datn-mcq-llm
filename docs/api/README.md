@@ -865,6 +865,20 @@ GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đố
 GET /api/exams/12/export/docx?equation=abc       → 400
 ```
 
+- **Khuôn đề kiểm tra THCS (4/11):** tham số tùy chọn `durationMinutes` (số nguyên 5–180, ngoài khoảng hoặc không phải số
+  là 400) điền "Thời gian làm bài: N phút, không kể thời gian phát đề"; không truyền thì "……". File khổ A4 (lề trên/dưới 1,5 cm,
+  trái 2 cm, phải 1,5 cm; hằng số ở `ExamPage`), Times New Roman 13 cho mọi kiểu kể cả tiêu đề (đậm, đen), giãn dòng 1,15,
+  cách đoạn ≤ 3 pt. Hai section A4 cùng lề: section đề (chân trang "Trang x/y – Mã đề 101", "(Đề có N trang)" ở đầu đề; trường
+  PAGE/SECTIONPAGES nên N chỉ tính trang của phần đề) và section đáp án (ngắt section trước "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM", đánh số
+  trang lại từ 1, chân trang "Trang x/y – Đáp án mã đề 101"). Mỗi phần một dòng hướng dẫn ("PHẦN I. …
+  Thí sinh trả lời từ câu 1 đến câu N. …"), "Câu k." đậm thụt lề treo, cuối đề "------ HẾT ------". Phương án A–D xếp bằng
+  tab (không dùng bảng): mọi phương án ≤ W/4 − 20pt thì 1 dòng 4 cột, ≤ W/2 − 20pt thì 2 dòng 2 cột, còn lại mỗi phương án một
+  dòng (W = bề rộng dòng sau thụt lề phương án = 446,1pt; `OptionLayout`). Phương án và ý đúng/sai thêm dấu chấm cuối nếu
+  chưa có dấu kết câu; câu dẫn "…là:" thành "…là" (chỉ trong file xuất). Sang trang mới: "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101"
+  với bảng đáp án từng phần (phần I 12 câu mỗi bảng, phần II "Câu | Ý | Đáp án", phần III 6 câu mỗi bảng) và điểm lấy từ
+  `app.exam.scoring`; rồi "LỜI GIẢI CHI TIẾT" ("Câu k. Chọn C." / "a) Đúng." / "Câu k. Đáp án: 10." đậm, lấy từ dữ liệu đáp án;
+  câu không có lời giải chỉ còn dòng nhãn). Mô tả chi tiết đầu đề ở mục kế (bản 2/11, nay có thêm dòng năm học, môn in hoa và ô
+  "Mã đề 101" có viền).
 - **Đầu đề (2/11):** bảng 2 cột không viền. Cột trái "PHÒNG GD&ĐT ……………" và "TRƯỜNG THCS ……………". Cột phải "ĐỀ KIỂM
   TRA <tên kì in hoa>" (tên ma trận của đề, bỏ phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8" thành "GIỮA KÌ I"; đề sinh theo bài
   hoặc đề cũ không có ma trận dùng tên đề), "Môn: <môn> <khối> — Thời gian: <phút> phút" và "Mã đề: 101". Dưới bảng là dòng

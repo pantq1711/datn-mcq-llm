@@ -366,7 +366,7 @@ Chủ dự án chốt sau khảo sát thiết kế (V26, module `com.datn.mcq.ba
    `origin = 'llm'`.
 5. **Bộ đề thương mại** chỉ dùng làm dữ liệu kiểm thử thủ công; không đưa vào fixture, log, seed. Fixture tự dựng bằng
    `DocxBuilder`; đối tượng MathType mẫu của test lấy từ file tự soạn `spikes/mathtype-ole/KIEM_TRA_mo_rong.docx`.
-6. **Câu không lời giải:** cho nhập, cờ thông tin `no_solution`, `explanation` NULL; xuất Word bỏ khối lời giải của câu đó.
+6. **Câu không lời giải:** cho nhập, cờ thông tin `no_solution`, `explanation` NULL; xuất Word: câu không có lời giải vẫn có dòng nhãn (Câu k. Chọn X. / Đáp án: …) trong phần lời giải chi tiết, không có đoạn lời giải.
 7. **Phạm vi bản đầu:** chỉ nhập câu không cần ảnh (câu có ảnh, công thức chưa chuyển được, bảng dữ liệu bị bỏ và đếm theo
    lý do). Không có sửa câu trong bản xem trước; câu có cờ chặn không chọn được khi xác nhận (422 `IMPORT_ITEM_BLOCKED`).
 8. **Duyệt bổ sung sau review (3/11):** `bankimport` được phụ thuộc thêm `qc` (chỉ `DedupChecker`/`DedupCandidate`, hàm thuần,

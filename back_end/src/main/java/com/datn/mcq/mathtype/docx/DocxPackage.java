@@ -46,6 +46,7 @@ public final class DocxPackage {
     private final Document rels;
     private final Document types;
     private final Map<String, Document> readOnly = new java.util.HashMap<>();
+    private final Map<String, Document> edited = new java.util.LinkedHashMap<>();
     private int relCounter;
 
     private DocxPackage(Map<String, byte[]> parts) throws IOException {
@@ -92,14 +93,52 @@ public final class DocxPackage {
         });
     }
 
+    /**
+     * Part XML khác để SỬA (vd. {@code word/styles.xml} của file mẫu): DOM trả về được ghi lại khi {@link #write()}.
+     * Null nếu gói không có part đó. Gọi lại với cùng tên trả cùng DOM.
+     */
+    public Document editable(String partName) {
+        if (!parts.containsKey(partName)) {
+            return null;
+        }
+        Document doc = edited.get(partName);
+        if (doc == null) {
+            try {
+                doc = parse(parts.get(partName));
+            } catch (IOException e) {
+                return null;
+            }
+            edited.put(partName, doc);
+        }
+        return doc;
+    }
+
     /** Thêm part mới (vd. {@code word/embeddings/oleObjectMT1.bin}). */
     public void put(String partName, byte[] content) {
         parts.put(partName, content);
     }
 
+    /** Khai báo kiểu nội dung riêng cho một part (vd. {@code /word/footer1.xml}) nếu chưa có. */
+    public void ensureOverrideContentType(String partName, String contentType) {
+        NodeList overrides = types.getElementsByTagNameNS(CT, "Override");
+        for (int i = 0; i < overrides.getLength(); i++) {
+            if (partName.equals(((Element) overrides.item(i)).getAttribute("PartName"))) {
+                return;
+            }
+        }
+        Element o = types.createElementNS(CT, "Override");
+        o.setAttribute("PartName", partName);
+        o.setAttribute("ContentType", contentType);
+        types.getDocumentElement().appendChild(o);
+    }
+
     /** Thêm một quan hệ của document.xml, trả Id ("rIdMT1", "rIdMT2"…; đánh số riêng cho từng gói). */
     public String addRelationship(String type, String target) {
-        String id = "rIdMT" + (++relCounter);
+        return addRelationship("rIdMT" + (++relCounter), type, target);
+    }
+
+    /** Thêm một quan hệ của document.xml với Id do bên gọi chọn (không được trùng Id đã có). */
+    public String addRelationship(String id, String type, String target) {
         Element rel = rels.createElementNS(PR, "Relationship");
         rel.setAttribute("Id", id);
         rel.setAttribute("Type", type);
@@ -126,6 +165,9 @@ public final class DocxPackage {
         parts.put(DOCUMENT, serialize(document));
         parts.put(DOCUMENT_RELS, serialize(rels));
         parts.put(CONTENT_TYPES, serialize(types));
+        for (Map.Entry<String, Document> e : edited.entrySet()) {
+            parts.put(e.getKey(), serialize(e.getValue()));
+        }
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         try (ZipOutputStream z = new ZipOutputStream(bos)) {
             List<String> names = new ArrayList<>(parts.keySet());

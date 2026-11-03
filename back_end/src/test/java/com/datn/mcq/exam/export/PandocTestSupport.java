@@ -71,12 +71,13 @@ public final class PandocTestSupport {
 
     /** Kiểu Normal dùng Times New Roman cỡ 13 (sz = 26 nửa điểm). */
     public static boolean normalIsTimesNewRoman13(String stylesXml) {
+        // Thứ tự thuộc tính của w:style không cố định (file mẫu được vá bằng DOM), nên không dựa vào thứ tự đó.
         java.util.regex.Matcher m = java.util.regex.Pattern.compile(
-                "(?s)<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\">(.*?)</w:style>").matcher(stylesXml);
-        if (!m.find()) {
+                "(?s)<w:style\\s([^>]*w:styleId=\"Normal\"[^>]*)>(.*?)</w:style>").matcher(stylesXml);
+        if (!m.find() || !m.group(1).contains("w:default=\"1\"") || !m.group(1).contains("w:type=\"paragraph\"")) {
             return false;
         }
-        String normal = m.group(1);
+        String normal = m.group(2);
         return normal.contains("w:ascii=\"Times New Roman\"") && normal.contains("w:hAnsi=\"Times New Roman\"")
                 && normal.contains("<w:sz w:val=\"26\"");
     }
