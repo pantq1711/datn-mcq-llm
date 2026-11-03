@@ -78,6 +78,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 
 | L-63 | "210^\toRadians" thay cho độ qua QC không cờ; cảnh báo bước format không được lưu (bổ sung 2/11, đề 11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
 | L-64 | Soát ngoài trước deploy lần 2 (nhánh `fix/pre-deploy-2`, 3/11): câu dự phòng bị ghi đè không theo chất lượng; tự đóng `$` không phân biệt số dấu; Solver `options_verdict` hỏng cho qua; hạn mức ngày Gemini; tắt app tính lỗi job; và các mục nhỏ | Nhiều nhóm | Cao | Đã sửa (đo F-07 chờ thực hiện trên `datn_mcq_e2e`) |
+| L-65 | Tài liệu giáo án .docx mất gần hết công thức MathType khi trích chữ (pandoc bỏ đối tượng OLE): 116/118 công thức mất (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (đo trên file thật qua HTTP: giữ 102/118) |
 
 **Thống kê theo nhóm** (60 mục; bảng chưa có dòng cho L-56 nên con số này cộng thêm đúng 7 mục L-57…L-63 vào số cũ):
 
@@ -709,6 +710,17 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
 - Quy trình: một lần dùng `sed -i` sửa file test (trái M-39); Docker Desktop treo giữa chừng làm hỏng một lượt chạy test (nghi ổ C: gần đầy), chạy lại sau khi bật lại DB.
 - Hạn chế: `queries.sql` ước tính cờ từ dữ liệu đã lưu (không có `similar_in_exam`); cờ thật lấy từ API vết QC. Hết hạn mức ngày khi `app.llm.daily-quota` ≤ 0 (tắt) thì 429 `PerDay` không có tác dụng đánh dấu.
 - Trạng thái: Đã sửa (đo F-07 chờ thực hiện).
+
+### L-65 Giáo án .docx mất công thức MathType khi trích chữ (bổ sung 3/11)
+- Nhóm: LLM & parse (đầu vào tài liệu bài học)
+- Triệu chứng: tải giáo án có công thức MathType (`POST /api/materials`), cảnh báo "116/118 công thức MathType bị bỏ": văn bản trích chỉ giữ 2 công thức Equation gốc của Word. 51/54 giáo viên Toán khảo sát dùng MathType, nên tài liệu Toán gần như mất hết công thức và câu sinh ra bám tài liệu kém.
+- Nguyên nhân gốc: pandoc không đọc đối tượng OLE nhúng (`Equation.DSMT4`), chỉ đọc Equation gốc (OMML). Bộ đọc MTEF → LaTeX đã có ở `tools/bank-import` (nhánh `feature/bank-import-tool`, chưa vào main) nhưng chưa dùng ở luồng trích tài liệu.
+- Cách sửa: gói `com.datn.mcq.mtef` (chép từ `bankimport.mtef`, chỉ đọc; thêm `org.apache.poi:poi:5.4.1`, cùng khối dependency với nhánh MathType) và `MathTypeInliner`. Trước pandoc: mỗi `w:object` có `o:OLEObject` ProgID `Equation.*` được thay bằng mã giữ chỗ duy nhất (có chuỗi ngẫu nhiên mỗi lần), file `oleObjectN.bin` đọc theo `r:id` trong `document.xml.rels`. Sau pandoc: mã đổi thành `$latex$` (`$$…$$` nếu đứng riêng một dòng). Chèn thẳng `$` vào docx không được vì pandoc thoát `$` và `\`. Không chuyển được (MTEF lỗi/chưa hỗ trợ, `Equation.3`, thiếu file, > 1 MB, công thức thứ 2001 trở đi) thì `[công thức]` và được đếm. Cảnh báo mới `MATHTYPE_UNREADABLE` ("Đã chuyển N/M công thức MathType; K công thức không đọc được", chỉ khi K > 0) thay `MATHTYPE_FORMULAS_DROPPED` (frontend vẫn hiển thị mã cũ vì dữ liệu cũ). Docx không có MathType: không ghi lại file, pandoc đọc đúng file gốc. Giữ nguyên mọi kiểm tra zip/magic bytes, parser XML tắt DTD, và chạy trong permit `PandocLimiter`.
+- Khác bản gốc: `MtefReader` thêm trần độ lồng 200 (dữ liệu người dùng cố ý lồng sâu làm tràn ngăn xếp; bản trong tools/bank-import chưa có).
+- Chống tái phát: `DocxMathTypeTest` (16 test với pandoc thật: công thức đúng chỗ giữa câu, riêng dòng `$$`, trong bảng/run đậm/tô màu, 12 công thức không lẫn mã, bin rác, `Equation.3`, quan hệ thiếu/thoát gốc/liên kết ngoài, OLE > 1 MB, > 2000 công thức, rels có DOCTYPE, docx không MathType giống hệt pandoc thuần), `MtefToLatexTest` + `MtefCleanTest` (45, kèm 6 file `real-*.bin`), `DocxTextExtractorTest` và `MaterialApiTest` đã cập nhật theo cảnh báo mới.
+- Đo trên file thật (`KIEM_TRA_mo_rong.docx`, 116 MathType + 2 OMML): trước sửa giữ 2/118; sau sửa giữ 102/118 (100 MathType + 2 OMML), 16 công thức là `[công thức]`. File này cố ý chứa nhiều cấu trúc lạ (phần C) nên 16 không đọc được là đúng thiết kế (bộ đọc không đoán). Bộ đề thật của bank-import chuyển đúng 876/876.
+- Hạn chế: chỉ xử lý `w:object` trong `word/document.xml` (đối tượng nằm trong `w:pict`, chân trang, chú thích vẫn bị pandoc bỏ; loại `w:pict` được tính vào số "không đọc được"). Kiểm HTTP thật 3/11: app chạy trên `datn_mcq_e2e` (worker tắt), `POST /api/materials` bằng giáo viên e2e trả 201, `charCount` 3008 (trước sửa: 1133), cảnh báo `MATHTYPE_UNREADABLE` 16/116. Lưu ý khi đo lại: tải lại đúng file bằng cùng giáo viên trả 200 kèm bản cũ đã lưu (cùng sha256), không chạy code mới; phải dùng giáo viên khác hoặc xóa bản cũ.
+- Trạng thái: Đã sửa.
 
 ## QC
 
