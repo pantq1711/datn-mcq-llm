@@ -469,7 +469,7 @@ public class QuestionEditService {
             }
             LlmOutputRepair.DollarRepair d = LlmOutputRepair.closeTrailingDollar(s);
             if (d.closed()) {
-                repairs.add(LlmOutputRepair.dollarWarning(field));
+                repairs.add(LlmOutputRepair.dollarWarning(field, s));
                 s = d.text();
             }
             // 31/10: như parser sinh câu, "75^\bullet" / "85^{\triangle}" trong công thức thành "^{\circ}".
@@ -477,6 +477,15 @@ public class QuestionEditService {
             if (g.fixed() > 0) {
                 repairs.add(LlmOutputRepair.degreeWarning(field, g.fixed()));
                 s = g.text();
+            }
+            // F-12: như parser sinh câu, lệnh LaTeX liền mạch nằm ngoài $...$ (giáo viên gõ \frac{1}{2} quên $) được bọc $
+            // thay vì bị từ chối 400. Đáp số của câu trả lời ngắn là số viết trần: để bước kiểm định dạng báo lỗi dạng đáp án.
+            if (!"answer".equals(field)) {
+                LlmOutputRepair.WrapRepair w = LlmOutputRepair.wrapLatexOutsideMath(s);
+                if (w.wrapped() > 0) {
+                    repairs.add(LlmOutputRepair.wrapWarning(field, w.wrapped()));
+                    s = w.text();
+                }
             }
             return s;
         }

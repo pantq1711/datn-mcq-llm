@@ -3,6 +3,7 @@ package com.datn.mcq.exam.service;
 import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.common.exception.ApiErrorException;
 import com.datn.mcq.common.util.JsonStringArray;
+import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.exam.dto.ExamEditDtos.EditQuestionRequest;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamItemDto;
 import com.datn.mcq.generation.dto.QuestionEditInput;
@@ -45,6 +46,11 @@ public class ExamActionService {
             + "đề; đã loại câu có trong đề và câu đã đổi ra). Hãy sinh câu mới.";
     static final String QC_CHECKING_MESSAGE =
             "Câu vừa sửa đang được kiểm tra lại (Solver), hãy chờ kiểm xong rồi Giữ.";
+    static final String GROUNDING_CHECKING_MESSAGE =
+            "Câu đang được đối chiếu với tài liệu đã đính kèm, hãy chờ kiểm xong rồi Giữ.";
+    /** B7 (V25): lỗi 400 khi lý do Đổi ngoài danh sách. */
+    static final String INVALID_REASON_MESSAGE = "reason phải là một trong: "
+            + String.join(", ", ExamSlotAction.REPLACE_REASONS) + " (hoặc bỏ trống).";
 
     private final ExamSlotRepository slotRepository;
     private final ExamSlotActionRepository actionRepository;
@@ -100,6 +106,11 @@ public class ExamActionService {
             if (questionEditService.hasActiveAnswerCheck(slot.getGeneratedQuestionId())) {
                 throw ApiErrorException.conflict(QC_CHECKING, QC_CHECKING_MESSAGE);
             }
+            // F-04: câu sinh từ tài liệu còn đang chờ chấm "bám tài liệu" thì cũng chưa Giữ (chưa biết có bám tài liệu không).
+            if (generationService.latestGroundingJob(slot.getGeneratedQuestionId())
+                    .map(j -> j.getStatus() == JobStatus.PENDING || j.getStatus() == JobStatus.RUNNING).orElse(false)) {
+                throw ApiErrorException.conflict(QC_CHECKING, GROUNDING_CHECKING_MESSAGE);
+            }
             edited = generationService.getQuestionById(slot.getGeneratedQuestionId()).getEditedFromQuestionId() != null;
             Integer bankItemId = assistedKeepService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
             slot.setBankItemId(bankItemId);
@@ -129,9 +140,21 @@ public class ExamActionService {
      */
     @Transactional
     public ExamItemDto replace(Integer examId, Integer slotId, Integer actorId, String source, String instruction) {
+        return replace(examId, slotId, actorId, source, instruction, null);
+    }
+
+    /**
+     * @param reason B7: lý do Đổi do giáo viên chọn (tùy chọn, không phân biệt hoa thường): một trong
+     *               {@link ExamSlotAction#REPLACE_REASONS}; trống thì không ghi lý do; giá trị lạ là 400 INVALID_REQUEST,
+     *               kiểm TRƯỚC mọi thay đổi
+     */
+    @Transactional
+    public ExamItemDto replace(Integer examId, Integer slotId, Integer actorId, String source, String instruction,
+                               String reason) {
         buildService.getOwnedExam(examId, actorId);
         String replaceSource = normalizeSource(source);
         String cleanInstruction = normalizeInstruction(instruction);
+        String cleanReason = normalizeReason(reason);
         if (ExamSlotAction.SOURCE_BANK.equals(replaceSource) && cleanInstruction != null) {
             throw ApiErrorException.badRequest(QuestionEditService.INVALID_REQUEST,
                     "instruction chỉ dùng khi source = generate (lấy câu ngân hàng không sinh câu mới).");
@@ -162,6 +185,7 @@ public class ExamActionService {
                 slot.getBankItemId(), null, actorId);
         log.setInstruction(cleanInstruction);
         log.setReplaceSource(replaceSource);
+        log.setReplaceReason(cleanReason);
         actionRepository.save(log);
         slot.setBankItemId(newBankItemId);
         slot.setGeneratedQuestionId(null);
@@ -176,6 +200,18 @@ public class ExamActionService {
         }
         slotRepository.save(slot);
         return viewService.item(slot, matrixService.getCell(slot.getCellId()));
+    }
+
+    /** B7: bỏ trống thì null; chỉ nhận các giá trị của {@link ExamSlotAction#REPLACE_REASONS} (không phân biệt hoa thường). */
+    static String normalizeReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return null;
+        }
+        String r = reason.strip().toLowerCase(java.util.Locale.ROOT);
+        if (!ExamSlotAction.REPLACE_REASONS.contains(r)) {
+            throw ApiErrorException.badRequest(QuestionEditService.INVALID_REQUEST, INVALID_REASON_MESSAGE);
+        }
+        return r;
     }
 
     /** Bỏ trống thì "generate"; chỉ nhận "bank" hoặc "generate" (không phân biệt hoa thường), còn lại 400. */

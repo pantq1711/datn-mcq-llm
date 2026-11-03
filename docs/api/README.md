@@ -390,7 +390,8 @@ câu bằng Giữ / Đổi / Sửa trong màn đề (mục 7). Số mục giữ 
 **Sửa đầu ra LLM ở run production (ngày 23/10).** Trước khi giải mã JSON, dấu `\` của lệnh LaTeX chưa nhân đôi trong
 chuỗi được nhân đôi (ví dụ `"$75^\circ$"` một dấu gạch); sau khi giải mã, trường có `$` lẻ mà phần sau `$` cuối trông
 như công thức được tự đóng `$` ở cuối trường, trước dấu câu. Mỗi lần sửa ghi cảnh báo vào `answerWarnings`/`warnings`
-(`json: đã sửa 1 escape LaTeX (\circ)`, `statement_b: đã tự đóng $`). `$` lẻ ở giữa câu vẫn là lỗi format. MCQ
+(`json: đã sửa 1 escape LaTeX (\circ)`, `statement_b: đã tự đóng $`; từ 3 dấu `$` chưa thoát trở lên cảnh báo là
+`statement_b: đã tự đóng $ khi chuỗi có N dấu $ (có thể đóng sai chỗ)` và bật cờ "cần xem kỹ"). `$` lẻ ở giữa câu vẫn là lỗi format. MCQ
 production gọi Gemini kèm schema JSON như `sa`/`tf`. Lý do format không qua (kể cả lỗi giải mã JSON) lưu ở
 `quality_check_result.errors` (V8). Run `experiment` không áp dụng; chi tiết ở `enums.md` mục 3.
 
@@ -678,6 +679,12 @@ môi trường (`app.generation-limits.*`, xem `docs/deploy/README.md`):
   tiếp." Không có `Retry-After`: frontend hiện thông báo, cho thử lại sau khi đề đang soạn xong.
 - `DAILY_GENERATION_LIMIT`: `error` nêu trần, số đã dùng, số còn lại, số câu yêu cầu cần và thời điểm được tạo tiếp (từ 0
   giờ ngày hôm sau, giờ Việt Nam); khi trần ngày đã hết, kiểm trần ngày trước trần hàng đợi.
+- **Hết lượt gọi Gemini trong ngày của cả hệ thống (F-18):** trước khi trừ hạn mức giáo viên và xếp job, `build`,
+  `build-by-lesson` và `replace` (sinh mới) kiểm hạn mức ngày của Gemini dùng chung (`app.llm.daily-quota`, đặt lại 00:00
+  giờ Thái Bình Dương; 429 của Gemini có `PerDay`/`RequestsPerDay` cũng đánh dấu hết hạn mức ngày). Hết thì **429**
+  `LLM_DAILY_QUOTA_EXHAUSTED` kèm `Retry-After` (giây tới lúc mở lại), KHÔNG trừ hạn mức giáo viên, không để lại gì (không
+  đề, không job, chỗ giữ nguyên). Đề đủ câu từ ngân hàng (không cần sinh) và Đổi bằng `source = bank` không bị chặn.
+  Frontend hiện "Hệ thống đã dùng hết lượt soạn câu hôm nay, thầy/cô thử lại sau HH:MM" (giờ Việt Nam, từ `Retry-After`).
 - Hai request song song của cùng giáo viên được tuần tự hóa (khóa dòng `generation_quota` của giáo viên trong transaction
   tạo job), nên không thể cùng lọt trần. Hạn chế: bộ đếm ngày chỉ ghi khi tạo job; không hoàn lại khi job sau đó lỗi.
 
@@ -773,7 +780,11 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
 - Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`, `edit`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại
   khỏi chỉ số của form chấm mù cũ (`answer_correct`, duyệt không sửa).
 - **Chưa có:** sửa câu đã nằm trong ngân hàng, ráp đề, trộn mã đề, đề dự phòng, xuất PDF.
-- **Đổi bằng câu ngân hàng (W1-4, D5-B):** `POST .../replace` nhận `{"source": "bank" | "generate", "instruction"?}`. Bỏ
+- **Lý do Đổi (B7, V25):** `POST .../replace` nhận thêm trường tùy chọn `reason` ∈ `wrong_answer`, `ambiguous_options`,
+  `off_matrix`, `duplicate_pattern`, `latex_format`, `too_hard`, `too_easy`, `other` (không phân biệt hoa thường), lưu ở
+  `exam_slot_action.replace_reason`. Bỏ trống thì không ghi lý do; giá trị khác thì 400 `INVALID_REQUEST` trước mọi thay
+  đổi. Dùng cho thống kê dùng thử: `docs/experiments/trial/queries.sql`.
+- **Đổi bằng câu ngân hàng (W1-4, D5-B):** `POST .../replace` nhận `{"source": "bank" | "generate", "instruction"?, "reason"?}`. Bỏ
   trống `source` (hoặc không gửi body) là `generate`: giữ nguyên hành vi cũ (sinh mới qua hàng đợi), nên client cũ không vỡ.
   - `bank`: lấy ngay câu ngân hàng khớp ô, cùng tiêu chí và xếp hạng mềm như lúc tạo đề (mục 7.2; đề theo bài: 7.2a).
     Không có job, không gọi LLM. Trả câu như 7.4 với `state = ready`, `source = bank`, `bankItemId`, không có cờ. Chỗ

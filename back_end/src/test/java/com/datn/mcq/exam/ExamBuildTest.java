@@ -1109,6 +1109,23 @@ class ExamBuildTest {
         assertEquals(expected, item.get("explanation").asText(), "xem đề trả lời giải của câu đã Giữ");
     }
 
+    /**
+     * F-12 phần 1: vết QC xếp cảnh báo tự sửa bằng đúng hàm của QcSummaryService (một nguồn duy nhất): "đã tự bọc $" là
+     * việc tự sửa nên nằm ở autoRepairs, không lẫn vào warnings (cảnh báo khác).
+     */
+    @Test
+    void vetQcXepCanhBaoTuBocVaoAutoRepairsCungNguonVoiLyDoCanXemKy() throws Exception {
+        generator.rawLatexExplanationMcq = 1;
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        JsonNode format = json(perform(get("/api/exams/" + examId + "/slots/" + slot + "/qc-trace"))
+                .andExpect(status().isOk())).get("lineages").get(0).get("versions").get(0).get("qc").get("format");
+        List<String> repairs = texts(format.get("autoRepairs"));
+        assertTrue(repairs.stream().anyMatch(r -> r.startsWith("explanation: đã tự bọc $ quanh")), repairs.toString());
+        assertEquals(List.of(), texts(format.get("warnings")),
+                "cảnh báo tự bọc $ không bật cờ nên không được xếp vào nhóm cảnh báo khác");
+    }
+
     /** 2/11: lời giải LaTeX ngoài $ mà không bọc được (lệnh lạ) là lỗi định dạng của đầu ra LLM: câu bị loại và sinh lại. */
     @Test
     void loiGiaiLatexNgoaiDolaKhongBocDuocThiSinhLai() throws Exception {

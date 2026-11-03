@@ -200,6 +200,10 @@ export function describeFormatIssue(issue: string): string {
     if (field.startsWith("statement_") && detail.startsWith("đã bỏ tiền tố")) {
         return `Ý ${field.slice("statement_".length)}) có ký hiệu đánh số thừa ở đầu nên hệ thống đã tự bỏ. Thầy/cô xem lại ý này.`;
     }
+    // Chuỗi có từ 3 dấu $ trở lên: vị trí hệ thống tự đóng có thể sai chỗ (khác trường hợp thiếu đúng một dấu $)
+    if (detail.startsWith("đã tự đóng $ khi chuỗi có")) {
+        return `Ở ${place} có nhiều dấu $ và hệ thống đã tự thêm một dấu để đóng công thức, có thể đóng sai chỗ. Thầy/cô kiểm tra lại công thức.`;
+    }
     if (detail.startsWith("đã tự đóng")) {
         return `Công thức ở ${place} chưa đóng đủ nên hệ thống đã tự sửa. Thầy/cô xem lại công thức.`;
     }

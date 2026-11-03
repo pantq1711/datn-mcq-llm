@@ -552,6 +552,54 @@ class ExamQuestionEditTest {
         assertTrue(warnings.contains("option_a: đã tự đóng $"), warnings);
     }
 
+    /**
+     * F-04 (phần nhỏ): Giữ bị chặn (409 QC_CHECKING, như answer_check) khi câu còn job grounding_check chờ hoặc đang chạy,
+     * để không đưa vào ngân hàng một câu chưa biết có bám tài liệu hay không. Job xong hoặc thất bại thì Giữ được.
+     */
+    @Test
+    void giuBiChanKhiCauConJobGroundingCheckChoHoacChay() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int question = questionOf(slot);
+        int grounding = insert("INSERT INTO generation_job (job_type, run_id, template_id, question_type, question_id,"
+                + " material_context, material_refs, status, attempt, next_run_at, created_at, updated_at)"
+                + " SELECT 'grounding_check', run_id, template_id, question_type, ?, 'ngữ cảnh', '[]'::jsonb, 'pending',"
+                + " 0, now(), now(), now()"
+                + " FROM generation_job WHERE exam_slot_id = ? AND job_type = 'generate'", question, slot);
+
+        for (String active : List.of("pending", "running")) {
+            jdbc.update("UPDATE generation_job SET status = ? WHERE id = ?", active, grounding);
+            assertEquals("QC_CHECKING", json(keep(examId, slot).andExpect(status().isConflict())).get("code").asText(),
+                    active);
+            assertEquals("ready", jdbc.queryForObject("SELECT state FROM exam_slot WHERE id = ?", String.class, slot));
+        }
+        jdbc.update("UPDATE generation_job SET status = 'failed' WHERE id = ?", grounding);
+        keep(examId, slot).andExpect(status().isOk());
+        assertEquals("kept", jdbc.queryForObject("SELECT state FROM exam_slot WHERE id = ?", String.class, slot));
+    }
+
+    /**
+     * F-12 phần 2: giáo viên gõ \frac{1}{2} quên $ thì được tự bọc như parser sinh câu (trước đây 400 FORMAT_INVALID vì LaTeX
+     * nằm ngoài $); cảnh báo "đã tự bọc $" được lưu ở bước format.
+     */
+    @Test
+    void banSuaQuenDollarQuanhLenhLatexDuocTuBocNhuParser() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int base = questionOf(slot);
+        JsonNode item = json(putQuestion(examId, slot, mcqBody(base)
+                .put("optionA", "\\frac{1}{2}")
+                .put("explanation", "Ta có \\frac{1}{2} khi $y \\neq 0$."))
+                .andExpect(status().isOk()));
+        int version = item.get("questionId").asInt();
+        assertEquals("$\\frac{1}{2}$", question(version).get("option_a"));
+        assertEquals("Ta có $\\frac{1}{2}$ khi $y \\neq 0$.", question(version).get("explanation"));
+        String warnings = jdbc.queryForObject("SELECT warnings::text FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type = 'format'", String.class, version);
+        assertTrue(warnings.contains("option_a: đã tự bọc $ quanh"), warnings);
+        assertTrue(warnings.contains("explanation: đã tự bọc $ quanh"), warnings);
+    }
+
     /** 27/10 (exam 10 ô 25): giáo viên lưu đơn vị viết "\text{km}" ngoài $ thì được gỡ vỏ và qua format. */
     @Test
     void banSuaCoTextNgoaiDolaDuocGoVoVaQuaFormat() throws Exception {

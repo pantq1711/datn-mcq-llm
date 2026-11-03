@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 /**
- * Chuyển Markdown sang docx bằng pandoc ("--sandbox -f markdown+tex_math_dollars -t docx --reference-doc"), để công thức $...$
+ * Chuyển Markdown sang docx bằng pandoc ("--sandbox -f markdown+tex_math_dollars-raw_html-raw_tex -t docx --reference-doc"), để công thức $...$
  * thành Equation gốc của Word (OMML). Chạy trong một thư mục tạm riêng, giới hạn {@value #TIMEOUT_SECONDS} giây, xóa thư mục khi xong.
  * Giới hạn bộ nhớ pandoc qua cờ +RTS -M<heap>m -RTS và dùng chung Semaphore với trích tài liệu để chống OOM (W2-4a Mục 1).
  * Không cài pandoc; máy chủ không có pandoc thì ném {@link DocumentExportException} 503.
@@ -29,6 +29,13 @@ public class PandocRunner {
     static final String TEMP_PREFIX = "exam-export-";
     static final String REFERENCE_DOC_RESOURCE = "/export/reference.docx";
     static final long TIMEOUT_SECONDS = 30;
+    /**
+     * Định dạng đọc Markdown (F-05): công thức {@code $...$}; tắt {@code raw_html} và {@code raw_tex} để chữ trong đề không
+     * thành HTML/TeX thô. KHÔNG tắt {@code raw_attribute}: ExamMarkdownBuilder tự dùng khối {@code ```{=openxml}} cho bảng
+     * đầu đề và ngắt trang (không có cách khác trong Markdown). Nội dung đề không thể tạo khối đó vì ký tự backtick ngoài
+     * công thức bị thoát và xuống dòng trong công thức bị thay bằng khoảng trắng (xem ExamMarkdownBuilder).
+     */
+    static final String MARKDOWN_FORMAT = "markdown+tex_math_dollars-raw_html-raw_tex";
     static final String NOT_INSTALLED_MESSAGE = "Máy chủ chưa cài pandoc nên chưa xuất được file Word. Cài pandoc theo "
             + "hướng dẫn trong docs/api/README.md (mục 7.6 Xuất đề ra Word) rồi khởi động lại backend, hoặc đặt PANDOC_PATH.";
 
@@ -86,7 +93,7 @@ public class PandocRunner {
             try {
                 // D4: --sandbox, pandoc chỉ đọc các file nêu trong dòng lệnh (không lấy được file máy chủ qua ảnh, include...).
                 process = new ProcessBuilder(pandocPath, "+RTS", "-M" + heapMb + "m", "-RTS", "--sandbox",
-                        "exam.md", "-f", "markdown+tex_math_dollars", "-t", "docx",
+                        "exam.md", "-f", MARKDOWN_FORMAT, "-t", "docx",
                         "--reference-doc=reference.docx", "-o", "exam.docx")
                         .directory(dir.toFile())
                         .redirectErrorStream(true)

@@ -113,7 +113,9 @@ public final class ExamMarkdownBuilder {
     }
 
     private static String xml(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+        // F-05: gộp xuống dòng thành khoảng trắng; tên đề nhiều dòng có dòng "```" sẽ đóng sớm khối openxml của đầu đề.
+        return text.replaceAll("\\s*\\R\\s*", " ").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;");
     }
 
     private static String label(int k) {
@@ -201,7 +203,9 @@ public final class ExamMarkdownBuilder {
                     out.append("\\$");
                     i++;
                 } else {
-                    out.append('$').append(inner).append('$');
+                    // F-05: xuống dòng trong công thức thành khoảng trắng; nếu không, một dòng của "công thức" có thể bắt đầu
+                    // bằng ```{=openxml} hoặc "<" và thành khối raw thật khi pandoc đọc Markdown.
+                    out.append('$').append(inner.replaceAll("\\s*\\R\\s*", " ")).append('$');
                     i = close + 1;
                 }
                 continue;

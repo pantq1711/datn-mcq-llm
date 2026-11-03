@@ -341,7 +341,7 @@ public class ExamBuildService {
             case IN_BANK -> useQuestion(slot, q.getId());
             case QC_PASSED -> {
                 if (!retryForSameLabel(slot, q)) {
-                    useQuestion(slot, q.getId());
+                    useBest(slot, q);
                 }
             }
             case GENERATED -> {
@@ -352,12 +352,17 @@ public class ExamBuildService {
                     return;
                 }
                 boolean solverInconsistent = Boolean.FALSE.equals(qcSummaryService.summarize(q.getId()).answerCheckPassed());
-                if (solverInconsistent && slot.getSolverRetries() < MAX_SOLVER_RETRIES && slot.getAttempts() < MAX_ATTEMPTS) {
-                    slot.setFallbackQuestionId(q.getId());
-                    slot.setSolverRetries(slot.getSolverRetries() + 1);
-                    enqueueRetry(slot);
+                if (solverInconsistent) {
+                    // F-01: câu lệch Solver không đi đường "sinh lại vì cùng nhãn"; chỉ được thử lại vì lệch Solver.
+                    if (slot.getSolverRetries() < MAX_SOLVER_RETRIES && slot.getAttempts() < MAX_ATTEMPTS) {
+                        offerFallback(slot, q);
+                        slot.setSolverRetries(slot.getSolverRetries() + 1);
+                        enqueueRetry(slot);
+                    } else {
+                        useBest(slot, q);
+                    }
                 } else if (!retryForSameLabel(slot, q)) {
-                    useQuestion(slot, q.getId());
+                    useBest(slot, q);
                 }
             }
             default -> retryOrFail(slot);
@@ -382,9 +387,40 @@ public class ExamBuildService {
         if (slot.getAttempts() >= MAX_ATTEMPTS || sameLabelWarning(q).isEmpty()) {
             return false;
         }
-        slot.setFallbackQuestionId(q.getId());
+        offerFallback(slot, q);
         enqueueRetry(slot);
         return true;
+    }
+
+    /** Thứ hạng câu làm câu dự phòng (F-01): GENERATED (lệch Solver, Solver lỗi) &lt; QC_PASSED có cảnh báo cùng nhãn &lt; câu sạch. */
+    private static final int RANK_GENERATED = 1;
+    private static final int RANK_QC_PASSED_WITH_WARNING = 2;
+    private static final int RANK_CLEAN = 3;
+
+    private int rank(GeneratedQuestion q) {
+        if (q.getStatus() == QuestionStatus.QC_PASSED || q.getStatus() == QuestionStatus.IN_BANK) {
+            return sameLabelWarning(q).isPresent() ? RANK_QC_PASSED_WITH_WARNING : RANK_CLEAN;
+        }
+        return RANK_GENERATED;
+    }
+
+    /** Chỉ ghi câu dự phòng khi chưa có hoặc câu mới TỐT HƠN câu dự phòng hiện có (không ghi đè theo thứ tự thời gian). */
+    private void offerFallback(ExamSlot slot, GeneratedQuestion q) {
+        Integer current = slot.getFallbackQuestionId();
+        if (current == null || rank(q) > rank(generationService.getQuestionById(current))) {
+            slot.setFallbackQuestionId(q.getId());
+        }
+    }
+
+    /** Hết lượt: dùng câu tốt nhất giữa câu cuối {@code last} và câu dự phòng (bằng hạng thì lấy câu cuối). */
+    private void useBest(ExamSlot slot, GeneratedQuestion last) {
+        Integer fallbackId = slot.getFallbackQuestionId();
+        if (fallbackId != null && !fallbackId.equals(last.getId())
+                && rank(generationService.getQuestionById(fallbackId)) > rank(last)) {
+            useQuestion(slot, fallbackId);
+            return;
+        }
+        useQuestion(slot, last.getId());
     }
 
     private void retryOrFail(ExamSlot slot) {
