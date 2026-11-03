@@ -35,4 +35,9 @@ public interface SlotDedupContext {
     default Integer creatorUserIdForSlot(Integer examSlotId) {
         return null;
     }
+
+    /** F-27: ID đề chứa chỗ {@code examSlotId}, để gắn vào nhật ký (MDC) của worker. Null khi không tìm thấy. */
+    default Integer examIdForSlot(Integer examSlotId) {
+        return null;
+    }
 }

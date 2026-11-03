@@ -61,7 +61,9 @@ public class QcSummaryService {
      * <ul>
      *   <li>{@code json: đã sửa …}: nhân đôi "\" của lệnh LaTeX, gỡ vỏ {@code \text{}} ngoài $, đổi ký hiệu độ sai thành
      *       {@code ^{\circ}} (cùng tiền tố {@link LlmOutputRepair#ESCAPE_WARNING_PREFIX}).</li>
-     *   <li>{@code <trường>: đã tự đóng $}: "$" quên đóng ở cuối trường, chỉ khi phần sau trông như công thức.</li>
+     *   <li>{@code <trường>: đã tự đóng $}: "$" quên đóng ở cuối trường, chỉ khi phần sau trông như công thức VÀ chuỗi gốc có
+     *       đúng 1 dấu "$" chưa thoát (F-02). Từ 3 dấu trở lên, cảnh báo là
+     *       {@code <trường>: đã tự đóng $ khi chuỗi có N dấu $ (có thể đóng sai chỗ)}, KHÔNG khớp mẫu này nên bật cờ.</li>
      *   <li>{@code <trường>: đã tự bọc $ quanh … LaTeX nằm ngoài $}: biểu thức LaTeX liền mạch ngoài $ được bọc $.</li>
      *   <li>{@code statement_x: đã bỏ tiền tố …}: bỏ "a)", "b." thừa ở đầu ý tf.</li>
      * </ul>
@@ -236,8 +238,9 @@ public class QcSummaryService {
         Optional<QualityCheckResult> dedup = resultRepository.findByQuestionIdAndCheckType(questionId, CheckType.DEDUP);
         Optional<QualityCheckResult> answer =
                 resultRepository.findByQuestionIdAndCheckType(questionId, CheckType.ANSWER_CHECK);
-        boolean undecidable = answer.isPresent() && statementRepository
-                .findByQcResultIdOrderByPositionAsc(answer.get().getId()).stream()
+        // F-07: chỉ câu Đúng/Sai có dòng ý (answer_check_statement); mcq và sa không cần truy vấn này.
+        boolean undecidable = answer.isPresent() && answer.get().getQuestionType() == QuestionType.TF
+                && statementRepository.findByQcResultIdOrderByPositionAsc(answer.get().getId()).stream()
                 .anyMatch(s -> s.getJudgeLabel() == TruthChoice.UNDECIDABLE);
         return new QcSummary(
                 dedup.isPresent(),

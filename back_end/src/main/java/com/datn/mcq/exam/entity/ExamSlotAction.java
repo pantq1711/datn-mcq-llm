@@ -57,13 +57,29 @@ public class ExamSlotAction {
     @Column(name = "replace_source", length = 10)
     private String replaceSource;
 
+    /** V25 (B7): lý do giáo viên chọn khi Đổi, một trong {@link #REPLACE_REASONS}; null khi không chọn hoặc dòng khác replace. */
+    @Column(name = "replace_reason", length = 40)
+    private String replaceReason;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
     public static final String SOURCE_BANK = "bank";
     public static final String SOURCE_GENERATE = "generate";
 
+    /** Lý do Đổi hợp lệ (khớp CHECK chk_esa_replace_reason của V25 và docs/contract/enums.md). */
+    public static final java.util.List<String> REPLACE_REASONS = java.util.List.of("wrong_answer", "ambiguous_options",
+            "off_matrix", "duplicate_pattern", "latex_format", "too_hard", "too_easy", "other");
+
     public ExamSlotAction() {}
+
+    public String getReplaceReason() {
+        return replaceReason;
+    }
+
+    public void setReplaceReason(String replaceReason) {
+        this.replaceReason = replaceReason;
+    }
 
     public String getReplaceSource() {
         return replaceSource;

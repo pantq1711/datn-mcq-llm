@@ -121,6 +121,39 @@ class PandocSandboxTest {
                 "word/styles.xml"));
     }
 
+    private static ExamItemDto sa(int no, String text, String answer) {
+        return new ExamItemDto(no, 3, no, "III", "Tứ giác", QuestionType.SA, "ready", "generated", null, 300 + no, text,
+                null, null, null, null, null, answer, null, "Lời giải.", Difficulty.MEDIUM, false, List.of());
+    }
+
+    /**
+     * F-05 (soát ngoài): đáp số sa đi vào Word qua inline() nên "$...$" có thể kéo dài qua nhiều dòng; dòng bắt đầu bằng
+     * ```{=openxml} bên trong công thức khi đó thành khối raw openxml thật. Xuống dòng trong công thức phải thành khoảng
+     * trắng; tiêu đề đề nhiều dòng cũng không được đóng sớm khối openxml của đầu đề. document.xml không có nút lạ.
+     */
+    @Test
+    void tieuDeVaCongThucNhieuDongKhongSinhNutXmlLa() throws Exception {
+        Optional<String> pandoc = PandocTestSupport.find();
+        assumeTrue(pandoc.isPresent(), "máy không có pandoc: bỏ qua");
+        String hostileAnswer = "$5\n```{=openxml}\n<w:p><w:r><w:t>RAWMATH</w:t></w:r></w:p>\n```\n$";
+        String hostileQuestion = "Tính ```{=openxml}<w:p><w:r><w:t>RAWTEXT</w:t></w:r></w:p>``` và <w:p>chen</w:p>";
+        List<ExamItemDto> items = List.of(sa(1, hostileQuestion, hostileAnswer));
+        ExamViewDto base = exam(items);
+        ExamViewDto hostile = new ExamViewDto(base.examId(), base.examCode(),
+                "Đề ```{=openxml}<w:p><w:r><w:t>RAWTITLE</w:t></w:r></w:p>```\n```\n\n# TIEUDEXXX\n",
+                base.mode(), base.status(), base.matrixId(), base.createdAt(), base.buildStatus(),
+                base.needsReviewCount(), base.parts());
+        byte[] docx = new PandocRunner(pandoc.get()).markdownToDocx(ExamMarkdownBuilder.build(hostile));
+        String xml = PandocTestSupport.documentXml(docx);
+
+        for (String raw : List.of("<w:t>RAWMATH</w:t>", "<w:t>RAWTEXT</w:t>", "<w:t>RAWTITLE</w:t>")) {
+            assertFalse(xml.contains(raw), "không chèn raw openxml: " + raw);
+        }
+        assertEquals(2, xml.split("w:val=\"Heading1\"", -1).length - 1,
+                "chỉ có hai tiêu đề cấp 1 (ĐÁP ÁN, LỜI GIẢI): tiêu đề đề không tách được khối openxml của đầu đề");
+        assertEquals(1, xml.split("<w:br w:type=\"page\"/>", -1).length - 1, "chỉ một ngắt trang chủ đích");
+    }
+
     @Test
     void vanBanNgoaiCongThucKhongTaoCodeSpanHayRawBlock() throws Exception {
         Optional<String> pandoc = PandocTestSupport.find();

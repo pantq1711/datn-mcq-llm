@@ -128,24 +128,57 @@ class McqSolverOptionCheckTest {
         assertTrue(match.passed());
     }
 
+    private static String verdictJson(String judge, String... items) {
+        return "{\"reasoning\": \"r\", \"options_verdict\": [" + String.join(", ", items) + "], \"correct_count\": 2,"
+                + " \"judge_answer\": \"" + judge + "\"}";
+    }
+
+    /**
+     * F-03: mảng options_verdict hỏng một phần nhưng đã đọc được từ 2 phương án correct=true thì vẫn kết luận nhiều đáp án
+     * đúng (solver_multiple_correct), không rơi về so judge_answer (trước đây judge_answer = A, trùng đáp án, cho qua).
+     */
     @Test
-    void optionsVerdictHongThiBoQuaVaDungJudgeAnswer() {
-        String threeItems = "{\"reasoning\": \"r\", \"options_verdict\": [" + item("A", true) + ", " + item("B", true)
-                + ", " + item("C", false) + "], \"correct_count\": 2, \"judge_answer\": \"A\"}";
-        String duplicateLetter = "{\"reasoning\": \"r\", \"options_verdict\": [" + item("A", true) + ", "
-                + item("A", true) + ", " + item("C", false) + ", " + item("D", false)
-                + "], \"correct_count\": 2, \"judge_answer\": \"A\"}";
-        String notBoolean = "{\"reasoning\": \"r\", \"options_verdict\": [" + item("A", "\"có\"") + ", "
-                + item("B", true) + ", " + item("C", false) + ", " + item("D", false)
-                + "], \"correct_count\": 2, \"judge_answer\": \"A\"}";
-        String notArray = "{\"reasoning\": \"r\", \"options_verdict\": \"A đúng\", \"judge_answer\": \"A\"}";
-        for (String raw : List.of(threeItems, duplicateLetter, notBoolean, notArray)) {
+    void optionsVerdictHongMotPhanNhungDocDuocTuHaiDungThiVanLaMultipleCorrect() {
+        String threeItems = verdictJson("A", item("A", true), item("B", true), item("C", false));
+        String badThird = verdictJson("A", item("A", true), item("B", true), item("C", "\"có\""), item("D", false));
+        String extraElement = verdictJson("A", item("A", true), item("B", true), item("C", false), item("D", false),
+                item("B", true));
+        String nonObjectElement = verdictJson("A", item("A", true), "\"B đúng\"", item("C", true), item("D", false));
+        for (String raw : List.of(threeItems, badThird, extraElement, nonObjectElement)) {
             AnswerSolverChecker.SolverCheckOutcome out = checker.parseAndCompare(raw, "m", Option.A);
-            assertTrue(out.passed(), raw);
-            assertEquals(AnswerChoice.A, out.judgeAnswer(), raw);
-            assertNull(out.optionCorrect(), raw);
-            assertEquals("r", out.reasoning(), raw);
+            assertFalse(out.passed(), raw);
+            assertEquals(AnswerChoice.MULTIPLE, out.judgeAnswer(), raw);
+            assertTrue(out.reasoning().startsWith(AnswerSolverChecker.OPTIONS_VERDICT_PREFIX),
+                    "gắn khối xét từng phương án để QcSummary tách solver_multiple_correct: " + out.reasoning());
         }
+    }
+
+    /**
+     * F-03: mảng hỏng mà không đủ căn cứ (chưa đọc được 2 phương án đúng) là Solver lỗi: ném IllegalArgumentException để
+     * QC coi là ERROR (đi đường job answer_check hiện có), KHÔNG rơi về judge_answer rồi cho qua.
+     */
+    @Test
+    void optionsVerdictHongKhongDuCanCuThiLaSolverLoi() {
+        String oneTrueThreeItems = verdictJson("A", item("A", true), item("B", false), item("C", false));
+        String duplicateLetter = verdictJson("A", item("A", true), item("A", true), item("C", false), item("D", false));
+        String notBoolean = verdictJson("A", item("A", "\"có\""), item("B", true), item("C", false), item("D", false));
+        String notArray = "{\"reasoning\": \"r\", \"options_verdict\": \"A đúng\", \"judge_answer\": \"A\"}";
+        String emptyArray = verdictJson("A");
+        for (String raw : List.of(oneTrueThreeItems, duplicateLetter, notBoolean, notArray, emptyArray)) {
+            assertThrows(IllegalArgumentException.class, () -> checker.parseAndCompare(raw, "m", Option.A), raw);
+        }
+    }
+
+    /** Prompt v2 không có options_verdict: không đổi hành vi cũ (so judge_answer), kể cả khi trường lạ đi kèm. */
+    @Test
+    void promptV2KhongXetTungPhuongAnVanSoJudgeAnswer() {
+        AnswerSolverChecker v2 = new AnswerSolverChecker(new LlmClient("", "m"), new PromptBuilder(), "m",
+                PromptBuilder.SOLVER_PROMPT_VERSION_V2);
+        String raw = "{\"reasoning\": \"r\", \"options_verdict\": \"A đúng\", \"judge_answer\": \"A\"}";
+        AnswerSolverChecker.SolverCheckOutcome out = v2.parseAndCompare(raw, "m", Option.A);
+        assertTrue(out.passed());
+        assertEquals(AnswerChoice.A, out.judgeAnswer());
+        assertNull(out.optionCorrect());
     }
 
     @Test

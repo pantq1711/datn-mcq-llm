@@ -180,7 +180,8 @@ public final class MatrixPromptDraftV0 {
         if (instruction == null) {
             return null;
         }
-        String clean = instruction.replace("<<<", "").replace(">>>", "").replaceAll("\\s+", " ").strip();
+        // F-25: neutralize lặp tới khi sạch ("<>>><<" sau khi gỡ ">>>" lại thành "<<<").
+        String clean = PromptData.neutralize(instruction).replaceAll("\\s+", " ").strip();
         return clean.isEmpty() ? null : TEACHER_PREFIX + TEACHER_OPEN + clean + TEACHER_CLOSE;
     }
 
@@ -214,7 +215,7 @@ public final class MatrixPromptDraftV0 {
             return null;
         }
         String clean = CellTextLimits.clip(
-                instruction.replace("<<<", "").replace(">>>", "").replaceAll("\\s+", " ").strip(),
+                PromptData.neutralize(instruction).replaceAll("\\s+", " ").strip(),
                 CellTextLimits.EXTRA_INSTRUCTION_MAX_CHARS);
         return clean.isEmpty() ? null : EXTRA_PREFIX + TEACHER_OPEN + clean + TEACHER_CLOSE;
     }
@@ -398,18 +399,20 @@ public final class MatrixPromptDraftV0 {
         if (spec.gradeLevel() != null) {
             sb.append("Khối lớp: ").append(spec.gradeLevel()).append("\n");
         }
-        sb.append("Chủ đề: ").append(spec.topic()).append("\n");
+        // F-25: chủ đề, nội dung, yêu cầu cần đạt của ô là văn bản giáo viên nhập: gỡ ranh giới khối như mọi dữ liệu khác.
+        sb.append("Chủ đề: ").append(PromptData.neutralize(spec.topic())).append("\n");
         if (spec.content() != null && !spec.content().isBlank()) {
             // D2: cắt an toàn cho ô lưu từ trước khi có giới hạn độ dài.
-            sb.append("Nội dung: ").append(CellTextLimits.clip(spec.content(), CellTextLimits.CONTENT_MAX_CHARS))
-                    .append("\n");
+            sb.append("Nội dung: ").append(CellTextLimits.clip(PromptData.neutralize(spec.content()),
+                    CellTextLimits.CONTENT_MAX_CHARS)).append("\n");
         }
         sb.append("Yêu cầu cần đạt:\n");
         for (Difficulty level : Difficulty.values()) {
             String text = spec.learningOutcomes().get(level);
             if (text != null && !text.isBlank()) {
                 sb.append("- ").append(TfPromptDraftV0.levelName(level)).append(": ")
-                        .append(CellTextLimits.clip(text, CellTextLimits.OUTCOME_MAX_CHARS)).append("\n");
+                        .append(CellTextLimits.clip(PromptData.neutralize(text), CellTextLimits.OUTCOME_MAX_CHARS))
+                        .append("\n");
             }
         }
         if (type == QuestionType.TF) {

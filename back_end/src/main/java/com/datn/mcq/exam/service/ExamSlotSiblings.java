@@ -150,6 +150,13 @@ public class ExamSlotSiblings implements SlotDedupContext {
     }
     @Override
     @Transactional(readOnly = true)
+    public Integer examIdForSlot(Integer examSlotId) {
+        return examSlotId == null ? null
+                : slotRepository.findById(examSlotId).map(ExamSlot::getExamId).orElse(null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Integer creatorUserIdForSlot(Integer examSlotId) {
         if (examSlotId == null) {
             return null;

@@ -68,6 +68,7 @@ class PandocRunnerTest {
         PandocRunner.Docx mathType = runner.markdownToDocx(md, EquationFormat.MATHTYPE);
         assertEquals(1, mathType.mathTypeObjects());
         assertEquals(1, mathType.equationsKeptOmml());
+        assertEquals(0, mathType.equationsScaled());
         String xml = PandocTestSupport.documentXml(mathType.content());
         assertEquals(1, xml.split("ProgID=\"Equation.DSMT4\"", -1).length - 1);
         assertEquals(1, xml.split("<m:oMath[ >]", -1).length - 1, "công thức chưa hỗ trợ giữ Equation");
@@ -76,6 +77,7 @@ class PandocRunnerTest {
         PandocRunner.Docx omml = runner.markdownToDocx(md, EquationFormat.OMML);
         assertEquals(0, omml.mathTypeObjects());
         assertNull(omml.equationsKeptOmml(), "xuất Equation thì không báo số giữ lại");
+        assertNull(omml.equationsScaled(), "xuất Equation thì không báo số thu nhỏ");
         assertFalse(PandocTestSupport.documentXml(omml.content()).contains("Equation.DSMT4"));
     }
 

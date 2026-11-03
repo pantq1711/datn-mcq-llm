@@ -75,9 +75,12 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-60 | Cờ "gần giống" ghi số câu toàn đề, trang đề đánh số theo Phần; cả hai câu của một cặp bị gắn (bổ sung 2/11) | QC | Trung bình | Đã sửa (frontend chưa cập nhật) |
 | L-61 | File Word không có đầu đề đề thi, in mã hệ thống MT… (bổ sung 2/11) | Xuất file | Trung bình | Đã sửa (chưa kiểm bằng Word thật) |
 | L-62 | Từ tiếng Anh lẫn trong câu sinh ra; ghi chú nội bộ trong ma trận mẫu hiện cho giáo viên (bổ sung 2/11) | LLM & parse | Thấp | Đã sửa |
-| L-64 | Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11) | Xuất file | – | Đã kiểm (còn mục mở) |
 
 | L-63 | "210^\toRadians" thay cho độ qua QC không cờ; cảnh báo bước format không được lưu (bổ sung 2/11, đề 11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
+| L-64 | Soát ngoài trước deploy lần 2 (nhánh `fix/pre-deploy-2`, 3/11): câu dự phòng bị ghi đè không theo chất lượng; tự đóng `$` không phân biệt số dấu; Solver `options_verdict` hỏng cho qua; hạn mức ngày Gemini; tắt app tính lỗi job; và các mục nhỏ | Nhiều nhóm | Cao | Đã sửa (đo F-07 chờ thực hiện trên `datn_mcq_e2e`) |
+| L-65 | Tài liệu giáo án .docx mất gần hết công thức MathType khi trích chữ (pandoc bỏ đối tượng OLE): 116/118 công thức mất (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (đo trên file thật qua HTTP: giữ 102/118) |
+| L-66 | Nhập ngân hàng câu từ Word: các bẫy khi đưa lõi tools/bank-import vào backend (câu nhập bị đếm là lượt gọi Gemini, ảnh trong mc:AlternateContent bị bỏ sót, nạp mọi ảnh vào bộ nhớ, fixture MathType thật) (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (nhập thử 1 bộ qua HTTP trên `datn_mcq_e2e`) |
+| L-67 | Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11) | Xuất file | – | Đã kiểm (còn mục mở) |
 
 **Thống kê theo nhóm** (61 mục; bảng chưa có dòng cho L-56 nên con số này cộng thêm đúng 8 mục L-57…L-64 vào số cũ):
 
@@ -689,6 +692,82 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
 - Hạn chế: số câu bị cờ "cần xem kỹ" sẽ tăng (các cảnh báo cũ nay hiện); câu cũ đã lưu không có cảnh báo vẫn không cờ (không sửa dữ liệu). `qcReport.answerWarnings` (đọc lại từ cột) nay gồm cả nhóm `warnings`. Cảnh báo bọc ký hiệu độ vẫn ghi chữ "(^\bullet, ^\triangle thành ^{\circ})".
 - Trạng thái: Đã sửa (chờ đo trên đề mới).
 
+### L-64 Soát ngoài trước deploy lần 2: 14 mục trên nhánh `fix/pre-deploy-2` (bổ sung 3/11)
+- Nhóm: nhiều nhóm (đối soát đề, LLM & parse, QC, xuất file, hàng đợi, cấu hình, nhật ký)
+- Nguồn: bản review ngoài (đường dẫn file trong bản review sai; package thật là `com.datn.mcq`). Mỗi phát hiện được kiểm lại với code thật trước khi sửa. Quy trình: test đỏ trước (163 test mục tiêu: 27 failure, 7 error), sửa, rồi chạy toàn bộ test.
+- **F-01 câu dự phòng theo chất lượng** (`ExamBuildService`): trước đây `fallback_question_id` bị ghi đè theo thứ tự thời gian, nên q1 `QC_PASSED` (4 ý cùng nhãn) bị câu lệch Solver ghi đè và hết lượt thì dùng câu lệch. Nay `offerFallback` chỉ ghi khi câu mới tốt hơn (QC_PASSED có cảnh báo cùng nhãn > GENERATED lệch Solver), `useBest` chọn câu tốt nhất giữa câu cuối và câu dự phòng, và câu lệch Solver không đi `retryForSameLabel`. Test `ExamFallbackQualityTest` (hai tình huống), tổng job generate ≤ 3.
+- **F-02 tự đóng `$` và `cdot`:** "đã tự đóng $" chỉ không bật cờ khi chuỗi gốc có ĐÚNG 1 dấu `$` chưa thoát; từ 3 dấu trở lên cảnh báo là `<trường>: đã tự đóng $ khi chuỗi có N dấu $ (có thể đóng sai chỗ)` (không khớp nhóm tự sửa nên bật cờ). `cdot` bỏ khỏi danh sách đổi thành `^{\circ}`. Hệ quả cần biết: câu có công thức đủ cặp và MỘT công thức quên đóng ở cuối (ví dụ `Giá trị của $R$ tại $x = 3$ bằng $9.`, 5 dấu) nay bật cờ dù chỗ đóng thường đúng; chọn thận trọng theo quy tắc chủ dự án. Hai test cũ (`LlmOutputRepairTest.fixtureId24...`, `TrueFalseFlowTest.loiFormatLuuOErrorsVaSyncTuDongDoLa`) có fixture 5 dấu nên kỳ vọng được cập nhật theo quy tắc.
+- **F-03 Solver `options_verdict` hỏng** (`AnswerSolverChecker`): mảng hỏng một phần mà đọc được từ 2 phương án `correct = true` thì vẫn `multiple`; không đủ căn cứ thì ném lỗi (đi đường ERROR / job `answer_check`), không so `judge_answer` rồi cho qua. Thiếu hẳn `options_verdict` và prompt v2 giữ cách cũ (phạm vi hẹp có chủ đích: ~68 chỗ test dùng JSON kiểu cũ).
+- **F-05 pandoc:** `-f markdown+tex_math_dollars-raw_html-raw_tex`. KHÔNG tắt `raw_attribute` vì `ExamMarkdownBuilder` dùng khối `` ```{=openxml} `` cho bảng đầu đề và ngắt trang (tắt thì mất cả hai và `PandocSandboxTest` đếm ngắt trang hỏng). Lỗ hổng thật được vá: xuống dòng trong `$...$` thành khoảng trắng (đáp số `sa` nhiều dòng có thể tạo khối raw), tên đề nhiều dòng không đóng sớm khối openxml của đầu đề. `DocxTextExtractor` chỉ xuất Markdown nên không phải đổi.
+- **F-09 tắt app:** `app.worker.shutdown-await-ms: 28000` ở prod. Lỗi mạng khi gọi Gemini lúc luồng bị interrupt hoặc cờ tắt đã bật không là lỗi job: `releaseJobOnShutdown` trả về `pending`, hoàn lại `attempt`, khôi phục cờ interrupt (`GenerationJobShutdownTest`).
+- **F-11:** `application-prod.yaml` dùng `${MATERIAL_MAX_CONCURRENT:1}`, `${MATERIAL_PANDOC_HEAP_MB:256}`, `${MATERIAL_QUEUE_WAIT:30s}` (compose đã truyền sẵn các biến này nhưng file cố định giá trị nên không có tác dụng).
+- **F-18 hạn mức ngày Gemini:** `GenerationQuotaService.reserve` kiểm `GeminiRateLimiter.requireDailyQuota()` trước khi trừ hạn mức giáo viên; hết thì `QuotaExhaustedException` (429 `LLM_DAILY_QUOTA_EXHAUSTED` kèm Retry-After, dùng handler sẵn có, không mã mới); đề đủ câu từ ngân hàng vẫn tạo được. `QcOrchestrator` ném tiếp `QuotaExhaustedException` (poller giữ câu `generated` kèm `solver_error` và xếp job `answer_check`). `LlmClient`: 429 có `PerDay`/`RequestsPerDay` đánh dấu hết hạn mức ngày. Frontend `apiError.ts` hiện "thử lại sau HH:MM" (giờ VN từ Retry-After).
+- **F-25:** `MatrixPromptDraftV0` dùng `PromptData.neutralize` (lặp tới khi sạch) thay `.replace("<<<","").replace(">>>","")` (`"<>>><<"` sau khi gỡ `>>>` lại thành `<<<`); chủ đề, nội dung, yêu cầu cần đạt của ô cũng qua nó.
+- **F-27 nhật ký:** `ApiExceptionHandler` ghi WARN cho 4xx (mã trạng thái, mã lỗi, phương thức và đường dẫn, userId; không ghi thân request, chuỗi truy vấn, token hay nội dung thông báo), ERROR kèm stacktrace cho 5xx, thêm catch-all trả 500 `INTERNAL_ERROR`; lỗi khung Spring (JSON hỏng, sai phương thức...) giữ mã 4xx. `GenerationJobPoller` đặt MDC `jobId`/`slotId`/`examId` và log lý do khi ghi lỗi job. `RequestCorrelationFilter` không chép sang (đang ở nhánh MathType).
+- **B7 lý do Đổi:** migration `V25__slot_action_replace_reason.sql` (`replace_reason VARCHAR(40)` NULL, CHECK 8 giá trị chữ thường, chỉ dòng `replace`); `POST .../replace` nhận `reason`, giá trị lạ là 400 trước mọi thay đổi. `docs/experiments/trial/queries.sql` (5 truy vấn chỉ đọc, gồm bảng chéo `replace_reason` × cờ ước tính của câu bị đổi); `TrialQueriesSqlTest` kiểm chỉ có SELECT và số đếm.
+- **Đo F-07 (chưa sửa):** hướng dẫn ở `docs/experiments/trial/do-f07-so-cau-sql.md` (bật `hibernate.generate_statistics` bằng tham số dòng lệnh, không đổi cấu hình mặc định). Phần rẻ: `QcSummaryService.summarize` chỉ truy vấn ý khi câu là TF.
+- **F-07 phần khóa:** `ExamBuildService.reconcile` khóa (PESSIMISTIC_WRITE) mọi chỗ của đề mỗi lần xem, kể cả đề đã xong. Nay kiểm trước bằng `existsByExamIdAndState(examId, "generating")` (không khóa); không có thì return ngay, có thì khóa và đối soát như cũ (đọc lại state sau khóa). Mọi nơi gọi (xem đề, tiến độ, ô, Giữ/Đổi/Sửa) đều qua hàm này. Test `ExamReconcileLockTest` (giao dịch khác giữ `FOR UPDATE`: đề xong không chờ, đề còn chỗ generating vẫn chờ). Đo trên `datn_mcq_e2e`, đề 13 (18 câu): số câu SQL vẫn 117 (câu `exists` thay đúng một câu khóa), số câu có `FOR (NO KEY) UPDATE` từ 1 mỗi lần xem về 0; thời gian một người dùng không đổi đáng kể (0,29–0,55 s), lợi ích là hết chặn nhau khi nhiều request xem cùng đề.
+- **F-12:** đường giáo viên sửa (`QuestionEditService`) tự bọc `$` quanh lệnh LaTeX ngoài `$` như parser (thay vì 400), trừ đáp số `sa`; vết QC (`ExamQcTraceService`) phân loại cảnh báo tự sửa bằng `QcSummaryService.isAutoFixedWarning` (một nguồn duy nhất).
+- **F-04 phần nhỏ:** `ExamActionService.keep` trả 409 `QC_CHECKING` khi câu còn job `grounding_check` pending/running.
+- Quy trình: một lần dùng `sed -i` sửa file test (trái M-39); Docker Desktop treo giữa chừng làm hỏng một lượt chạy test (nghi ổ C: gần đầy), chạy lại sau khi bật lại DB.
+- Hạn chế: `queries.sql` ước tính cờ từ dữ liệu đã lưu (không có `similar_in_exam`); cờ thật lấy từ API vết QC. Hết hạn mức ngày khi `app.llm.daily-quota` ≤ 0 (tắt) thì 429 `PerDay` không có tác dụng đánh dấu.
+- Trạng thái: Đã sửa (đo F-07 chờ thực hiện).
+
+### L-65 Giáo án .docx mất công thức MathType khi trích chữ (bổ sung 3/11)
+- Nhóm: LLM & parse (đầu vào tài liệu bài học)
+- Triệu chứng: tải giáo án có công thức MathType (`POST /api/materials`), cảnh báo "116/118 công thức MathType bị bỏ": văn bản trích chỉ giữ 2 công thức Equation gốc của Word. 51/54 giáo viên Toán khảo sát dùng MathType, nên tài liệu Toán gần như mất hết công thức và câu sinh ra bám tài liệu kém.
+- Nguyên nhân gốc: pandoc không đọc đối tượng OLE nhúng (`Equation.DSMT4`), chỉ đọc Equation gốc (OMML). Bộ đọc MTEF → LaTeX đã có ở `tools/bank-import` (nhánh `feature/bank-import-tool`, chưa vào main) nhưng chưa dùng ở luồng trích tài liệu.
+- Cách sửa: gói `com.datn.mcq.mtef` (chép từ `bankimport.mtef`, chỉ đọc; thêm `org.apache.poi:poi:5.4.1`, cùng khối dependency với nhánh MathType) và `MathTypeInliner`. Trước pandoc: mỗi `w:object` có `o:OLEObject` ProgID `Equation.*` được thay bằng mã giữ chỗ duy nhất (có chuỗi ngẫu nhiên mỗi lần), file `oleObjectN.bin` đọc theo `r:id` trong `document.xml.rels`. Sau pandoc: mã đổi thành `$latex$` (`$$…$$` nếu đứng riêng một dòng). Chèn thẳng `$` vào docx không được vì pandoc thoát `$` và `\`. Không chuyển được (MTEF lỗi/chưa hỗ trợ, `Equation.3`, thiếu file, > 1 MB, công thức thứ 2001 trở đi) thì `[công thức]` và được đếm. Cảnh báo mới `MATHTYPE_UNREADABLE` ("Đã chuyển N/M công thức MathType; K công thức không đọc được", chỉ khi K > 0) thay `MATHTYPE_FORMULAS_DROPPED` (frontend vẫn hiển thị mã cũ vì dữ liệu cũ). Docx không có MathType: không ghi lại file, pandoc đọc đúng file gốc. Giữ nguyên mọi kiểm tra zip/magic bytes, parser XML tắt DTD, và chạy trong permit `PandocLimiter`.
+- Khác bản gốc: `MtefReader` thêm trần độ lồng 200 (dữ liệu người dùng cố ý lồng sâu làm tràn ngăn xếp; bản trong tools/bank-import chưa có).
+- Chống tái phát: `DocxMathTypeTest` (16 test với pandoc thật: công thức đúng chỗ giữa câu, riêng dòng `$$`, trong bảng/run đậm/tô màu, 12 công thức không lẫn mã, bin rác, `Equation.3`, quan hệ thiếu/thoát gốc/liên kết ngoài, OLE > 1 MB, > 2000 công thức, rels có DOCTYPE, docx không MathType giống hệt pandoc thuần), `MtefToLatexTest` + `MtefCleanTest` (45, kèm 6 file `real-*.bin`), `DocxTextExtractorTest` và `MaterialApiTest` đã cập nhật theo cảnh báo mới.
+- Đo trên file thật (`KIEM_TRA_mo_rong.docx`, 116 MathType + 2 OMML): trước sửa giữ 2/118; sau sửa giữ 102/118 (100 MathType + 2 OMML), 16 công thức là `[công thức]`. File này cố ý chứa nhiều cấu trúc lạ (phần C) nên 16 không đọc được là đúng thiết kế (bộ đọc không đoán). Bộ đề thật của bank-import chuyển đúng 876/876.
+- Hạn chế: chỉ xử lý `w:object` trong `word/document.xml` (đối tượng nằm trong `w:pict`, chân trang, chú thích vẫn bị pandoc bỏ; loại `w:pict` được tính vào số "không đọc được"). Kiểm HTTP thật 3/11: app chạy trên `datn_mcq_e2e` (worker tắt), `POST /api/materials` bằng giáo viên e2e trả 201, `charCount` 3008 (trước sửa: 1133), cảnh báo `MATHTYPE_UNREADABLE` 16/116. Lưu ý khi đo lại: tải lại đúng file bằng cùng giáo viên trả 200 kèm bản cũ đã lưu (cùng sha256), không chạy code mới; phải dùng giáo viên khác hoặc xóa bản cũ.
+- Trạng thái: Đã sửa.
+
+### L-66 Nhập ngân hàng câu từ Word: bẫy khi đưa lõi tools/bank-import vào backend (bổ sung 3/11)
+- Nhóm: LLM & parse (đầu vào bộ câu hỏi .docx); nhánh `feature/bank-import-api`, V26, `/api/bank-imports`.
+- Triệu chứng/rủi ro tìm thấy khi khảo sát và viết:
+  1. Bộ đếm hạn mức Gemini khởi tạo lúc khởi động bằng `countLlmGeneratedSince` (mọi `generated_question` có
+     `edited_from_question_id IS NULL`): nếu câu nhập nằm trong `generated_question` mà không có cột phân biệt, nhập 161 câu rồi
+     khởi động lại sẽ "tiêu" 161/480 lượt Gemini của cả hệ thống.
+  2. `DocxReader` của tool: `mc:AlternateContent` lọc nhánh `Choice` theo namespace `w` nên không bao giờ khớp, ảnh nằm trong
+     `mc:AlternateContent` bị bỏ qua; đối tượng OLE không phải công thức mà không có ảnh xem trước và `w:drawing` không có
+     `a:blip` cũng mất. Với phạm vi "chỉ nhập câu không ảnh", câu có hình sẽ lọt vào ngân hàng thiếu hình.
+  3. Tool nạp MỌI `word/media/*` và `word/embeddings/*` bằng `readAllBytes`, không giới hạn; DOM của document.xml không có trần.
+  4. Fixture `src/test/resources/mtef/real-*.bin` không rõ nguồn (có thể lấy từ bộ đề thương mại).
+- Cách sửa:
+  1. V26 thêm `generated_question.origin` (`llm`/`import`) + `import_batch_id`; `countLlmGeneratedSince` và các file thống kê
+     (`docs/thong-ke/*.sql`, `docs/experiments/trial/queries.sql`) lọc `origin = 'llm'`. Test
+     `BankImportApiTest.nhapNamMuoiCauRoiKhoiDongLaiBoDemGeminiKhongDoi`.
+  2. `DocxReader` bản backend lấy `Choice` theo namespace `mc`, coi mọi đối tượng vẽ/hình (kể cả không có ảnh nhúng) là ảnh;
+     `DocParser` đăng ký thêm ảnh trong bảng bố cục và giữa "Trả lời"/"Đáp số". Câu có ảnh bị bỏ và đếm (`has_image`).
+  3. Không nạp ảnh; chỉ nạp embedding của công thức gặp trong thân tài liệu, trần 1 MiB/tệp (lớn hơn thì công thức coi như
+     không chuyển được) và 64 MiB tổng (quá thì 422); XML qua `DocxInputGuard.guardedXml` (chặn DOCTYPE/ENTITY, trần 16 MiB);
+     zip qua `ZipSafetyScanner` dùng chung với tài liệu bài học; parse trong permit `PandocLimiter`.
+  4. Thay bằng 7 đối tượng `oleObjectMT*.bin` lấy từ file tự soạn `spikes/mathtype-ole/KIEM_TRA_mo_rong.docx`
+     (`MtefToLatexTest`, `DocxMathTypeTest` cập nhật kỳ vọng). File tự soạn không có hệ phương trình (cases); cases vẫn được
+     test bằng MTEF dựng tay.
+- Chống tái phát: `BankImportParseTest` (15), `BankImportApiTest` (20: riêng tư, rollback, không gọi `LlmClient`, zip bomb,
+  DOCTYPE, quá cỡ, quá nhiều câu, hết hạn, log không chứa nội dung câu), `ExamMarkdownBuilderTest.cauKhongLoiGiaiBiBoKhoiPhanLoiGiai`.
+- Đo trên file thật (3/11, app chạy `datn_mcq_e2e`, worker tắt, giáo viên GV1, bộ k8c3b1): 40 câu đọc được, 26 vào bản xem
+  trước (0 cờ chặn; 24 không có lời giải, 7 cảnh báo LaTeX), bỏ 14 câu có ảnh; xác nhận 26 câu vào ngân hàng riêng tư. Khớp
+  `report.json` offline (`usable_text_only` = 26). Log chỉ có số liệu và id.
+- Bổ sung cùng ngày (sau review): (5) thông báo lỗi ràng buộc của PostgreSQL có "Failing row contains (…)" kèm nội dung
+  câu, và Hibernate ghi nguyên thông báo đó (Hibernate 7: logger `org.hibernate.orm.jdbc.error`, HHH000247, mức WARN; bản cũ:
+  `SqlExceptionHelper`). Khi lưu lô và khi xác nhận: bắt
+  `DataIntegrityViolationException`/`ConstraintViolationException`, chỉ log tên ràng buộc + SQLState + mã lô
+  (`ImportDbErrors`), trả 422 `IMPORT_DATA_INVALID` (CHECK/NOT NULL) hoặc 409 `IMPORT_CONFLICT` (trùng khóa/khóa ngoại); log
+  `org.hibernate.orm.jdbc.*` và `org.hibernate.engine.jdbc.*` bị chặn CHỈ trong phạm vi thao tác nhập (`ImportLogGuard`, turbo
+  filter logback theo MDC). Lưu ý khi viết test log: console đổi bảng mã chữ tiếng Việt, nên so chuỗi ASCII (ví dụ
+  `\frac{3}{4}` trong đề) chứ không so chữ có dấu.
+  (6) Trần 3 lô chờ trước đây kiểm và lưu ở hai transaction khác nhau: nay `ImportBatchWriter.savePreview` lấy
+  `pg_advisory_xact_lock(0x42494D50, ownerId)` rồi kiểm và lưu trong một transaction. Test
+  `viPhamCheckKhiXacNhanTra422VaLogChiCoTenRangBuoc`, `viPhamCheckKhiLuuLoTra422VaLogKhongCoNoiDung`,
+  `luuLoDongThoiKhongVuotTranLoCho` (6 luồng cùng lúc → đúng 3 lô).
+- Hạn chế: chặn log Hibernate chỉ có hiệu lực trong thân phương thức (bước xác nhận flush ngay cuối để mọi lỗi nổ ra trước
+  commit). Câu tf nhận chung một mức cho 4 ý.
+- Trạng thái: Đã sửa.
+
 ## QC
 
 ### L-28 Câu được `qc_passed` dù Solver lệch hoặc lỗi (bổ sung từ repo)
@@ -1227,7 +1306,7 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
 - Hạn chế: **thời gian làm bài luôn in "…… phút"** vì ma trận chưa có trường thời gian (cần migration và API riêng, chưa làm); chưa mở bằng Word thật để xem bố cục.
 - Trạng thái: Đã sửa (chưa kiểm bằng Word thật).
 
-### L-64 Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11)
+### L-67 Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11)
 - Nhóm: Xuất file
 - Triệu chứng: không phải lỗi. Đây là ghi nhận kiểm chứng tính năng mới `?equation=mathtype` (commit `c78862d`).
 - Cách kiểm:
@@ -1242,10 +1321,46 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
   Editor 3.0". Đây là hành vi của Word với mọi đối tượng MathType khi thiếu MathType, file vẫn đúng. Vì vậy mặc định để
   `omml`, và frontend cần ghi chú khi cho chọn MathType.
 - Còn mở:
-  - `\widehat` trên một chữ cái thành `\hat` (66/876 công thức);
+  - `\widehat` trên một chữ cái thành `\hat` (66/876 công thức): không phải lỗi, xem mục bổ sung 3/11 bên dưới;
   - tên kiểu trong `\1CompObj` là "MathType 6.0 Equation", MathType 7 ghi "7.0" (chép từ spike; MathType vẫn đọc được);
   - file nặng do ảnh PNG 600 dpi;
   - chưa chạy thử trong container Linux.
+- **Bổ sung 3/11 – công thức tràn lề, công thức giữa câu, `\widehat`, menu frontend** (xuất đề 14 trên `datn_mcq_e2e` đã
+  chạy end-to-end: 218/218 công thức thành `Equation.DSMT4`). Nguyên tắc chốt: ở chế độ `mathtype` MỌI công thức là đối tượng
+  MathType, không giữ Equation vì lý do bố cục (giáo viên không có MathType trả phí thì không Convert Equations được);
+  `X-Equation-Kept-Omml` chỉ > 0 khi chuyển MTEF thất bại thật.
+  - **Tràn lề (P0):** đối tượng OLE không tự xuống dòng; đề 14 có 2 công thức trong lời giải rộng 726pt và 561pt so với lề
+    chữ 468pt nên bị cắt khi in. Sửa: `PageGeometry` (lề chữ từ `sectPr`; `reference.docx` không khai báo `pgSz`/`pgMar` nên
+    dùng mặc định Word 12240 × 15840, lề 1440 twips; trừ thụt lề đoạn trực tiếp, của danh sách đánh số và của kiểu đoạn),
+    `FormulaBreaker` (ngắt tại dấu quan hệ cấp ngoài cùng, rồi `+`/`−` hai ngôi; không ngắt trong ngoặc, phân số, căn, chỉ số,
+    `\left…\right`, `\begin…\end`; dấu âm đứng đầu hoặc sau toán tử không ngắt), `ParagraphLines` (mỗi dòng công thức một
+    đoạn canh giữa; chữ trước ở lại, chữ sau sang đoạn mới), thu nhỏ kích thước hiển thị khi không ngắt được (header mới
+    `X-Equation-Scaled`, mở qua CORS). Bề rộng công thức đo bằng chính phép dựng ảnh xem trước (`PreviewRenderer.widthPt`).
+  - **Lỗi phát hiện khi xuất đề 14 thật:** lần chạy đầu bộ ngắt vẫn thu nhỏ công thức 726pt thay vì ngắt. Nguyên nhân:
+    pandoc gắn chỉ số vào ngoặc đóng (`(3x−2)^2` thành `(`, `3`, `x`, `−`, `2`, `sSup[")" mũ 2]`), nên bên Equation dấu `(`
+    không bao giờ đóng và không tìm được chỗ ngắt, trong khi bên LaTeX có. Test đơn vị với `m:r` rời không thấy được lỗi này;
+    chỉ test chạy pandoc thật với đúng công thức đề 14 mới đỏ. Sửa: ngoặc đóng nằm trong thân `sSup`/`sSub`/`sSubSup` được
+    tính là đóng ngoặc ở cấp ngoài. Chống tái phát: `MathTypeLayoutTest.congThucRongCuaDe14NgatTaiDauBangKhongThuNho`,
+    `FormulaBreakerTest.ngoacDongNamTrongThanChiSoVanDongNgoacMo`.
+  - **Đo trên đề 14 (3/11, app chạy `datn_mcq_e2e`, worker tắt, GV1, curl):** `equation=omml`: 218 Equation, 0 OLE. `equation=mathtype`:
+    218 công thức thành 224 đối tượng OLE (hai công thức 726pt và 561pt mỗi công thức thành 4 dòng), 0 Equation còn lại,
+    `X-Equation-Kept-Omml: 0`, `X-Equation-Scaled: 0`; đối tượng rộng nhất 421,08pt so với lề chữ 468pt (trước sửa 725,65pt).
+    Mở bằng Word 16 thật: `omml` 7 trang, `mathtype` 8 trang (ComputeStatistics); trang lời giải có hai công thức từng tràn lề
+    hiển thị đủ trong lề. Lần chạy đầu (trước khi sửa lỗi ngoặc đóng trong chỉ số) cho `X-Equation-Scaled: 1`, công thức 726pt bị thu nhỏ ×0,645.
+  - **Chưa làm được:** xuất PDF bằng Word COM (`ExportAsFixedFormat` rồi `SaveAs2`) đều treo trên máy kiểm nên số trang lấy từ
+    Word thay cho PDF; không bấm thử menu frontend trong trình duyệt và không chụp ảnh thông báo (phiên làm việc không có công
+    cụ trình duyệt); `npm run build` đạt. Nhận xét hiển thị: dấu câu đứng ngay sau công thức bị tách (ví dụ ". Khẳng định
+    này Đúng." thành dòng chữ riêng sau các dòng công thức) — chưa xử lý.
+  - **Công thức giữa câu (P1):** kiểm bằng `document.xml` của "Cho $x = 3$." và "Tính $(3)$": công thức vẫn nằm trong
+    đoạn, chữ "Cho ." và "Tính " đúng một dấu cách do pandoc, không thêm khoảng trắng nào trước/sau công thức. Code cũ đã
+    đúng; chỉ thêm test khóa (`MathTypeLayoutTest.congThucGiuaCauNamTrongDongChuKhongKhoangTrangThua`).
+  - **`\widehat` (P1):** pandoc đổi cả `\widehat` và `\hat` thành `m:acc` dấu mũ. Bộ chuyển đã phân biệt theo nền: nền một
+    ký tự dùng dấu mũ gắn vào ký tự (embellishment `EMB_HAT`), nền nhiều ký tự (`ABC`) dùng mẫu mũ rộng `tmHAT` của MathType
+    (đã có trong bộ so với MathType 7.12, `exprs10`). Chỉ có `\widehat{x}` một ký tự ra mũ thường (không phân biệt được với
+    `\hat{x}` sau pandoc; hai dạng hiển thị giống nhau). Thêm test khóa (`MathTypeLayoutTest.muRongChoNenNhieuKyTuMuThuongChoMotKyTu`).
+  - **Frontend:** nút "Xuất file Word" có mũi tên mở menu "Công thức Word (Equation)" (mặc định) và "Công thức MathType
+    (thử nghiệm)"; tên file `<tên đề>-mathtype.docx`; thông báo số công thức không chuyển được và số công thức bị thu nhỏ.
+    Trang đề hiện không có hộp xác nhận cho câu "cần xem kỹ" nên không có gì để giữ nguyên; khóa khi đề đang soạn giữ nguyên.
 - Bài học: với định dạng của phần mềm đóng, kiểm ở ba mức: cấu trúc (so với file do phần mềm sinh), đọc ngược trên dữ
   liệu thật, và mở bằng chính phần mềm đó. Mức sau không thay được mức trước.
 - Trạng thái: Đã kiểm, dùng được. Còn các mục mở ở trên.

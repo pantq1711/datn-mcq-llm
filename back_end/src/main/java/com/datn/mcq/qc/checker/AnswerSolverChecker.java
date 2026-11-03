@@ -310,11 +310,16 @@ public class AnswerSolverChecker {
      *       lệch, chỉ ghi cảnh báo). Từ 2 trở lên: {@code multiple}; 0: {@code none}; đều không qua (theo đường Q-2 của
      *       INCONSISTENT). Đúng 1: qua khi trùng đáp án, không trùng là INCONSISTENT như cũ. Ghi chú Solver bắt đầu bằng
      *       khối {@link #OPTIONS_VERDICT_PREFIX}.</li>
-     *   <li>Thiếu hoặc hỏng {@code options_verdict}: như Solver cũ, so {@code judge_answer} với đáp án, ghi chú giữ
-     *       nguyên (không có khối xét từng phương án, nên không gắn lý do mới). Prompt v3 mà thiếu thì ghi cảnh báo.</li>
+     *   <li>Thiếu hẳn {@code options_verdict}: như Solver cũ, so {@code judge_answer} với đáp án, ghi chú giữ nguyên (không
+     *       có khối xét từng phương án, nên không gắn lý do mới). Prompt v3, v4 mà thiếu thì ghi cảnh báo.</li>
+     *   <li>(F-03) Prompt xét từng phương án (v3, v4) mà {@code options_verdict} CÓ nhưng hỏng (không đủ 4 phần tử A-D hợp lệ):
+     *       đã đọc được từ 2 phương án {@code correct = true} thì vẫn là {@code multiple} (không qua); còn lại là Solver lỗi
+     *       (ném IllegalArgumentException), không so {@code judge_answer} rồi cho qua. Prompt v2 không có trường này nên giữ
+     *       cách so {@code judge_answer}.</li>
      * </ul>
-     * Ném IllegalArgumentException (nơi gọi coi là ERROR) khi JSON hỏng, thiếu correct_option của câu, hoặc không có
-     * {@code options_verdict} hợp lệ mà {@code judge_answer} thiếu hay sai.
+     * Ném IllegalArgumentException (nơi gọi coi là ERROR) khi JSON hỏng, thiếu correct_option của câu, {@code options_verdict}
+     * hỏng mà không đủ căn cứ (prompt xét từng phương án), hoặc không có {@code options_verdict} mà {@code judge_answer}
+     * thiếu hay sai.
      */
     public SolverCheckOutcome parseAndCompare(
             String rawSolverJson,
@@ -333,12 +338,22 @@ public class AnswerSolverChecker {
         }
         String model = modelUsed != null && !modelUsed.isBlank() ? modelUsed : solverModel;
 
-        List<OptionVerdict> verdicts = readOptionsVerdict(map);
-        if (verdicts != null) {
-            return fromOptionsVerdict(verdicts, map, judgeStr, reasoning, model, generatorCorrectOption);
+        VerdictRead read = readOptionsVerdict(map);
+        if (read.complete() != null) {
+            return fromOptionsVerdict(read.complete(), map, judgeStr, reasoning, model, generatorCorrectOption);
+        }
+        if (read.present() && optionCheckPrompt()) {
+            // F-03: mảng options_verdict có nhưng hỏng. Đã đọc được từ 2 phương án correct=true thì đủ căn cứ kết luận nhiều
+            // đáp án đúng; không thì Solver lỗi (ném, nơi gọi coi là ERROR và xếp job answer_check), KHÔNG so judge_answer
+            // rồi cho qua (judge_answer có thể trùng đáp án trong khi chính Solver xét thêm phương án khác cũng đúng).
+            if (read.correctLetters().size() >= 2) {
+                return multipleFromPartial(read.correctLetters(), reasoning, model);
+            }
+            throw new IllegalArgumentException("options_verdict của Solver hỏng (không đủ 4 phương án A-D hợp lệ) và"
+                    + " chưa đọc được từ 2 phương án đúng: không đủ căn cứ kết luận");
         }
         if (optionCheckPrompt()) {
-            log.warn("Phản hồi Solver {} không có options_verdict hợp lệ: kết luận theo judge_answer như Solver cũ",
+            log.warn("Phản hồi Solver {} không có options_verdict: kết luận theo judge_answer như Solver cũ",
                     promptVersion);
         }
         // Structured output không phải bảo đảm tuyệt đối: vẫn kiểm tra kết quả sau khi parse.
@@ -390,36 +405,82 @@ public class AnswerSolverChecker {
     }
 
     /**
-     * Đọc {@code options_verdict} theo thứ tự A-D. Trả null (kèm cảnh báo khi có trường mà hỏng) nếu không phải mảng đúng
-     * 4 phần tử, thiếu hoặc trùng chữ cái, hoặc {@code correct} không phải true/false.
+     * Kết quả đọc {@code options_verdict}.
+     *
+     * @param present        trường có trong phản hồi (khác null)
+     * @param complete       mảng đủ 4 phương án A-D, mỗi phương án một lần, {@code correct} là true/false (theo thứ tự A-D);
+     *                       null khi mảng hỏng hoặc thiếu
+     * @param correctLetters các chữ cái có {@code correct = true} đọc được từ những phần tử hợp lệ, mỗi chữ một lần (chữ
+     *                       xuất hiện nhiều lần với giá trị mâu thuẫn bị loại)
      */
-    private static List<OptionVerdict> readOptionsVerdict(Map<String, Object> map) {
+    private record VerdictRead(boolean present, List<OptionVerdict> complete, List<String> correctLetters) {}
+
+    /**
+     * Đọc {@code options_verdict}. Hỏng (không phải mảng đúng 4 phần tử A-D, trùng chữ cái, {@code correct} không phải
+     * true/false) thì {@code complete} = null nhưng vẫn gom các phương án {@code correct = true} đọc được ở những phần tử
+     * hợp lệ để nơi gọi quyết định có đủ căn cứ hay không (F-03).
+     */
+    private static VerdictRead readOptionsVerdict(Map<String, Object> map) {
         Object raw = map.get("options_verdict");
         if (raw == null) {
-            return null;
+            return new VerdictRead(false, null, List.of());
         }
-        if (!(raw instanceof List<?> list) || list.size() != OPTION_LETTERS.size()) {
-            log.warn("options_verdict của Solver không phải mảng 4 phần tử: bỏ qua");
-            return null;
+        if (!(raw instanceof List<?> list)) {
+            log.warn("options_verdict của Solver không phải mảng: hỏng");
+            return new VerdictRead(true, null, List.of());
         }
         OptionVerdict[] byLetter = new OptionVerdict[OPTION_LETTERS.size()];
+        Boolean[] seen = new Boolean[OPTION_LETTERS.size()];
+        boolean[] conflict = new boolean[OPTION_LETTERS.size()];
+        boolean sound = list.size() == OPTION_LETTERS.size();
         for (Object element : list) {
             if (!(element instanceof Map<?, ?> item)) {
-                log.warn("options_verdict của Solver có phần tử không phải đối tượng: bỏ qua");
-                return null;
+                sound = false;
+                continue;
             }
             String option = item.get("option") != null ? String.valueOf(item.get("option")).trim().toUpperCase() : "";
             int idx = OPTION_LETTERS.indexOf(option);
             Boolean correct = toBoolean(item.get("correct"));
-            if (idx < 0 || byLetter[idx] != null || correct == null) {
-                log.warn("options_verdict của Solver thiếu, trùng phương án hoặc correct không phải true/false: bỏ qua");
-                return null;
+            if (idx < 0 || correct == null) {
+                sound = false;
+                continue;
+            }
+            if (byLetter[idx] != null) {
+                sound = false;
+                if (!correct.equals(seen[idx])) {
+                    conflict[idx] = true;
+                }
+                continue;
             }
             String reason = item.get("reason") != null ? String.valueOf(item.get("reason")).replaceAll("\\s+", " ").trim()
                     : "";
             byLetter[idx] = new OptionVerdict(option, correct, reason);
+            seen[idx] = correct;
         }
-        return List.of(byLetter);
+        List<String> correctLetters = new ArrayList<>();
+        for (int i = 0; i < byLetter.length; i++) {
+            if (byLetter[i] != null && !conflict[i] && byLetter[i].correct()) {
+                correctLetters.add(byLetter[i].option());
+            }
+        }
+        boolean complete = sound && java.util.Arrays.stream(byLetter).allMatch(java.util.Objects::nonNull);
+        if (!complete) {
+            log.warn("options_verdict của Solver hỏng (thiếu, trùng phương án, correct không phải true/false hoặc không đúng 4"
+                    + " phần tử): đọc được {} phương án đúng", correctLetters.size());
+        }
+        return new VerdictRead(true, complete ? List.of(byLetter) : null, correctLetters);
+    }
+
+    /** Mảng hỏng nhưng đã đọc được từ 2 phương án đúng: nhiều đáp án đúng, không qua; ghi chú gắn khối xét từng phương án. */
+    private static SolverCheckOutcome multipleFromPartial(List<String> correctLetters, String reasoning, String model) {
+        StringBuilder notes = new StringBuilder(OPTIONS_VERDICT_PREFIX).append(' ').append("từ ")
+                .append(correctLetters.size()).append(" phương án đúng (")
+                .append(String.join(", ", correctLetters))
+                .append("); mảng options_verdict của Solver không đủ 4 phương án hợp lệ nên không có kết quả từng phương án");
+        if (!reasoning.isEmpty()) {
+            notes.append("\n\n").append(reasoning);
+        }
+        return new SolverCheckOutcome(false, AnswerChoice.MULTIPLE, model, notes.toString());
     }
 
     private static Boolean toBoolean(Object value) {

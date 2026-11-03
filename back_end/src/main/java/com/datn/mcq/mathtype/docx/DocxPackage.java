@@ -45,6 +45,7 @@ public final class DocxPackage {
     private final Document document;
     private final Document rels;
     private final Document types;
+    private final Map<String, Document> readOnly = new java.util.HashMap<>();
     private int relCounter;
 
     private DocxPackage(Map<String, byte[]> parts) throws IOException {
@@ -72,6 +73,23 @@ public final class DocxPackage {
     /** {@code word/document.xml}; sửa trực tiếp trên DOM này. */
     public Document document() {
         return document;
+    }
+
+    /**
+     * Part XML khác (vd. {@code word/styles.xml}, {@code word/numbering.xml}) để đọc; null nếu gói không có part đó.
+     * Chỉ đọc: thay đổi trên DOM này không được ghi lại.
+     */
+    public Document xml(String partName) {
+        if (!parts.containsKey(partName)) {
+            return null;
+        }
+        return readOnly.computeIfAbsent(partName, name -> {
+            try {
+                return parse(parts.get(name));
+            } catch (IOException e) {
+                return null;
+            }
+        });
     }
 
     /** Thêm part mới (vd. {@code word/embeddings/oleObjectMT1.bin}). */

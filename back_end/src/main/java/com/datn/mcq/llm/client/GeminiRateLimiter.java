@@ -105,6 +105,33 @@ public class GeminiRateLimiter {
     }
 
     /**
+     * F-18: kiểm tra còn hạn mức ngày mà KHÔNG tiêu lượt nào; hết thì ném {@link QuotaExhaustedException} (kèm mốc đặt lại).
+     * Nơi tạo job (tạo đề, Đổi câu bằng sinh mới) gọi trước khi trừ hạn mức giáo viên và xếp job.
+     */
+    public synchronized void requireDailyQuota() {
+        Instant now = clock.instant();
+        refreshDayLocked(now);
+        if (dailyQuota > 0 && dailyUsed >= dailyQuota) {
+            throw new QuotaExhaustedException(dailyQuota, nextResetLocalDateTime(now));
+        }
+    }
+
+    /**
+     * F-18: Gemini trả HTTP 429 với dấu hiệu hết hạn mức NGÀY (thân chứa {@code PerDay}/{@code RequestsPerDay}): coi như đã
+     * dùng hết hạn mức ngày tới 00:00 giờ Thái Bình Dương, kể cả khi bộ đếm trong bộ nhớ còn thấp (khởi động lại giữa ngày,
+     * hoặc dự án Gemini dùng chung với việc khác). Không có tác dụng khi {@code app.llm.daily-quota} &le; 0 (tắt).
+     */
+    public synchronized void markDailyQuotaExhausted() {
+        Instant now = clock.instant();
+        refreshDayLocked(now);
+        if (dailyQuota > 0 && dailyUsed < dailyQuota) {
+            LOG.warn("Gemini báo hết hạn mức NGÀY (HTTP 429): đánh dấu đã dùng {}/{} lượt, mở lại {}",
+                    dailyUsed, dailyQuota, nextResetLocalDateTime(now));
+            dailyUsed = dailyQuota;
+        }
+    }
+
+    /**
      * Xin phép trước một lượt gọi HTTP tới Gemini. Chờ đủ khoảng cách tối thiểu ({@code minSpacingMs}) và khoảng tạm dừng
      * do 429 (nếu có); nếu đã chạm hạn mức ngày thì ném ngay {@link QuotaExhaustedException} mà không ngủ chờ.
      */

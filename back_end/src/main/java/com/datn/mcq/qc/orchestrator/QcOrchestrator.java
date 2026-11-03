@@ -8,6 +8,7 @@ import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
+import com.datn.mcq.llm.client.QuotaExhaustedException;
 import com.datn.mcq.llm.dto.LlmUsage;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.FormatChecker;
@@ -198,6 +199,10 @@ public class QcOrchestrator {
                 saJudgeAnswer = verdict.saJudgeAnswer();
                 tfJudgements = verdict.tfJudgements();
                 answerCheckStatus = verdict.status();
+            } catch (QuotaExhaustedException ex) {
+                // F-18: hết hạn mức NGÀY của Gemini không phải lỗi của Solver hay của câu: ném tiếp để nơi gọi hoãn việc
+                // (job) hoặc trả 429, không ghi nhận thành ERROR.
+                throw ex;
             } catch (RuntimeException ex) {
                 answerCheckStatus = AnswerCheckStatus.ERROR;
                 answerCheckPassed = null;

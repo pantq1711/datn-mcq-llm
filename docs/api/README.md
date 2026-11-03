@@ -90,6 +90,9 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | POST | `/api/materials` | Tải tài liệu bài học (.docx, .pdf, .txt; multipart, tối đa 10 MB). Chỉ lưu văn bản đã trích (mục 9) |
 | GET | `/api/materials` | Tài liệu của tôi, mới nhất trước, có phân trang, không kèm văn bản (mục 9) |
 | GET, DELETE | `/api/materials/{id}` | Chi tiết kèm 500 ký tự đầu của văn bản / xóa tài liệu của tôi (mục 9) |
+| POST | `/api/bank-imports` | Nhập ngân hàng câu từ Word: tải bộ câu hỏi .docx → bản xem trước kèm cờ (mục 10). Không gọi AI |
+| GET, DELETE | `/api/bank-imports/{id}` | Xem lại / hủy một lần nhập của tôi (mục 10) |
+| POST | `/api/bank-imports/{id}/confirm` | Đưa các câu chọn vào ngân hàng RIÊNG TƯ của tôi (mục 10) |
 | GET | `/api/exams/{id}/progress` | Tiến độ theo ô |
 | GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
@@ -390,7 +393,8 @@ câu bằng Giữ / Đổi / Sửa trong màn đề (mục 7). Số mục giữ 
 **Sửa đầu ra LLM ở run production (ngày 23/10).** Trước khi giải mã JSON, dấu `\` của lệnh LaTeX chưa nhân đôi trong
 chuỗi được nhân đôi (ví dụ `"$75^\circ$"` một dấu gạch); sau khi giải mã, trường có `$` lẻ mà phần sau `$` cuối trông
 như công thức được tự đóng `$` ở cuối trường, trước dấu câu. Mỗi lần sửa ghi cảnh báo vào `answerWarnings`/`warnings`
-(`json: đã sửa 1 escape LaTeX (\circ)`, `statement_b: đã tự đóng $`). `$` lẻ ở giữa câu vẫn là lỗi format. MCQ
+(`json: đã sửa 1 escape LaTeX (\circ)`, `statement_b: đã tự đóng $`; từ 3 dấu `$` chưa thoát trở lên cảnh báo là
+`statement_b: đã tự đóng $ khi chuỗi có N dấu $ (có thể đóng sai chỗ)` và bật cờ "cần xem kỹ"). `$` lẻ ở giữa câu vẫn là lỗi format. MCQ
 production gọi Gemini kèm schema JSON như `sa`/`tf`. Lý do format không qua (kể cả lỗi giải mã JSON) lưu ở
 `quality_check_result.errors` (V8). Run `experiment` không áp dụng; chi tiết ở `enums.md` mục 3.
 
@@ -678,6 +682,12 @@ môi trường (`app.generation-limits.*`, xem `docs/deploy/README.md`):
   tiếp." Không có `Retry-After`: frontend hiện thông báo, cho thử lại sau khi đề đang soạn xong.
 - `DAILY_GENERATION_LIMIT`: `error` nêu trần, số đã dùng, số còn lại, số câu yêu cầu cần và thời điểm được tạo tiếp (từ 0
   giờ ngày hôm sau, giờ Việt Nam); khi trần ngày đã hết, kiểm trần ngày trước trần hàng đợi.
+- **Hết lượt gọi Gemini trong ngày của cả hệ thống (F-18):** trước khi trừ hạn mức giáo viên và xếp job, `build`,
+  `build-by-lesson` và `replace` (sinh mới) kiểm hạn mức ngày của Gemini dùng chung (`app.llm.daily-quota`, đặt lại 00:00
+  giờ Thái Bình Dương; 429 của Gemini có `PerDay`/`RequestsPerDay` cũng đánh dấu hết hạn mức ngày). Hết thì **429**
+  `LLM_DAILY_QUOTA_EXHAUSTED` kèm `Retry-After` (giây tới lúc mở lại), KHÔNG trừ hạn mức giáo viên, không để lại gì (không
+  đề, không job, chỗ giữ nguyên). Đề đủ câu từ ngân hàng (không cần sinh) và Đổi bằng `source = bank` không bị chặn.
+  Frontend hiện "Hệ thống đã dùng hết lượt soạn câu hôm nay, thầy/cô thử lại sau HH:MM" (giờ Việt Nam, từ `Retry-After`).
 - Hai request song song của cùng giáo viên được tuần tự hóa (khóa dòng `generation_quota` của giáo viên trong transaction
   tạo job), nên không thể cùng lọt trần. Hạn chế: bộ đếm ngày chỉ ghi khi tạo job; không hoàn lại khi job sau đó lỗi.
 
@@ -773,7 +783,11 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
 - Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`, `edit`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại
   khỏi chỉ số của form chấm mù cũ (`answer_correct`, duyệt không sửa).
 - **Chưa có:** sửa câu đã nằm trong ngân hàng, ráp đề, trộn mã đề, đề dự phòng, xuất PDF.
-- **Đổi bằng câu ngân hàng (W1-4, D5-B):** `POST .../replace` nhận `{"source": "bank" | "generate", "instruction"?}`. Bỏ
+- **Lý do Đổi (B7, V25):** `POST .../replace` nhận thêm trường tùy chọn `reason` ∈ `wrong_answer`, `ambiguous_options`,
+  `off_matrix`, `duplicate_pattern`, `latex_format`, `too_hard`, `too_easy`, `other` (không phân biệt hoa thường), lưu ở
+  `exam_slot_action.replace_reason`. Bỏ trống thì không ghi lý do; giá trị khác thì 400 `INVALID_REQUEST` trước mọi thay
+  đổi. Dùng cho thống kê dùng thử: `docs/experiments/trial/queries.sql`.
+- **Đổi bằng câu ngân hàng (W1-4, D5-B):** `POST .../replace` nhận `{"source": "bank" | "generate", "instruction"?, "reason"?}`. Bỏ
   trống `source` (hoặc không gửi body) là `generate`: giữ nguyên hành vi cũ (sinh mới qua hàng đợi), nên client cũ không vỡ.
   - `bank`: lấy ngay câu ngân hàng khớp ô, cùng tiêu chí và xếp hạng mềm như lúc tạo đề (mục 7.2; đề theo bài: 7.2a).
     Không có job, không gọi LLM. Trả câu như 7.4 với `state = ready`, `source = bank`, `bankItemId`, không có cờ. Chỗ
@@ -847,7 +861,7 @@ PUT /api/exams/12/slots/101/question
 
 ```http
 GET /api/exams/12/export/docx                    → 200, file MT2610231200001.docx (Content-Disposition: attachment)
-GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đối tượng MathType; header X-Equation-Kept-Omml: 0
+GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đối tượng MathType; header X-Equation-Kept-Omml: 0, X-Equation-Scaled: 0
 GET /api/exams/12/export/docx?equation=abc       → 400
 ```
 
@@ -875,14 +889,44 @@ GET /api/exams/12/export/docx?equation=abc       → 400
     ảnh xem trước PNG để Word hiển thị và in. Bấm đúp sửa bằng MathType, kể cả MathType Lite. Máy không cài MathType vẫn
     xem và in được, nhưng bấm đúp thì Word đề nghị đổi sang Office Math.
   - Giá trị khác: 400.
+  - **Nguyên tắc (3/11): ở chế độ `mathtype`, MỌI công thức là đối tượng MathType; không giữ Equation của Word cho công
+    thức nào vì lý do bố cục** (giáo viên không có MathType trả phí thì không chạy được Convert Equations). Công thức chỉ ở
+    lại dạng Equation khi chuyển sang MTEF thất bại thật (cấu trúc hoặc ký hiệu chưa hỗ trợ, JLaTeXMath không dựng được
+    ảnh xem trước).
   - Header `X-Equation-Kept-Omml` (chỉ có khi `equation=mathtype`, đã mở qua CORS): số công thức vẫn là Equation của Word
-    vì bộ chuyển chưa hỗ trợ cấu trúc hoặc ký hiệu đó. Không đổi được cả file (số công thức lệch, lỗi bất ngờ) thì trả file
-    Equation, header bằng tổng số công thức, ghi log WARN, không trả 500.
+    vì chuyển MTEF thất bại thật như trên, nên **chỉ > 0 khi có thất bại thật**. Không đổi được cả file (số công thức lệch,
+    lỗi bất ngờ) thì trả file Equation, header bằng tổng số công thức, ghi log WARN, không trả 500.
+  - Header `X-Equation-Scaled` (chỉ có khi `equation=mathtype`, đã mở qua CORS): số công thức dài không ngắt dòng được nên
+    đã bị thu nhỏ kích thước hiển thị cho vừa lề chữ (xem mục bố cục dưới). 0 khi không có công thức nào bị thu nhỏ.
+  - **Bố cục công thức rộng (3/11):** đối tượng OLE không tự xuống dòng, nên công thức rộng hơn lề chữ bị cắt khi in. Bề rộng
+    lề chữ = khổ giấy − lề trái − lề phải (đọc từ `sectPr` của file, vốn chép từ `reference.docx`; `reference.docx` không
+    khai báo `pgSz`/`pgMar` nên dùng mặc định của Word: Letter, lề 1 inch, chữ rộng 468pt) − thụt lề trái/phải của đoạn
+    (khai báo trực tiếp, trong cấp độ danh sách đánh số, hoặc trong kiểu đoạn). Bề rộng công thức là bề rộng ảnh xem trước
+    (cùng phép đo dựng ảnh). Công thức rộng hơn thì:
+    1. Ngắt tại dấu quan hệ CẤP NGOÀI CÙNG (`=`, `≠`, `≤`, `≥`, `<`, `>`, `⇔`, `⇒`, `≈`…), không ngắt trong ngoặc, phân số,
+       căn, chỉ số, `\left…\right`, `\begin…\end`. Mỗi đoạn là một đối tượng MathType trên một dòng riêng (đoạn văn riêng,
+       canh giữa); từ dòng thứ hai bắt đầu bằng chính dấu quan hệ.
+    2. Đoạn vẫn rộng hơn lề thì ngắt tiếp tại `+`/`−` hai ngôi cấp ngoài cùng (dấu đứng đầu, hoặc sau dấu quan hệ/toán tử
+       nhân, là dấu âm/dương, không ngắt); dòng sau bắt đầu bằng dấu đó.
+    3. Khối không ngắt được thì thu nhỏ kích thước hiển thị của riêng đối tượng đó cho vừa lề (`w:dxaOrig`/`w:dyaOrig` giữ
+       kích thước gốc; vẫn là đối tượng OLE, bấm đúp sửa được); đếm vào `X-Equation-Scaled`.
+    4. Công thức nằm giữa câu mà quá rộng: tách thành các dòng công thức như trên; chữ đứng trước giữ trong đoạn gốc, chữ đứng
+       sau sang đoạn mới (khoảng trắng ở rìa đoạn được cắt). Công thức vừa lề không đổi gì, vẫn nằm trong dòng chữ.
+    Chỗ ngắt được tìm song song trên LaTeX (để dựng ảnh từng đoạn) và trên cây Equation (để dựng MTEF từng đoạn); hai bên ra
+    số chỗ ngắt khác nhau thì không ngắt ở tầng đó mà chuyển xuống tầng sau (không đoán).
+  - **Hạn chế đã biết:** `\hat{x}` (một ký tự) dùng dấu mũ thường, `\widehat{ABC}` (nền nhiều ký tự) dùng mẫu mũ rộng của
+    MathType (`tmHAT`); `\widehat{x}` một ký tự cũng ra mũ thường vì pandoc gộp `\hat` và `\widehat` thành cùng một dấu
+    (hai trường hợp này giống nhau trên màn hình). Khi MathType mở lại và vẽ lại đối tượng đã thu nhỏ, kích thước có thể
+    trở về cỡ gốc (chưa kiểm bằng MathType thật).
   - Cách làm: chạy thêm `pandoc -t json` trên cùng file Markdown để lấy LaTeX từng công thức đúng thứ tự (vẽ ảnh xem trước),
     trong cùng thư mục tạm và cùng lượt giữ Semaphore của pandoc.
   - Chi phí (đo 01/11 trên 4 bộ đề thật khoảng 40 câu): file nặng khoảng 1,5–2 MB (Equation khoảng 20 KB) do ảnh xem trước
     600 dpi; thời gian xuất tăng khoảng 2–3 giây với đề nhiều công thức, trong thời gian đó vẫn giữ Semaphore.
-  - Frontend: nên ghi rõ "Chỉ chọn MathType nếu máy đã cài MathType".
+  - Frontend (trang đề): nút "Xuất file Word" có mũi tên mở menu hai mục: "Công thức Word (Equation)" (mặc định, bấm nút
+    chính cũng xuất mục này) và "Công thức MathType (thử nghiệm)" (gọi `?equation=mathtype`, tên file tải về
+    `<tên đề>-mathtype.docx`). Nút khóa khi đề đang soạn. Sau khi tải: `X-Equation-Kept-Omml > 0` hiện "N công thức không
+    chuyển được sang MathType, vẫn ở dạng công thức Word"; `X-Equation-Scaled > 0` hiện "N công thức dài đã được thu nhỏ
+    cho vừa trang". Nên ghi rõ "Chỉ chọn MathType nếu máy đã cài MathType" khi hướng dẫn giáo viên.
 - **Phòng thủ (D4):** `--sandbox` (cần pandoc từ 2.15, cùng yêu cầu với đọc docx tài liệu) để pandoc chỉ đọc các file nêu
   trong dòng lệnh, nên nội dung câu hỏi chứa `![](/etc/passwd)` hay chỉ thị include không lấy được file của máy chủ. Ngoài công
   thức, `ExamMarkdownBuilder` thoát mọi ký tự đặc biệt của Markdown gồm `\` và `` ` ``, nên `` ` ``, `` `{=openxml}` `` hay khối
@@ -1198,7 +1242,7 @@ Content-Type: multipart/form-data   (phần "file")
 ```json
 {"id": 12, "fileName": "bai3.docx", "kind": "docx", "sizeBytes": 48211, "charCount": 5120, "pageCount": null,
  "sha256": "9f2c…", "extractMethod": "pandoc",
- "warnings": [{"code": "MATHTYPE_FORMULAS_DROPPED", "count": 12, "total": 15, "message": "Có 12/15 công thức MathType …"}],
+ "warnings": [{"code": "MATHTYPE_UNREADABLE", "count": 2, "total": 118, "message": "Đã chuyển 116/118 công thức MathType; 2 công thức không đọc được."}],
  "createdAt": "2026-10-25T21:30:00"}
 ```
 
@@ -1206,8 +1250,9 @@ Content-Type: multipart/form-data   (phần "file")
 
 | `code` | Ý nghĩa |
 |---|---|
-| `MATHTYPE_FORMULAS_DROPPED` | docx có `count` công thức MathType (đối tượng nhúng) trong tổng `total` công thức mà hệ thống chưa đọc được; chúng KHÔNG có trong văn bản trích |
-| `FORMULA_LOSS_HIGH` | như trên nhưng từ 30% công thức trở lên bị mất: câu hỏi sinh ra có thể thiếu hoặc sai công thức. Frontend nên cảnh báo rõ |
+| `MATHTYPE_UNREADABLE` | chỉ có khi `count` > 0: docx có `total` công thức MathType (đối tượng nhúng), trong đó `count` công thức không đọc được (message: "Đã chuyển N/M công thức MathType; K công thức không đọc được."). Chúng hiện là `[công thức]` trong văn bản trích; phần còn lại đã thành `$latex$`. Thay cho `MATHTYPE_FORMULAS_DROPPED` |
+| `FORMULA_LOSS_HIGH` | `count` công thức không đọc được trong tổng `total` công thức (MathType + Equation gốc) từ 30% trở lên: câu hỏi sinh ra có thể thiếu hoặc sai công thức. Frontend nên cảnh báo rõ |
+| `MATHTYPE_FORMULAS_DROPPED` | **không còn được sinh ra.** Chỉ còn trong `warnings` của tài liệu tải lên trước khi hệ thống đọc được MathType (nghĩa cũ: `count` công thức bị bỏ hẳn khỏi văn bản). Frontend vẫn phải hiển thị được mã này |
 | `FORMULA_IMAGES_NOT_READ` | docx có `count` ảnh ngoài đối tượng công thức (có thể là công thức dạng ảnh); không OCR |
 | `PDF_TEXT_QUALITY_LOW` | pdf có nhiều ký tự lỗi (thường do công thức hoặc font đặc biệt) |
 
@@ -1219,7 +1264,7 @@ Mã lỗi (body `{"error", "code"}`):
 | 409 | `MATERIAL_QUOTA_EXCEEDED` | đã lưu đủ 50 tài liệu (xóa bớt rồi tải lại; tải lại file đã có vẫn được 200) |
 | 413 | `FILE_TOO_LARGE` | quá giới hạn (mặc định 10 MB; thông báo ghi rõ "tối đa N MB", lấy từ `spring.servlet.multipart.max-file-size`) |
 | 415 | `UNSUPPORTED_FILE_TYPE` | không phải docx, pdf hay txt UTF-8 (thông báo nói rõ với `.doc`, UTF-16, sai bảng mã) |
-| 422 | `NO_EXTRACTABLE_TEXT` | không có chữ: PDF scan (không OCR), docx chỉ có ảnh hoặc công thức MathType, txt rỗng |
+| 422 | `NO_EXTRACTABLE_TEXT` | không có chữ: PDF scan (không OCR), docx chỉ có ảnh hoặc công thức MathType không đọc được, txt rỗng |
 | 422 | `INVALID_FILE`, `EXTRACTION_FAILED` | file hỏng, nghi zip bomb, XML có DTD; pandoc không đọc được |
 | 422 | `TEXT_TOO_LONG`, `TOO_MANY_PAGES` | quá 300.000 ký tự hoặc 200 trang (không cắt âm thầm) |
 | 422 | `MATERIAL_ENCRYPTED` | pdf có mật khẩu hoặc cấm sao chép nội dung |
@@ -1239,9 +1284,17 @@ Mã lỗi (body `{"error", "code"}`):
 
 ### 9.3. Văn bản trích
 
-- docx đọc bằng pandoc: công thức Equation gốc của Word (OMML) thành `$...$`. **Công thức MathType (đối tượng nhúng) bị
-  bỏ**, được đếm và báo trong `warnings`; tách từng công thức ra văn bản là việc của một bước sau (dùng bộ đọc MTEF của
-  `tools/bank-import`).
+- docx đọc bằng pandoc: công thức Equation gốc của Word (OMML) thành `$...$`.
+- **Công thức MathType (đối tượng nhúng OLE, ProgID `Equation.DSMT*`) được đổi thành LaTeX `$...$`** (`$$...$$` khi công
+  thức đứng riêng một dòng), vì pandoc bỏ qua đối tượng OLE. Backend xử lý TRƯỚC pandoc (`MathTypeInliner`): thay mỗi
+  đối tượng bằng một mã giữ chỗ duy nhất, đọc file `word/embeddings/oleObjectN.bin` (luồng "Equation Native", MTEF v5) bằng
+  gói `com.datn.mcq.mtef` (chỉ đọc; bản chép từ `tools/bank-import`, thêm thư viện Apache POI `poi` 5.4.1), rồi đổi mã
+  thành công thức sau khi pandoc trích xong. Công thức không chuyển được (MTEF lỗi hoặc chưa hỗ trợ, `Equation.3` và ProgID
+  `Equation.*` khác `DSMT`, thiếu file oleObject, file oleObject lớn hơn 1 MB, công thức thứ 2001 trở đi trong một tài
+  liệu) thành `[công thức]` và được đếm trong `warnings` (`MATHTYPE_UNREADABLE`). Lỗi của một công thức không làm hỏng
+  công thức khác hay cả tài liệu. docx không có MathType được xử lý đúng như trước. Docx chỉ gồm `[công thức]` mà không có
+  chữ nào vẫn là 422 `NO_EXTRACTABLE_TEXT`. Đối tượng MathType nằm ngoài `w:object` (ví dụ trong `w:pict`) và công thức trong
+  chân trang/chú thích vẫn chưa đọc được; loại thứ nhất được tính vào số "không đọc được".
 - pdf đọc bằng PDFBox, không OCR. Công thức trong PDF thường bị méo khi trích.
 - Văn bản chuẩn hóa Unicode NFC, bỏ ký tự điều khiển và ký tự ẩn (bidi, độ rộng bằng không).
 - **docx được làm sạch markdown ngay khi trích (W2-3 bước 5)**: `extracted_text` lưu trong DB là văn bản thường, không còn `**`,
@@ -1278,3 +1331,46 @@ Mã lỗi (body `{"error", "code"}`):
   > *"Tài liệu sẽ được gửi tới dịch vụ AI bên thứ ba để sinh câu hỏi. Tôi xác nhận tài liệu không chứa thông tin cá nhân của học sinh và tôi có quyền sử dụng tài liệu này."*
 
   Nút "Tải lên" chỉ được kích hoạt (enable) khi người dùng đã tích chọn ô xác nhận này.
+
+## 10. Nhập ngân hàng câu từ Word (V26, 3/11)
+
+Chỉ giáo viên. Lô nhập thuộc người tải; lô của người khác (hoặc không có) trả 404 `IMPORT_NOT_FOUND`. Câu đã xác nhận vào
+ngân hàng **riêng tư** của chính người tải (`/api/bank-items` của người khác không thấy, tạo đề của người khác không dùng).
+Không gọi AI ở bất kỳ bước nào, không chạy Solver, không tính vào giới hạn sinh câu (mục 7.2b). Không lưu file gốc và tên
+file gốc. Cờ và lý do bỏ câu: xem `docs/contract/enums.md` mục 3 ("Nhập ngân hàng câu từ Word").
+
+### 10.1. Tải lên → bản xem trước
+
+```
+POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic)
+```
+
+- File .docx (nhận dạng theo nội dung), tối đa 10 MB và 200 câu. Định dạng: "PHẦN I/II/III", đầu câu "Câu N." hoặc nhãn mức
+  `[NB]`/`[TH]`/`[VD]`/`[VDC]`, đáp án mcq tô vàng, tf tô vàng hoặc dòng "Đáp án: Đ S S Đ", sa dòng "Đáp số: ...".
+- Khối, chủ đề lấy từ tên file mẫu "KHỐI 8 - CHƯƠNG 1 - BÀI 2 - Tên bài - GV ..." (phần "GV ..." bị bỏ); `gradeLevel`, `topic`
+  ghi đè. Môn là Toán.
+- 201 → lô: `{id, displayName, status: "preview", subjectId, gradeLevel, topic, createdAt, expiresAt (24 giờ), confirmedAt,
+  questionCount, importableCount, blockedCount, importedCount, skipped: {has_image: 3, ...}, skippedItems: [{locator, type,
+  reason}], items: [...]}`. Mỗi `items[]`: `{key ("mcq-007"), type, locator ("Phần I, câu thứ 7"), levelRaw, level, stem,
+  options [{key, text}], correctOption, statements [{key, text, label}], saAnswer, explanation, flags [...], blocking}`.
+- Bản đầu bỏ (và đếm) câu có ảnh, câu có công thức chưa chuyển được, câu có bảng dữ liệu. Không có sửa câu trong bản xem
+  trước: câu có `blocking = true` phải sửa trong file Word rồi tải lại.
+- Lỗi: 400 `EMPTY_FILE`, `MISSING_FILE`, `IMPORT_TOPIC_INVALID`; 409 `IMPORT_PENDING_LIMIT` (đã có 3 lô chờ xác nhận); 413
+  `FILE_TOO_LARGE`; 415 `UNSUPPORTED_FILE_TYPE`; 422 `INVALID_FILE`, `IMPORT_LESSON_UNKNOWN`, `IMPORT_GRADE_INVALID`,
+  `IMPORT_NO_QUESTIONS`, `IMPORT_TOO_MANY_QUESTIONS`, `IMPORT_DATA_INVALID` (dữ liệu vi phạm ràng buộc DB; thông báo chỉ nêu
+  tên ràng buộc); 429 `TOO_MANY_UPLOADS` (30 lần/giờ); 503 `EXTRACTOR_BUSY`. Trần 3 lô chờ được kiểm cùng transaction với lúc
+  lưu lô, có khóa theo người tải, nên tải đồng thời cũng không vượt trần.
+
+### 10.2. Xem lại, xác nhận, hủy
+
+- `GET /api/bank-imports/{id}` → lô như trên; lô đã xác nhận không còn `items` (nội dung đã vào ngân hàng). Quá hạn: 410
+  `IMPORT_EXPIRED` (nội dung bị xóa).
+- `POST /api/bank-imports/{id}/confirm` thân `{"keys": ["mcq-001", "tf-002"]}` → 200 `{batchId, imported, bankItemIds}`. Một
+  transaction: lỗi thì không ghi câu nào. Lỗi: 400 `IMPORT_KEYS_INVALID` (rỗng, lặp, không có trong lô); 409
+  `IMPORT_NOT_PREVIEW` (đã xác nhận), `IMPORT_CONFLICT` (trùng khóa / khóa ngoại do thao tác đồng thời); 410 `IMPORT_EXPIRED`;
+  422 `IMPORT_ITEM_BLOCKED` (thông báo nêu mã các câu còn cờ chặn), `IMPORT_DATA_INVALID` (vi phạm CHECK/NOT NULL; không ghi
+  câu nào).
+- `DELETE /api/bank-imports/{id}` → 204 (hủy lô chưa xác nhận); lô đã xác nhận: 409 `IMPORT_NOT_PREVIEW`.
+- Trong ngân hàng: `origin.type = "import"`, lọc bằng `GET /api/bank-items?origin=import`. Câu không có lời giải có
+  `explanation = null`; khi xuất đề ra Word, phần LỜI GIẢI bỏ câu đó.
+- Hạn chế: câu tf nhận chung một mức cho cả 4 ý (file chỉ ghi một mức cho câu).

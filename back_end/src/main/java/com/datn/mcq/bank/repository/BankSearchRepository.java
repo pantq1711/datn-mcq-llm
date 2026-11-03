@@ -9,6 +9,7 @@ import com.datn.mcq.common.util.JsonStringArray;
 import com.datn.mcq.enums.DbEnum;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
+import com.datn.mcq.enums.QuestionOrigin;
 import com.datn.mcq.enums.QuestionType;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -60,7 +61,7 @@ public class BankSearchRepository {
                       Option correctOption, String saAnswer, String explanation, Difficulty difficulty,
                       LocalDateTime createdAt, Integer subjectId, String subjectName, Integer gradeLevel,
                       String topic, String content, String reviewMode, boolean edited, long usageCount,
-                      LocalDateTime lastUsedAt) {}
+                      LocalDateTime lastUsedAt, QuestionOrigin origin) {}
 
     /** Đếm đề đang dùng câu: số đề khác nhau và ngày tạo đề mới nhất (đề của mọi giáo viên). */
     private static final String USAGE_SUBQUERY = """
@@ -77,7 +78,7 @@ public class BankSearchRepository {
                    b.option_a, b.option_b, b.option_c, b.option_d, b.correct_option, b.sa_answer, b.explanation,
                    b.difficulty, b.created_at, t.subject_id, s.name AS subject_name, t.grade_level, t.topic,
                    mc.content, r.review_mode, (g.edited_from_question_id IS NOT NULL OR r.edited) AS edited,
-                   coalesce(us.uses, 0) AS uses, us.last_used
+                   coalesce(us.uses, 0) AS uses, us.last_used, g.origin
             """;
 
     private static final String FROM_JOINS = """
@@ -154,9 +155,12 @@ public class BankSearchRepository {
                     + " FROM bank_item_statement bs WHERE bs.bank_item_id = b.id) = :levels");
             p.addValue("levels", f.levels());
         }
+        // V26: nguồn câu theo generated_question.origin của câu nguồn: ai = câu AI đã duyệt (llm, kể cả bản giáo viên
+        // sửa), import = câu nhập từ Word.
         if ("import".equals(f.origin())) {
-            // Chỗ để dành cho câu nhập từ Word: chưa có nguồn nào ngoài câu AI đã duyệt.
-            w.append(" AND FALSE");
+            w.append(" AND g.origin = 'import'");
+        } else if ("ai".equals(f.origin())) {
+            w.append(" AND g.origin = 'llm'");
         }
         if (f.q() != null) {
             w.append(" AND (b.question_text ILIKE :q ESCAPE '!' OR b.option_a ILIKE :q ESCAPE '!'"
@@ -194,7 +198,8 @@ public class BankSearchRepository {
                     SELECT g.id, g.edited_from_question_id, g.created_at, c.depth + 1
                     FROM generated_question g JOIN chain c ON g.id = c.edited_from_question_id)
                 SELECT c.id, c.edited_from_question_id, c.created_at, a.actor_id, u.name,
-                       CAST(a.changed_fields AS text) AS changed_fields, a.edit_distance
+                       CAST(a.changed_fields AS text) AS changed_fields, a.edit_distance,
+                       (SELECT q.origin FROM generated_question q WHERE q.id = c.id) AS origin
                 FROM chain c
                 LEFT JOIN exam_slot_action a ON a.generated_question_id = c.id AND a.action = 'edit'
                 LEFT JOIN users u ON u.id = a.actor_id
@@ -202,7 +207,9 @@ public class BankSearchRepository {
         return jdbc.query(sql, new MapSqlParameterSource("src", sourceQuestionId), (rs, i) -> {
             boolean edit = rs.getObject("edited_from_question_id") != null;
             Integer actor = (Integer) rs.getObject("actor_id");
-            return new VersionDto(rs.getInt("id"), edit ? "teacher_edit" : "llm", time(rs, "created_at"),
+            String kind = edit ? "teacher_edit" : QuestionOrigin.IMPORT.getDbValue().equals(rs.getString("origin"))
+                    ? "import" : "llm";
+            return new VersionDto(rs.getInt("id"), kind, time(rs, "created_at"),
                     edit && actor != null ? new UserRef(actor, rs.getString("name")) : null,
                     edit && actor != null ? JsonStringArray.read(rs.getString("changed_fields")) : null,
                     edit && actor != null ? (Integer) rs.getObject("edit_distance") : null);
@@ -273,7 +280,8 @@ public class BankSearchRepository {
                 difficulty == null ? null : DbEnum.fromDbValue(Difficulty.class, difficulty), time(rs, "created_at"),
                 rs.getInt("subject_id"), rs.getString("subject_name"), (Integer) rs.getObject("grade_level"),
                 rs.getString("topic"), rs.getString("content"), rs.getString("review_mode"), rs.getBoolean("edited"),
-                rs.getLong("uses"), time(rs, "last_used"));
+                rs.getLong("uses"), time(rs, "last_used"),
+                DbEnum.fromDbValue(QuestionOrigin.class, rs.getString("origin")));
     }
 
     private static LocalDateTime time(ResultSet rs, String column) throws SQLException {

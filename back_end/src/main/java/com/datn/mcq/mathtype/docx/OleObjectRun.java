@@ -11,7 +11,6 @@ import com.datn.mcq.mathtype.ole.MathTypeOle;
 import com.datn.mcq.mathtype.preview.PreviewRenderer.Preview;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-import org.w3c.dom.Node;
 
 /**
  * Dựng run {@code w:r} chứa {@code w:object} (v:shape + v:imagedata + o:OLEObject ProgID="Equation.DSMT4"), theo đúng
@@ -30,10 +29,20 @@ public final class OleObjectRun {
      */
     public static Element create(Document doc, int n, String ridOle, String ridImg, Preview p, boolean withShapetype,
                                  long objectId) {
+        return create(doc, n, ridOle, ridImg, p, withShapetype, objectId, 1.0);
+    }
+
+    /**
+     * @param scale hệ số thu nhỏ kích thước HIỂN THỊ (≤ 1; công thức dài không ngắt được): w:dxaOrig/w:dyaOrig giữ kích
+     *              thước gốc, chỉ width/height của v:shape và độ hạ đường cơ sở co lại. Vẫn là đối tượng OLE, bấm đúp
+     *              sửa được.
+     */
+    public static Element create(Document doc, int n, String ridOle, String ridImg, Preview p, boolean withShapetype,
+                                 long objectId, double scale) {
         Element r = doc.createElementNS(W, "w:r");
         Element rPr = el(doc, r, W, "w:rPr");
         // hạ đối tượng xuống theo phần dưới đường cơ sở (đơn vị nửa point), như MathType làm
-        int halfPts = (int) Math.round(p.depthPt() * 2);
+        int halfPts = (int) Math.round(p.depthPt() * scale * 2);
         if (halfPts != 0) {
             el(doc, rPr, W, "w:position").setAttributeNS(W, "w:val", Integer.toString(-halfPts));
         }
@@ -47,7 +56,8 @@ public final class OleObjectRun {
         Element shape = el(doc, obj, V, "v:shape");
         shape.setAttribute("id", shapeId);
         shape.setAttribute("type", "#_x0000_t75");
-        shape.setAttribute("style", String.format(Locale.ROOT, "width:%.2fpt;height:%.2fpt", p.widthPt(), p.heightPt()));
+        shape.setAttribute("style", String.format(Locale.ROOT, "width:%.2fpt;height:%.2fpt", p.widthPt() * scale,
+                p.heightPt() * scale));
         shape.setAttributeNS(O, "o:ole", "");
         Element img = el(doc, shape, V, "v:imagedata");
         img.setAttributeNS(R, "r:id", ridImg);
@@ -64,20 +74,9 @@ public final class OleObjectRun {
 
     /** Canh giữa đoạn chứa công thức riêng dòng (thay cho m:oMathPara). */
     public static void centerParagraph(Element p) {
-        if (!"p".equals(p.getLocalName())) {
-            return;
+        if ("p".equals(p.getLocalName())) {
+            ParagraphLines.center(p);
         }
-        Element pPr = null;
-        for (Node c = p.getFirstChild(); c != null; c = c.getNextSibling()) {
-            if (c instanceof Element e && "pPr".equals(e.getLocalName())) {
-                pPr = e;
-            }
-        }
-        if (pPr == null) {
-            pPr = p.getOwnerDocument().createElementNS(W, "w:pPr");
-            p.insertBefore(pPr, p.getFirstChild());
-        }
-        el(p.getOwnerDocument(), pPr, W, "w:jc").setAttributeNS(W, "w:val", "center");
     }
 
     /** v:shapetype #_x0000_t75 (khung ảnh) như Word ghi ở đối tượng OLE đầu tiên. */

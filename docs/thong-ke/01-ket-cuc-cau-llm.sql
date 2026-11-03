@@ -4,7 +4,8 @@
 --
 -- BỘ LỌC CHUNG (xem docs/thong-ke/README.md):
 --   * exam.mode = 'teacher' (đề tạo theo ma trận);
---   * chỉ câu LLM gốc: generated_question.edited_from_question_id IS NULL, run production có prompt_version 'matrix-%';
+--   * chỉ câu LLM gốc: generated_question.edited_from_question_id IS NULL và origin = 'llm' (V26: không gồm câu nhập từ
+--     Word), run production có prompt_version 'matrix-%';
 --     các bản giáo viên sửa được gom vào câu gốc qua chuỗi edited_from_question_id;
 --   * loại đề của tài khoản nhóm phát triển: điền email vào ARRAY[...] bên dưới.
 -- GIỚI HẠN: tỉ lệ Giữ/Sửa/Đổi là MỨC CHẤP NHẬN, không phải độ đúng (giáo viên đã thấy đáp án và lời giải của hệ thống).
@@ -15,7 +16,7 @@ dev_users AS (
 roots AS (
     SELECT DISTINCT j.question_id AS root, j.exam_slot_id AS slot_id
     FROM generation_job j
-    JOIN generated_question g ON g.id = j.question_id AND g.edited_from_question_id IS NULL
+    JOIN generated_question g ON g.id = j.question_id AND g.edited_from_question_id IS NULL AND g.origin = 'llm'
     JOIN experiment_run r ON r.id = g.run_id AND r.purpose = 'production' AND r.prompt_version LIKE 'matrix-%'
     JOIN exam_slot s ON s.id = j.exam_slot_id
     JOIN exam e ON e.id = s.exam_id AND e.mode = 'teacher' AND e.created_by NOT IN (SELECT id FROM dev_users)

@@ -45,6 +45,8 @@ public class ExamController {
 
     /** Header của xuất Word dạng MathType; SecurityConfig mở header này cho frontend đọc (CORS). */
     public static final String EQUATION_KEPT_HEADER = "X-Equation-Kept-Omml";
+    /** Số công thức dài không ngắt được nên bị thu nhỏ cho vừa lề (xuất MathType); cũng mở qua CORS. */
+    public static final String EQUATION_SCALED_HEADER = "X-Equation-Scaled";
 
     private final ExamBuildService examBuildService;
     private final ExamViewService examViewService;
@@ -105,6 +107,9 @@ public class ExamController {
         if (file.equationsKeptOmml() != null) {
             response.header(EQUATION_KEPT_HEADER, Integer.toString(file.equationsKeptOmml()));
         }
+        if (file.equationsScaled() != null) {
+            response.header(EQUATION_SCALED_HEADER, Integer.toString(file.equationsScaled()));
+        }
         return response.body(file.content());
     }
 
@@ -139,8 +144,15 @@ public class ExamController {
      *                    hàng khớp ô, hết câu thì 409 BANK_EXHAUSTED (không tự sinh); giá trị khác thì 400
      * @param instruction yêu cầu bổ sung của giáo viên cho lượt sinh lại này (tùy chọn; trim, tối đa 500 ký tự, dài hơn
      *                    thì 400; trống thì như không có); không dùng với source = bank
+     * @param reason      B7 (V25): lý do Đổi do giáo viên chọn (tùy chọn): wrong_answer, ambiguous_options, off_matrix,
+     *                    duplicate_pattern, latex_format, too_hard, too_easy, other; trống thì không ghi; giá trị khác 400
      */
-    public record ReplaceRequest(String source, String instruction) {}
+    public record ReplaceRequest(String source, String instruction, String reason) {
+        /** Chữ ký trước B7 (không có lý do). */
+        public ReplaceRequest(String source, String instruction) {
+            this(source, instruction, null);
+        }
+    }
 
     /**
      * Đổi câu khác: sinh lại đúng ô qua hàng đợi (có thể kèm yêu cầu của giáo viên) hoặc, với {@code source = "bank"},
@@ -150,7 +162,7 @@ public class ExamController {
     public ExamItemDto replace(CurrentUser user, @PathVariable Integer examId, @PathVariable Integer slotId,
                                @RequestBody(required = false) ReplaceRequest request) {
         return examActionService.replace(examId, slotId, user.id(), request != null ? request.source() : null,
-                request != null ? request.instruction() : null);
+                request != null ? request.instruction() : null, request != null ? request.reason() : null);
     }
 
     /**

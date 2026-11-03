@@ -1039,6 +1039,7 @@ class ExamBuildTest {
             assertTrue(xml.contains("m:oMath"), "công thức là Equation gốc của Word");
             assertFalse(xml.contains("Equation.DSMT4"), "mặc định không có đối tượng MathType");
             assertNull(response.getHeader("X-Equation-Kept-Omml"), "header chỉ có khi xuất MathType");
+            assertNull(response.getHeader("X-Equation-Scaled"), "header chỉ có khi xuất MathType");
             for (String part : List.of("PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn", "ĐÁP ÁN", "LỜI GIẢI",
                     "Chưa có câu – cần sinh lại")) {
                 assertTrue(xml.contains(part), "docx thiếu: " + part);
@@ -1073,6 +1074,9 @@ class ExamBuildTest {
             assertNotNull(kept, "header số công thức giữ Equation");
             assertEquals(xml.split("<m:oMath[ >]", -1).length - 1, Integer.parseInt(kept),
                     "header khớp số Equation còn lại trong file");
+            assertNotNull(response.getHeader("X-Equation-Scaled"), "header số công thức bị thu nhỏ cho vừa lề");
+            assertEquals(0, Integer.parseInt(response.getHeader("X-Equation-Scaled")),
+                    "đề thử toàn công thức ngắn: không công thức nào bị thu nhỏ");
             assertTrue(xml.contains("PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn") && xml.contains("ĐÁP ÁN"));
         } else {
             assertEquals(503, response.getStatus());
@@ -1137,6 +1141,23 @@ class ExamBuildTest {
                 .get("parts").get(0).get("items").get(0);
         assertEquals(kept.get("bankItemId").asInt(), item.get("bankItemId").asInt(), "câu đã Giữ hiển thị bản ngân hàng");
         assertEquals(expected, item.get("explanation").asText(), "xem đề trả lời giải của câu đã Giữ");
+    }
+
+    /**
+     * F-12 phần 1: vết QC xếp cảnh báo tự sửa bằng đúng hàm của QcSummaryService (một nguồn duy nhất): "đã tự bọc $" là
+     * việc tự sửa nên nằm ở autoRepairs, không lẫn vào warnings (cảnh báo khác).
+     */
+    @Test
+    void vetQcXepCanhBaoTuBocVaoAutoRepairsCungNguonVoiLyDoCanXemKy() throws Exception {
+        generator.rawLatexExplanationMcq = 1;
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        JsonNode format = json(perform(get("/api/exams/" + examId + "/slots/" + slot + "/qc-trace"))
+                .andExpect(status().isOk())).get("lineages").get(0).get("versions").get(0).get("qc").get("format");
+        List<String> repairs = texts(format.get("autoRepairs"));
+        assertTrue(repairs.stream().anyMatch(r -> r.startsWith("explanation: đã tự bọc $ quanh")), repairs.toString());
+        assertEquals(List.of(), texts(format.get("warnings")),
+                "cảnh báo tự bọc $ không bật cờ nên không được xếp vào nhóm cảnh báo khác");
     }
 
     /** 2/11: lời giải LaTeX ngoài $ mà không bọc được (lệnh lạ) là lỗi định dạng của đầu ra LLM: câu bị loại và sinh lại. */

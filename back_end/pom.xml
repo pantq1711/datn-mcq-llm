@@ -76,7 +76,8 @@
 			<artifactId>pdfbox</artifactId>
 			<version>3.0.8</version>
 		</dependency>
-		<!-- Xuất Word công thức MathType (module mathtype): POIFS ghi file OLE oleObjectN.bin (Apache 2.0). -->
+		<!-- Đọc công thức MathType trong tài liệu bài học (module mtef: POIFS mở file OLE oleObjectN.bin) và xuất Word
+		     công thức MathType (module mathtype: POIFS ghi file OLE oleObjectN.bin) (Apache 2.0). -->
 		<dependency>
 			<groupId>org.apache.poi</groupId>
 			<artifactId>poi</artifactId>

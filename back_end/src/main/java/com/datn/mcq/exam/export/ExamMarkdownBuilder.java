@@ -75,8 +75,16 @@ public final class ExamMarkdownBuilder {
             blocks.add("## PHẦN " + part.part());
             int k = 1;
             for (ExamItemDto item : part.items()) {
-                String explanation = hasQuestion(item) ? paragraphs(item.explanation()) : "";
-                blocks.add(label(k++) + (explanation.isEmpty() ? NONE : explanation));
+                int no = k++;
+                if (!hasQuestion(item)) {
+                    blocks.add(label(no) + NONE);
+                    continue;
+                }
+                // Quyết định 6 (nhập từ Word, 3/11): câu không có lời giải thì bỏ hẳn khối lời giải của câu đó.
+                String explanation = paragraphs(item.explanation());
+                if (!explanation.isEmpty()) {
+                    blocks.add(label(no) + explanation);
+                }
             }
         }
         return String.join("\n\n", blocks) + "\n";
@@ -113,7 +121,9 @@ public final class ExamMarkdownBuilder {
     }
 
     private static String xml(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+        // F-05: gộp xuống dòng thành khoảng trắng; tên đề nhiều dòng có dòng "```" sẽ đóng sớm khối openxml của đầu đề.
+        return text.replaceAll("\\s*\\R\\s*", " ").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;");
     }
 
     private static String label(int k) {
@@ -201,7 +211,9 @@ public final class ExamMarkdownBuilder {
                     out.append("\\$");
                     i++;
                 } else {
-                    out.append('$').append(inner).append('$');
+                    // F-05: xuống dòng trong công thức thành khoảng trắng; nếu không, một dòng của "công thức" có thể bắt đầu
+                    // bằng ```{=openxml} hoặc "<" và thành khối raw thật khi pandoc đọc Markdown.
+                    out.append('$').append(inner.replaceAll("\\s*\\R\\s*", " ")).append('$');
                     i = close + 1;
                 }
                 continue;

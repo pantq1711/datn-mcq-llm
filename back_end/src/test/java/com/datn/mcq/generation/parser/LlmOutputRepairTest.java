@@ -7,6 +7,7 @@ import com.datn.mcq.generation.dto.ParsedSaDto;
 import com.datn.mcq.generation.dto.ParsedTfDto;
 import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.QuestionQcInput;
+import com.datn.mcq.qc.service.QcSummaryService;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -163,11 +164,14 @@ class LlmOutputRepairTest {
         ParsedTfDto p = TfJsonParser.parse(RAW_ID24, true);
         assertEquals("Khai triển theo hằng đẳng thức: $(a + b)^3 = a^3 + 3a^2b + 3ab^2 + b^3$.", p.statements().get(1));
         assertEquals("Giá trị của biểu thức $A$ tại $x = -2024$ bằng $25$.", p.statements().get(3));
-        assertEquals(List.of("statement_b: đã tự đóng $", "statement_d: đã tự đóng $"), p.parseWarnings());
+        // F-02: statement_b có đúng 1 "$" chưa thoát (nhóm không bật cờ); statement_d có 5 "$" nên là cảnh báo bật cờ.
+        List<String> expectedWarnings = List.of("statement_b: đã tự đóng $",
+                "statement_d: đã tự đóng $ khi chuỗi có 5 dấu $ (có thể đóng sai chỗ)");
+        assertEquals(expectedWarnings, p.parseWarnings());
         FormatChecker.FormatCheckOutcome out = checker.check(QuestionQcInput.trueFalse(24, true, p.questionText(),
                 p.statements(), p.labels(), p.explanation(), true, false, null, p.parseWarnings()));
         assertTrue(out.passed(), out.errors().toString());
-        assertEquals(List.of("statement_b: đã tự đóng $", "statement_d: đã tự đóng $"), out.answerWarnings());
+        assertEquals(expectedWarnings, out.answerWarnings());
     }
 
     @Test
@@ -314,7 +318,7 @@ class LlmOutputRepairTest {
      */
     @Test
     void kyHieuDoMoRongToRadiansRceilVaCacBienThe() {
-        for (String x : List.of("bullet", "triangle", "toRadians", "rceil", "lceil", "degree", "deg", "circle", "o", "cdot")) {
+        for (String x : List.of("bullet", "triangle", "toRadians", "rceil", "lceil", "degree", "deg", "circle", "o")) {
             for (String form : List.of("$210^\\" + x + "$", "$210^{\\" + x + "}$", "$210 ^ \\" + x + "$", "$210^{ \\" + x + " }$")) {
                 LlmOutputRepair.DegreeRepair r = LlmOutputRepair.fixDegreeSymbol(form);
                 assertEquals("$210^{\\circ}$", r.text(), form);
@@ -326,6 +330,55 @@ class LlmOutputRepairTest {
         LlmOutputRepair.DegreeRepair two = LlmOutputRepair.fixDegreeSymbol("Góc $A = 30^\\rceil$ và $B = 40^{\\lceil}$.");
         assertEquals("Góc $A = 30^{\\circ}$ và $B = 40^{\\circ}$.", two.text());
         assertEquals(2, two.fixed());
+    }
+
+    /**
+     * F-02 (soát ngoài): "\cdot" là dấu nhân, không phải ký hiệu độ ("$30^\cdot$" có thể là lũy thừa chưa viết xong): giữ
+     * nguyên, không đổi thành ^{\circ} (đổi sai làm đổi nghĩa câu mà vẫn không bật cờ).
+     */
+    @Test
+    void cdotKhongBiDoiThanhKyHieuDo() {
+        for (String keep : List.of("$210^\\cdot$", "$210^{\\cdot}$", "$210 ^ \\cdot$", "$x = 30^{ \\cdot }$")) {
+            LlmOutputRepair.DegreeRepair r = LlmOutputRepair.fixDegreeSymbol(keep);
+            assertEquals(keep, r.text(), keep);
+            assertEquals(0, r.fixed(), keep);
+        }
+    }
+
+    private static List<String> warningsOfMcq(String questionText, String optionA) {
+        String raw = "{\"question_text\": " + SimpleJson.quote(questionText) + ", \"option_a\": "
+                + SimpleJson.quote(optionA) + ", \"option_b\": \"$2$\", \"option_c\": \"$3$\", \"option_d\": \"$4$\","
+                + " \"correct_option\": \"B\", \"explanation\": \"Vì $x = 2$.\"}";
+        ParsedMcqDto p = McqJsonParser.parse(raw, true);
+        assertTrue(p.parseSuccess(), p.parseError());
+        return p.parseWarnings();
+    }
+
+    /**
+     * F-02: "đã tự đóng $" chỉ thuộc nhóm KHÔNG bật cờ khi chuỗi gốc có ĐÚNG 1 dấu $ chưa thoát (quên đóng một công thức).
+     * Từ 3 dấu trở lên, vị trí đóng có thể sai nên cảnh báo mang tên khác và bật cờ "cần xem kỹ".
+     */
+    @Test
+    void tuDongDongDollarChiKhongBatCoKhiChuoiGocCoDungMotDauDollar() {
+        List<String> single = warningsOfMcq("Bậc của đơn thức là:", "$5");
+        assertEquals(List.of("option_a: đã tự đóng $"), single);
+        assertTrue(QcSummaryService.isAutoFixedWarning(single.get(0)));
+        assertEquals(List.of(), new QcSummaryService.QcSummary(true, true, null, false, single).reviewReasons());
+
+        List<String> multi = warningsOfMcq("Cho $a, $b và $x = 3", "$5");
+        String w = multi.stream().filter(s -> s.startsWith("question_text: đã tự đóng $")).findFirst().orElseThrow();
+        assertFalse(w.equals("question_text: đã tự đóng $"), "từ 3 dấu $ trở lên phải có tên cảnh báo khác: " + w);
+        assertFalse(QcSummaryService.isAutoFixedWarning(w), "không thuộc nhóm tự sửa chắc chắn: " + w);
+        assertEquals(List.of("warning: " + w),
+                new QcSummaryService.QcSummary(true, true, null, false, List.of(w)).reviewReasons(),
+                "bật cờ cần xem kỹ");
+    }
+
+    @Test
+    void dollarThoatKhongTinhVaoSoDauDollar() {
+        // "\$" là đô la, không phải dấu công thức: chuỗi gốc chỉ có đúng 1 "$" chưa thoát nên vẫn là nhóm không bật cờ.
+        List<String> w = warningsOfMcq("Giá \\$5 và $x = 2", "$5");
+        assertTrue(w.contains("question_text: đã tự đóng $"), w.toString());
     }
 
     @Test

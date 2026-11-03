@@ -43,13 +43,17 @@ com.datn.mcq
 ├── bank/                   bank_item
 ├── matrix/                 exam_matrix, exam_matrix_cell (V6: ma trận đề, mỗi ô một question_template)
 ├── material/               lesson_material (V18, W2-3: tài liệu bài học đính kèm, chỉ lưu văn bản đã trích)
+├── bankimport/             import_batch (V26, 3/11: nhập ngân hàng câu từ Word; docx/, parse/, model/ chuyển từ
+│                           tools/bank-import; công thức MathType dùng chung mtef/)
+├── mtef/                   đọc MTEF (MathType) → LaTeX, hàm thuần (P6; dùng chung material.extract và bankimport)
 ├── exam/                   exam, exam_question, exam_slot, exam_slot_action (V7: tạo đề theo ma trận)
 ├── goldset/                dedup_gold_pair, dedup_gold_label
 └── mathtype/               không có bảng: đổi Equation (OMML) trong docx thành đối tượng MathType (OLE), thư viện lá
     ├── mtef/               OmmlToMtef, MtefWriter (chuyển từ spikes/mathtype-ole)
     ├── ole/                MathTypeOle (POIFS)
-    ├── preview/            PreviewRenderer (PNG bằng JLaTeXMath)
-    └── docx/               DocxPackage, OleObjectRun
+    ├── preview/            PreviewRenderer (PNG và bề rộng ảnh bằng JLaTeXMath)
+    ├── layout/             FormulaBreaker (chỗ ngắt dòng công thức rộng: quan hệ rồi +/−, cấp ngoài cùng)
+    └── docx/               DocxPackage, OleObjectRun, PageGeometry (lề chữ, thụt lề), ParagraphLines (tách dòng công thức)
 ```
 
 ## Hướng phụ thuộc (không được tạo vòng)
@@ -58,6 +62,7 @@ com.datn.mcq
 exam        ──► matrix, generation, qc, review, bank, catalog, user, material, mathtype   (V7: tạo đề theo ma trận; W2-3: material; 30/10: mathtype)
 matrix      ──► catalog
 material    ──► (chỉ common; passage/PassageSelector là hàm thuần)   (W2-3 bước 4: exam ──► material qua MaterialService; material khai báo MaterialUsageLookup, exam cài đặt)
+bankimport  ──► bank, catalog, generation, review, material.extract (chỉ DocxInputGuard), mtef, qc (DedupChecker/DedupCandidate thuần, không gọi mạng)   (V26, quyết định 3/11; không bao giờ ──► llm)
 review      ──► generation, bank, catalog, experiment, user   (25/10: chỉ còn AssistedKeepService)
 generation  ──► qc, llm
 experiment  ──► generation, catalog

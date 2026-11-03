@@ -12,10 +12,11 @@ import org.springframework.stereotype.Service;
 /**
  * Xuất đề ra Word (ngày 23/10, bản cơ bản): dữ liệu xem đề ở chế độ giáo viên (đã đối soát) → Markdown
  * ({@link ExamMarkdownBuilder}) → docx ({@link PandocRunner}). Không giữ transaction trong lúc chạy pandoc.
- * Công thức là Equation của Word hoặc đối tượng MathType ({@link EquationFormat}).
  *
  * <p>Từ 2/11 file có đầu đề ({@link ExamHeader}): tên kì, môn và khối lấy từ ma trận của đề; mã đề in ra là 101 (đề gốc),
  * mã hệ thống MT… chỉ còn ở tên file.
+ *
+ * <p>Công thức là Equation của Word hoặc đối tượng MathType ({@link EquationFormat}).
  */
 @Service
 public class ExamExportService {
@@ -25,9 +26,12 @@ public class ExamExportService {
 
     /**
      * @param fileName          tên file theo mã đề, ví dụ "MT2610231200001.docx"
-     * @param equationsKeptOmml khi xuất MathType: số công thức giữ dạng Equation của Word; null khi xuất Equation
+     * @param equationsKeptOmml khi xuất MathType: số công thức giữ dạng Equation của Word (chuyển MTEF thất bại thật);
+     *                          null khi xuất Equation
+     * @param equationsScaled   khi xuất MathType: số công thức dài không ngắt được nên bị thu nhỏ cho vừa lề; null khi
+     *                          xuất Equation
      */
-    public record DocxFile(String fileName, byte[] content, Integer equationsKeptOmml) {}
+    public record DocxFile(String fileName, byte[] content, Integer equationsKeptOmml, Integer equationsScaled) {}
 
     private final ExamViewService viewService;
     private final PandocRunner pandocRunner;
@@ -48,7 +52,8 @@ public class ExamExportService {
     public DocxFile docx(Integer examId, Integer actorId, EquationFormat format) {
         ExamViewDto view = viewService.view(examId, actorId);
         PandocRunner.Docx docx = pandocRunner.markdownToDocx(ExamMarkdownBuilder.build(view, header(view)), format);
-        return new DocxFile(fileName(view), docx.content(), docx.equationsKeptOmml());
+        return new DocxFile(fileName(view), docx.content(), docx.equationsKeptOmml(),
+                docx.equationsScaled());
     }
 
     /**
