@@ -82,6 +82,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-66 | Nhập ngân hàng câu từ Word: các bẫy khi đưa lõi tools/bank-import vào backend (câu nhập bị đếm là lượt gọi Gemini, ảnh trong mc:AlternateContent bị bỏ sót, nạp mọi ảnh vào bộ nhớ, fixture MathType thật) (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (nhập thử 1 bộ qua HTTP trên `datn_mcq_e2e`) |
 | L-67 | Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11) | Xuất file | – | Đã kiểm (còn mục mở) |
 | L-68 | Góp ý giáo viên Toán trên đề 14: đáp án mcq dồn vào A; câu dẫn dài dòng, "cạnh biên", "(Nhập đáp án…)" (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (đã đo 1 đề) |
+| L-69 | F-07: xem đề và danh sách đề truy vấn N+1 (đề 18 câu 117 câu SQL; danh sách 10 đề 774); số "cần xem lại" ở danh sách lệch trang chi tiết (bổ sung 4/11) | Hàng đợi/đồng thời | Trung bình | Đã sửa |
 
 **Thống kê theo nhóm** (61 mục; bảng chưa có dòng cho L-56 nên con số này cộng thêm đúng 8 mục L-57…L-64 vào số cũ):
 
@@ -1324,6 +1325,28 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
    - Dòng log `Đã trả N job running quá 300 giây về pending` của lần 2 không được ghi lại. Mới đo một lần tắt đột ngột.
 4. Các hạn chế đã biết của W2-4b: xem `docs/architecture/backend-structure.md`, quy tắc 24.
 - Chống tái phát: `ProductionContextCircularDependencyTest`, `GeminiRateLimiterAndWorkerTest`.
+- Trạng thái: Đã sửa.
+
+### L-69 F-07: xem đề và danh sách đề truy vấn N+1; số "cần xem lại" lệch nhau (bổ sung 4/11)
+- Nhóm: Hàng đợi/đồng thời
+- Triệu chứng: đo ngày 3/11 trên `datn_mcq_e2e` (4 lượt, chi tiết ở `docs/experiments/trial/do-f07-so-cau-sql.md`):
+  `GET /api/exams/13` (18 câu) 117 câu SQL, 295-546 ms; `GET /api/exams` (10 đề, 152 câu) 774 câu SQL, 743-1186 ms. Số câu
+  SQL tăng tuyến tính theo số câu. Đồng thời số "cần xem lại" của danh sách lệch số "cần xem kỹ" của trang chi tiết.
+- Nguyên nhân gốc:
+  1. `ExamViewService.item` và `list` gọi `QcSummaryService.summarize`, `getQuestionById`, `getStatements`, `latestAnswerCheckJob`,
+     `latestGroundingJob`, `originalQuestionId`, `BankService.getItem` cho TỪNG câu.
+  2. Hai nơi có hai bản tính cờ: danh sách chỉ đếm slot `ready` và không gắn cờ `similar_in_exam` (cờ thêm ngày 31/10 chỉ ở
+     trang chi tiết), nên số của danh sách thiếu các câu cùng khuôn.
+- Cách sửa (không đổi JSON ngoài `needsReviewSlots`, không migration, `reconcile` giữ nguyên):
+  - `QcSummaryService.summarizeAll(ids)` nạp QC của cả tập câu bằng 3 truy vấn cố định; `summarize(id)` gọi lại hàm này (một
+    logic). Không cần `DISTINCT ON` cho QC vì `uq_qcr_question_check` bảo đảm mỗi (câu, loại) một dòng.
+  - Xem đề và danh sách dùng chung `ExamViewService.buildParts`: nạp theo lô ô ma trận, câu ngân hàng và ý (tf), câu sinh và ý,
+    bản gốc của chuỗi sửa (truy vấn đệ quy), job answer_check/grounding mới nhất (`DISTINCT ON`, dùng `idx_gj_question_type`),
+    QC; rồi dựng mục, gắn cờ similar. `needsReviewSlots` = số mục `needsReview` của đúng hàm đó.
+- Kết quả: xem `docs/experiments/trial/do-f07-so-cau-sql.md` mục "Sau khi sửa".
+- Chống tái phát: `ExamViewBatchTest` (ảnh chụp JSON trước khi sửa, số truy vấn không tăng theo số câu và số đề, danh sách khớp
+  trang chi tiết), `QcSummaryTfOnlyStatementQueryTest`.
+- Lưu ý khi đo: truy vấn đếm tổng của `Page` chỉ chạy khi trang đầy, nên khi so số truy vấn danh sách phải so trang đầy với trang đầy.
 - Trạng thái: Đã sửa.
 
 ## Xuất file

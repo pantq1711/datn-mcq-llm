@@ -13,6 +13,9 @@ public interface QuestionGroundingRepository extends JpaRepository<QuestionGroun
     /** Kết quả bám tài liệu của một câu (một phiên bản); rỗng khi chưa chấm hoặc câu không có tài liệu. */
     Optional<QuestionGrounding> findByQuestionId(Integer questionId);
 
+    /** F-07: kết quả bám tài liệu của một tập câu bằng một truy vấn (UNIQUE theo question_id, V20). */
+    java.util.List<QuestionGrounding> findByQuestionIdIn(java.util.Collection<Integer> questionIds);
+
     /** W2-4b (C): đếm số lượt gọi judge "bám tài liệu" thành công (V21: có {@code token_count}) từ mốc {@code since}. */
     @Query(value = """
             SELECT count(*) FROM question_grounding

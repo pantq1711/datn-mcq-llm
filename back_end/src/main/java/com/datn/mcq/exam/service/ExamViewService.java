@@ -16,12 +16,14 @@ import com.datn.mcq.exam.entity.ExamSlot;
 import com.datn.mcq.exam.repository.ExamRepository;
 import com.datn.mcq.exam.repository.ExamSlotRepository;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
+import com.datn.mcq.generation.entity.GeneratedQuestionStatement;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.matrix.entity.ExamMatrix;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
 import com.datn.mcq.qc.service.QcSummaryService;
+import com.datn.mcq.qc.service.QcSummaryService.QcSummary;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -30,12 +32,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -85,28 +89,107 @@ public class ExamViewService {
     public static final String GROUNDING_FAILED = "grounding_failed";
 
     /**
-     * W2-3: lý do "cần xem kỹ" của một câu: lý do đã lưu (kể cả kết luận "bám tài liệu" NOT_SUPPORTED/UNKNOWN) cộng, khi câu
+     * W2-3: thêm vào lý do "cần xem kỹ" đã lưu của một câu (kể cả kết luận "bám tài liệu" NOT_SUPPORTED/UNKNOWN), khi câu
      * có job grounding mà chưa có kết quả, {@value #GROUNDING_PENDING} (đang chờ/chạy) hoặc {@value #GROUNDING_FAILED}.
-     * Câu không dùng tài liệu không có job nên không bị ảnh hưởng.
+     * Câu không dùng tài liệu không có job nên không bị ảnh hưởng. Dùng chung với vết QC (tra job của một câu).
      */
-    private List<String> reviewReasonsOf(Integer questionId) {
-        List<String> reasons = new ArrayList<>(qcSummaryService.summarize(questionId).reviewReasons());
-        addGroundingJobReason(generationService, questionId, reasons);
-        return reasons;
-    }
-
-    /** Xem {@link #reviewReasonsOf}; dùng chung với vết QC. */
     static void addGroundingJobReason(GenerationService generationService, Integer questionId, List<String> reasons) {
-        if (reasons.contains(QcSummaryService.GROUNDING_NOT_SUPPORTED) || reasons.contains(QcSummaryService.GROUNDING_UNKNOWN)) {
+        if (hasGroundingVerdict(reasons)) {
             return;
         }
-        generationService.latestGroundingJob(questionId).ifPresent(job -> {
+        addGroundingJobReason(generationService.latestGroundingJob(questionId), reasons);
+    }
+
+    /** Như trên với job đã nạp sẵn (xem đề, danh sách đề nạp job theo lô); cùng một logic. */
+    static void addGroundingJobReason(Optional<GenerationJob> groundingJob, List<String> reasons) {
+        if (hasGroundingVerdict(reasons)) {
+            return;
+        }
+        groundingJob.ifPresent(job -> {
             if (job.getStatus() == JobStatus.PENDING || job.getStatus() == JobStatus.RUNNING) {
                 reasons.add(GROUNDING_PENDING);
             } else if (job.getStatus() == JobStatus.FAILED) {
                 reasons.add(GROUNDING_FAILED);
             }
         });
+    }
+
+    private static boolean hasGroundingVerdict(List<String> reasons) {
+        return reasons.contains(QcSummaryService.GROUNDING_NOT_SUPPORTED) || reasons.contains(QcSummaryService.GROUNDING_UNKNOWN);
+    }
+
+    /**
+     * F-07: dữ liệu của một nhóm chỗ, nạp theo lô bằng số truy vấn cố định (không phụ thuộc số câu). Nội dung câu và mọi cờ
+     * "cần xem kỹ" lấy từ đây, không truy vấn thêm.
+     *
+     * @param bank       câu ngân hàng của các chỗ đã có bản ngân hàng
+     * @param questions  câu sinh của các chỗ hiển thị bản sinh (chỗ chưa có bản ngân hàng)
+     * @param statements 4 ý của các câu tf trong {@code questions}
+     * @param originals  bản gốc LLM của câu sinh đã sửa và của câu sinh đứng sau chỗ đã có bản ngân hàng
+     * @param jobs       job answer_check và grounding_check mới nhất của {@code questions}
+     * @param qc         tóm tắt QC của {@code questions}
+     */
+    private record Loaded(Map<Integer, BankItemDto> bank, Map<Integer, GeneratedQuestion> questions,
+                          Map<Integer, List<GeneratedQuestionStatement>> statements, Map<Integer, Integer> originals,
+                          GenerationService.CheckJobs jobs, Map<Integer, QcSummary> qc) {}
+
+    private Loaded load(Collection<ExamSlot> slots) {
+        Set<Integer> bankIds = new LinkedHashSet<>();
+        Set<Integer> generatedIds = new LinkedHashSet<>();
+        Set<Integer> originalIds = new LinkedHashSet<>();
+        for (ExamSlot slot : slots) {
+            if (!ExamBuildService.hasQuestion(slot)) {
+                continue;
+            }
+            if (slot.getBankItemId() != null) {
+                bankIds.add(slot.getBankItemId());
+                if (slot.getGeneratedQuestionId() != null) {
+                    originalIds.add(slot.getGeneratedQuestionId());
+                }
+            } else if (slot.getGeneratedQuestionId() != null) {
+                generatedIds.add(slot.getGeneratedQuestionId());
+            }
+        }
+        Map<Integer, BankItemDto> bank = bankService.getItems(bankIds);
+        Map<Integer, GeneratedQuestion> questions = generationService.questionsByIds(generatedIds);
+        List<Integer> tfIds = questions.values().stream().filter(q -> q.getQuestionType() == QuestionType.TF)
+                .map(GeneratedQuestion::getId).toList();
+        for (GeneratedQuestion q : questions.values()) {
+            if (q.getEditedFromQuestionId() != null) {
+                originalIds.add(q.getId());
+            }
+        }
+        return new Loaded(bank, questions, generationService.statementsByQuestionIds(tfIds),
+                generationService.originalQuestionIds(originalIds), generationService.latestCheckJobs(generatedIds),
+                qcSummaryService.summarizeAll(generatedIds));
+    }
+
+    /**
+     * Các phần I-III (có thể thêm Phần khác) của từng đề, theo thứ tự hiển thị, đã gắn cờ similar_in_exam. MỘT hàm cho xem
+     * đề và danh sách đề, nên số "cần xem lại" của hai nơi cùng một nguồn. Nạp dữ liệu của mọi chỗ một lần.
+     */
+    private Map<Integer, Map<String, List<ExamItemDto>>> buildParts(Map<Integer, List<ExamSlot>> slotsByExam) {
+        List<ExamSlot> all = slotsByExam.values().stream().flatMap(List::stream).toList();
+        Map<Integer, ExamMatrixCell> cells = matrixService.cellsByIds(
+                all.stream().map(ExamSlot::getCellId).collect(Collectors.toCollection(LinkedHashSet::new)));
+        Loaded loaded = load(all);
+        Map<Integer, Map<String, List<ExamItemDto>>> out = new LinkedHashMap<>();
+        for (Map.Entry<Integer, List<ExamSlot>> entry : slotsByExam.entrySet()) {
+            List<ExamSlot> slots = new ArrayList<>(entry.getValue());
+            slots.sort(Comparator.comparing((ExamSlot s) -> cells.get(s.getCellId()).getPosition())
+                    .thenComparing(ExamSlot::getSlotNo));
+            Map<String, List<ExamItemDto>> byPart = new LinkedHashMap<>();
+            for (String part : List.of("I", "II", "III")) {
+                byPart.put(part, new ArrayList<>());
+            }
+            for (ExamSlot slot : slots) {
+                ExamItemDto item = toItem(slot, cells.get(slot.getCellId()), loaded);
+                byPart.computeIfAbsent(item.part(), k -> new ArrayList<>()).add(item);
+            }
+            flagSimilarInExam(byPart);
+            out.put(entry.getKey(), byPart);
+        }
+        return out;
     }
 
     /**
@@ -132,28 +215,25 @@ public class ExamViewService {
         List<Integer> ids = exams.getContent().stream().map(Exam::getId).toList();
         Map<Integer, List<ExamSlot>> slotsByExam = ids.isEmpty() ? Map.of()
                 : slotRepository.findByExamIdIn(ids).stream().collect(Collectors.groupingBy(ExamSlot::getExamId));
+        // F-07: số "cần xem lại" lấy từ ĐÚNG các mục mà trang chi tiết dựng (cùng buildParts, gồm cả cờ similar_in_exam),
+        // nạp theo lô cho mọi đề của trang.
+        Map<Integer, Map<String, List<ExamItemDto>>> partsByExam = buildParts(slotsByExam);
         List<ExamSummaryDto> items = new ArrayList<>();
         for (Exam e : exams.getContent()) {
             List<ExamSlot> slots = slotsByExam.getOrDefault(e.getId(), List.of());
             int ready = 0;
             int kept = 0;
-            int needsReview = 0;
             int generating = 0;
             int failed = 0;
             for (ExamSlot s : slots) {
                 switch (s.getState()) {
-                    case ExamSlot.READY -> {
-                        ready++;
-                        if (s.getBankItemId() == null && s.getGeneratedQuestionId() != null
-                                && !reviewReasonsOf(s.getGeneratedQuestionId()).isEmpty()) {
-                            needsReview++;
-                        }
-                    }
+                    case ExamSlot.READY -> ready++;
                     case ExamSlot.KEPT, ExamSlot.EDITED -> kept++;
                     case ExamSlot.FAILED -> failed++;
                     default -> generating++;
                 }
             }
+            int needsReview = countNeedsReview(partsByExam.getOrDefault(e.getId(), Map.of()));
             String examKind = kindOf(e, kinds);
             items.add(new ExamSummaryDto(e.getId(), e.getExamCode(), e.getTitle(), e.getMode(), examKind,
                     e.getStatus(), publicMatrixId(e, examKind), e.getCreatedAt(), slots.size(), ready, kept, needsReview, generating, failed));
@@ -165,30 +245,18 @@ public class ExamViewService {
     public ExamViewDto view(Integer examId, Integer actorId) {
         Exam exam = buildService.getOwnedExam(examId, actorId);
         buildService.reconcile(examId);
-        List<ExamMatrixCell> cells = exam.getMatrixId() != null ? matrixService.cells(exam.getMatrixId()) : List.of();
-        Map<Integer, ExamMatrixCell> cellById = cells.stream()
-                .collect(Collectors.toMap(ExamMatrixCell::getId, Function.identity()));
-        List<ExamSlot> slots = new ArrayList<>(slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(examId));
-        slots.sort(Comparator.comparing((ExamSlot s) -> cellById.get(s.getCellId()).getPosition())
-                .thenComparing(ExamSlot::getSlotNo));
-
-        Map<String, List<ExamItemDto>> byPart = new LinkedHashMap<>();
-        for (String part : List.of("I", "II", "III")) {
-            byPart.put(part, new ArrayList<>());
-        }
+        List<ExamSlot> slots = slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(examId);
+        Map<String, List<ExamItemDto>> byPart = buildParts(Map.of(examId, slots)).get(examId);
         int generating = 0;
         int failed = 0;
         for (ExamSlot slot : slots) {
-            ExamItemDto item = item(slot, cellById.get(slot.getCellId()));
-            byPart.computeIfAbsent(item.part(), k -> new ArrayList<>()).add(item);
             if (ExamSlot.FAILED.equals(slot.getState())) {
                 failed++;
             } else if (!ExamBuildService.hasQuestion(slot)) {
                 generating++;
             }
         }
-        flagSimilarInExam(byPart);
-        int needsReview = (int) byPart.values().stream().flatMap(List::stream).filter(ExamItemDto::needsReview).count();
+        int needsReview = countNeedsReview(byPart);
         List<PartDto> parts = new ArrayList<>();
         for (Map.Entry<String, List<ExamItemDto>> e : byPart.entrySet()) {
             int ready = (int) e.getValue().stream().filter(i -> i.questionText() != null).count();
@@ -210,6 +278,11 @@ public class ExamViewService {
         ExamQuestionSimilarity.flag(byPart, similarThreshold);
     }
 
+    /** Số chỗ "cần xem kỹ" của một đề: định nghĩa duy nhất, dùng cho cả trang chi tiết và danh sách đề. */
+    private static int countNeedsReview(Map<String, List<ExamItemDto>> byPart) {
+        return (int) byPart.values().stream().flatMap(List::stream).filter(ExamItemDto::needsReview).count();
+    }
+
     /** W1-4: loại đề suy ra từ ma trận gốc; đề cũ không có ma trận là "manual". */
     private static String kindOf(Exam exam, Map<Integer, String> kindsByMatrix) {
         if (exam.getMatrixId() == null) {
@@ -223,17 +296,22 @@ public class ExamViewService {
         return ExamMatrix.KIND_LESSON.equals(kind) ? null : exam.getMatrixId();
     }
 
+    /** Mục của một chỗ (ExamActionService trả sau mỗi thao tác); cùng logic với xem đề, nạp dữ liệu của riêng chỗ này. */
     ExamItemDto item(ExamSlot slot, ExamMatrixCell cell) {
+        return toItem(slot, cell, load(List.of(slot)));
+    }
+
+    private ExamItemDto toItem(ExamSlot slot, ExamMatrixCell cell, Loaded data) {
         String source = slot.getGeneratedQuestionId() != null ? "generated"
                 : slot.getBankItemId() != null ? "bank" : null;
         boolean hasQuestion = ExamBuildService.hasQuestion(slot);
         boolean showBank = hasQuestion && slot.getBankItemId() != null;
         if (showBank) {
-            BankItemDto b = bankService.getItem(slot.getBankItemId());
+            BankItemDto b = data.bank().get(slot.getBankItemId());
             List<ItemStatementDto> statements = b.statements() == null ? null : b.statements().stream()
                     .map(s -> new ItemStatementDto(s.key(), s.text(), s.label(), s.difficulty())).toList();
             Integer original = slot.getGeneratedQuestionId() == null ? null
-                    : generationService.originalQuestionId(slot.getGeneratedQuestionId());
+                    : data.originals().get(slot.getGeneratedQuestionId());
             boolean edited = original != null && !original.equals(slot.getGeneratedQuestionId());
             return new ExamItemDto(slot.getId(), slot.getCellId(), slot.getSlotNo(), cell.getPart(), cell.getTopic(),
                     slot.getQuestionType(), slot.getState(), source, slot.getBankItemId(), slot.getGeneratedQuestionId(),
@@ -242,18 +320,20 @@ public class ExamViewService {
                     edited ? original : null);
         }
         if (hasQuestion && slot.getGeneratedQuestionId() != null) {
-            GeneratedQuestion q = generationService.getQuestionById(slot.getGeneratedQuestionId());
+            GeneratedQuestion q = data.questions().get(slot.getGeneratedQuestionId());
             List<ItemStatementDto> statements = q.getQuestionType() != QuestionType.TF ? null
-                    : generationService.getStatements(q.getId()).stream()
+                    : data.statements().getOrDefault(q.getId(), List.of()).stream()
                             .map(s -> new ItemStatementDto(s.getStatementKey(), s.getStatementText(), s.getLlmLabel(),
                                     s.getFinalDifficulty() != null ? s.getFinalDifficulty() : s.getLlmDifficulty()))
                             .toList();
             Difficulty difficulty = q.getFinalDifficulty() != null ? q.getFinalDifficulty() : q.getLlmDifficulty();
-            List<String> reasons = reviewReasonsOf(q.getId());
+            // W2-3: lý do đã lưu (QC) cộng lý do của job "bám tài liệu" chưa có kết quả.
+            List<String> reasons = new ArrayList<>(data.qc().get(q.getId()).reviewReasons());
+            addGroundingJobReason(Optional.ofNullable(data.jobs().grounding().get(q.getId())), reasons);
             // W1-2 / W2-4b: câu chờ Solver kiểm (job answer_check) thì "đang kiểm", job thất bại hoặc Solver lỗi thì nói rõ;
             // cả hai không bao giờ là đạt.
             String qcState = null;
-            Optional<GenerationJob> check = generationService.latestAnswerCheckJob(q.getId());
+            Optional<GenerationJob> check = Optional.ofNullable(data.jobs().answerCheck().get(q.getId()));
             if (reasons.contains(QcSummaryService.SOLVER_NOT_RUN)) {
                 if (check.isPresent() && (check.get().getStatus() == JobStatus.PENDING
                         || check.get().getStatus() == JobStatus.RUNNING)) {
@@ -267,7 +347,7 @@ public class ExamViewService {
             if (qcState == null) {
                 qcState = reasons.isEmpty() ? ExamItemDto.QC_PASSED : ExamItemDto.QC_NEEDS_REVIEW;
             }
-            Integer original = q.getEditedFromQuestionId() == null ? null : generationService.originalQuestionId(q.getId());
+            Integer original = q.getEditedFromQuestionId() == null ? null : data.originals().get(q.getId());
             return new ExamItemDto(slot.getId(), slot.getCellId(), slot.getSlotNo(), cell.getPart(), cell.getTopic(),
                     slot.getQuestionType(), slot.getState(), source, null, q.getId(), q.getQuestionText(),
                     q.getOptionA(), q.getOptionB(), q.getOptionC(), q.getOptionD(), q.getCorrectOption(),

@@ -18,6 +18,12 @@ public interface QualityCheckResultRepository extends JpaRepository<QualityCheck
     Optional<QualityCheckResult> findByQuestionIdAndCheckType(Integer questionId, CheckType checkType);
 
     /**
+     * F-07: mọi dòng QC của một tập câu bằng MỘT truy vấn. Mỗi cặp (question_id, check_type) có tối đa một dòng
+     * (UNIQUE {@code uq_qcr_question_check}, V1), nên "kết quả mới nhất" chính là dòng duy nhất đó.
+     */
+    List<QualityCheckResult> findByQuestionIdIn(Collection<Integer> questionIds);
+
+    /**
      * W2-4b (C): đếm số lượt gọi Solver thành công (V21: {@code check_type = 'answer_check'} và có {@code token_count};
      * dòng chép từ bản trước có {@code token_count IS NULL} nên không tính) từ mốc {@code since}.
      */

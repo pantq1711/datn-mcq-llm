@@ -453,14 +453,15 @@ GET /api/exams?page=0&size=10[&kind=lesson|matrix]
   cũ không có ma trận). Tham số `kind` tùy chọn lọc theo `lesson` hoặc `matrix`; giá trị khác trả 400 (`kind phải là lesson
   hoặc matrix`). Loại suy ra từ ma trận gốc của đề, không có cột riêng.
 - Chỉ đề do người gọi tạo, mới nhất trước. `page` từ 0 (mặc định 0), `size` từ 1 đến 50 (mặc định 10); sai thì 400.
-- `readySlots`: chỗ đã có câu, chưa Giữ (`ready`); `keptSlots`: đã Giữ (`kept`, `edited`); `needsReviewSlots`: trong số
-  `readySlots`, câu hệ thống sinh có cờ "cần xem kỹ" (cùng cách tính `needsReview` ở 7.4); `generatingSlots`: `pending`,
-  `generating`; `failedSlots`: `failed`.
+- `readySlots`: chỗ đã có câu, chưa Giữ (`ready`); `keptSlots`: đã Giữ (`kept`, `edited`); `needsReviewSlots`: số chỗ có
+  `needsReview = true` trong `GET /api/exams/{id}` của cùng đề (từ 4/11 dùng CHUNG một hàm dựng mục với trang chi tiết, nên gồm
+  cả cờ `similar_in_exam` và luôn bằng `needsReviewCount` của trang chi tiết); `generatingSlots`: `pending`, `generating`;
+  `failedSlots`: `failed`.
 - Danh sách chỉ đọc, KHÔNG đối soát job (khác 7.3/7.4): số liệu theo lần đối soát gần nhất. Muốn số mới nhất của một đề
   thì gọi `GET /api/exams/{id}/progress`.
-- **Việc còn nợ (chưa làm):** `needsReviewSlots` đang tính N+1: mỗi chỗ `ready` có câu hệ thống sinh gọi
-  `QcSummaryService.summarize` (vài truy vấn `quality_check_result`, `answer_check_statement` mỗi câu). Sẽ thay bằng một
-  truy vấn gộp theo danh sách câu ở task thống kê; trước đó giữ `size` nhỏ (mặc định 10, tối đa 50).
+- F-07 (4/11): danh sách và trang chi tiết nạp dữ liệu theo lô, số truy vấn cố định (khoảng 14 cho danh sách, 13 cho xem đề)
+  không phụ thuộc số câu hay số đề trong trang; xem `docs/experiments/trial/do-f07-so-cau-sql.md`. Trước 4/11
+  `needsReviewSlots` bị N+1, chỉ đếm chỗ `ready` và không có cờ `similar_in_exam` nên có thể nhỏ hơn `needsReviewCount`.
 
 ### 7.1. Ma trận
 
@@ -738,7 +739,7 @@ khác để sinh lại).
   `similar_in_exam: II.3` là Phần II, Câu 3; trước 2/11 là số thứ tự toàn đề như `similar_in_exam: 14`, dễ nhầm với trang đề).
   Mỗi cặp chỉ câu có số thứ tự lớn hơn bị gắn (câu đứng trước không bị gắn); một câu giống nhiều câu trước thì mỗi câu trước một
   lý do. Tính lúc xem đề, không lưu, không đổi trạng thái câu; câu ngân hàng và câu đã Giữ/Sửa không bị gắn. `qcState` về
-  `needs_review`. Chỉ `GET /api/exams/{id}` có lý do này; `needsReviewSlots` của `GET /api/exams` chưa tính. Chuỗi hiển thị đề
+  `needs_review`. Lý do này có ở `GET /api/exams/{id}`; từ 4/11 `needsReviewSlots` của `GET /api/exams` cũng đếm nó. Chuỗi hiển thị đề
   xuất: "Gần giống Câu {số} Phần {Phần} trong đề, nên đổi một trong hai câu". Frontend đọc được cả dạng cũ (chỉ có số, dữ liệu trước 2/11) lẫn dạng mới.
 - W2-3, câu sinh từ đề có tài liệu bài học (mục 7.2, 9) có thêm lý do của QC "bám tài liệu" (mục 7.7a):
   `grounding_not_supported` (judge cho là đáp án, lời giải hoặc câu hỏi không khớp tài liệu), `grounding_unknown` (đoạn tài
