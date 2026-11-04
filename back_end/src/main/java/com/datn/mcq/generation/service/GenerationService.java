@@ -640,6 +640,74 @@ public class GenerationService {
                 GenerationJob.TYPE_GROUNDING_CHECK);
     }
 
+    /** F-07: job kiểm mới nhất của một tập câu: answer_check (Solver) và grounding_check (bám tài liệu), khóa theo id câu. */
+    public record CheckJobs(java.util.Map<Integer, GenerationJob> answerCheck, java.util.Map<Integer, GenerationJob> grounding) {}
+
+    /** F-07: như {@link #latestAnswerCheckJob} và {@link #latestGroundingJob} cho cả tập câu, bằng một truy vấn. */
+    @Transactional(readOnly = true)
+    public CheckJobs latestCheckJobs(java.util.Collection<Integer> questionIds) {
+        java.util.Map<Integer, GenerationJob> answer = new java.util.HashMap<>();
+        java.util.Map<Integer, GenerationJob> grounding = new java.util.HashMap<>();
+        if (!questionIds.isEmpty()) {
+            for (GenerationJob job : generationJobRepository.findLatestCheckJobs(questionIds)) {
+                if (GenerationJob.TYPE_ANSWER_CHECK.equals(job.getJobType())) {
+                    answer.put(job.getQuestionId(), job);
+                } else if (GenerationJob.TYPE_GROUNDING_CHECK.equals(job.getJobType())) {
+                    grounding.put(job.getQuestionId(), job);
+                }
+            }
+        }
+        return new CheckJobs(answer, grounding);
+    }
+
+    /** F-07: nhiều câu theo id bằng một truy vấn; id không có thì NoSuchElementException như {@link #getQuestionById}. */
+    @Transactional(readOnly = true)
+    public java.util.Map<Integer, GeneratedQuestion> questionsByIds(java.util.Collection<Integer> ids) {
+        java.util.Map<Integer, GeneratedQuestion> out = new java.util.LinkedHashMap<>();
+        if (ids.isEmpty()) {
+            return out;
+        }
+        for (GeneratedQuestion q : generatedQuestionRepository.findAllById(ids)) {
+            out.put(q.getId(), q);
+        }
+        for (Integer id : ids) {
+            if (!out.containsKey(id)) {
+                throw new NoSuchElementException("Không tìm thấy câu hỏi id=" + id);
+            }
+        }
+        return out;
+    }
+
+    /** F-07: 4 ý (a-d) của các câu tf trong tập bằng một truy vấn; câu không có ý thì không có khóa. */
+    @Transactional(readOnly = true)
+    public java.util.Map<Integer, List<GeneratedQuestionStatement>> statementsByQuestionIds(
+            java.util.Collection<Integer> questionIds) {
+        java.util.Map<Integer, List<GeneratedQuestionStatement>> out = new java.util.HashMap<>();
+        if (questionIds.isEmpty()) {
+            return out;
+        }
+        for (GeneratedQuestionStatement s : statementRepository.findByQuestionIdInOrderByQuestionIdAscPositionAsc(questionIds)) {
+            out.computeIfAbsent(s.getQuestionId(), k -> new ArrayList<>()).add(s);
+        }
+        return out;
+    }
+
+    /** F-07: như {@link #originalQuestionId} cho cả tập câu bằng một truy vấn đệ quy; mọi id được hỏi đều có trong kết quả. */
+    @Transactional(readOnly = true)
+    public java.util.Map<Integer, Integer> originalQuestionIds(java.util.Collection<Integer> questionIds) {
+        java.util.Map<Integer, Integer> out = new java.util.HashMap<>();
+        if (questionIds.isEmpty()) {
+            return out;
+        }
+        for (Object[] row : generatedQuestionRepository.findOriginalIds(questionIds)) {
+            out.put(((Number) row[0]).intValue(), ((Number) row[1]).intValue());
+        }
+        for (Integer id : questionIds) {
+            out.putIfAbsent(id, id);
+        }
+        return out;
+    }
+
     /** W1-3: mọi job sinh câu (không kể answer_check) của một chỗ trong đề, theo thứ tự tạo. */
     @Transactional(readOnly = true)
     public List<GenerationJob> generateJobsForSlot(Integer examSlotId) {

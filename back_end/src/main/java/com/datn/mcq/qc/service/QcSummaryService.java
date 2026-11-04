@@ -14,7 +14,9 @@ import com.datn.mcq.qc.checker.ExplanationDraftLeak;
 import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.GroundingVerdict;
 import com.datn.mcq.qc.dto.TfJudgement;
+import com.datn.mcq.qc.entity.AnswerCheckStatement;
 import com.datn.mcq.qc.entity.QualityCheckResult;
+import com.datn.mcq.qc.entity.QuestionGrounding;
 import com.datn.mcq.qc.repository.AnswerCheckStatementRepository;
 import com.datn.mcq.qc.repository.QualityCheckResultRepository;
 import com.datn.mcq.qc.repository.QuestionGroundingRepository;
@@ -23,8 +25,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -235,28 +245,72 @@ public class QcSummaryService {
         return new QcDetail(format, dedup, solver, grounding);
     }
 
+    /** Tóm tắt QC của một câu: dùng chung logic với {@link #summarizeAll} (không có hai bản tính cờ). */
     @Transactional(readOnly = true)
     public QcSummary summarize(Integer questionId) {
-        Optional<QualityCheckResult> format = resultRepository.findByQuestionIdAndCheckType(questionId, CheckType.FORMAT);
-        Optional<QualityCheckResult> dedup = resultRepository.findByQuestionIdAndCheckType(questionId, CheckType.DEDUP);
-        Optional<QualityCheckResult> answer =
-                resultRepository.findByQuestionIdAndCheckType(questionId, CheckType.ANSWER_CHECK);
+        return summarizeAll(List.of(questionId)).get(questionId);
+    }
+
+    /**
+     * F-07: tóm tắt QC của cả một tập câu bằng số truy vấn CỐ ĐỊNH (không phụ thuộc số câu): một cho dòng QC (format,
+     * dedup, answer_check), một cho nhãn Solver từng ý nhưng chỉ khi trong tập có câu Đúng/Sai đã có answer_check, một cho
+     * kết quả "bám tài liệu". Mỗi (câu, loại kiểm) có tối đa một dòng (UNIQUE ở V1), nên không cần chọn "mới nhất".
+     *
+     * @return đủ mọi id được hỏi (câu chưa có dòng QC nào cho {@code dedupRan = false}, Solver chưa chạy); rỗng nếu không hỏi id nào
+     */
+    @Transactional(readOnly = true)
+    public Map<Integer, QcSummary> summarizeAll(Collection<Integer> questionIds) {
+        Set<Integer> ids = new LinkedHashSet<>();
+        for (Integer id : questionIds) {
+            if (id != null) {
+                ids.add(id);
+            }
+        }
+        Map<Integer, QcSummary> out = new LinkedHashMap<>();
+        if (ids.isEmpty()) {
+            return out;
+        }
+        Map<Integer, Map<CheckType, QualityCheckResult>> results = new HashMap<>();
+        for (QualityCheckResult r : resultRepository.findByQuestionIdIn(ids)) {
+            results.computeIfAbsent(r.getQuestionId(), k -> new EnumMap<>(CheckType.class)).put(r.getCheckType(), r);
+        }
         // F-07: chỉ câu Đúng/Sai có dòng ý (answer_check_statement); mcq và sa không cần truy vấn này.
-        boolean undecidable = answer.isPresent() && answer.get().getQuestionType() == QuestionType.TF
-                && statementRepository.findByQcResultIdOrderByPositionAsc(answer.get().getId()).stream()
-                .anyMatch(s -> s.getJudgeLabel() == TruthChoice.UNDECIDABLE);
-        return new QcSummary(
-                dedup.isPresent(),
-                answer.map(QualityCheckResult::getPassed).orElse(null),
-                answer.map(QualityCheckResult::getJudgeSaKind).orElse(null),
-                undecidable,
-                JsonStringArray.read(format.map(QualityCheckResult::getWarnings).orElse(null)),
-                dedup.filter(d -> Boolean.FALSE.equals(d.getPassed()))
-                        .map(QualityCheckResult::getComparedToQuestionId).orElse(null),
-                groundingRepository.findByQuestionId(questionId).map(g -> GroundingVerdict.fromDb(g.getVerdict()))
-                        .orElse(null),
-                answer.map(QualityCheckResult::getJudgeAnswer).orElse(null),
-                answer.map(QualityCheckResult::getSolverReasoning)
-                        .filter(r -> r.startsWith(AnswerSolverChecker.OPTIONS_VERDICT_PREFIX)).isPresent());
+        List<Integer> tfAnswerRows = new ArrayList<>();
+        for (Map<CheckType, QualityCheckResult> byType : results.values()) {
+            QualityCheckResult answer = byType.get(CheckType.ANSWER_CHECK);
+            if (answer != null && answer.getQuestionType() == QuestionType.TF) {
+                tfAnswerRows.add(answer.getId());
+            }
+        }
+        Set<Integer> undecidableRows = new HashSet<>();
+        if (!tfAnswerRows.isEmpty()) {
+            for (AnswerCheckStatement s : statementRepository.findByQcResultIdIn(tfAnswerRows)) {
+                if (s.getJudgeLabel() == TruthChoice.UNDECIDABLE) {
+                    undecidableRows.add(s.getQcResultId());
+                }
+            }
+        }
+        Map<Integer, GroundingVerdict> grounding = new HashMap<>();
+        for (QuestionGrounding g : groundingRepository.findByQuestionIdIn(ids)) {
+            grounding.put(g.getQuestionId(), GroundingVerdict.fromDb(g.getVerdict()));
+        }
+        for (Integer id : ids) {
+            Map<CheckType, QualityCheckResult> byType = results.getOrDefault(id, Map.of());
+            QualityCheckResult format = byType.get(CheckType.FORMAT);
+            QualityCheckResult dedup = byType.get(CheckType.DEDUP);
+            QualityCheckResult answer = byType.get(CheckType.ANSWER_CHECK);
+            out.put(id, new QcSummary(
+                    dedup != null,
+                    answer == null ? null : answer.getPassed(),
+                    answer == null ? null : answer.getJudgeSaKind(),
+                    answer != null && undecidableRows.contains(answer.getId()),
+                    JsonStringArray.read(format == null ? null : format.getWarnings()),
+                    dedup != null && Boolean.FALSE.equals(dedup.getPassed()) ? dedup.getComparedToQuestionId() : null,
+                    grounding.get(id),
+                    answer == null ? null : answer.getJudgeAnswer(),
+                    answer != null && answer.getSolverReasoning() != null
+                            && answer.getSolverReasoning().startsWith(AnswerSolverChecker.OPTIONS_VERDICT_PREFIX)));
+        }
+        return out;
     }
 }

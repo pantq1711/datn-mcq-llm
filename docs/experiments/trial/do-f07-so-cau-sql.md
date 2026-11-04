@@ -70,3 +70,40 @@ $lines = (Get-Content f07.log | Select-Object -Skip $before)
 
 Nhận định khi đọc: nếu số câu SQL tăng tuyến tính theo số câu (hoặc số đề) với cùng một mẫu câu lặp, đó là N+1 (xem
 `QcSummaryService.summarize`, đã bỏ truy vấn ý cho câu mcq/sa ở F-07 phần rẻ). Chỉ sửa khi số đo cho thấy cần.
+
+## Kết quả TRƯỚC khi sửa (đo 3/11, `datn_mcq_e2e`, 4 lượt, tài khoản GV1)
+
+| Endpoint | Số đề / số câu | Số câu SQL | Thời gian 4 lượt (ms) | Câu lặp theo N |
+|---|---|---|---|---|
+| `GET /api/exams/13` | 1 đề / 18 câu | 117 | 546 / 359 / 295 / 307 | `quality_check_result` 3 lần/câu (format, dedup, answer_check), `generation_job`, `question_grounding`, `generated_question` |
+| `GET /api/exams` | 10 đề / 152 câu | 774 | 1056 / 1186 / 992 / 743 | `quality_check_result` 456, `question_grounding` 152, `generation_job` 152, `answer_check_statement` 10 |
+
+Số "cần xem lại" lệch: đề 8 ở danh sách 3, ở trang chi tiết 7 (danh sách không gắn cờ `similar_in_exam`, chỉ đếm slot `ready`).
+
+## Sau khi sửa (đo 4/11, cùng DB `datn_mcq_e2e`, cùng đề 13, cùng tài khoản GV1)
+
+Cách đo: app chạy `spring-boot:run` với `DB_NAME=datn_mcq_e2e`, cổng 8085, worker tắt, `generate_statistics=true` và
+`org.hibernate.SQL=DEBUG` như Bước 1; gọi bằng `curl` (thời gian `time_total`), 4 lượt mỗi endpoint sau khi đã gọi thử vài lần
+(không phải khởi động lạnh). Số câu SQL đếm dòng `org.hibernate.SQL` của từng request, bỏ hai câu `SELECT * FROM generation_job` của bộ
+nhận job nền (không thuộc request).
+
+| Endpoint | Số đề / số câu | Số câu SQL | Thời gian 4 lượt (ms) |
+|---|---|---|---|
+| `GET /api/exams/13` | 1 đề / 18 câu | 13 | 81 / 81 / 70 / 102 |
+| `GET /api/exams` (size mặc định 10) | 10 đề / 180 slot | 14 | 422 / 354 / 388 / 379 |
+
+Ghi chú:
+
+- 13 câu SQL của xem đề: đề, `exists generating`, slot, ô ma trận, ngân hàng (2), câu sinh, ý tf, job, QC (3), ma trận (loại đề).
+  Thêm 1 truy vấn đệ quy bản gốc khi đề có câu đã sửa hoặc câu đã Giữ (đề 13 không có nên không chạy; trang đầu của danh sách có nên chạy).
+  Danh sách: trang đề, đếm tổng, loại đề, slot, ô ma trận, ngân hàng (2), câu sinh, ý tf, bản gốc, job, QC (3) = 14.
+  Số này không đổi theo số câu hay số đề (test
+  `ExamViewBatchTest`: đề 18 và 36 câu cùng số truy vấn, ≤ 25; danh sách 3 và 10 đề cùng số truy vấn, ≤ 20).
+- DB lúc đo sau không còn đúng như lúc đo trước: có thêm đề 15 (15 đề thay vì 14), nên trang đầu của danh sách gồm 10 đề / 180 slot
+  thay vì 152 câu. Số câu SQL "sau" không phụ thuộc quy mô nên vẫn so được; thời gian danh sách "sau" đo trên dữ liệu lớn hơn.
+- Thời gian danh sách (~0,4 s) còn cao so với số truy vấn vì phần so khuôn `similar_in_exam` (`ExamQuestionSimilarity`) tính trong bộ nhớ,
+  O(n²) theo số câu của từng đề và chuẩn hóa lại văn bản cho mỗi cặp. Chưa tối ưu (ngoài phạm vi F-07); nếu cần, lưu sẵn chuẩn hóa của mỗi câu.
+- Số "cần xem lại": cả 15 đề ở danh sách bằng `needsReviewCount` ở trang chi tiết (không đề nào lệch). Đề 8: 5 ở cả hai nơi
+  (số 3 và 7 ghi ở trên là số của lần đo 3/11, trước khi hai nơi dùng chung hàm tính).
+- Hai truy vấn mới tải dữ liệu theo lô không cần index mới: `DISTINCT ON (question_id, job_type)` dùng `idx_gj_question_type` (V13);
+  truy vấn đệ quy bản gốc đi theo khóa chính. Không có migration.

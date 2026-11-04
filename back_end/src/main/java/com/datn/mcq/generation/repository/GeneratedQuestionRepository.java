@@ -23,6 +23,23 @@ public interface GeneratedQuestionRepository extends JpaRepository<GeneratedQues
     /** V13 (W1-2): câu đã có bản giáo viên sửa tiếp (đã bị thay). */
     boolean existsByEditedFromQuestionId(Integer questionId);
 
+    /**
+     * F-07: bản gốc LLM (đầu chuỗi {@code edited_from_question_id}) của từng câu trong tập, bằng một truy vấn đệ quy. Mỗi
+     * dòng: {@code [id câu, id bản gốc]}; câu chưa sửa ra chính nó. Chuỗi dừng ở độ sâu 1000 như
+     * {@code GenerationService.originalQuestionId}.
+     */
+    @Query(value = """
+            WITH RECURSIVE chain(start_id, cur_id, parent_id, depth) AS (
+                SELECT q.id, q.id, q.edited_from_question_id, 0
+                FROM generated_question q WHERE q.id IN (:ids)
+                UNION ALL
+                SELECT c.start_id, p.id, p.edited_from_question_id, c.depth + 1
+                FROM chain c JOIN generated_question p ON p.id = c.parent_id
+                WHERE c.depth < 1000)
+            SELECT start_id, cur_id FROM chain WHERE parent_id IS NULL
+            """, nativeQuery = true)
+    List<Object[]> findOriginalIds(@Param("ids") java.util.Collection<Integer> ids);
+
     /** W1-3: bản giáo viên sửa tiếp theo của một câu (tối đa một, UNIQUE ở DB). */
     java.util.Optional<GeneratedQuestion> findByEditedFromQuestionId(Integer questionId);
 
