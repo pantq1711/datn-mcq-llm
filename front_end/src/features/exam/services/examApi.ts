@@ -85,7 +85,24 @@ export interface ExportDocxResult {
     keptOmml: number;
     /** Số công thức dài không ngắt dòng được nên đã thu nhỏ cho vừa trang (chỉ khi xuất MathType). */
     scaled: number;
+    /** Tên file backend đặt trong Content-Disposition (ví dụ MT2610231200001.docx); không có thì undefined. */
+    filename?: string;
 }
+
+/** Lấy tên file từ header Content-Disposition (ưu tiên filename*=UTF-8''...). */
+const parseDispositionFilename = (disposition: unknown): string | undefined => {
+    if (typeof disposition !== 'string') return undefined;
+    const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+    if (utf8?.[1]) {
+        try {
+            return decodeURIComponent(utf8[1]);
+        } catch {
+            // chuỗi mã hoá hỏng: thử dạng filename thường bên dưới
+        }
+    }
+    const plain = /filename=["']?([^"';]+)["']?/i.exec(disposition);
+    return plain?.[1]?.trim() || undefined;
+};
 
 /** Số nguyên dương trong header phản hồi; thiếu hoặc sai định dạng thì 0. */
 const headerCount = (value: unknown): number => {
@@ -108,6 +125,7 @@ export const getExamExportDocx = async (
         blob: resp.data,   // Blob .docx
         keptOmml: headerCount(resp.headers['x-equation-kept-omml']),
         scaled: headerCount(resp.headers['x-equation-scaled']),
+        filename: parseDispositionFilename(resp.headers['content-disposition']),
     };
 };
 

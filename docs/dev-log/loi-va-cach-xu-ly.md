@@ -83,7 +83,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-67 | Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11) | Xuất file | – | Đã kiểm (còn mục mở) |
 | L-68 | Góp ý giáo viên Toán trên đề 14: đáp án mcq dồn vào A; câu dẫn dài dòng, "cạnh biên", "(Nhập đáp án…)" (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (đã đo 1 đề) |
 
-**Thống kê theo nhóm** (60 mục; bảng chưa có dòng cho L-56 nên con số này cộng thêm đúng 7 mục L-57…L-63 vào số cũ):
+**Thống kê theo nhóm** (61 mục; bảng chưa có dòng cho L-56 nên con số này cộng thêm đúng 8 mục L-57…L-64 vào số cũ):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|

@@ -254,16 +254,18 @@ export default function ExamDetailPage() {
         if (!examId) return;
         try {
             setExportLoading(true);
-            const { blob, keptOmml, scaled } = await getExamExportDocx(examId, equation);
+            const { blob, keptOmml, scaled, filename } = await getExamExportDocx(examId, equation);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = equation === 'mathtype'
-                ? `${toFileName(detail?.title, `exam-${examId}`)}-mathtype.docx`
-                : `exam-${examId}.docx`;
+            // Ưu tiên tên backend đặt (mã đề); không có thì dựa vào tên đề / mã đề
+            a.download = filename
+                ?? `${toFileName(detail?.title, detail?.examCode ?? `exam-${examId}`)}${equation === 'mathtype' ? '-mathtype' : ''}.docx`;
             a.click();
             window.URL.revokeObjectURL(url);
-            message.success('Xuất file Word thành công!');
+            message.success(equation === 'mathtype'
+                ? 'Xuất file Word (công thức MathType) thành công!'
+                : 'Xuất file Word (công thức Word Equation) thành công!');
             // Chỉ có khi xuất MathType (backend không gửi header ở chế độ Equation)
             if (keptOmml > 0) {
                 message.warning(`${keptOmml} công thức không chuyển được sang MathType, vẫn ở dạng công thức Word`, 8);
@@ -271,8 +273,18 @@ export default function ExamDetailPage() {
             if (scaled > 0) {
                 message.info(`${scaled} công thức dài đã được thu nhỏ cho vừa trang`, 8);
             }
-        } catch (err: any) {
-            message.error(err?.response?.data?.error ?? 'Không xuất được file');
+        } catch (err: unknown) {
+            // responseType 'blob': thân lỗi JSON cũng là Blob, phải đọc ra chữ mới thấy thông báo của backend
+            let errorMsg = 'Không xuất được file';
+            const data = (err as { response?: { data?: unknown } })?.response?.data;
+            try {
+                const body = data instanceof Blob ? JSON.parse(await data.text()) : data;
+                const serverMsg = (body as { error?: unknown } | null | undefined)?.error;
+                if (serverMsg) errorMsg = String(serverMsg);
+            } catch {
+                // thân lỗi không phải JSON: giữ câu mặc định
+            }
+            message.error(errorMsg);
         } finally {
             setExportLoading(false);
         }
@@ -427,7 +439,7 @@ export default function ExamDetailPage() {
                                         menu={{
                                             items: [
                                                 { key: "omml", label: "Công thức Word (Equation)" },
-                                                { key: "mathtype", label: "Công thức MathType (thử nghiệm)" },
+                                                { key: "mathtype", label: "Công thức MathType" },
                                             ],
                                             selectedKeys: ["omml"],
                                             onClick: ({ key }) => handleExportWord(key === "mathtype" ? "mathtype" : "omml"),
