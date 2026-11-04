@@ -18,6 +18,8 @@ import java.util.regex.Pattern;
  *   <li>{@link #stripTextOutsideMath} (27/10): vỏ {@code \text{...}} của đơn vị đo viết ngoài $ ("$40$ \text{km/h}").</li>
  *   <li>{@link #fixDegreeSymbol} (31/10): ký hiệu độ viết {@code ^\bullet}/{@code ^\triangle} thay cho {@code ^{\circ}}.</li>
  *   <li>{@link #wrapLatexOutsideMath} (2/11): biểu thức LaTeX liền mạch nằm ngoài $...$ (không áp cho trường {@code answer}).</li>
+ *   <li>{@link #wrapFormulaLines} (4/11): dòng công thức của lời giải viết ngoài $ được bọc NGUYÊN dòng; dòng bị chia bởi $
+ *       giữa biểu thức ({@link #hasBrokenFormulaLine}) không tự sửa mà bị FormatChecker báo lỗi (câu được sinh lại).</li>
  * </ol>
  */
 public final class LlmOutputRepair {
@@ -454,6 +456,202 @@ public final class LlmOutputRepair {
         return field + ": đã tự bọc $ quanh " + (wrapped > 1 ? wrapped + " công thức" : "công thức") + " LaTeX nằm ngoài $";
     }
 
+    /** @param text lời giải sau khi sửa; {@code wrapped} là số dòng đã được bọc nguyên dòng bằng $...$ */
+    public record FormulaLineRepair(String text, int wrapped) {}
+
+    /**
+     * Thông báo lỗi khi một dòng công thức của lời giải bị chia bởi "$" giữa biểu thức ({@code P $= … \cdot$ (-3)}): không
+     * biết chỗ đóng đúng nằm đâu nên không tự sửa; câu được sinh lại. Công khai để FormatChecker báo lỗi chặn cho đầu ra LLM.
+     */
+    public static final String MSG_FORMULA_LINE_BROKEN =
+            "Có dòng công thức bị chia bởi dấu $ giữa biểu thức (thiếu hoặc thừa $)";
+
+    /** Dấu hết câu đứng cuối dòng công thức: nằm ngoài $ ("$= 4(x - 2)(x + 2)$."). */
+    private static final String LINE_TAIL_PUNCTUATION = ".,;:!?";
+    /** Ký hiệu cho biết dòng là công thức: dấu quan hệ, phép cộng, mũ, chỉ số, so sánh (không tính chữ số trần). */
+    private static final String FORMULA_SYMBOLS = "=+^_<>";
+    private static final Pattern LATEX_COMMAND = Pattern.compile("\\\\([A-Za-z]+)");
+    /** Đầu dòng liệt kê: "- ", "1. ", "a) ", "(b) ": không phải công thức dù theo sau có ký hiệu toán. */
+    private static final Pattern LIST_MARKER = Pattern.compile("^\\s*(?:[-*•+]\\s+|\\(?\\d+[.)]\\s+|\\(?[a-dA-D][.)]\\s*)");
+
+    /**
+     * Bọc NGUYÊN dòng bằng $...$ cho dòng công thức viết ngoài $ trong lời giải (4/11, đo đề 16 ô 37: quy tắc "mỗi bước một
+     * dòng" làm model viết "P = -5x^2(x - 3)" không có $). Tách theo "\n". Dòng được bọc khi: không có "$" nào; không có chữ
+     * tiếng Việt (chữ ngoài ASCII) và không có từ chữ cái ASCII dài từ 2 ký tự (trừ tên in hoa 2-4 chữ như "AB", "ABC" và
+     * tên lệnh LaTeX); mọi lệnh LaTeX nằm trong danh sách cho phép (không tính \text, \begin, \end); có ký hiệu toán ({@code =
+     * + ^ _ < >}) hoặc lệnh LaTeX; ngoặc nhọn cân; không mở đầu bằng nhãn liệt kê ("a)", "1.", "- "). Dấu hết câu ở cuối dòng
+     * ({@code . , ; : ! ?}) ở lại ngoài $. Dòng bắt đầu bằng "=" cũng được bọc nguyên dòng ({@code $= 4(x - 2)$}). Không chắc
+     * thì giữ nguyên.
+     */
+    public static FormulaLineRepair wrapFormulaLines(String text) {
+        // "$$" (công thức riêng dòng) không chắc đâu là trong/ngoài: giữ nguyên.
+        if (text == null || text.isEmpty() || text.contains("$$")) {
+            return new FormulaLineRepair(text, 0);
+        }
+        String[] lines = text.split("\n", -1);
+        int wrapped = 0;
+        boolean open = false; // đang ở TRONG một cặp $...$ mở ở dòng trước (công thức trải qua nhiều dòng)
+        for (int i = 0; i < lines.length; i++) {
+            if (!open) {
+                String w = wrapFormulaLine(lines[i]);
+                if (w != null) {
+                    lines[i] = w;
+                    wrapped++;
+                }
+            }
+            if (unescapedDollars(lines[i]) % 2 != 0) {
+                open = !open;
+            }
+        }
+        // Số dấu $ lẻ cả đoạn: không biết đâu là trong/ngoài, giữ nguyên để bộ kiểm tra báo lỗi như cũ.
+        return wrapped == 0 || open ? new FormulaLineRepair(text, 0) : new FormulaLineRepair(String.join("\n", lines), wrapped);
+    }
+
+    /** Dòng đã bọc, hoặc null khi dòng không phải dòng công thức viết ngoài $. */
+    private static String wrapFormulaLine(String line) {
+        if (line.indexOf('$') >= 0) {
+            return null;
+        }
+        String stripped = line.strip();
+        if (stripped.isEmpty() || LIST_MARKER.matcher(stripped).find()) {
+            return null;
+        }
+        int end = stripped.length();
+        while (end > 0 && LINE_TAIL_PUNCTUATION.indexOf(stripped.charAt(end - 1)) >= 0) {
+            end--;
+        }
+        String body = stripped.substring(0, end).strip();
+        if (body.isEmpty() || !formulaLike(body)) {
+            return null;
+        }
+        return "$" + body + "$" + stripped.substring(end);
+    }
+
+    /** True khi {@code body} chỉ gồm ký hiệu toán, số, biến và lệnh LaTeX cho phép (xem {@link #wrapFormulaLines}). */
+    private static boolean formulaLike(String body) {
+        int braces = 0;
+        for (int i = 0; i < body.length(); i++) {
+            char c = body.charAt(i);
+            if (c > 127 && Character.isLetter(c)) {
+                return false;
+            }
+            if (c == '{') {
+                braces++;
+            } else if (c == '}' && --braces < 0) {
+                return false;
+            }
+        }
+        if (braces != 0) {
+            return false;
+        }
+        boolean hasCommand = false;
+        Matcher m = LATEX_COMMAND.matcher(body);
+        StringBuilder rest = new StringBuilder();
+        int last = 0;
+        while (m.find()) {
+            String name = m.group(1);
+            if (!LatexValidationRules.isAllowedCommand(name) || NOT_ANCHOR.contains(name)) {
+                return false;
+            }
+            hasCommand = true;
+            rest.append(body, last, m.start()).append(' ');
+            last = m.end();
+        }
+        rest.append(body, last, body.length());
+        for (String token : rest.toString().split("[^A-Za-z]+")) {
+            if (token.length() >= 2 && !token.matches("[A-Z]{2,4}")) {
+                return false;
+            }
+        }
+        if (hasCommand) {
+            return true;
+        }
+        for (int i = 0; i < body.length(); i++) {
+            if (FORMULA_SYMBOLS.indexOf(body.charAt(i)) >= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Cảnh báo khi đã bọc dòng công thức; cùng tiền tố "đã tự bọc $ quanh" nên không bật cờ "cần xem kỹ". */
+    public static String formulaLineWarning(String field, int wrapped) {
+        return field + ": đã tự bọc $ quanh " + wrapped + " dòng công thức nằm ngoài $";
+    }
+
+    /**
+     * True khi có một DÒNG công thức bị chia bởi "$" giữa biểu thức ({@code P $= (-5x^2) \cdot x + (-5x^2) \cdot$ (-3)}, 4/11,
+     * đề 16 ô 37). Dòng công thức là dòng có ít nhất một cặp $...$ mà phần ngoài $ không có chữ nào (không chữ tiếng Việt,
+     * không từ ASCII dài từ 2 ký tự trừ tên in hoa); dòng đó bị chia khi phần ngoài $ còn có số hoặc ký hiệu toán
+     * ({@code = + ^ _ < > * /}) mà không phải dấu câu hay ngoặc đóng/mở. Số dấu $ lẻ không xét (bộ kiểm tra LaTeX lo). Đầu dòng liệt kê
+     * ("1.", "a)", "- ") được bỏ qua. Không tự sửa vì không biết chỗ đóng đúng.
+     */
+    public static boolean hasBrokenFormulaLine(String text) {
+        if (text == null || text.indexOf('$') < 0) {
+            return false;
+        }
+        for (String line : text.split("\n", -1)) {
+            if (line.indexOf('$') >= 0 && isBrokenFormulaLine(line)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isBrokenFormulaLine(String line) {
+        String rest = line;
+        Matcher marker = LIST_MARKER.matcher(rest);
+        if (marker.find()) {
+            rest = rest.substring(marker.end());
+        }
+        int dollars = unescapedDollars(rest);
+        if (dollars == 0) {
+            return false;
+        }
+        if (dollars % 2 != 0) {
+            // Dòng chỉ gồm công thức mà số $ lẻ: công thức trải qua nhiều dòng ("$= a\n= b$"), Word tách theo dòng nên mỗi
+            // dòng hiện chữ "$". Dòng có chữ thì giữ cho bộ kiểm tra LaTeX hiện có lo.
+            return wordless(rest.replace("$", " "));
+        }
+        List<int[]> outside = outsideMathSpans(rest);
+        if (outside == null) {
+            return false;
+        }
+        StringBuilder outsideText = new StringBuilder();
+        for (int[] span : outside) {
+            outsideText.append(rest, span[0], span[1]).append(' ');
+        }
+        String o = outsideText.toString();
+        if (!wordless(o)) {
+            return false;
+        }
+        for (String token : o.trim().split("\\s+")) {
+            String bare = token.replaceAll("^[(\\[{.,;:!?]+", "").replaceAll("[)\\]}.,;:!?]+$", "");
+            if (!bare.isEmpty() && bare.matches(".*[0-9=+^_<>*/].*")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * True khi {@code s} không có chữ: không chữ tiếng Việt (chữ ngoài ASCII) và không từ ASCII dài từ 2 chữ cái, trừ tên in
+     * hoa 2-4 chữ ("AB", "ABC") và tên lệnh LaTeX ("\cdot", "\frac"...).
+     */
+    private static boolean wordless(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) > 127 && Character.isLetter(s.charAt(i))) {
+                return false;
+            }
+        }
+        for (String token : LATEX_COMMAND.matcher(s).replaceAll(" ").split("[^A-Za-z]+")) {
+            if (token.length() >= 2 && !token.matches("[A-Z]{2,4}")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /**
      * Các đoạn [start, end) nằm ngoài cặp $...$ ("\$" và mọi ký hiệu "\" khác bỏ qua nguyên khối; "$$" là công thức riêng
      * dòng); null khi số dấu $ lẻ (không biết đâu là trong/ngoài).
@@ -667,6 +865,15 @@ public final class LlmOutputRepair {
             if (g.fixed() > 0) {
                 warnings.add(degreeWarning(field, g.fixed()));
                 s = g.text();
+            }
+            // 4/11: dòng công thức của lời giải viết ngoài $ ("mỗi bước một dòng") được bọc nguyên dòng, TRƯỚC bước bọc theo
+            // đoạn liền mạch (bước đó đi qua cả ký tự xuống dòng và có thể ghép hai dòng, hoặc bọc dở một dòng).
+            if ("explanation".equals(field)) {
+                FormulaLineRepair f = wrapFormulaLines(McqJsonParser.normalizeLiteralNewlines(s));
+                if (f.wrapped() > 0) {
+                    warnings.add(formulaLineWarning(field, f.wrapped()));
+                }
+                s = f.text();
             }
             // Đáp án câu trả lời ngắn là số viết trần: LaTeX ở đó để bước kiểm định dạng báo đúng lỗi dạng đáp án.
             if (!"answer".equals(field)) {

@@ -50,14 +50,18 @@ public final class TfJsonParser {
         List<String> statements = new ArrayList<>(4);
         List<String> labels = new ArrayList<>(4);
         for (String key : KEYS) {
-            statements.add(stripLabelPrefix(key, LlmOutputRepair.textField("statement_" + key,
-                    obj.get("statement_" + key), repair, true, warnings), warnings));
+            statements.add(StemPunctuation.statement("statement_" + key, stripLabelPrefix(key,
+                    LlmOutputRepair.textField("statement_" + key, obj.get("statement_" + key), repair, true, warnings),
+                    warnings), repair, warnings));
             Object label = obj.get("label_" + key);
             labels.add(label != null ? String.valueOf(label).trim() : null);
         }
+        String questionText = StemPunctuation.stem("question_text",
+                LlmOutputRepair.textField("question_text", obj.get("question_text"), repair, true, warnings), true, repair,
+                warnings);
         return new ParsedTfDto(
                 true,
-                LlmOutputRepair.textField("question_text", obj.get("question_text"), repair, true, warnings),
+                questionText,
                 statements,
                 LlmOutputRepair.textField("explanation", obj.get("explanation"), repair, true, warnings),
                 labels,

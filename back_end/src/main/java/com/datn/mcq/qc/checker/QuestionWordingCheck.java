@@ -34,7 +34,57 @@ public final class QuestionWordingCheck {
             LETTER_BOUNDARY_BEFORE + "nhập\\s+(?:đáp\\s+án|đáp\\s+số|kết\\s+quả)" + LETTER_BOUNDARY_AFTER,
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
+    /**
+     * Cụm chữ chỉ quan hệ giữa hai đối tượng đã đặt tên mà góp ý giáo viên 4/11 muốn viết bằng ký hiệu ($AD \perp BC$,
+     * $AD \parallel BC$, $AD > BC$, $AD < BC$). Mỗi cụm đúng chữ thường, các từ cách nhau một dấu cách.
+     */
+    public static final List<String> SYMBOL_SUGGESTED_PHRASES = List.of("vuông góc với", "song song với", "lớn hơn", "nhỏ hơn");
+
+    /** Tên đối tượng: 1 đến 3 chữ in hoa ASCII, mỗi chữ có thể kèm dấu phẩy trên ({@code A'B'}). */
+    private static final String OBJECT_NAME = "(?:[A-Z]'?){1,3}";
+
+    /** Mẫu "tên + cụm + tên" cho từng cụm của {@link #SYMBOL_SUGGESTED_PHRASES}; chỉ phần cụm không phân biệt hoa thường. */
+    private static final List<Pattern> SYMBOL_PATTERNS = SYMBOL_SUGGESTED_PHRASES.stream()
+            .map(p -> Pattern.compile(LETTER_BOUNDARY_BEFORE + OBJECT_NAME + "\\s+(?iu:" + String.join("\\s+", p.split(" "))
+                    + ")\\s+" + OBJECT_NAME + LETTER_BOUNDARY_AFTER))
+            .toList();
+
     private QuestionWordingCheck() {}
+
+    /**
+     * Cụm chữ chỉ quan hệ ({@link #SYMBOL_SUGGESTED_PHRASES}) đứng giữa hai tên đối tượng in hoa trong {@code text}, mỗi cụm một
+     * lần, theo thứ tự danh sách; dấu "$" bị bỏ trước khi so nên "$AD$ vuông góc với $BC$" cũng khớp. Rỗng khi quan hệ đã viết
+     * bằng ký hiệu hoặc không đứng giữa hai tên đối tượng.
+     */
+    public static List<String> symbolSuggestedPhrases(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+        String plain = Normalizer.normalize(text, Normalizer.Form.NFC).replace("$", "");
+        List<String> found = new ArrayList<>();
+        for (int i = 0; i < SYMBOL_SUGGESTED_PHRASES.size(); i++) {
+            if (SYMBOL_PATTERNS.get(i).matcher(plain).find()) {
+                found.add(SYMBOL_SUGGESTED_PHRASES.get(i));
+            }
+        }
+        return found;
+    }
+
+    private static final String SYMBOL_SUGGESTED_TAG = "wording_symbol_suggested";
+
+    /**
+     * Cảnh báo gợi ý dùng ký hiệu cho trường {@code fieldName}, ví dụ
+     * {@code option_a: wording_symbol_suggested (dùng chữ "vuông góc với" thay vì ký hiệu)}. Chỉ để đo: không bật cờ "cần xem
+     * kỹ" ({@code QcSummaryService}).
+     */
+    public static String symbolSuggestedWarning(String fieldName, String phrase) {
+        return fieldName + ": " + SYMBOL_SUGGESTED_TAG + " (dùng chữ \"" + phrase + "\" thay vì ký hiệu)";
+    }
+
+    /** True khi {@code warning} do {@link #symbolSuggestedWarning} tạo ra. */
+    public static boolean isSymbolSuggestedWarning(String warning) {
+        return warning != null && warning.matches("^[a-z_]+: " + SYMBOL_SUGGESTED_TAG + " \\(.*\\)$");
+    }
 
     /** Các thuật ngữ sai có trong {@code text}, mỗi thuật ngữ một lần, theo thứ tự trong {@link #WRONG_TERMS}. */
     public static List<WrongTerm> wrongTerms(String text) {

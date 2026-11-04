@@ -12,6 +12,7 @@ import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.ExplanationDraftLeak;
 import com.datn.mcq.qc.checker.FormatChecker;
+import com.datn.mcq.qc.checker.QuestionWordingCheck;
 import com.datn.mcq.qc.dto.GroundingVerdict;
 import com.datn.mcq.qc.dto.TfJudgement;
 import com.datn.mcq.qc.entity.AnswerCheckStatement;
@@ -80,7 +81,9 @@ public class QcSummaryService {
      * </ul>
      * Nhãn tf lệch mẫu mục tiêu ({@link TfLabelPattern#isDeviationWarning}) cũng không bật cờ nhưng do model chọn nhãn, không
      * phải việc tự sửa, nên nằm riêng. Chữ đúng của câu mcq khác chữ đã giao ({@link McqAnswerPlan#isDeviationWarning}, 3/11) cũng
-     * không bật cờ: câu vẫn đúng toán học, chỉ lệch vị trí đáp án; cảnh báo chỉ để thống kê mức tuân thủ.
+     * không bật cờ: câu vẫn đúng toán học, chỉ lệch vị trí đáp án; cảnh báo chỉ để thống kê mức tuân thủ. Cảnh báo gợi ý dùng
+     * ký hiệu thay chữ ở phương án mcq ({@link QuestionWordingCheck#isSymbolSuggestedWarning}, góp ý giáo viên 4/11) cũng không
+     * bật cờ: chỉ để đo.
      */
     static final List<Pattern> AUTO_FIXED_WARNING_PATTERNS = List.of(
             Pattern.compile("^" + Pattern.quote(LlmOutputRepair.ESCAPE_WARNING_PREFIX) + ".*", Pattern.DOTALL),
@@ -168,7 +171,7 @@ public class QcSummaryService {
                 if (ExplanationDraftLeak.SUSPECT_WARNING.equals(w)) {
                     reasons.add(EXPLANATION_DRAFT_SUSPECT);
                 } else if (!isAutoFixedWarning(w) && !TfLabelPattern.isDeviationWarning(w)
-                        && !McqAnswerPlan.isDeviationWarning(w)) {
+                        && !McqAnswerPlan.isDeviationWarning(w) && !QuestionWordingCheck.isSymbolSuggestedWarning(w)) {
                     reasons.add(WARNING_PREFIX + w);
                 }
             }

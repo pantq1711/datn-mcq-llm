@@ -5,6 +5,7 @@ import com.datn.mcq.common.util.ShortAnswerValue;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.TruthValue;
 import com.datn.mcq.common.util.TextDistanceUtils;
+import com.datn.mcq.generation.parser.LlmOutputRepair;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import org.springframework.stereotype.Component;
 
@@ -90,6 +91,10 @@ public class FormatChecker {
             checkWording("option_c", input.optionC(), warnings);
             checkWording("option_d", input.optionD(), warnings);
             checkWording("explanation", input.explanation(), warnings);
+            checkSymbolSuggested("option_a", input.optionA(), warnings);
+            checkSymbolSuggested("option_b", input.optionB(), warnings);
+            checkSymbolSuggested("option_c", input.optionC(), warnings);
+            checkSymbolSuggested("option_d", input.optionD(), warnings);
         }
 
         // Ngày 23/10: cảnh báo từ bước giải mã ở chế độ sửa (đã sửa escape LaTeX, đã tự đóng $).
@@ -288,6 +293,10 @@ public class FormatChecker {
         for (String warning : result.warnings()) {
             warnings.add("explanation: " + warning);
         }
+        // 4/11 (đo đề 16 ô 37): dòng công thức bị chia bởi $ giữa biểu thức mà parser không dám tự sửa: sinh lại.
+        if (input.llmOutput() && LlmOutputRepair.hasBrokenFormulaLine(value)) {
+            errors.add("explanation: " + LlmOutputRepair.MSG_FORMULA_LINE_BROKEN);
+        }
     }
 
     /** Từ tiếng Anh đứng riêng ngoài $...$ (2/11): chỉ cảnh báo, câu không bị loại. */
@@ -302,6 +311,16 @@ public class FormatChecker {
     private void checkWording(String fieldName, String value, List<String> warnings) {
         for (QuestionWordingCheck.WrongTerm term : QuestionWordingCheck.wrongTerms(value)) {
             warnings.add(QuestionWordingCheck.wrongTermWarning(fieldName, term));
+        }
+    }
+
+    /**
+     * Phương án mcq viết quan hệ bằng chữ giữa hai tên đối tượng ("AD vuông góc với BC", góp ý giáo viên 4/11): gợi ý dùng ký
+     * hiệu. Chỉ để đo; {@code QcSummaryService} không bật cờ "cần xem kỹ" cho cảnh báo này.
+     */
+    private void checkSymbolSuggested(String fieldName, String value, List<String> warnings) {
+        for (String phrase : QuestionWordingCheck.symbolSuggestedPhrases(value)) {
+            warnings.add(QuestionWordingCheck.symbolSuggestedWarning(fieldName, phrase));
         }
     }
 
