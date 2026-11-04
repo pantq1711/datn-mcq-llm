@@ -54,7 +54,21 @@ public final class PageGeometry {
 
     /** Thụt lề trái và phải của đoạn, đơn vị twips (0 nếu không khai báo). */
     public static double[] indentTwips(DocxPackage pkg, Element p) {
-        Double[] ind = new Double[2];
+        double[] all = indentAllTwips(pkg, p);
+        return new double[]{all[0], all[1]};
+    }
+
+    /**
+     * Độ treo (w:hanging) của đoạn, đơn vị twips (0 nếu không có): dòng đầu bắt đầu ở (thụt lề trái − độ treo). Đoạn mới tách
+     * ra từ đoạn có thụt lề treo phải bỏ độ treo, nếu không dòng đầu của chữ nối tiếp lùi ra khỏi chỗ thẳng hàng.
+     */
+    public static double hangingTwips(DocxPackage pkg, Element p) {
+        return indentAllTwips(pkg, p)[2];
+    }
+
+    /** [trái, phải, treo] theo thứ tự ưu tiên: khai báo trực tiếp, cấp độ danh sách, kiểu đoạn và kiểu cha. */
+    private static double[] indentAllTwips(DocxPackage pkg, Element p) {
+        Double[] ind = new Double[3];
         Element pPr = child(p, "pPr");
         if (pPr != null) {
             fill(ind, child(pPr, "ind"));
@@ -80,7 +94,7 @@ public final class PageGeometry {
                 styleId = val(child(style, "basedOn"));
             }
         }
-        return new double[]{ind[0] == null ? 0 : ind[0], ind[1] == null ? 0 : ind[1]};
+        return new double[]{ind[0] == null ? 0 : ind[0], ind[1] == null ? 0 : ind[1], ind[2] == null ? 0 : ind[2]};
     }
 
     // ---------------------------------------------------------------- chi tiết
@@ -150,6 +164,9 @@ public final class PageGeometry {
         }
         if (ind[1] == null) {
             ind[1] = attr(indEl, "right", "end");
+        }
+        if (ind[2] == null) {
+            ind[2] = attr(indEl, "hanging", "hanging");
         }
     }
 

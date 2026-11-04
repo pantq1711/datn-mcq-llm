@@ -79,9 +79,7 @@ class PandocSandboxTest {
         Path dir = Files.createTempDirectory("pandoc-legacy-");
         try {
             Files.writeString(dir.resolve("exam.md"), markdown, StandardCharsets.UTF_8);
-            try (var in = PandocRunner.class.getResourceAsStream(PandocRunner.REFERENCE_DOC_RESOURCE)) {
-                Files.copy(in, dir.resolve("reference.docx"));
-            }
+            Files.write(dir.resolve("reference.docx"), PandocRunner.referenceDocBytes());
             Process p = new ProcessBuilder(pandoc, "+RTS", "-M256m", "-RTS", "exam.md", "-f",
                     "markdown+tex_math_dollars", "-t", "docx", "--reference-doc=reference.docx", "-o", "exam.docx")
                     .directory(dir.toFile()).redirectErrorStream(true)
@@ -112,7 +110,8 @@ class PandocSandboxTest {
         String markdown = ExamMarkdownBuilder.build(exam(items));
 
         byte[] sandboxed = new PandocRunner(pandoc.get()).markdownToDocx(markdown);
-        byte[] legacy = legacyDocx(pandoc.get(), markdown);
+        // Bản cũ không qua bước thay mã giữ chỗ tab của PandocRunner: áp bước đó để so cùng điều kiện.
+        byte[] legacy = ExamSections.ensureExamFooter(ExamTabs.apply(legacyDocx(pandoc.get(), markdown)));
 
         String newXml = PandocTestSupport.documentXml(sandboxed);
         assertTrue(newXml.contains("m:oMath"));
@@ -151,7 +150,9 @@ class PandocSandboxTest {
         }
         assertEquals(2, xml.split("w:val=\"Heading1\"", -1).length - 1,
                 "chỉ có hai tiêu đề cấp 1 (ĐÁP ÁN, LỜI GIẢI): tiêu đề đề không tách được khối openxml của đầu đề");
-        assertEquals(1, xml.split("<w:br w:type=\"page\"/>", -1).length - 1, "chỉ một ngắt trang chủ đích");
+        assertEquals(2, xml.split("<w:sectPr[ >]", -1).length - 1,
+                "chỉ hai section: ngắt section chủ đích trước đáp án và sectPr cuối tài liệu");
+        assertEquals(0, xml.split("<w:br w:type=\"page\"/>", -1).length - 1, "nội dung không tạo được ngắt trang");
     }
 
     @Test
@@ -172,8 +173,9 @@ class PandocSandboxTest {
         assertFalse(xml.contains("<w:t>RAWCHEN</w:t>") || xml.contains("<w:t>RAWCHEN2</w:t>"),
                 "không chèn raw openxml");
         assertTrue(xml.contains("&lt;w:t&gt;RAWCHEN"), "mã giả hiện thành chữ, không thành thẻ");
-        // Duy nhất ngắt trang do ExamMarkdownBuilder.PAGE_BREAK chèn có chủ đích.
-        assertEquals(1, xml.split("<w:br w:type=\"page\"/>", -1).length - 1, "chỉ một ngắt trang chủ đích");
+        // Duy nhất ngắt section (trước đáp án) do ExamMarkdownBuilder chèn có chủ đích, cộng sectPr cuối tài liệu.
+        assertEquals(2, xml.split("<w:sectPr[ >]", -1).length - 1, "chỉ một ngắt section chủ đích");
+        assertEquals(0, xml.split("<w:br w:type=\"page\"/>", -1).length - 1, "nội dung không tạo được ngắt trang");
         assertFalse(xml.contains("<w:drawing"), "ảnh /etc/passwd không được nhúng");
     }
 }
