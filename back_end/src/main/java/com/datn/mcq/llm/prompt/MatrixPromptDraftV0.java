@@ -80,14 +80,17 @@ public final class MatrixPromptDraftV0 {
      * {@link #FACTORING_CELL_RULE_TF} (ý là khẳng định về kết quả phân tích hoặc tính nhanh). sa v7 (ngày 2/11, thẩm định
      * UX đề 10: Phần III câu 2 lưu đáp án 100, đúng là 10000, lời giải "đổi đơn vị … thành trăm để đáp án gọn"): bỏ quy tắc
      * đổi đơn vị cho đáp án gọn (commit 6d8a582), thay bằng "chọn số liệu ngay từ đầu, không đổi đơn vị, không chia/nhân
-     * kết quả, không làm tròn để rút gọn" trong {@link #SA_ANSWER_RULES}. Run cũ là v0 (tf: v0, v1, v2, v3, v4, v5, v6;
-     * mcq: v1, v2, v3, v4; sa: v1, v2, v3, v4, v5, v6).
+     * kết quả, không làm tròn để rút gọn" trong {@link #SA_ANSWER_RULES}. mcq v6, sa v8, tf v8 (ngày 3/11, góp ý giáo viên
+     * Toán thật trên đề 14): {@link #STYLE_RULES} (câu lệnh ngắn gọn, không dữ kiện thừa, đúng thuật ngữ SGK, không dấu hai
+     * chấm sau "là") cho cả 3 dạng, {@link #MCQ_OPTION_PUNCTUATION_RULE} cho mcq, {@link #SA_ANSWER_INPUT_RULE} cho sa; chữ
+     * đáp án đúng của mcq do hệ thống giao trước qua ghi chú của job ({@link McqAnswerPlan}). Run cũ là v0 (tf: v0, v1, v2, v3,
+     * v4, v5, v6, v7; mcq: v1, v2, v3, v4, v5; sa: v1, v2, v3, v4, v5, v6, v7).
      */
     public static String promptVersion(QuestionType type) {
         String version = switch (type) {
-            case TF -> "-v7-draft";
-            case SA -> "-v7-draft";
-            case MCQ -> "-v5-draft";
+            case TF -> "-v8-draft";
+            case SA -> "-v8-draft";
+            case MCQ -> "-v6-draft";
         };
         return VERSION_PREFIX + type.getDbValue() + version;
     }
@@ -131,6 +134,31 @@ public final class MatrixPromptDraftV0 {
             - Câu chữ: viết "thỏa mãn đẳng thức" (không viết "thỏa mãn biểu thức"); không lặp từ (cụm "sau đây" chỉ dùng \
             một lần trong câu).
             """;
+
+    /**
+     * Văn phong câu hỏi của cả 3 dạng (3/11, góp ý giáo viên Toán thật trên đề 14: câu dẫn dài dòng "Hãy nhận biết…", "Trong các
+     * biểu thức đại số sau đây…"; dữ kiện không dùng đến; "cạnh biên"; dấu hai chấm sau "là"). Mỗi dòng là một gạch đầu dòng.
+     * Hằng riêng của prompt ma trận: prompt Solver và prompt sinh lẻ không chứa.
+     */
+    static final String STYLE_RULES = """
+            - Câu lệnh ngắn gọn, đi thẳng vào yêu cầu, ví dụ "Phân tích đa thức $x^3 - 6x^2 + 12x - 8$ thành nhân tử, ta được \
+            kết quả là". Không mở đầu dài dòng như "Hãy nhận biết…", "Trong các biểu thức đại số sau đây…" khi không cần.
+            - Không đưa dữ kiện không dùng đến trong câu hỏi (ví dụ không nêu "hình thang cân MNPQ có hai đáy MN và PQ" rồi hỏi \
+            dấu hiệu nhận biết chung của hình thang cân).
+            - Dùng đúng thuật ngữ trong sách giáo khoa Toán (ví dụ "cạnh bên" của hình thang, không viết "cạnh biên").
+            - Câu dẫn dạng câu nối kết thúc bằng "là" thì KHÔNG đặt dấu hai chấm sau "là".
+            """;
+
+    /** Chỉ cho mcq (3/11): dấu chấm cuối mỗi phương án, đặt sau dấu $ đóng công thức. */
+    static final String MCQ_OPTION_PUNCTUATION_RULE = "- Mỗi phương án kết thúc bằng dấu chấm (đặt sau dấu $ đóng công thức, "
+            + "ví dụ \"$x + 1$.\").";
+
+    /**
+     * Chỉ cho sa (3/11): phiếu trả lời đã có hướng dẫn điền đáp án nên câu dẫn không lặp lại; yêu cầu làm tròn thì vẫn ghi
+     * ({@link #SA_ANSWER_RULES}). Prompt không có câu nào dạy model viết hướng dẫn này; model tự thêm, nên cấm rõ.
+     */
+    static final String SA_ANSWER_INPUT_RULE = "- Câu Trả lời ngắn: không ghi hướng dẫn nhập đáp án trong câu dẫn (ví dụ "
+            + "\"(Nhập đáp án dưới dạng…)\"); phiếu trả lời đã có hướng dẫn điền. Riêng yêu cầu làm tròn khi đề cần vẫn phải ghi rõ.";
 
     /**
      * Ô phân tích đa thức của câu sa (31/10, câu 46 và 58 ra bài tìm x chỉ cần khai căn; thẩm định đề 5-7: ô C17 cả 3 đề vẫn
@@ -449,7 +477,8 @@ public final class MatrixPromptDraftV0 {
                         - Viết lời giải ngắn trong "explanation" và kiểm tra "correct_option" khớp với lời giải.
                         """);
                 sb.append(MCQ_DISTRACTOR_RULE).append("\n");
-                sb.append(MCQ_OPTION_RULES).append("\n").append(CONTENT_RULES).append(EXPLANATION_RULE).append("\n");
+                sb.append(MCQ_OPTION_RULES).append("\n").append(CONTENT_RULES).append(STYLE_RULES)
+                        .append(MCQ_OPTION_PUNCTUATION_RULE).append("\n").append(EXPLANATION_RULE).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append("""
                         Trả về DUY NHẤT một đối tượng JSON có đủ 7 trường:
@@ -467,13 +496,15 @@ public final class MatrixPromptDraftV0 {
                 if (levels != null && levels.size() == 4 && levels.get(3) == Difficulty.HARD) {
                     sb.append(TF_D_RULE).append("\n");
                 }
-                sb.append(CONTENT_RULES).append(EXPLANATION_RULE).append("\n").append(FACTORING_CELL_RULE_TF).append("\n");
+                sb.append(CONTENT_RULES).append(STYLE_RULES).append(EXPLANATION_RULE).append("\n")
+                        .append(FACTORING_CELL_RULE_TF).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(TfPromptDraftV0.OUTPUT_INSTRUCTION);
             }
             case SA -> {
                 sb.append(SA_ANSWER_RULES);
-                sb.append("\nQuy tắc nội dung:\n").append(CONTENT_RULES).append(EXPLANATION_RULE).append("\n")
+                sb.append("\nQuy tắc nội dung:\n").append(CONTENT_RULES).append(STYLE_RULES)
+                        .append(SA_ANSWER_INPUT_RULE).append("\n").append(EXPLANATION_RULE).append("\n")
                         .append(FACTORING_CELL_RULE).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(SaPromptDraftV0.OUTPUT_INSTRUCTION);

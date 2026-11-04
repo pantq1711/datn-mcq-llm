@@ -107,9 +107,9 @@ class MatrixPromptDraftV0Test {
 
     @Test
     void phienBanVaThongSoOLuuDuoc() {
-        assertEquals("matrix-mcq-v5-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
-        assertEquals("matrix-tf-v7-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
-        assertEquals("matrix-sa-v7-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
+        assertEquals("matrix-mcq-v6-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
+        assertEquals("matrix-tf-v8-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-sa-v8-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion("sa-v1-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion(null));
@@ -174,6 +174,74 @@ class MatrixPromptDraftV0Test {
                 assertTrue(p.contains(part), type + " thiếu: " + part);
             }
         }
+    }
+
+    /**
+     * Văn phong câu hỏi (góp ý giáo viên Toán 3/11, prompt mcq v6, sa v8, tf v8): câu lệnh ngắn gọn đi thẳng yêu cầu, không đưa
+     * dữ kiện không dùng, đúng thuật ngữ SGK, câu dẫn kết thúc bằng "là" không có dấu hai chấm. Cả 3 dạng.
+     */
+    @Test
+    void quyTacVanPhongCauHoiCoTrongPromptMaTranCaBaDang() {
+        for (QuestionType type : QuestionType.values()) {
+            String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Phân tích đa thức thành nhân tử", null));
+            for (String part : List.of(
+                    "Câu lệnh ngắn gọn, đi thẳng vào yêu cầu",
+                    "\"Phân tích đa thức $x^3 - 6x^2 + 12x - 8$ thành nhân tử, ta được kết quả là\"",
+                    "Không mở đầu dài dòng như \"Hãy nhận biết…\", \"Trong các biểu thức đại số sau đây…\" khi không cần",
+                    "Không đưa dữ kiện không dùng đến trong câu hỏi",
+                    "\"hình thang cân MNPQ có hai đáy MN và PQ\" rồi hỏi dấu hiệu nhận biết chung",
+                    "Dùng đúng thuật ngữ trong sách giáo khoa",
+                    "\"cạnh bên\" của hình thang, không viết \"cạnh biên\"",
+                    "Câu dẫn dạng câu nối kết thúc bằng \"là\" thì KHÔNG đặt dấu hai chấm")) {
+                assertTrue(p.contains(part), type + " thiếu: " + part);
+            }
+        }
+    }
+
+    /** Dấu chấm cuối phương án chỉ có nghĩa với mcq; hướng dẫn nhập đáp án chỉ có nghĩa với câu Trả lời ngắn. */
+    @Test
+    void quyTacVanPhongRiengTungDang() {
+        String mcq = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.MCQ, "Đa thức", null));
+        assertTrue(mcq.contains("Mỗi phương án kết thúc bằng dấu chấm (đặt sau dấu $ đóng công thức, ví dụ \"$x + 1$.\")"), mcq);
+        assertFalse(mcq.contains("Nhập đáp án"), "mcq không có quy tắc nhập đáp án");
+        String sa = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.SA, "Đa thức", null));
+        for (String part : List.of("Câu Trả lời ngắn: không ghi hướng dẫn nhập đáp án trong câu dẫn",
+                "\"(Nhập đáp án dưới dạng…)\"", "phiếu trả lời đã có hướng dẫn điền",
+                "yêu cầu làm tròn khi đề cần vẫn phải ghi rõ")) {
+            assertTrue(sa.contains(part), "sa thiếu: " + part);
+        }
+        assertFalse(sa.contains("Mỗi phương án kết thúc bằng dấu chấm"));
+        String tf = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.TF, "Đa thức", null));
+        assertFalse(tf.contains("Mỗi phương án kết thúc bằng dấu chấm") || tf.contains("hướng dẫn nhập đáp án"));
+    }
+
+    /** Quy tắc văn phong là hằng riêng của prompt ma trận: prompt Solver và prompt sinh lẻ không chứa. */
+    @Test
+    void quyTacVanPhongKhongNamTrongSolverVaPromptSinhLe() {
+        List<String> markers = List.of("Câu lệnh ngắn gọn", "cạnh biên", "Dùng đúng thuật ngữ trong sách giáo khoa",
+                "Không đưa dữ kiện không dùng đến", "kết thúc bằng \"là\" thì KHÔNG");
+        List<String> prompts = List.of(
+                new PromptBuilder().buildSolverPrompt("Tính $1 + 1$.", "$1$", "$2$", "$3$", "$4$"),
+                SaPromptDraftV0.buildSolverPrompt("Tính $1 + 1$."),
+                TfPromptDraftV0.buildSolverPrompt("Cho $x = 1$.", List.of("a", "b", "c", "d")),
+                SaPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, "Giải $2x - 6 = 0$.", Difficulty.EASY));
+        for (String prompt : prompts) {
+            for (String marker : markers) {
+                assertFalse(prompt.contains(marker), marker + " lọt vào: " + prompt);
+            }
+        }
+    }
+
+    /** Chữ đáp án đúng đã giao (3/11) đi vào prompt qua ghi chú của job; câu mcq không có ghi chú thì không có dòng này. */
+    @Test
+    void chuDapAnDaGiaoDiVaoPromptMcqQuaGhiChu() {
+        MatrixCellSpec s = spec(QuestionType.MCQ, "Đa thức", null);
+        String p = MatrixPromptDraftV0.buildGenerationPrompt(s, List.of(), McqAnswerPlan.promptLine("C"));
+        assertTrue(p.contains("Phương án đúng phải là C: đặt đáp án đúng vào phương án C"), p);
+        assertTrue(p.contains("Lời giải không được nhắc tới chữ cái của phương án"), p);
+        assertFalse(MatrixPromptDraftV0.buildGenerationPrompt(s).contains("Phương án đúng phải là"));
+        // ghi chú nằm trước phần Yêu cầu / định dạng JSON, không sau khối giáo viên
+        assertTrue(p.indexOf("Phương án đúng phải là C") < p.indexOf("Trả về DUY NHẤT một đối tượng JSON"), p);
     }
 
     /** Hai quy tắc phương án (31/10) chỉ có nghĩa với câu mcq. */

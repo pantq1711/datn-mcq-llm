@@ -81,6 +81,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-65 | Tài liệu giáo án .docx mất gần hết công thức MathType khi trích chữ (pandoc bỏ đối tượng OLE): 116/118 công thức mất (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (đo trên file thật qua HTTP: giữ 102/118) |
 | L-66 | Nhập ngân hàng câu từ Word: các bẫy khi đưa lõi tools/bank-import vào backend (câu nhập bị đếm là lượt gọi Gemini, ảnh trong mc:AlternateContent bị bỏ sót, nạp mọi ảnh vào bộ nhớ, fixture MathType thật) (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (nhập thử 1 bộ qua HTTP trên `datn_mcq_e2e`) |
 | L-67 | Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11) | Xuất file | – | Đã kiểm (còn mục mở) |
+| L-68 | Góp ý giáo viên Toán trên đề 14: đáp án mcq dồn vào A; câu dẫn dài dòng, "cạnh biên", "(Nhập đáp án…)" (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (đã đo 1 đề) |
 
 **Thống kê theo nhóm** (60 mục; bảng chưa có dòng cho L-56 nên con số này cộng thêm đúng 7 mục L-57…L-63 vào số cũ):
 
@@ -767,6 +768,52 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
 - Hạn chế: chặn log Hibernate chỉ có hiệu lực trong thân phương thức (bước xác nhận flush ngay cuối để mọi lỗi nổ ra trước
   commit). Câu tf nhận chung một mức cho 4 ý.
 - Trạng thái: Đã sửa.
+
+### L-68 Góp ý giáo viên Toán trên đề 14: vị trí đáp án mcq, văn phong câu hỏi (bổ sung 3/11)
+- Nhóm: LLM & parse
+- Triệu chứng (giáo viên Toán thật xem đề 14): (1) Phần I có 7/12 đáp án A, câu 7-12 đều A (chuỗi `CBABBBAAAAAA`: A=7, B=4, C=1,
+  D=0), thí sinh đoán được. (2) Câu dẫn dài dòng ("Hãy nhận biết…" 1 câu, "Trong các biểu thức đại số sau đây…" 5 câu); dữ
+  kiện không dùng đến ("Cho hình thang cân MNPQ có hai đáy MN và PQ" rồi hỏi dấu hiệu nhận biết chung); thuật ngữ sai "cạnh
+  biên" (1 câu); câu dẫn "... là:" có dấu hai chấm sau "là"; câu sa có "(Nhập đáp án dưới dạng số nguyên hoặc số thập phân
+  gọn nhất)" (1 câu).
+- Nguyên nhân: (1) để model tự chọn thì thiên về A (cùng gốc với L-25 của câu Đúng/Sai); hệ thống không quyết định phân bố
+  chữ đáp án. (2) Prompt ma trận không nói gì về văn phong. Grep prompt thấy KHÔNG có câu nào dạy model viết "(Nhập đáp án…)":
+  model tự thêm vào, nên không có gì để xóa khỏi prompt, chỉ thêm lệnh cấm.
+- Cách sửa (không migration; mcq v6, sa v8, tf v8):
+  - `McqAnswerPlan`: khi tạo đề, gán trước chữ đúng cho mọi chỗ mcq cần sinh theo thứ tự câu trong đề, seed là id đề (qua hàm
+    trộn bit vì id liên tiếp là seed liên tiếp). Chữ đáp án của các chỗ lấy từ ngân hàng (`bank_item.correct_option`, truy vấn
+    native chỉ đọc ở `ExamSlotRepository.findBankCorrectOptions`) được đếm trước, rồi chia chữ cho chỗ cần sinh sao cho toàn đề
+    cân bằng nhất có thể, không để chỗ sinh nào tạo 3 câu liền nhau cùng chữ (12 câu thì mỗi chữ 3 lần). Dòng `Phương án đúng
+    phải là C: …` vào `generation_job.prompt_note`, kèm lệnh cấm lời giải nhắc chữ cái ("Do đó chọn B").
+  - Đổi câu / sinh lại: `chooseBalanced` chọn chữ đang ít nhất trong các chỗ mcq còn lại (tính cả câu ngân hàng), tránh chuỗi dài.
+  - Kiểm sau khi sinh: chữ đúng khác chữ đã giao thì ghi cảnh báo `correct_option: khác chữ đã giao C (nhận A)` vào QC; KHÔNG
+    bật cờ và chưa sinh lại (như `label: khác mẫu mục tiêu` của tf).
+  - `MatrixPromptDraftV0.STYLE_RULES` (cả 3 dạng: câu lệnh ngắn gọn có ví dụ, không dữ kiện thừa, đúng thuật ngữ SGK, không
+    dấu hai chấm sau "là"), `MCQ_OPTION_PUNCTUATION_RULE` (mcq: mỗi phương án kết thúc bằng dấu chấm),
+    `SA_ANSWER_INPUT_RULE` (sa: không ghi hướng dẫn nhập đáp án).
+  - `QuestionWordingCheck` (FormatChecker, chỉ đầu ra LLM, cảnh báo BẬT cờ, không loại câu): "cạnh biên" → "cạnh bên" ở đề dẫn,
+    phương án, ý, lời giải (danh sách `WRONG_TERMS` mở rộng bằng một dòng); "nhập đáp án/đáp số/kết quả" trong câu dẫn sa.
+- Chống tái phát: `McqAnswerPlanTest` (13: 12 câu mỗi chữ 3 lần với 500 seed, lệch tối đa 1 với mọi cỡ, 5 câu ngân hàng đều A + 7
+  chỗ sinh → chỗ sinh không thêm A, B/C/D chia 3,2,2; ít câu ngân hàng thì cả đề vẫn 3-3-3-3; chọn lại khi Đổi câu; đọc lại chữ,
+  bỏ qua khối giáo viên), `QuestionWordingCheckTest` (10), `MatrixPromptDraftV0Test` (văn phong, dấu chấm phương án, hướng dẫn
+  nhập chỉ sa, không lọt vào Solver, dòng chữ đáp án), `QcSummaryReviewReasonsTest.chuDungMcqKhacChuDaGiaoKhongBatCanXemKy`,
+  `ExamBuildTest` (giao chữ chia đều theo seed đề; lệch chữ là cảnh báo không bật cờ; Đổi câu chọn chữ đang thiếu; câu ngân
+  hàng đều A được đếm trước; yêu cầu của giáo viên không đổi chữ hệ thống giao).
+- Đo thật (3/11, app chạy `datn_mcq_e2e`, worker bật, giáo viên GV1; đề 14 trước, đề 15 tạo từ ma trận 4 sau):
+  | | Đề 14 (trước) | Đề 15 (sau) |
+  |---|---|---|
+  | Phân bố đáp án Phần I (12 câu) | A=7 B=4 C=1 D=0, `CBABBBAAAAAA` | A=3 B=3 C=3 D=3, `CACABDBCBDDA` |
+  | Câu dẫn mở bằng "Hãy" / "Trong các" | 1 / 5 | 0 / 2 |
+  | "cạnh biên" | 1 | 0 |
+  | "(Nhập đáp án" trong câu dẫn | 1 | 0 |
+  | Câu dẫn kết thúc "là:" | 1 | 0 |
+  | Số câu bật cờ | 3 | 4 (3 `similar_in_exam`, 1 `solver_multiple_correct`) |
+  Lưu ý khi đọc số: đề 15 có 3 câu lấy từ ngân hàng (1 mcq, 1 tf, 1 sa; câu ngân hàng viết bằng prompt cũ, và 1 trong 2 câu
+  "Trong các" là câu ngân hàng), 11 câu mcq do model sinh. Cả 11 câu sinh đúng chữ đã giao (vết QC không có cảnh báo lệch chữ).
+  Chữ đáp án câu ngân hàng được đếm trước nên cả 12 câu vẫn 3-3-3-3. Chỉ đo 1 đề, chưa đủ để kết luận về mức tuân thủ văn
+  phong; một số câu dẫn mcq vẫn chưa gọn (ví dụ câu cuối hỏi về "hai góc kề một đáy" không có vế kết).
+- Hạn chế / chưa làm: lệch chữ đáp án chưa sinh lại (chỉ cảnh báo); chưa có thống kê tuân thủ chữ trên nhiều đề.
+- Trạng thái: Đã sửa (đã đo 1 đề).
 
 ## QC
 

@@ -22,6 +22,7 @@ import com.datn.mcq.generation.service.TrueFalseQuestionStore;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
+import com.datn.mcq.llm.prompt.McqAnswerPlan;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
@@ -90,6 +91,8 @@ public class GenerationJobProcessor {
             Purpose purpose,
             /* mẫu nhãn bắt buộc của job tf theo ma trận (TfLabelPattern, đọc từ prompt_note); null với job khác */
             String tfLabelPattern,
+            /* chữ đáp án đúng đã giao cho chỗ mcq của đề theo ma trận (McqAnswerPlan, đọc từ prompt_note); null với job khác */
+            String mcqAnswerLetter,
             /* V13 (W1-2): loại job; với answer_check chỉ có jobId, runId, templateId, attempt, questionType, questionId */
             String jobType,
             /* answer_check: bản giáo viên sửa cần chạy lại Solver; null với job sinh câu */
@@ -192,14 +195,14 @@ public class GenerationJobProcessor {
         if (GenerationJob.TYPE_ANSWER_CHECK.equals(job.getJobType())) {
             // W1-2: job chạy lại Solver cho bản giáo viên sửa, không dựng prompt sinh câu.
             return Optional.of(new ClaimedJobContext(job.getId(), job.getRunId(), job.getTemplateId(), nextAttempt,
-                    null, null, null, null, null, false, jobQuestionType, List.of(), null, null,
+                    null, null, null, null, null, false, jobQuestionType, List.of(), null, null, null,
                     job.getJobType(), job.getQuestionId(), null, claimSeq));
         }
 
         if (GenerationJob.TYPE_GROUNDING_CHECK.equals(job.getJobType())) {
             // W2-3: job chấm "bám tài liệu", không dựng prompt sinh câu; đoạn tài liệu đọc ở prepareGrounding.
             return Optional.of(new ClaimedJobContext(job.getId(), job.getRunId(), job.getTemplateId(), nextAttempt,
-                    null, null, null, null, null, false, jobQuestionType, List.of(), null, null,
+                    null, null, null, null, null, false, jobQuestionType, List.of(), null, null, null,
                     job.getJobType(), job.getQuestionId(), null, claimSeq));
         }
 
@@ -266,6 +269,7 @@ public class GenerationJobProcessor {
             statementLevels,
             run.getPurpose(),
             matrix && questionType == QuestionType.TF ? TfLabelPattern.fromNote(job.getPromptNote()) : null,
+            matrix && questionType == QuestionType.MCQ ? McqAnswerPlan.fromNote(job.getPromptNote()) : null,
             job.getJobType(),
             null,
             job.getExamSlotId(),

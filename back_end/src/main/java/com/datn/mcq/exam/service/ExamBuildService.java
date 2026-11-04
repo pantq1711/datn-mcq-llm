@@ -21,6 +21,7 @@ import com.datn.mcq.experiment.entity.ExperimentRun;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.llm.prompt.McqAnswerPlan;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
@@ -189,6 +190,8 @@ public class ExamBuildService {
         // D1: giữ chỗ cho đúng số câu phải sinh (câu ngân hàng không tính) rồi mới xếp job, cùng transaction; vượt trần thì
         // 429 và toàn bộ đề vừa tạo rollback.
         generationQuota.reserve(actorId, toGenerate);
+        // Góp ý giáo viên 3/11: chữ đáp án đúng giao trước cho mọi chỗ mcq cần sinh, chia đều A/B/C/D theo seed của đề.
+        Map<Integer, String> mcqLetters = assignMcqLetters(plans, exam.getId());
         // Bước 2: xếp job sinh câu cho phần thiếu.
         for (CellPlan plan : plans) {
             ExamMatrixCell cell = plan.cell();
@@ -211,6 +214,9 @@ public class ExamBuildService {
                         lastTfPattern = TfLabelPattern.choose(lastTfPattern, ThreadLocalRandom.current());
                         note.add(TfLabelPattern.promptLine(lastTfPattern));
                     }
+                    if (cell.getQuestionType() == QuestionType.MCQ) {
+                        note.add(McqAnswerPlan.promptLine(mcqLetters.get(slot.getId())));
+                    }
                     generationService.enqueueMatrixJob(run.getId(), cell.getTemplateId(), spec, slot.getId(),
                             start, joinNote(note),
                             snapshotOf(materials, cell.getTopic(), details, slot.getSlotNo() - 1, 0));
@@ -221,6 +227,47 @@ public class ExamBuildService {
         }
         return new BuildResultDto(exam.getId(), exam.getExamCode(), exam.getTitle(),
                 matrix.isLesson() ? null : matrix.getId(), total, fromBank, jobs, matrix.getKind());
+    }
+
+    /**
+     * Chữ đáp án đúng cho các chỗ mcq cần sinh của đề ({@link McqAnswerPlan#assignAround}, seed là id đề). Thứ tự là thứ tự câu
+     * trong đề (ô rồi số chỗ); chữ đáp án của các chỗ lấy từ ngân hàng được đếm trước, để toàn đề cân bằng nhất có thể.
+     */
+    private Map<Integer, String> assignMcqLetters(List<CellPlan> plans, long seed) {
+        List<ExamSlot> all = new ArrayList<>();
+        for (CellPlan plan : plans) {
+            if (plan.cell().getQuestionType() == QuestionType.MCQ) {
+                all.addAll(plan.slots());
+            }
+        }
+        Map<Integer, String> bank = bankLetters(all.stream().map(ExamSlot::getBankItemId)
+                .filter(java.util.Objects::nonNull).toList());
+        List<String> fixed = new ArrayList<>(all.size());
+        for (ExamSlot slot : all) {
+            // chỗ cần sinh là null; chỗ ngân hàng giữ chữ của câu (không đọc được thì "?" để không bị coi là chỗ sinh)
+            fixed.add(slot.getBankItemId() == null ? null : bank.getOrDefault(slot.getBankItemId(), "?"));
+        }
+        List<String> letters = McqAnswerPlan.assignAround(fixed, seed);
+        Map<Integer, String> out = new LinkedHashMap<>();
+        for (int i = 0; i < all.size(); i++) {
+            if (all.get(i).getBankItemId() == null) {
+                out.put(all.get(i).getId(), letters.get(i));
+            }
+        }
+        return out;
+    }
+
+    /** Chữ đáp án đúng của các câu ngân hàng (id -> A-D); id không có thì vắng mặt. */
+    private Map<Integer, String> bankLetters(java.util.Collection<Integer> bankItemIds) {
+        Map<Integer, String> out = new java.util.HashMap<>();
+        if (bankItemIds.isEmpty()) {
+            return out;
+        }
+        for (Object[] row : slotRepository.findBankCorrectOptions(new LinkedHashSet<>(bankItemIds))) {
+            // correct_option là char(1): JDBC trả Character (hoặc String tùy kiểu cột), nên đổi qua toString
+            out.put(((Number) row[0]).intValue(), String.valueOf(row[1]).strip());
+        }
+        return out;
     }
 
     /** Kế hoạch của một ô lúc tạo đề: các chỗ, phần chỗ chưa có câu ngân hàng (cần sinh) và yêu cầu thêm hiệu lực của ô. */
@@ -544,6 +591,9 @@ public class ExamBuildService {
             lines.add(TfLabelPattern.promptLine(
                     TfLabelPattern.choose(latestTfPattern(slot), ThreadLocalRandom.current())));
         }
+        if (cell.getQuestionType() == QuestionType.MCQ) {
+            lines.add(McqAnswerPlan.promptLine(replacementLetter(slot)));
+        }
         Optional<GenerationJob> previous = generationService.latestJobForSlot(slot.getId());
         if (previous.isPresent() && previous.get().getQuestionId() != null) {
             GeneratedQuestion q = generationService.getQuestionById(previous.get().getQuestionId());
@@ -556,6 +606,48 @@ public class ExamBuildService {
         }
         addLine(lines, MatrixPromptDraftV0.teacherBlock(instruction));
         return joinNote(lines);
+    }
+
+    /**
+     * Chữ đáp án đúng cho job sinh lại hay Đổi câu của chỗ mcq {@code slot}: chữ đang ít nhất trong các chỗ mcq khác của đề
+     * ({@link McqAnswerPlan#chooseBalanced}), không tạo 3 câu liền nhau cùng chữ. Chữ của chỗ khác là chữ đúng của câu đang
+     * dùng; chỗ lấy từ ngân hàng là chữ của câu ngân hàng; chưa có câu thì chữ đã giao trong job mới nhất của chỗ; chưa biết thì
+     * bỏ qua.
+     */
+    private String replacementLetter(ExamSlot slot) {
+        List<ExamSlot> mcq = slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(slot.getExamId()).stream()
+                .filter(s -> s.getQuestionType() == QuestionType.MCQ).toList();
+        Map<Integer, String> bank = bankLetters(mcq.stream().filter(s -> !s.getId().equals(slot.getId()))
+                .filter(s -> s.getGeneratedQuestionId() == null).map(ExamSlot::getBankItemId)
+                .filter(java.util.Objects::nonNull).toList());
+        List<String> sequence = new ArrayList<>();
+        int index = -1;
+        for (ExamSlot other : mcq) {
+            if (other.getId().equals(slot.getId())) {
+                index = sequence.size();
+                sequence.add(null);
+            } else {
+                sequence.add(currentLetter(other, bank));
+            }
+        }
+        if (index < 0) {
+            sequence.add(null);
+            index = sequence.size() - 1;
+        }
+        return McqAnswerPlan.chooseBalanced(sequence, index, ThreadLocalRandom.current());
+    }
+
+    private String currentLetter(ExamSlot other, Map<Integer, String> bank) {
+        if (other.getGeneratedQuestionId() != null) {
+            var option = generationService.getQuestionById(other.getGeneratedQuestionId()).getCorrectOption();
+            if (option != null) {
+                return option.getDbValue();
+            }
+        } else if (other.getBankItemId() != null && bank.containsKey(other.getBankItemId())) {
+            return bank.get(other.getBankItemId());
+        }
+        return generationService.latestJobForSlot(other.getId())
+                .map(j -> McqAnswerPlan.fromNote(j.getPromptNote())).orElse(null);
     }
 
     /** Mẫu nhãn bắt buộc của job tf mới nhất thuộc các chỗ khác cùng đề; null khi chưa có. */

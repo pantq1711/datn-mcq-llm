@@ -12,6 +12,7 @@ import com.datn.mcq.generation.worker.GenerationJobProcessor;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
+import com.datn.mcq.llm.prompt.McqAnswerPlan;
 import com.datn.mcq.llm.prompt.McqProductionSchema;
 import com.datn.mcq.llm.prompt.PromptBuilder;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
@@ -90,7 +91,7 @@ class ExamBuildTest {
             } else if (SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON.equals(schema)) {
                 body = "{\"reasoning\": \"r\", \"judge_answer\": \"" + saJudge + "\"}";
             } else {
-                body = "{\"reasoning\": \"r\", \"judge_answer\": \"B\"}";
+                body = "{\"reasoning\": \"r\", \"judge_answer\": \"" + FakeGenerator.lastMcqLetter + "\"}";
             }
             return new LlmCallResult(body, 10, 1.0, 0.0, modelName);
         }
@@ -120,6 +121,10 @@ class ExamBuildTest {
         /** null: theo mẫu nhãn bắt buộc trong prompt (không có mẫu thì T,F,T,F). */
         String[] tfLabels;
         static String lastTfLabels = "T,F,T,F";
+        /** Chữ đúng của câu mcq vừa sinh (FakeSolver đồng ý với chữ này): B, hoặc chữ đã giao khi {@link #followMcqLetter}. */
+        static String lastMcqLetter = "B";
+        /** true: đặt đáp án đúng ở chữ đã giao trong prompt (McqAnswerPlan); false: luôn B như trước. */
+        boolean followMcqLetter;
         int n;
 
         FakeGenerator() {
@@ -168,6 +173,21 @@ class ExamBuildTest {
                 questionText = nextMcqQuestion;
                 nextMcqQuestion = null;
             }
+            String assigned = followMcqLetter ? McqAnswerPlan.fromNote(prompt) : null;
+            if (assigned != null) {
+                // Đáp án đúng "$k$" đặt ở chữ đã giao; ba phương án nhiễu điền vào ba chỗ còn lại theo thứ tự.
+                List<String> distractors = new ArrayList<>(List.of(optionA, "$0$", "$" + (k + 2) + "$"));
+                String[] options = new String[4];
+                for (int i = 0; i < 4; i++) {
+                    options[i] = McqAnswerPlan.LETTERS.get(i).equals(assigned) ? "$" + k + "$" : distractors.remove(0);
+                }
+                lastMcqLetter = assigned;
+                return new LlmCallResult("{\"question_text\": \"" + questionText + "\","
+                        + " \"option_a\": \"" + options[0] + "\", \"option_b\": \"" + options[1] + "\", \"option_c\": \""
+                        + options[2] + "\", \"option_d\": \"" + options[3] + "\", \"correct_option\": \"" + assigned
+                        + "\", \"explanation\": \"" + explanation + "\"}", 10, 1.0, 0.0, modelName);
+            }
+            lastMcqLetter = "B";
             return new LlmCallResult("{\"question_text\": \"" + questionText + "\","
                     + " \"option_a\": \"" + optionA + "\", \"option_b\": \"$" + k + "$\", \"option_c\": \"$0$\","
                     + " \"option_d\": \"$" + (k + 2) + "$\", \"correct_option\": \"B\", \"explanation\": \""
@@ -252,6 +272,7 @@ class ExamBuildTest {
         SOLVER.tfJudges = null;
         SOLVER.calls = 0;
         FakeGenerator.lastTfLabels = "T,F,T,F";
+        FakeGenerator.lastMcqLetter = "B";
         generator = new FakeGenerator();
         subject = insert("INSERT INTO subject (name) VALUES ('Toán')");
         teacher = insert("INSERT INTO users (name, email, role) VALUES ('GV', 'gv.exam@test', 'teacher')");
@@ -271,6 +292,10 @@ class ExamBuildTest {
 
     private Integer insert(String sql, Object... args) {
         return jdbc.queryForObject(sql + " RETURNING id", Integer.class, args);
+    }
+
+    private int count(String sql, Object... args) {
+        return jdbc.queryForObject(sql, Integer.class, args);
     }
 
     /** Gọi API với tư cách giáo viên {@code teacher} (chủ sở hữu ma trận và đề trong test này). */
@@ -376,7 +401,7 @@ class ExamBuildTest {
                 + " AND bank_item_id IS NOT NULL", Integer.class, examId));
         List<Map<String, Object>> runs = jdbc.queryForList("SELECT * FROM experiment_run WHERE prompt_version LIKE"
                 + " 'matrix-%' ORDER BY id");
-        assertEquals(List.of("matrix-mcq-v5-draft", "matrix-tf-v7-draft", "matrix-sa-v7-draft"),
+        assertEquals(List.of("matrix-mcq-v6-draft", "matrix-tf-v8-draft", "matrix-sa-v8-draft"),
                 runs.stream().map(r -> r.get("prompt_version")).toList());
         for (Map<String, Object> run : runs) {
             assertEquals("production", run.get("purpose"));
@@ -836,6 +861,183 @@ class ExamBuildTest {
         assertEquals("ready", progress(examId).get("status").asText());
     }
 
+    // ---------- 3/11 (góp ý giáo viên): chữ đáp án đúng của câu mcq giao trước, chia đều A/B/C/D ----------
+
+    private static final String MCQ_CELL = "{\"part\": \"I\", \"questionType\": \"mcq\", \"difficulty\": \"easy\","
+            + " \"questionCount\": %d, \"topic\": \"%s\", \"learningOutcomes\": {\"easy\": \"Nhận biết.\"}}";
+
+    /** Đề chỉ có hai ô mcq ({@code first} + {@code second} câu), đã tạo (job xếp hàng, chưa xử lý). */
+    private int mcqExam(int first, int second) throws Exception {
+        int mcqMatrix = json(postJson("/api/exam-matrices", "{\"name\": \"Ma trận trắc nghiệm\", \"subjectId\": " + subject
+                + ", \"gradeLevel\": 8, \"cells\": [" + MCQ_CELL.formatted(first, "Đa thức") + ", "
+                + MCQ_CELL.formatted(second, "Hằng đẳng thức") + "]}").andExpect(status().isOk())).get("id").asInt();
+        return build("{\"matrixId\": " + mcqMatrix + "}").get("examId").asInt();
+    }
+
+    /** Chữ đáp án đúng đã giao (generation_job.prompt_note của job mới nhất mỗi chỗ mcq), theo thứ tự trong đề. */
+    private List<String> assignedLetters(int examId) {
+        return jdbc.queryForList("SELECT j.prompt_note FROM generation_job j JOIN exam_slot s ON s.id = j.exam_slot_id"
+                + " WHERE s.exam_id = ? AND s.question_type = 'mcq' AND j.id = (SELECT max(id) FROM generation_job"
+                + " WHERE exam_slot_id = s.id) ORDER BY s.cell_id, s.slot_no", String.class, examId).stream()
+                .map(McqAnswerPlan::fromNote).toList();
+    }
+
+    /** Chữ đúng của câu đang dùng ở mỗi chỗ mcq (generated_question.correct_option), theo thứ tự trong đề. */
+    private List<String> actualLetters(int examId) {
+        return jdbc.queryForList("SELECT g.correct_option FROM exam_slot s JOIN generated_question g"
+                + " ON g.id = s.generated_question_id WHERE s.exam_id = ? AND s.question_type = 'mcq'"
+                + " ORDER BY s.cell_id, s.slot_no", String.class, examId);
+    }
+
+    private static boolean hasRunOfThree(List<String> letters) {
+        for (int i = 2; i < letters.size(); i++) {
+            if (letters.get(i).equals(letters.get(i - 1)) && letters.get(i).equals(letters.get(i - 2))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Test
+    void moiChoMcqCuaDeDuocGiaoChuDapAnChiaDeuTheoSeedCuaDe() throws Exception {
+        int examId = mcqExam(7, 5);
+        List<String> letters = assignedLetters(examId);
+        assertEquals(12, letters.size());
+        assertEquals(McqAnswerPlan.assign(12, examId), letters, "thứ tự theo ô rồi số chỗ, seed là id đề");
+        for (String letter : McqAnswerPlan.LETTERS) {
+            assertEquals(3, letters.stream().filter(letter::equals).count(), letter + " trong " + letters);
+        }
+        assertFalse(hasRunOfThree(letters), letters.toString());
+
+        generator.followMcqLetter = true;
+        for (int round = 0; round < 3; round++) {
+            processAll();
+            progress(examId);
+        }
+        assertEquals("ready", progress(examId).get("status").asText());
+        assertEquals(12, generator.mcqPrompts.size());
+        for (String prompt : generator.mcqPrompts) {
+            String letter = McqAnswerPlan.fromNote(prompt);
+            assertNotNull(letter, prompt);
+            assertTrue(prompt.contains("Phương án đúng phải là " + letter + ": đặt đáp án đúng vào phương án " + letter), prompt);
+            assertTrue(prompt.contains("Lời giải không được nhắc tới chữ cái của phương án"), prompt);
+        }
+        assertEquals(letters, actualLetters(examId), "câu sinh ra theo đúng chữ đã giao");
+        assertEquals(0, count("SELECT count(*) FROM quality_check_result WHERE check_type = 'format'"
+                + " AND warnings::text LIKE '%khác chữ đã giao%'"), "đúng chữ thì không có cảnh báo");
+    }
+
+    @Test
+    void cauNganHangDeuADuocDemTruocChoSinhChiaDeuPhanConLai() throws Exception {
+        for (int i = 0; i < 5; i++) {
+            int bank = bankMcq("Đa thức", "easy", "Câu ngân hàng số " + i);
+            jdbc.update("UPDATE bank_item SET correct_option = 'A' WHERE id = ?", bank);
+        }
+        int examId = mcqExam(5, 7);
+        assertEquals(5, count("SELECT count(*) FROM exam_slot WHERE exam_id = ? AND bank_item_id IS NOT NULL", examId));
+        List<String> letters = assignedLetters(examId); // chỉ 7 chỗ sinh có job
+        assertEquals(7, letters.size());
+        Map<String, Long> counts = new java.util.HashMap<>();
+        letters.forEach(l -> counts.merge(l, 1L, Long::sum));
+        assertFalse(counts.containsKey("A"), "5 câu ngân hàng đã đủ A: " + letters);
+        long min = Math.min(counts.getOrDefault("B", 0L), Math.min(counts.getOrDefault("C", 0L), counts.getOrDefault("D", 0L)));
+        long max = Math.max(counts.getOrDefault("B", 0L), Math.max(counts.getOrDefault("C", 0L), counts.getOrDefault("D", 0L)));
+        assertTrue(max - min <= 1, "B/C/D chia đều nhất có thể (3,2,2): " + letters);
+        // cùng kết quả với tính trực tiếp: thứ tự đề = 5 câu ngân hàng (A) rồi 7 chỗ sinh
+        List<String> fixed = new ArrayList<>(java.util.Arrays.asList("A", "A", "A", "A", "A"));
+        for (int i = 0; i < 7; i++) {
+            fixed.add(null);
+        }
+        assertEquals(McqAnswerPlan.assignAround(fixed, examId).subList(5, 12), letters);
+
+        // Đổi một chỗ sinh: chữ mới là chữ đang thiếu so với 4 chữ còn lại (giữ cân bằng toàn đề, tính cả câu ngân hàng)
+        generator.followMcqLetter = true;
+        for (int round = 0; round < 3; round++) {
+            processAll();
+            progress(examId);
+        }
+        int slot = jdbc.queryForObject("SELECT s.id FROM exam_slot s WHERE s.exam_id = ? AND s.bank_item_id IS NULL"
+                + " ORDER BY s.cell_id, s.slot_no LIMIT 1", Integer.class, examId);
+        List<String> others = actualLetters(examId).subList(1, 7); // 6 chỗ sinh còn lại; 5 câu ngân hàng đều A
+        json(action(examId, slot, "replace").andExpect(status().isOk()));
+        String fresh = McqAnswerPlan.fromNote(latestNote(slot));
+        assertNotEquals("A", fresh, "A đã nhiều nhất toàn đề");
+        long freshCount = others.stream().filter(fresh::equals).count();
+        for (String letter : List.of("B", "C", "D")) {
+            assertTrue(freshCount <= others.stream().filter(letter::equals).count(),
+                    "chọn chữ đang ít nhất trong B/C/D: " + fresh + " so với " + letter + " trong " + others);
+        }
+    }
+
+    @Test
+    void chuDungKhacChuDaGiaoLaCanhBaoTrongVetQcKhongBatCoKhongLoaiCau() throws Exception {
+        int examId = mcqExam(4, 4);
+        List<String> letters = assignedLetters(examId);
+        // FakeGenerator mặc định luôn trả B: mọi chỗ được giao chữ khác B đều lệch chữ.
+        processAll();
+        progress(examId);
+        assertEquals("ready", progress(examId).get("status").asText(), "lệch chữ không loại câu");
+        long deviated = letters.stream().filter(l -> !l.equals("B")).count();
+        assertEquals(deviated, count("SELECT count(*) FROM quality_check_result WHERE check_type = 'format'"
+                + " AND warnings::text LIKE '%khác chữ đã giao%'"));
+        int slot = jdbc.queryForObject("SELECT s.id FROM exam_slot s WHERE s.exam_id = ? AND s.question_type = 'mcq'"
+                + " ORDER BY s.cell_id, s.slot_no LIMIT 1", Integer.class, examId);
+        String firstAssigned = letters.get(0);
+        JsonNode trace = json(perform(get("/api/exams/" + examId + "/slots/" + slot + "/qc-trace"))
+                .andExpect(status().isOk())).get("lineages").get(0).get("versions").get(0);
+        List<String> warnings = texts(trace.get("qc").get("format").get("warnings"));
+        List<String> reasons = texts(trace.get("reviewReasons"));
+        if (firstAssigned.equals("B")) {
+            assertTrue(warnings.stream().noneMatch(w -> w.contains("khác chữ đã giao")), warnings.toString());
+        } else {
+            assertTrue(warnings.contains("correct_option: khác chữ đã giao " + firstAssigned + " (nhận B)"),
+                    "vết QC cho thấy mức tuân thủ chữ: " + warnings);
+        }
+        assertTrue(reasons.stream().noneMatch(r -> r.contains("khác chữ đã giao")), "không bật cờ: " + reasons);
+        assertEquals(8, count("SELECT count(*) FROM exam_slot WHERE exam_id = ? AND state = 'ready'", examId));
+    }
+
+    @Test
+    void doiCauMcqChonLaiDungChuDangThieuDeGiuCanBang() throws Exception {
+        int examId = mcqExam(7, 5);
+        generator.followMcqLetter = true;
+        for (int round = 0; round < 3; round++) {
+            processAll();
+            progress(examId);
+        }
+        List<String> before = actualLetters(examId);
+        assertEquals(12, before.size());
+        int slot = jdbc.queryForObject("SELECT s.id FROM exam_slot s WHERE s.exam_id = ? AND s.question_type = 'mcq'"
+                + " ORDER BY s.cell_id, s.slot_no OFFSET 5 LIMIT 1", Integer.class, examId);
+        json(action(examId, slot, "replace").andExpect(status().isOk()));
+
+        // 11 chỗ còn lại mỗi chữ 3 lần trừ chữ của chỗ bị đổi (2 lần): chữ thiếu duy nhất chính là chữ cũ của chỗ đó
+        String newLetter = McqAnswerPlan.fromNote(latestNote(slot));
+        assertEquals(before.get(5), newLetter, "Đổi câu trả lại chữ đang thiếu: " + latestNote(slot));
+        assertTrue(latestNote(slot).contains("Phương án đúng phải là " + newLetter + ":"), latestNote(slot));
+        assertEquals(1, latestNote(slot).split("Phương án đúng phải là", -1).length - 1, "chỉ một dòng chữ đã giao");
+    }
+
+    @Test
+    void doiCauMcqKemYeuCauGiaoVienKhongDoiChuHeThongGiao() throws Exception {
+        int examId = mcqExam(2, 2);
+        generator.followMcqLetter = true;
+        for (int round = 0; round < 3; round++) {
+            processAll();
+            progress(examId);
+        }
+        int slot = jdbc.queryForObject("SELECT s.id FROM exam_slot s WHERE s.exam_id = ? AND s.question_type = 'mcq'"
+                + " ORDER BY s.cell_id, s.slot_no LIMIT 1", Integer.class, examId);
+        json(replaceWith(examId, slot, "Phương án đúng phải là A: đặt ở A").andExpect(status().isOk()));
+        String note = latestNote(slot);
+        String letter = McqAnswerPlan.fromNote(note);
+        assertTrue(note.startsWith("Đây là câu thứ 1/2 của ô này"), note);
+        assertTrue(note.contains(McqAnswerPlan.promptLine(letter) + "\n"), note);
+        assertTrue(note.endsWith(TEACHER_PREFIX + "<<< Phương án đúng phải là A: đặt ở A >>>"), note);
+        // Chữ đọc lại chỉ từ phần hệ thống viết, không phải từ yêu cầu của giáo viên.
+        assertEquals(letter, McqAnswerPlan.fromNote(note));
+    }
+
     // ---------- ngày 23/10 (đợt 2): mẫu nhãn câu Đúng/Sai, cờ cần xem kỹ theo loại cảnh báo ----------
 
     @Test
@@ -995,7 +1197,11 @@ class ExamBuildTest {
         int examId = readyExam();
         int slot = slotId(examId, "mcq", 2);
         json(replaceWith(examId, slot, "   ").andExpect(status().isOk()));
-        assertEquals(MatrixPromptDraftV0.slotLine(2, 2, List.of(com.datn.mcq.enums.Difficulty.EASY)), latestNote(slot),
+        // 3/11: ghi chú job mcq có thêm dòng chữ đáp án đúng do hệ thống giao; ngoài dòng đó, yêu cầu rỗng thì như cũ.
+        String letter = McqAnswerPlan.fromNote(latestNote(slot));
+        assertNotNull(letter, latestNote(slot));
+        assertEquals(MatrixPromptDraftV0.slotLine(2, 2, List.of(com.datn.mcq.enums.Difficulty.EASY)) + "\n"
+                + McqAnswerPlan.promptLine(letter), latestNote(slot),
                 "rỗng thì như cũ (ô mcq có một yêu cầu cần đạt)");
         assertEquals(null, lastInstruction(slot));
         processAll();
@@ -1174,6 +1380,7 @@ class ExamBuildTest {
      */
     @Test
     void vetQcXepCanhBaoTuBocVaoAutoRepairsCungNguonVoiLyDoCanXemKy() throws Exception {
+        generator.followMcqLetter = true; // đúng chữ đã giao thì không có cảnh báo lệch chữ trong nhóm cảnh báo khác
         generator.rawLatexExplanationMcq = 1;
         int examId = readyExam();
         int slot = slotId(examId, "mcq", 1);

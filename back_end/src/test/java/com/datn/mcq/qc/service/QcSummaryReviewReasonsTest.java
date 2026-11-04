@@ -126,6 +126,14 @@ class QcSummaryReviewReasonsTest {
      * Từ 26/10 mẫu nhãn tf là mục tiêu: nhãn lệch mẫu vì tính đúng là hợp lệ, nên không bật "cần xem kỹ" (cảnh báo vẫn lưu ở
      * warnings và hiện trong vết QC để thống kê mức tuân thủ). Dòng cũ ghi "bắt buộc" cũng vậy.
      */
+    /** 3/11: chữ đúng của câu mcq khác chữ đã giao chỉ ghi vào QC để thống kê, không bật "cần xem kỹ" (chưa sinh lại). */
+    @Test
+    void chuDungMcqKhacChuDaGiaoKhongBatCanXemKy() {
+        assertEquals(List.of(), reasons("correct_option: khác chữ đã giao C (nhận A)"));
+        assertEquals(List.of("warning: question_text: có từ tiếng Anh ngoài công thức (and)"),
+                reasons("correct_option: khác chữ đã giao C (nhận A)", "question_text: có từ tiếng Anh ngoài công thức (and)"));
+    }
+
     @Test
     void canhBaoLechMauMucTieuKhongBatCanXemKy() {
         assertEquals(List.of(), reasons("label: khác mẫu mục tiêu T,F,F,T (nhận T,T,F,F)"));
