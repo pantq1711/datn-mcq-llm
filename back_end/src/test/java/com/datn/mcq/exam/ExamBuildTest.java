@@ -1040,13 +1040,15 @@ class ExamBuildTest {
             assertFalse(xml.contains("Equation.DSMT4"), "mặc định không có đối tượng MathType");
             assertNull(response.getHeader("X-Equation-Kept-Omml"), "header chỉ có khi xuất MathType");
             assertNull(response.getHeader("X-Equation-Scaled"), "header chỉ có khi xuất MathType");
-            for (String part : List.of("PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn", "ĐÁP ÁN", "LỜI GIẢI",
+            for (String part : List.of("PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN", "ĐÁP ÁN", "LỜI GIẢI",
                     "Chưa có câu – cần sinh lại")) {
                 assertTrue(xml.contains(part), "docx thiếu: " + part);
             }
             // 2/11: đầu đề (bảng 2 cột không viền) và mã đề hiển thị 101; mã hệ thống MT... chỉ ở tên file, không in ra file.
-            for (String part : List.of("PHÒNG GD&amp;ĐT ……………", "TRƯỜNG THCS ……………", "ĐỀ KIỂM TRA ĐỀ THỬ MA TRẬN",
-                    "Môn: Toán 8 — Thời gian: …… phút", "Mã đề: 101", "Họ và tên: ………………………", "Lớp: ………", "<w:tbl>")) {
+            for (String part : List.of("UBND PHƯỜNG ……………", "TRƯỜNG THCS ……………", "ĐỀ KIỂM TRA ĐỀ THỬ MA TRẬN",
+                    "Môn: Toán, Lớp: 8.", "(Thời gian làm bài …… phút không kể thời gian giao đề)", "Mã đề",
+                    "Điểm bài thi", "Mã phách", "<w:tbl>",
+                    "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101", "LỜI GIẢI CHI TIẾT", "------ HẾT ------")) {
                 assertTrue(xml.contains(part), "đầu đề docx thiếu: " + part);
             }
             assertTrue(xml.contains("<w:top w:val=\"nil\"/>"), "bảng đầu đề không viền");
@@ -1057,6 +1059,29 @@ class ExamBuildTest {
             assertTrue(response.getContentAsString(StandardCharsets.UTF_8).contains("pandoc"));
         }
         perform(get("/api/exams/999999/export/docx")).andExpect(status().isNotFound());
+    }
+
+    /** durationMinutes (5–180) điền dòng "Thời gian làm bài"; không có thì "……"; ngoài khoảng hoặc không phải số thì 400. */
+    @Test
+    void xuatDeRaWordThamSoThoiGianLamBai() throws Exception {
+        int examId = readyExam();
+        progress(examId);
+        String base = "/api/exams/" + examId + "/export/docx";
+        if (PandocTestSupport.find().isPresent()) {
+            var ok = perform(get(base + "?durationMinutes=45")).andReturn().getResponse();
+            assertEquals(200, ok.getStatus(), ok.getContentAsString(StandardCharsets.UTF_8));
+            assertTrue(PandocTestSupport.documentXml(ok.getContentAsByteArray())
+                    .contains("(Thời gian làm bài 45 phút không kể thời gian giao đề)"));
+            var both = perform(get(base + "?equation=mathtype&durationMinutes=180")).andReturn().getResponse();
+            assertEquals(200, both.getStatus());
+            assertTrue(PandocTestSupport.documentXml(both.getContentAsByteArray())
+                    .contains("(Thời gian làm bài 180 phút không kể thời gian giao đề)"));
+        }
+        for (String bad : List.of("4", "181", "0", "-5", "abc", "45.5")) {
+            var response = perform(get(base + "?durationMinutes=" + bad)).andReturn().getResponse();
+            assertEquals(400, response.getStatus(), bad);
+            assertTrue(response.getContentAsString(StandardCharsets.UTF_8).contains("180"), "thông báo nêu khoảng hợp lệ");
+        }
     }
 
     /** ?equation=mathtype: công thức thành đối tượng MathType OLE; header báo số công thức giữ Equation của Word. */
@@ -1077,7 +1102,7 @@ class ExamBuildTest {
             assertNotNull(response.getHeader("X-Equation-Scaled"), "header số công thức bị thu nhỏ cho vừa lề");
             assertEquals(0, Integer.parseInt(response.getHeader("X-Equation-Scaled")),
                     "đề thử toàn công thức ngắn: không công thức nào bị thu nhỏ");
-            assertTrue(xml.contains("PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn") && xml.contains("ĐÁP ÁN"));
+            assertTrue(xml.contains("PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN") && xml.contains("ĐÁP ÁN"));
         } else {
             assertEquals(503, response.getStatus());
         }

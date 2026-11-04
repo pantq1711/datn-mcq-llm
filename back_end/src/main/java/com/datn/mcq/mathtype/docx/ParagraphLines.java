@@ -62,6 +62,7 @@ public final class ParagraphLines {
 
         Element pPr = pPr(p, false);
         double[] indent = PageGeometry.indentTwips(pkg, p);
+        double hanging = PageGeometry.hangingTwips(pkg, p);
         boolean listed = pPr != null && PageGeometry.child(pPr, "numPr") != null;
 
         List<Element> lines = new ArrayList<>(runs);
@@ -73,14 +74,14 @@ public final class ParagraphLines {
         }
         Node last = p;
         for (Element run : lines) {
-            Element np = newParagraph(doc, pPr, false, indent);
+            Element np = newParagraph(doc, pPr, false, indent, hanging);
             center(np);
             np.appendChild(run);
             last.getParentNode().insertBefore(np, last.getNextSibling());
             last = np;
         }
         if (!after.isEmpty()) {
-            Element np = newParagraph(doc, pPr, listed, indent);
+            Element np = newParagraph(doc, pPr, listed, indent, hanging);
             after.forEach(np::appendChild);
             last.getParentNode().insertBefore(np, last.getNextSibling());
         }
@@ -90,9 +91,12 @@ public final class ParagraphLines {
 
     /**
      * Đoạn mới có pPr là bản sao của đoạn gốc nhưng bỏ w:numPr (không đánh số lại). Đoạn chữ nối tiếp của một mục danh
-     * sách ({@code keepIndent}) khai báo trực tiếp thụt lề trái của mục đó để vẫn thẳng hàng.
+     * sách ({@code keepIndent}) khai báo trực tiếp thụt lề trái của mục đó để vẫn thẳng hàng. Đoạn gốc có thụt lề treo
+     * ({@code hanging} &gt; 0, khai báo trong kiểu đoạn như "Câu k." của đề) thì đoạn mới khai báo trực tiếp thụt lề trái
+     * và độ treo 0, để chữ nối tiếp không lùi ra khỏi chỗ thẳng hàng với chữ đầu câu.
      */
-    private static Element newParagraph(Document doc, Element sourcePPr, boolean keepIndent, double[] indent) {
+    private static Element newParagraph(Document doc, Element sourcePPr, boolean keepIndent, double[] indent,
+                                        double hanging) {
         Element np = doc.createElementNS(W, "w:p");
         if (sourcePPr != null) {
             Element pPr = (Element) sourcePPr.cloneNode(true);
@@ -104,6 +108,10 @@ public final class ParagraphLines {
                     ind.removeAttributeNS(W, "hanging");
                     ind.removeAttributeNS(W, "firstLine");
                 }
+            } else if (hanging > 0) {
+                Element ind = setChild(pPr, "ind", "left", Long.toString(Math.round(indent[0])));
+                ind.setAttributeNS(W, "w:hanging", "0");
+                ind.removeAttributeNS(W, "firstLine");
             }
             np.appendChild(pPr);
         }
@@ -121,6 +129,13 @@ public final class ParagraphLines {
 
     /** Đặt (thay nếu đã có) con {@code name} của pPr với một thuộc tính w:{@code attr}, đúng thứ tự lược đồ. */
     private static Element setChild(Element pPr, String name, String attr, String value) {
+        Element e = ensureChild(pPr, name);
+        e.setAttributeNS(W, "w:" + attr, value);
+        return e;
+    }
+
+    /** Con {@code name} của pPr (tạo ở đúng thứ tự lược đồ nếu chưa có). */
+    private static Element ensureChild(Element pPr, String name) {
         Element e = PageGeometry.child(pPr, name);
         if (e == null) {
             e = pPr.getOwnerDocument().createElementNS(W, "w:" + name);
@@ -134,8 +149,29 @@ public final class ParagraphLines {
             }
             pPr.insertBefore(e, before);
         }
-        e.setAttributeNS(W, "w:" + attr, value);
         return e;
+    }
+
+    /**
+     * Đặt các tab dừng trái của đoạn (w:tabs, vị trí twips tính từ lề trái trang), thay w:tabs cũ nếu có. Danh sách trống
+     * thì không làm gì.
+     */
+    public static void setTabs(Element p, java.util.Collection<Integer> positions) {
+        if (positions.isEmpty()) {
+            return;
+        }
+        Element pPr = pPr(p, true);
+        Element old = PageGeometry.child(pPr, "tabs");
+        if (old != null) {
+            pPr.removeChild(old);
+        }
+        Element tabs = ensureChild(pPr, "tabs");
+        for (int pos : new java.util.TreeSet<>(positions)) {
+            Element tab = p.getOwnerDocument().createElementNS(W, "w:tab");
+            tab.setAttributeNS(W, "w:val", "left");
+            tab.setAttributeNS(W, "w:pos", Integer.toString(pos));
+            tabs.appendChild(tab);
+        }
     }
 
     /**

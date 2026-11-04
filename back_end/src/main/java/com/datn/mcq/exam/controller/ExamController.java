@@ -13,6 +13,7 @@ import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
 import com.datn.mcq.exam.export.ExamExportService;
 import com.datn.mcq.exam.export.ExamExportService.DocxFile;
 import com.datn.mcq.exam.export.EquationFormat;
+import com.datn.mcq.exam.export.ExamHeader;
 import com.datn.mcq.exam.service.ExamActionService;
 import com.datn.mcq.exam.service.ExamBuildService;
 import com.datn.mcq.exam.service.ExamQcTraceService;
@@ -94,12 +95,17 @@ public class ExamController {
      * <p>{@code equation}: {@code omml} (mặc định, Equation gốc của Word) hoặc {@code mathtype} (đối tượng MathType,
      * bấm đúp sửa bằng MathType); giá trị khác 400. Với {@code mathtype}, header {@value #EQUATION_KEPT_HEADER} cho biết số
      * công thức phải giữ dạng Equation (chưa hỗ trợ, hoặc cả file khi không đổi được).
+     *
+     * <p>{@code durationMinutes} (tùy chọn): thời gian làm bài, số nguyên 5–180, in ở đầu đề; không truyền thì in "……"; giá
+     * trị khác 400.
      */
     @GetMapping("/{examId}/export/docx")
     public ResponseEntity<byte[]> exportDocx(CurrentUser user, @PathVariable Integer examId,
-                                             @RequestParam(required = false) String equation) {
+                                             @RequestParam(required = false) String equation,
+                                             @RequestParam(required = false) String durationMinutes) {
         EquationFormat format = EquationFormat.parse(equation);
-        DocxFile file = examExportService.docx(examId, user.id(), format);
+        Integer minutes = ExamHeader.parseDuration(durationMinutes);
+        DocxFile file = examExportService.docx(examId, user.id(), format, minutes);
         ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(ExamExportService.DOCX_CONTENT_TYPE))
                 .header(HttpHeaders.CONTENT_DISPOSITION,

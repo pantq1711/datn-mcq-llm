@@ -125,7 +125,7 @@ public class PandocRunner {
                     "--reference-doc=reference.docx", "-o", "exam.docx");
             byte[] docx = Files.readAllBytes(dir.resolve("exam.docx"));
             if (format != EquationFormat.MATHTYPE) {
-                return new Docx(docx, 0, null, null);
+                return new Docx(finish(docx), 0, null, null);
             }
             List<String> latex;
             try {
@@ -134,9 +134,12 @@ public class PandocRunner {
             } catch (DocumentExportException | IOException | UncheckedIOException e) {
                 log.warn("Xuất MathType: không lấy được LaTeX bằng pandoc -t json ({}), trả file Equation",
                         e.getMessage());
-                return new Docx(docx, 0, MathTypeDocxConverter.countEquations(docx), 0);
+                return new Docx(finish(docx), 0, MathTypeDocxConverter.countEquations(docx), 0);
             }
-            return toMathType(docx, latex);
+            // Tab (mã giữ chỗ của ExamMarkdownBuilder) thay SAU bước MathType: bước đó có thể tách đoạn quanh công thức rộng.
+            Docx converted = toMathType(docx, latex);
+            return new Docx(finish(converted.content()), converted.mathTypeObjects(),
+                    converted.equationsKeptOmml(), converted.equationsScaled());
         } catch (IOException e) {
             throw new UncheckedIOException("Lỗi đọc/ghi file khi xuất đề", e);
         } catch (InterruptedException e) {
@@ -145,6 +148,11 @@ public class PandocRunner {
         } finally {
             deleteQuietly(dir);
         }
+    }
+
+    /** Bước hậu xử lý riêng của đề, sau pandoc và MathType: thay mã giữ chỗ tab, thêm chân trang section đề. */
+    private static byte[] finish(byte[] docx) {
+        return ExamSections.ensureExamFooter(ExamTabs.apply(docx));
     }
 
     /** Chạy pandoc trong {@code dir} với giới hạn bộ nhớ và thời gian; lỗi thì ném {@link DocumentExportException}. */
@@ -225,14 +233,20 @@ public class PandocRunner {
     /**
      * File mẫu --reference-doc ({@value #REFERENCE_DOC_RESOURCE}): reference.docx mặc định của pandoc, thêm
      * compatibilityMode = 15 trong settings.xml (Word không mở ở Compatibility Mode, lệnh Convert Equations của MathType
-     * chạy được) và font Normal Times New Roman 13. Cách tạo ghi ở docs/api/README.md mục 7.6.
+     * chạy được) và font Normal Times New Roman 13. Cách tạo ghi ở docs/api/README.md mục 7.6. Mỗi lần xuất, file này được
+     * vá thêm khổ A4, lề, kiểu của đề và chân trang ({@link ExamReferenceDoc}).
      */
     private static void copyReferenceDoc(Path target) throws IOException {
+        Files.write(target, referenceDocBytes());
+    }
+
+    /** Nội dung file mẫu đưa cho pandoc: {@value #REFERENCE_DOC_RESOURCE} đã vá khổ trang, kiểu, chân trang. */
+    static byte[] referenceDocBytes() throws IOException {
         try (var in = PandocRunner.class.getResourceAsStream(REFERENCE_DOC_RESOURCE)) {
             if (in == null) {
                 throw new IllegalStateException("Thiếu file mẫu " + REFERENCE_DOC_RESOURCE + " trong resources");
             }
-            Files.copy(in, target);
+            return ExamReferenceDoc.build(in.readAllBytes());
         }
     }
 
