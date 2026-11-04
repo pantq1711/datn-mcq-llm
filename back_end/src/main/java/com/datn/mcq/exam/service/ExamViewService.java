@@ -22,6 +22,7 @@ import com.datn.mcq.matrix.entity.ExamMatrix;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
 import com.datn.mcq.qc.service.QcSummaryService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -52,10 +53,17 @@ public class ExamViewService {
     private final BankService bankService;
     private final QcSummaryService qcSummaryService;
 
+    private final double similarThreshold;
+
     public ExamViewService(ExamBuildService buildService, ExamRepository examRepository,
                            ExamSlotRepository slotRepository, MatrixService matrixService,
                            GenerationService generationService, BankService bankService,
-                           QcSummaryService qcSummaryService) {
+                           QcSummaryService qcSummaryService,
+                           @Value("${app.exam.similar-threshold:0.82}") double similarThreshold) {
+        if (!(similarThreshold > 0.0 && similarThreshold <= 1.0)) {
+            throw new IllegalArgumentException("app.exam.similar-threshold phải nằm trong (0, 1], nhận " + similarThreshold);
+        }
+        this.similarThreshold = similarThreshold;
         this.buildService = buildService;
         this.examRepository = examRepository;
         this.slotRepository = slotRepository;
@@ -170,19 +178,17 @@ public class ExamViewService {
         }
         int generating = 0;
         int failed = 0;
-        int needsReview = 0;
         for (ExamSlot slot : slots) {
             ExamItemDto item = item(slot, cellById.get(slot.getCellId()));
             byPart.computeIfAbsent(item.part(), k -> new ArrayList<>()).add(item);
-            if (item.needsReview()) {
-                needsReview++;
-            }
             if (ExamSlot.FAILED.equals(slot.getState())) {
                 failed++;
             } else if (!ExamBuildService.hasQuestion(slot)) {
                 generating++;
             }
         }
+        flagSimilarInExam(byPart);
+        int needsReview = (int) byPart.values().stream().flatMap(List::stream).filter(ExamItemDto::needsReview).count();
         List<PartDto> parts = new ArrayList<>();
         for (Map.Entry<String, List<ExamItemDto>> e : byPart.entrySet()) {
             int ready = (int) e.getValue().stream().filter(i -> i.questionText() != null).count();
@@ -193,6 +199,15 @@ public class ExamViewService {
                 : matrixService.kindsByIds(List.of(exam.getMatrixId())));
         return new ExamViewDto(exam.getId(), exam.getExamCode(), exam.getTitle(), exam.getMode(), exam.getStatus(),
                 publicMatrixId(exam, kind), exam.getCreatedAt(), buildStatus, needsReview, parts, kind);
+    }
+
+    /**
+     * Thẩm định 31/10 (lớp 2): gắn lý do {@code similar_in_exam: <Phần>.<số>} cho câu hệ thống sinh cùng khuôn với một câu
+     * ĐỨNG TRƯỚC nó trong CHÍNH đề này; từ 2/11 mỗi cặp chỉ câu sau bị gắn, và số đếm theo Phần như trang đề ("Câu k" của
+     * từng Phần), xem {@link ExamQuestionSimilarity#flag}. Tính lúc xem, không ghi DB, không đổi trạng thái câu.
+     */
+    private void flagSimilarInExam(Map<String, List<ExamItemDto>> byPart) {
+        ExamQuestionSimilarity.flag(byPart, similarThreshold);
     }
 
     /** W1-4: loại đề suy ra từ ma trận gốc; đề cũ không có ma trận là "manual". */

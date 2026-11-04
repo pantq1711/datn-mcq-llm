@@ -14,7 +14,7 @@ dev_users AS (
 roots AS (
     SELECT DISTINCT j.question_id AS root, j.exam_slot_id AS slot_id
     FROM generation_job j
-    JOIN generated_question g ON g.id = j.question_id AND g.edited_from_question_id IS NULL
+    JOIN generated_question g ON g.id = j.question_id AND g.edited_from_question_id IS NULL AND g.origin = 'llm'
     JOIN experiment_run r ON r.id = g.run_id AND r.purpose = 'production' AND r.prompt_version LIKE 'matrix-%'
     JOIN quality_check_result a ON a.question_id = g.id AND a.check_type = 'answer_check' AND a.passed = FALSE
     JOIN exam_slot s ON s.id = j.exam_slot_id

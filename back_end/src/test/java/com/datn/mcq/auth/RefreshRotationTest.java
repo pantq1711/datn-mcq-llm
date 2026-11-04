@@ -140,6 +140,9 @@ class RefreshRotationTest {
         Session first = login();
         Session second = session(refresh(first.refreshToken()).andExpect(status().isOk()).andReturn().getResponse());
         Session otherDevice = login();
+        // D6: ngoài cửa sổ ân hạn (mặc định 30 giây) kể từ lúc token bị thay thì mới là dùng lại thật.
+        jdbc.update("UPDATE refresh_token SET revoked_at = now() - interval '2 minutes' WHERE token_hash = ?",
+                AuthTestSupport.sha256Hex(first.refreshToken()));
 
         MockHttpServletResponse reuse = refresh(first.refreshToken()).andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("REFRESH_INVALID")).andReturn().getResponse();
@@ -150,6 +153,88 @@ class RefreshRotationTest {
         refresh(second.refreshToken()).andExpect(status().isUnauthorized());
         assertNull(row(otherDevice.refreshToken()).get("revoked_at"), "phiên ở thiết bị khác không bị ảnh hưởng");
         refresh(otherDevice.refreshToken()).andExpect(status().isOk());
+    }
+
+    // ---------- D6: hai tab cùng làm mới phiên ----------
+
+    /**
+     * Tab 1 xoay vòng token, tab 2 (vẫn giữ cookie cũ) gửi refresh trước khi nhận cookie mới. Trước D6 việc này bị coi là dùng
+     * lại: thu hồi cả chuỗi và đăng xuất cả hai tab. Nay trong cửa sổ ân hạn: 401 REFRESH_RACE, không thu hồi gì, không cấp
+     * token mới, không xóa cookie (cookie mới của tab 1 đã nằm trong trình duyệt).
+     */
+    @Test
+    void tabHaiGuiTokenCuTrongCuaSoAnHanKhongThuHoiChuoi() throws Exception {
+        Session first = login();
+        Session second = session(refresh(first.refreshToken()).andExpect(status().isOk()).andReturn().getResponse());
+        int rowsBefore = jdbc.queryForObject("SELECT count(*) FROM refresh_token", Integer.class);
+
+        MockHttpServletResponse race = refresh(first.refreshToken()).andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("REFRESH_RACE")).andExpect(jsonPath("$.error").exists())
+                .andReturn().getResponse();
+        assertNull(race.getHeader(HttpHeaders.SET_COOKIE), "không xóa cũng không đặt cookie mới");
+        assertNull(race.getCookie(AuthTestSupport.REFRESH_COOKIE));
+        assertEquals(rowsBefore, jdbc.queryForObject("SELECT count(*) FROM refresh_token", Integer.class),
+                "không cấp token mới");
+        assertNull(row(second.refreshToken()).get("revoked_at"), "token mới của chuỗi còn nguyên");
+        assertEquals("rotated", row(first.refreshToken()).get("revoke_reason"), "token cũ giữ lý do rotated");
+
+        // Tab 2 thử lại sau 1 giây với cookie mới (frontend làm theo docs/api): thành công.
+        refresh(second.refreshToken()).andExpect(status().isOk());
+    }
+
+    @Test
+    void gui2LanTokenCuTrongCuaSoVanKhongThuHoiChuoi() throws Exception {
+        Session first = login();
+        Session second = session(refresh(first.refreshToken()).andExpect(status().isOk()).andReturn().getResponse());
+        for (int i = 0; i < 3; i++) {
+            refresh(first.refreshToken()).andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("REFRESH_RACE"));
+        }
+        assertNull(row(second.refreshToken()).get("revoked_at"));
+        assertEquals(1, activeTokens());
+    }
+
+    @Test
+    void tokenBiThuHoiVeLyDoKhacTrongCuaSoVanLaDungLai() throws Exception {
+        // đăng xuất ở tab 1 ngay sau khi xoay vòng, tab 2 gửi token cũ: phải là REFRESH_INVALID, không phải REFRESH_RACE
+        Session first = login();
+        Session second = session(refresh(first.refreshToken()).andExpect(status().isOk()).andReturn().getResponse());
+        mockMvc.perform(post("/api/auth/logout").cookie(new Cookie(AuthTestSupport.REFRESH_COOKIE,
+                second.refreshToken()))).andExpect(status().isNoContent());
+        refresh(first.refreshToken()).andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("REFRESH_INVALID"));
+
+        // đổi mật khẩu
+        Session a = login();
+        Session a2 = session(refresh(a.refreshToken()).andExpect(status().isOk()).andReturn().getResponse());
+        mockMvc.perform(post("/api/auth/password").header(HttpHeaders.AUTHORIZATION, "Bearer " + a2.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\": \"" + PASSWORD + "\", \"newPassword\": \"matkhau-moi-2\"}"))
+                .andExpect(status().isNoContent());
+        refresh(a.refreshToken()).andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("REFRESH_INVALID"));
+    }
+
+    @Test
+    void taiKhoanBiKhoaTrongCuaSoKhongDuocCoiLaRace() throws Exception {
+        Session first = login();
+        Session second = session(refresh(first.refreshToken()).andExpect(status().isOk()).andReturn().getResponse());
+        jdbc.update("UPDATE users SET enabled = FALSE WHERE id = ?", teacher);
+        refresh(second.refreshToken()).andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("REFRESH_INVALID")); // thu hồi chuỗi 'admin_disabled'
+        refresh(first.refreshToken()).andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("REFRESH_INVALID"));
+    }
+
+    @Test
+    void rotatedNgoaiCuaSoLaDungLaiThatKhiChuoiConSong() throws Exception {
+        Session first = login();
+        Session second = session(refresh(first.refreshToken()).andExpect(status().isOk()).andReturn().getResponse());
+        jdbc.update("UPDATE refresh_token SET revoked_at = now() - interval '31 seconds' WHERE token_hash = ?",
+                AuthTestSupport.sha256Hex(first.refreshToken()));
+        refresh(first.refreshToken()).andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("REFRESH_INVALID"));
+        assertEquals("reuse_detected", row(second.refreshToken()).get("revoke_reason"));
     }
 
     @Test

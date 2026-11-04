@@ -88,6 +88,22 @@ class QcOrchestratorStatusTest {
         verify(repository, never()).findDedupCandidateRows(any(), any(), any(), any());
     }
 
+    /**
+     * F-18 (b): hết hạn mức NGÀY của Gemini giữa lúc gọi Solver không phải lỗi Solver: QuotaExhaustedException được ném
+     * tiếp (nơi gọi trả 429 hoặc hoãn job), không thành answer_check ERROR và không ghi dòng answer_check.
+     */
+    @Test
+    void quotaExhaustedKhiGoiSolverPhaiNemTiepKhongThanhError() {
+        FakeSolverLlmClient llm = FakeSolverLlmClient.throwing(
+                () -> new com.datn.mcq.llm.client.QuotaExhaustedException(480, java.time.LocalDateTime.now().plusHours(3)));
+
+        org.junit.jupiter.api.Assertions.assertThrows(com.datn.mcq.llm.client.QuotaExhaustedException.class,
+                () -> orchestrator(llm).evaluateAndSave(validInput(Option.A, true), SCOPE));
+
+        assertEquals(1, llm.solverCalls);
+        assertNoAnswerCheckRowSaved();
+    }
+
     // ---------- Dedup chưa kết luận: thiếu phạm vi, lỗi, hoặc trùng ----------
     // Sửa 2026-10-21 (quyết định 1): trước đây test này kỳ vọng Solver vẫn được gọi khi dedup chưa chạy
     // (solverCalls = 1, answer_check CONSISTENT). Hợp đồng mới: dedup chưa kết luận thì KHÔNG gọi Solver.

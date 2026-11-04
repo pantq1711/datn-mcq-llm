@@ -17,10 +17,20 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
     /** Các chỗ của nhiều đề (danh sách đề của tôi, chỉ đọc). */
     List<ExamSlot> findByExamIdIn(Collection<Integer> examIds);
 
+    /** Đề còn chỗ ở trạng thái {@code state} không (truy vấn KHÔNG khóa; dùng để quyết định có cần khóa khi đối soát). */
+    boolean existsByExamIdAndState(Integer examId, String state);
+
     /** Khóa các chỗ của một đề khi đối soát, để hai lần đối soát đồng thời không tạo job trùng. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM ExamSlot s WHERE s.examId = :examId ORDER BY s.cellId, s.slotNo")
     List<ExamSlot> lockByExamId(@Param("examId") Integer examId);
+
+    /**
+     * Chữ đáp án đúng (A-D) của các câu ngân hàng mcq, để chia đều chữ đáp án toàn đề (3/11); mỗi dòng là
+     * {@code [id, correct_option]}. Truy vấn native chỉ đọc bank_item (cùng ngoại lệ như {@link #findBankCandidates}).
+     */
+    @Query(value = "SELECT id, correct_option FROM bank_item WHERE id IN (:ids)", nativeQuery = true)
+    List<Object[]> findBankCorrectOptions(@Param("ids") Collection<Integer> ids);
 
     /**
      * Câu ngân hàng khớp một ô (phần C mục 2): cùng môn, cùng dạng, cùng mức (tf: cùng 4 mức theo thứ tự a-d), cùng chủ

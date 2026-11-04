@@ -66,21 +66,37 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-50 | Đáp án câu Trả lời ngắn là phân số, hỗn số, vượt quy ước phiếu trả lời Bộ GD&ĐT (bổ sung 27/10) | LLM & parse | Trung bình | Đã sửa |
 | L-51 | Model viết đơn vị đo `\text{km/h}` ngoài `$...$`, cả ô mcq mức vừa bị loại 18/18 lượt sinh (bổ sung 27/10) | LLM & parse | Cao | Đã sửa |
 | L-52 | W2-4b: hàng đợi, bộ điều tiết Gemini, worker liên tục (bổ sung 28/10) | Hàng đợi/đồng thời | Cao | Đã sửa |
+| L-53 | Dedup: `similarity` null do chốt chặn số liệu; câu fallback của ô đang sinh lại không là ứng viên (bổ sung 31/10) | QC | Trung bình | Đã sửa |
+| L-54 | Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (thẩm định 31/10) | QC | Cao | Đã sửa (v4 bắt 7/9 và 5/9, không báo nhầm) |
+| L-55 | Nhiều câu cùng khuôn (chỉ khác số, tên đỉnh) trong một đề; mcq lộ đáp án ý đúng/sai (thẩm định 31/10) | QC | Cao | Đã sửa (chờ đối chiếu dữ liệu thật) |
+| L-57 | Đáp án câu Trả lời ngắn bị đổi đơn vị cho vừa 4 ký tự: đề 10 Phần III câu 2 lưu 100, đúng là 10000 (bổ sung 2/11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
+| L-58 | Lệnh LaTeX nằm ngoài `$...$` trong lời giải và các trường khác: đề 10 Phần I câu 2 (bổ sung 2/11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
+| L-59 | Câu Đúng/Sai có 4 ý cùng nhãn chỉ bị cảnh báo, không được sinh lại (bổ sung 2/11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
+| L-60 | Cờ "gần giống" ghi số câu toàn đề, trang đề đánh số theo Phần; cả hai câu của một cặp bị gắn (bổ sung 2/11) | QC | Trung bình | Đã sửa (frontend chưa cập nhật) |
+| L-61 | File Word không có đầu đề đề thi, in mã hệ thống MT… (bổ sung 2/11) | Xuất file | Trung bình | Đã sửa (chưa kiểm bằng Word thật) |
+| L-62 | Từ tiếng Anh lẫn trong câu sinh ra; ghi chú nội bộ trong ma trận mẫu hiện cho giáo viên (bổ sung 2/11) | LLM & parse | Thấp | Đã sửa |
 
-**Thống kê theo nhóm** (52 mục):
+| L-63 | "210^\toRadians" thay cho độ qua QC không cờ; cảnh báo bước format không được lưu (bổ sung 2/11, đề 11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
+| L-64 | Soát ngoài trước deploy lần 2 (nhánh `fix/pre-deploy-2`, 3/11): câu dự phòng bị ghi đè không theo chất lượng; tự đóng `$` không phân biệt số dấu; Solver `options_verdict` hỏng cho qua; hạn mức ngày Gemini; tắt app tính lỗi job; và các mục nhỏ | Nhiều nhóm | Cao | Đã sửa (đo F-07 chờ thực hiện trên `datn_mcq_e2e`) |
+| L-65 | Tài liệu giáo án .docx mất gần hết công thức MathType khi trích chữ (pandoc bỏ đối tượng OLE): 116/118 công thức mất (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (đo trên file thật qua HTTP: giữ 102/118) |
+| L-66 | Nhập ngân hàng câu từ Word: các bẫy khi đưa lõi tools/bank-import vào backend (câu nhập bị đếm là lượt gọi Gemini, ảnh trong mc:AlternateContent bị bỏ sót, nạp mọi ảnh vào bộ nhớ, fixture MathType thật) (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (nhập thử 1 bộ qua HTTP trên `datn_mcq_e2e`) |
+| L-67 | Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11) | Xuất file | – | Đã kiểm (còn mục mở) |
+| L-68 | Góp ý giáo viên Toán trên đề 14: đáp án mcq dồn vào A; câu dẫn dài dòng, "cạnh biên", "(Nhập đáp án…)" (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (đã đo 1 đề) |
+
+**Thống kê theo nhóm** (61 mục; bảng chưa có dòng cho L-56 nên con số này cộng thêm đúng 8 mục L-57…L-64 vào số cũ):
 
 | Nhóm | Số lỗi | Đã sửa | Đang sửa | Chưa sửa |
 |---|---|---|---|---|
 | Môi trường | 11 | 11 | 0 | 0 |
 | Dữ liệu/DB | 5 | 5 | 0 | 0 |
 | Quy trình git | 2 | 2 | 0 | 0 |
-| LLM & parse | 14 | 13 | 0 | 1 |
-| QC | 11 | 10 | 0 | 1 |
+| LLM & parse | 19 | 18 | 0 | 1 |
+| QC | 13 | 12 | 0 | 1 |
 | Hàng đợi/đồng thời | 8 | 7 | 0 | 1 |
-| Xuất file | 1 | 1 | 0 | 0 |
-| **Tổng** | **52** | **49** | **0** | **3** |
+| Xuất file | 2 | 2 | 0 | 0 |
+| **Tổng** | **60** | **57** | **0** | **3** |
 
-Theo mức độ: Cao 13, Trung bình 25, Thấp 14.
+Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
 
 ---
 
@@ -622,6 +638,183 @@ Theo mức độ: Cao 13, Trung bình 25, Thấp 14.
   không so trực tiếp được vì lần đo này có 6 chỗ dùng hết 3 lần thử.
 - Trạng thái: Đã sửa trong code và test; chưa đo lại bằng đề thật.
 
+### L-57 Đáp án câu Trả lời ngắn bị đổi đơn vị cho vừa 4 ký tự: đề 10 Phần III câu 2 lưu 100, đúng là 10000 (bổ sung 2/11)
+- Nhóm: LLM & parse
+- Triệu chứng: thẩm định UX 2/11 trên đề 10 (DB `datn_mcq_e2e`): Phần III câu 2 có đáp án lưu `100`, đáp số đúng là `10000`; lời giải ghi "Đổi đơn vị … thành trăm để đáp án gọn trong 4 ký tự". Đáp án sai thật nhưng khớp khung 4 ký tự nên qua QC (Solver giải theo đề đã đổi đơn vị).
+- Nguyên nhân gốc: quy tắc của prompt ma trận `sa` thêm ở commit `6d8a582` ("ask matrix short-answer prompt to rescale large results") dặn "kết quả lớn hơn 4 ký tự thì đề phải đổi đơn vị" kèm ví dụ "10000 đồng thì đề hỏi theo nghìn đồng và đáp án 10". Model làm theo nhưng đổi đơn vị trong lời giải mà không đổi đề, nên đáp số lệch. Bộ chặn lời giải còn nháp (`ExplanationDraftLeak`) không có mẫu nào bắt kiểu "giải thích việc rút gọn đáp số".
+- Cách phát hiện: giáo viên/người dùng xem đề 10 (thẩm định UX), đọc lời giải câu Phần III.
+- Cách sửa (không migration):
+  - `MatrixPromptDraftV0.SA_ANSWER_RULES`: bỏ hai gạch đầu dòng "làm tròn rõ ràng" và "đổi đơn vị", thay bằng "Chọn số liệu ngay từ đầu để đáp số đúng tự nhiên là số nguyên hoặc thập phân tối đa 4 ký tự. TUYỆT ĐỐI không đổi đơn vị, không chia/nhân kết quả, không làm tròn để rút gọn đáp số. Nếu đề cần làm tròn thì câu dẫn phải ghi rõ làm tròn đến đâu." Nâng `matrix-sa-v6-draft` lên `matrix-sa-v7-draft`.
+  - `ExplanationDraftLeak` (nhánh chặn, đầu ra LLM của cả 3 dạng; giáo viên chỉ cảnh báo): thêm mẫu "ký tự", "để đáp án gọn", "cho gọn", "đổi đơn vị … để" (cùng một câu, tối đa 80 ký tự giữa hai cụm), so không phân biệt hoa thường và dấu.
+- Chống tái phát: `MatrixPromptDraftV0Test.promptSaDanDapAnSoNguyenHoacThapPhanToiDa4KyTu` (có quy tắc mới, không còn chữ của quy tắc cũ), `phienBanVaThongSoOLuuDuoc` (v7); `FormatCheckerExplanationDraftTest.loiGiaiGiaiThichDoiDonViChoGonDapAnBiBat`, `caumToanHopLeCoChuDonViKhongBiBatNham` ("đơn vị đo", "Đổi 30 phút = 0,5 giờ." không bị bắt), `loiGiaiDoiDonViDeGonCaBaDangDauRaLlmBiFormatFailedChuGiaoVienChiCanhBao`.
+- Hạn chế: (1) chưa đo bằng Gemini thật (không gọi mạng trong lần sửa này): chưa biết model có thôi đổi đơn vị chưa; (2) bản đầu của mẫu "đổi đơn vị … để" chặn cả lời giải hợp lệ kiểu "Đổi đơn vị phút sang giờ để tính vận tốc"; **đã thu hẹp cùng ngày (2/11, lượt sau)**: chỉ bắt khi sau "để" (cùng câu) có gọn / vừa / đáp án / 4 ký tự ("kết quả" bị bỏ khỏi danh sách vì "Đổi đơn vị phút sang giờ để tính kết quả" là lời giải hợp lệ) (`FormatCheckerExplanationDraftTest.caumToanHopLeCoChuDonViKhongBiBatNham`); (3) **đã sửa cùng ngày**: `ShortAnswerValue.MSG_SA_ANSWER_FORMAT` (ghi chú sinh lại khi đáp án sai dạng) đổi thành "Đáp số phải là số nguyên hoặc thập phân tối đa 4 ký tự. Hãy chọn lại số liệu của đề để đáp số tự nhiên thỏa điều kiện; không đổi đơn vị, không nhân/chia hay làm tròn kết quả để rút gọn." Chỗ so khớp nguyên văn: chỉ `ShortAnswerValueTest` (cập nhật; các test khác dùng hằng số). Frontend (`exam.utils.ts`) nhận theo phần đầu "Đáp số phải là" / "đáp án phải là" (dữ liệu cũ) và hiện chữ của frontend. Dữ liệu `quality_check_result.errors` cũ vẫn giữ chuỗi cũ.
+- Trạng thái: Đã sửa (chờ đo trên đề mới).
+
+### L-58 Lệnh LaTeX nằm ngoài `$...$` trong lời giải và các trường khác: đề 10 Phần I câu 2 (bổ sung 2/11)
+- Nhóm: LLM & parse
+- Triệu chứng: đề 10 Phần I câu 2: lời giải có `\frac{5x + y}{xy}` không nằm trong `$`, hiện nguyên chữ lệnh cho giáo viên.
+- Nguyên nhân gốc: (1) lỗi LaTeX của lời giải chỉ là cảnh báo (quyết định 22/10, Việc 2), nên câu vẫn qua bước format; câu hỏi và phương án có lỗi này thì `format_failed` nhưng không có bước tự sửa. (2) Bộ kiểm tra LaTeX chỉ nhận ra `\lệnh` ngoài `$`, không nhận `^{`/`_{`.
+- Cách phát hiện: thẩm định UX 2/11.
+- Cách sửa (không migration):
+  - `LlmOutputRepair.wrapLatexOutsideMath` (chế độ sửa của parser mcq/sa/tf, mọi trường văn bản trừ `answer` của sa): mỏ neo là lệnh trong danh sách cho phép của `LatexValidationRules` (trừ `\text`, `\begin`, `\end`) hoặc `^{`/`_{` ngoài `$`; mở rộng sang hai phía qua các "từ" (tách theo khoảng trắng ngoài ngoặc nhọn) trông như công thức (không chữ có dấu tiếng Việt, không từ chỉ gồm ≥2 chữ cái ASCII, không lệnh lạ, ngoặc cân, không qua dấu hết câu), bọc `$...$`, dấu câu cuối nằm ngoài. Cảnh báo mới `<trường>: đã tự bọc $ quanh công thức LaTeX nằm ngoài $` (bật cờ "cần xem kỹ" như "đã tự đóng $"). Không chắc (số `$` lẻ, ngoặc lệch, lệnh lạ) thì giữ nguyên. `\n` (gạch rồi n) không là lệnh.
+  - `LatexValidationRules`: nhận `^{`/`_{` ngoài `$` như lệnh ngoài `$` (một lỗi mỗi trường); công khai `MSG_COMMAND_OUTSIDE`, `isAllowedCommand`.
+  - `FormatChecker.validateExplanationLatex`: lời giải của đầu ra LLM có lệnh LaTeX ngoài `$` mà không bọc được là lỗi chặn (sinh lại); lời giải giáo viên viết/sửa và các lỗi LaTeX khác của lời giải vẫn chỉ cảnh báo.
+- Chống tái phát: `LatexOutsideMathWrapTest` (17 test: ví dụ "Ta có \frac{a}{b} = 2", chữ đã trong `$` không đổi, dấu câu, mũ/chỉ số, chữ Việt/Anh chặn đoạn, nhiều lệnh một lần bọc, không sinh `$$`, `\$`, `\n`, các ca không chắc, từng trường mcq/sa/tf, `answer` không bị bọc, ca lời giải đề 10), `LatexValidationRulesTest.superscriptOrSubscriptBraceOutsideMathIsReported`, `ExamBuildTest.loiGiaiCoLatexNgoaiCongThucDuocBocVaGiuNguyenSauKhiGiu` (cập nhật từ ca đề 2 chỗ 20), `ExamBuildTest.loiGiaiLatexNgoaiDolaKhongBocDuocThiSinhLai`.
+- Hạn chế: bọc theo heuristic: biểu thức nối với chữ cái đơn ("x \frac{1}{2}") được kéo vào chung một cặp `$`; lệnh ngoài danh sách cho phép (ví dụ `\alpha`) không bọc mà chuyển thành lỗi sinh lại. Lời giải của đầu ra LLM trước đây không bao giờ làm câu `format_failed` vì LaTeX; nay có thể (tốn thêm lượt sinh).
+- Trạng thái: Đã sửa (chờ đo trên đề mới).
+
+### L-59 Câu Đúng/Sai có 4 ý cùng nhãn chỉ bị cảnh báo, không được sinh lại (bổ sung 2/11)
+- Nhóm: LLM & parse
+- Triệu chứng: đề 10: câu Đúng/Sai có cả 4 ý cùng một nhãn (khác ý đồ phân bố đáp án) chỉ có cờ `warning: label: 4 ý cùng nhãn T`.
+- Nguyên nhân gốc: quyết định 22/10 giữ "4 nhãn giống nhau" là cảnh báo, nên không có đường sinh lại.
+- Cách phát hiện: thẩm định UX 2/11.
+- Cách sửa (không migration, không đổi prompt): **không** đổi thành lỗi chặn ở `FormatChecker` vì lỗi chặn đưa câu về `format_failed` (không Giữ được: `AssistedKeepService` từ chối; hết lượt thì chỗ hỏng), trái với "hết lượt thì giữ câu kèm cờ". Thay vào đó `ExamBuildService.reconcileSlot` coi cảnh báo `label: 4 ý cùng nhãn` của câu `qc_passed`/`generated` là lý do sinh lại: chỗ còn lượt (`attempts` < 3) thì lưu câu làm dự phòng (`fallback_question_id`, như câu lệch Solver) và xếp job sinh lại; `promptNote` của job có dòng "Lần sinh trước bị loại vì: label: 4 ý cùng nhãn T (ít nhất một ý phải có nhãn khác; …)". Hết lượt hoặc lần sinh lại hỏng thì dùng lại câu đó kèm cờ như cũ. Hằng `FormatChecker.SAME_LABEL_WARNING_PREFIX` và `QcSummary.sameLabelWarning()` (exam chỉ phụ thuộc `qc.service`).
+- Nhánh `fix/tf-solution-first` (chỉ đọc, không merge; 3 commit `8d688ca`, `cf7d5fb`, `ab60183`, L-50 của nhánh trùng số với L-50 đã có ở `main`, chưa đo hiệu quả): (a) đáng dùng lại sau: `ExamBuildService.actualTfPattern/latestTfPattern` đọc nhãn thật từ `generated_question_statement` thay vì mẫu mục tiêu trong `prompt_note`, giúp câu sinh lại không lặp nhãn thật của câu vừa bị bỏ (kể cả TTTT); (b) không dùng lại: đổi thứ tự JSON (lời giải trước) và nâng `matrix-tf-v4-draft` xung đột phiên bản với `matrix-tf-v7-draft` hiện tại, và chưa đo.
+- Chống tái phát: `ExamTfSameLabelRegenTest` (3 test: TTTT sinh lại một lần rồi dùng câu TFTF không cờ, `promptNote` có lý do; TTTT mãi thì đúng 3 lượt rồi giữ câu kèm cờ, không `format_failed`; nhãn đa dạng không sinh lại), `FormatCheckerTrueFalseTest.bonNhanGiongNhauChiCanhBao` (vẫn cảnh báo, không chặn).
+- Hạn chế: mỗi lần sinh lại tốn thêm một lượt Gemini cho Solver trên câu bị bỏ (câu đã qua QC đầy đủ trước khi đối soát thấy); không có chỉ số sau-sửa vì chưa đo.
+- Trạng thái: Đã sửa (chờ đo trên đề mới).
+
+### L-62 Từ tiếng Anh lẫn trong câu sinh ra; ghi chú nội bộ trong ma trận mẫu hiện cho giáo viên (bổ sung 2/11)
+- Nhóm: LLM & parse
+- Triệu chứng: thẩm định UX 2/11: câu sinh ra đôi khi có "and", "or", "is"… đứng riêng ngoài công thức; ma trận mẫu "Giữa kì I – Toán 8" hiện cho giáo viên dòng nguồn "Mức: Biết = easy, Hiểu = medium, Vận dụng = hard." và ghi chú "… Cần giáo viên xác nhận."
+- Cách sửa (không migration): `EnglishWordLeak` + `FormatChecker`: cảnh báo `<trường>: có từ tiếng Anh ngoài công thức (<từ>)` cho `and/or/the/is/true/false` đứng riêng ngoài `$...$` trong đề dẫn, phương án, ý, lời giải của đầu ra LLM (không loại câu, bật cờ). Mẫu `docs/sample/matrix_giuaki1_toan8.json` và bản chép `back_end/src/main/resources/samples/…` bỏ phần "Mức: …" khỏi `source` và bỏ ghi chú số 2 ("… Cần giáo viên xác nhận.") khỏi `notes`.
+- Chống tái phát: `EnglishWordLeakTest` (5 test), `MatrixApiTest.mauKhongConGhiChuNoiBoTrongTruongHienChoGiaoVien`.
+- Hạn chế: ma trận đã tạo từ mẫu trước 2/11 vẫn giữ chữ cũ trong `exam_matrix.source`/`notes` (không sửa dữ liệu DB); "true/false" trong lời giải đúng/sai bị cảnh báo dù có thể là cố ý.
+- Trạng thái: Đã sửa.
+
+### L-63 "210^\toRadians", "30^\rceil" thay cho độ qua QC không cờ; cảnh báo bước format không được lưu (bổ sung 2/11, đề 11)
+- Nhóm: LLM & parse
+- Triệu chứng: đề 11 (đo bằng Gemini thật) câu 190 và 192: đề dẫn hiện "bằng 210^\toRadians" / "210^\rceil" thay cho 210°, câu `qc_passed`, không cờ "cần xem kỹ".
+- Nguyên nhân gốc: (1) model viết `^\circ` thành lệnh lạ; bước chuẩn hóa ký hiệu độ (31/10) chỉ biết `\bullet`/`\triangle`. (2) **Lưới an toàn không chạy:** `FormatChecker` có ghi cảnh báo "Lệnh \toRadians không hỗ trợ…" nhưng nằm ở `FormatCheckOutcome.warnings()`, còn `QcOrchestrator.evaluateAndSave` (`QcOrchestrator.java:117`) chỉ lưu `answerWarnings()` (cảnh báo giải mã, nhãn tf, đáp số) vào `quality_check_result.warnings`; nhóm `warnings()` (lệnh LaTeX không hỗ trợ, môi trường không hỗ trợ, lời giải có "tính lại/làm lại/sửa lại", từ tiếng Anh, lỗi LaTeX của lời giải) bị bỏ. `QcSummaryService.reviewReasons` (`QcSummaryService.java:117-126`) không lọc các cảnh báo này (chỉ bỏ `json: đã sửa…` và `label: khác mẫu…`); chúng chưa từng đến được đó. Hệ quả kéo dài: lý do `explanation_draft_suspect` (31/10) và cảnh báo từ tiếng Anh (L-62) trước bản sửa này không bao giờ hiện trong đề thật; các test cũ chỉ kiểm `FormatChecker` và `QcSummaryService` rời nhau.
+- Cách sửa (không migration): `LlmOutputRepair.fixDegreeSymbol`: sau chữ số hoặc `}`, `^\X` / `^{\X}` với X thuộc bullet, triangle, toRadians, rceil, lceil, degree, deg, circle, o, cdot thành `^{\circ}` (giữ `^{\prime}`, `^\circ`, mọi `^` sau chữ cái, `\triangle ABC`). `QcOrchestrator.storedWarnings` lưu cả hai nhóm (answerWarnings trước, rồi warnings, bỏ trùng); mọi cảnh báo này bật cờ `warning: …` hoặc `explanation_draft_suspect`.
+- Chống tái phát: `LlmOutputRepairTest` (`kyHieuDoMoRongToRadiansRceilVaCacBienThe`, `kyHieuDoMoRongGiuNguyenCacDangKhongPhaiDo`, `cauMcqDe11ToRadiansVaRceilDuocSuaThanhDo`), `ExamBuildTest.lenhLatexKhongHoTroTrongCongThucBatCanXemKy` (qua đối soát và xem đề thật), `loiGiaiCoTinhLaiVaTuTiengAnhBatCanXemKy`.
+- Phân nhóm cờ (cùng ngày, lượt sau): vì lưu đủ cảnh báo làm số cờ tăng, `QcSummaryService.AUTO_FIXED_WARNING_PATTERNS` tách nhóm KHÔNG bật cờ (hệ thống đã tự sửa chắc chắn: `json: đã sửa…` gồm cả ký hiệu độ, `đã tự đóng $`, `đã tự bọc $…`, `đã bỏ tiền tố…`, cộng `label: khác mẫu…`) khỏi nhóm BẬT cờ (còn lại, kể cả cảnh báo chưa biết). `đã tự đóng $` trước đây bật cờ, nay không. Cảnh báo vẫn lưu và hiện ở vết QC. Test: `QcSummaryReviewReasonsTest` (10 test).
+- Đo lại bằng Gemini thật (3/11, đề 13 `MT261103000334735`, ma trận 4, một backend duy nhất; lần đo đề 11 và 12 bị nhiễm vì còn một backend cũ chạy worker trên cùng DB e2e): 4/18 câu bị cờ, 18/18 `ready`. I.9 và I.10: `Lệnh \widehat không hỗ trợ…` ở đề dẫn và lời giải (cảnh báo nhầm: `\widehat` là lệnh KaTeX hợp lệ nhưng chưa có trong danh sách cho phép của `LatexValidationRules`); I.10 thêm `similar_in_exam: I.9`; I.12 `similar_in_exam: I.11`; II.2 `label: 4 ý cùng nhãn F` sau 3 lượt sinh (cơ chế sinh lại chạy thật: 3 job, hết lượt giữ câu kèm cờ; toán và nhãn của câu đúng). Không còn `^\toRadians`/`^\rceil`; Phần III đáp số 100, −8, 57 đều đúng và tự nhiên. Không thấy câu sai thật bị lọt; chưa cờ nhưng đáng chú ý: I.4 phương án C `(x²−2x+1)/(x−1)` rút gọn được thành `x−1`, III.3 đề dẫn thừa dòng "(Nhập đáp án dưới dạng số nguyên hoặc số thập phân gọn nhất)". Đã làm (3/11): `LatexValidationRules` thêm 20 lệnh KaTeX hay dùng ở THCS vào danh sách cho phép: widehat, hat, overline, overrightarrow, vec, parallel, perp, cong, sim, backsim, Leftarrow, subset, emptyset, mathbb, approx, mp, mathrm, qquad, dfrac, prime (các lệnh còn lại trong danh sách yêu cầu đã có sẵn). `\toRadians`, `\rceil` vẫn cảnh báo; hai test dùng `\widehat` làm ví dụ lệnh lạ đổi sang `\toRadians`.
+- Hạn chế: số câu bị cờ "cần xem kỹ" sẽ tăng (các cảnh báo cũ nay hiện); câu cũ đã lưu không có cảnh báo vẫn không cờ (không sửa dữ liệu). `qcReport.answerWarnings` (đọc lại từ cột) nay gồm cả nhóm `warnings`. Cảnh báo bọc ký hiệu độ vẫn ghi chữ "(^\bullet, ^\triangle thành ^{\circ})".
+- Trạng thái: Đã sửa (chờ đo trên đề mới).
+
+### L-64 Soát ngoài trước deploy lần 2: 14 mục trên nhánh `fix/pre-deploy-2` (bổ sung 3/11)
+- Nhóm: nhiều nhóm (đối soát đề, LLM & parse, QC, xuất file, hàng đợi, cấu hình, nhật ký)
+- Nguồn: bản review ngoài (đường dẫn file trong bản review sai; package thật là `com.datn.mcq`). Mỗi phát hiện được kiểm lại với code thật trước khi sửa. Quy trình: test đỏ trước (163 test mục tiêu: 27 failure, 7 error), sửa, rồi chạy toàn bộ test.
+- **F-01 câu dự phòng theo chất lượng** (`ExamBuildService`): trước đây `fallback_question_id` bị ghi đè theo thứ tự thời gian, nên q1 `QC_PASSED` (4 ý cùng nhãn) bị câu lệch Solver ghi đè và hết lượt thì dùng câu lệch. Nay `offerFallback` chỉ ghi khi câu mới tốt hơn (QC_PASSED có cảnh báo cùng nhãn > GENERATED lệch Solver), `useBest` chọn câu tốt nhất giữa câu cuối và câu dự phòng, và câu lệch Solver không đi `retryForSameLabel`. Test `ExamFallbackQualityTest` (hai tình huống), tổng job generate ≤ 3.
+- **F-02 tự đóng `$` và `cdot`:** "đã tự đóng $" chỉ không bật cờ khi chuỗi gốc có ĐÚNG 1 dấu `$` chưa thoát; từ 3 dấu trở lên cảnh báo là `<trường>: đã tự đóng $ khi chuỗi có N dấu $ (có thể đóng sai chỗ)` (không khớp nhóm tự sửa nên bật cờ). `cdot` bỏ khỏi danh sách đổi thành `^{\circ}`. Hệ quả cần biết: câu có công thức đủ cặp và MỘT công thức quên đóng ở cuối (ví dụ `Giá trị của $R$ tại $x = 3$ bằng $9.`, 5 dấu) nay bật cờ dù chỗ đóng thường đúng; chọn thận trọng theo quy tắc chủ dự án. Hai test cũ (`LlmOutputRepairTest.fixtureId24...`, `TrueFalseFlowTest.loiFormatLuuOErrorsVaSyncTuDongDoLa`) có fixture 5 dấu nên kỳ vọng được cập nhật theo quy tắc.
+- **F-03 Solver `options_verdict` hỏng** (`AnswerSolverChecker`): mảng hỏng một phần mà đọc được từ 2 phương án `correct = true` thì vẫn `multiple`; không đủ căn cứ thì ném lỗi (đi đường ERROR / job `answer_check`), không so `judge_answer` rồi cho qua. Thiếu hẳn `options_verdict` và prompt v2 giữ cách cũ (phạm vi hẹp có chủ đích: ~68 chỗ test dùng JSON kiểu cũ).
+- **F-05 pandoc:** `-f markdown+tex_math_dollars-raw_html-raw_tex`. KHÔNG tắt `raw_attribute` vì `ExamMarkdownBuilder` dùng khối `` ```{=openxml} `` cho bảng đầu đề và ngắt trang (tắt thì mất cả hai và `PandocSandboxTest` đếm ngắt trang hỏng). Lỗ hổng thật được vá: xuống dòng trong `$...$` thành khoảng trắng (đáp số `sa` nhiều dòng có thể tạo khối raw), tên đề nhiều dòng không đóng sớm khối openxml của đầu đề. `DocxTextExtractor` chỉ xuất Markdown nên không phải đổi.
+- **F-09 tắt app:** `app.worker.shutdown-await-ms: 28000` ở prod. Lỗi mạng khi gọi Gemini lúc luồng bị interrupt hoặc cờ tắt đã bật không là lỗi job: `releaseJobOnShutdown` trả về `pending`, hoàn lại `attempt`, khôi phục cờ interrupt (`GenerationJobShutdownTest`).
+- **F-11:** `application-prod.yaml` dùng `${MATERIAL_MAX_CONCURRENT:1}`, `${MATERIAL_PANDOC_HEAP_MB:256}`, `${MATERIAL_QUEUE_WAIT:30s}` (compose đã truyền sẵn các biến này nhưng file cố định giá trị nên không có tác dụng).
+- **F-18 hạn mức ngày Gemini:** `GenerationQuotaService.reserve` kiểm `GeminiRateLimiter.requireDailyQuota()` trước khi trừ hạn mức giáo viên; hết thì `QuotaExhaustedException` (429 `LLM_DAILY_QUOTA_EXHAUSTED` kèm Retry-After, dùng handler sẵn có, không mã mới); đề đủ câu từ ngân hàng vẫn tạo được. `QcOrchestrator` ném tiếp `QuotaExhaustedException` (poller giữ câu `generated` kèm `solver_error` và xếp job `answer_check`). `LlmClient`: 429 có `PerDay`/`RequestsPerDay` đánh dấu hết hạn mức ngày. Frontend `apiError.ts` hiện "thử lại sau HH:MM" (giờ VN từ Retry-After).
+- **F-25:** `MatrixPromptDraftV0` dùng `PromptData.neutralize` (lặp tới khi sạch) thay `.replace("<<<","").replace(">>>","")` (`"<>>><<"` sau khi gỡ `>>>` lại thành `<<<`); chủ đề, nội dung, yêu cầu cần đạt của ô cũng qua nó.
+- **F-27 nhật ký:** `ApiExceptionHandler` ghi WARN cho 4xx (mã trạng thái, mã lỗi, phương thức và đường dẫn, userId; không ghi thân request, chuỗi truy vấn, token hay nội dung thông báo), ERROR kèm stacktrace cho 5xx, thêm catch-all trả 500 `INTERNAL_ERROR`; lỗi khung Spring (JSON hỏng, sai phương thức...) giữ mã 4xx. `GenerationJobPoller` đặt MDC `jobId`/`slotId`/`examId` và log lý do khi ghi lỗi job. `RequestCorrelationFilter` không chép sang (đang ở nhánh MathType).
+- **B7 lý do Đổi:** migration `V25__slot_action_replace_reason.sql` (`replace_reason VARCHAR(40)` NULL, CHECK 8 giá trị chữ thường, chỉ dòng `replace`); `POST .../replace` nhận `reason`, giá trị lạ là 400 trước mọi thay đổi. `docs/experiments/trial/queries.sql` (5 truy vấn chỉ đọc, gồm bảng chéo `replace_reason` × cờ ước tính của câu bị đổi); `TrialQueriesSqlTest` kiểm chỉ có SELECT và số đếm.
+- **Đo F-07 (chưa sửa):** hướng dẫn ở `docs/experiments/trial/do-f07-so-cau-sql.md` (bật `hibernate.generate_statistics` bằng tham số dòng lệnh, không đổi cấu hình mặc định). Phần rẻ: `QcSummaryService.summarize` chỉ truy vấn ý khi câu là TF.
+- **F-07 phần khóa:** `ExamBuildService.reconcile` khóa (PESSIMISTIC_WRITE) mọi chỗ của đề mỗi lần xem, kể cả đề đã xong. Nay kiểm trước bằng `existsByExamIdAndState(examId, "generating")` (không khóa); không có thì return ngay, có thì khóa và đối soát như cũ (đọc lại state sau khóa). Mọi nơi gọi (xem đề, tiến độ, ô, Giữ/Đổi/Sửa) đều qua hàm này. Test `ExamReconcileLockTest` (giao dịch khác giữ `FOR UPDATE`: đề xong không chờ, đề còn chỗ generating vẫn chờ). Đo trên `datn_mcq_e2e`, đề 13 (18 câu): số câu SQL vẫn 117 (câu `exists` thay đúng một câu khóa), số câu có `FOR (NO KEY) UPDATE` từ 1 mỗi lần xem về 0; thời gian một người dùng không đổi đáng kể (0,29–0,55 s), lợi ích là hết chặn nhau khi nhiều request xem cùng đề.
+- **F-12:** đường giáo viên sửa (`QuestionEditService`) tự bọc `$` quanh lệnh LaTeX ngoài `$` như parser (thay vì 400), trừ đáp số `sa`; vết QC (`ExamQcTraceService`) phân loại cảnh báo tự sửa bằng `QcSummaryService.isAutoFixedWarning` (một nguồn duy nhất).
+- **F-04 phần nhỏ:** `ExamActionService.keep` trả 409 `QC_CHECKING` khi câu còn job `grounding_check` pending/running.
+- Quy trình: một lần dùng `sed -i` sửa file test (trái M-39); Docker Desktop treo giữa chừng làm hỏng một lượt chạy test (nghi ổ C: gần đầy), chạy lại sau khi bật lại DB.
+- Hạn chế: `queries.sql` ước tính cờ từ dữ liệu đã lưu (không có `similar_in_exam`); cờ thật lấy từ API vết QC. Hết hạn mức ngày khi `app.llm.daily-quota` ≤ 0 (tắt) thì 429 `PerDay` không có tác dụng đánh dấu.
+- Trạng thái: Đã sửa (đo F-07 chờ thực hiện).
+
+### L-65 Giáo án .docx mất công thức MathType khi trích chữ (bổ sung 3/11)
+- Nhóm: LLM & parse (đầu vào tài liệu bài học)
+- Triệu chứng: tải giáo án có công thức MathType (`POST /api/materials`), cảnh báo "116/118 công thức MathType bị bỏ": văn bản trích chỉ giữ 2 công thức Equation gốc của Word. 51/54 giáo viên Toán khảo sát dùng MathType, nên tài liệu Toán gần như mất hết công thức và câu sinh ra bám tài liệu kém.
+- Nguyên nhân gốc: pandoc không đọc đối tượng OLE nhúng (`Equation.DSMT4`), chỉ đọc Equation gốc (OMML). Bộ đọc MTEF → LaTeX đã có ở `tools/bank-import` (nhánh `feature/bank-import-tool`, chưa vào main) nhưng chưa dùng ở luồng trích tài liệu.
+- Cách sửa: gói `com.datn.mcq.mtef` (chép từ `bankimport.mtef`, chỉ đọc; thêm `org.apache.poi:poi:5.4.1`, cùng khối dependency với nhánh MathType) và `MathTypeInliner`. Trước pandoc: mỗi `w:object` có `o:OLEObject` ProgID `Equation.*` được thay bằng mã giữ chỗ duy nhất (có chuỗi ngẫu nhiên mỗi lần), file `oleObjectN.bin` đọc theo `r:id` trong `document.xml.rels`. Sau pandoc: mã đổi thành `$latex$` (`$$…$$` nếu đứng riêng một dòng). Chèn thẳng `$` vào docx không được vì pandoc thoát `$` và `\`. Không chuyển được (MTEF lỗi/chưa hỗ trợ, `Equation.3`, thiếu file, > 1 MB, công thức thứ 2001 trở đi) thì `[công thức]` và được đếm. Cảnh báo mới `MATHTYPE_UNREADABLE` ("Đã chuyển N/M công thức MathType; K công thức không đọc được", chỉ khi K > 0) thay `MATHTYPE_FORMULAS_DROPPED` (frontend vẫn hiển thị mã cũ vì dữ liệu cũ). Docx không có MathType: không ghi lại file, pandoc đọc đúng file gốc. Giữ nguyên mọi kiểm tra zip/magic bytes, parser XML tắt DTD, và chạy trong permit `PandocLimiter`.
+- Khác bản gốc: `MtefReader` thêm trần độ lồng 200 (dữ liệu người dùng cố ý lồng sâu làm tràn ngăn xếp; bản trong tools/bank-import chưa có).
+- Chống tái phát: `DocxMathTypeTest` (16 test với pandoc thật: công thức đúng chỗ giữa câu, riêng dòng `$$`, trong bảng/run đậm/tô màu, 12 công thức không lẫn mã, bin rác, `Equation.3`, quan hệ thiếu/thoát gốc/liên kết ngoài, OLE > 1 MB, > 2000 công thức, rels có DOCTYPE, docx không MathType giống hệt pandoc thuần), `MtefToLatexTest` + `MtefCleanTest` (45, kèm 6 file `real-*.bin`), `DocxTextExtractorTest` và `MaterialApiTest` đã cập nhật theo cảnh báo mới.
+- Đo trên file thật (`KIEM_TRA_mo_rong.docx`, 116 MathType + 2 OMML): trước sửa giữ 2/118; sau sửa giữ 102/118 (100 MathType + 2 OMML), 16 công thức là `[công thức]`. File này cố ý chứa nhiều cấu trúc lạ (phần C) nên 16 không đọc được là đúng thiết kế (bộ đọc không đoán). Bộ đề thật của bank-import chuyển đúng 876/876.
+- Hạn chế: chỉ xử lý `w:object` trong `word/document.xml` (đối tượng nằm trong `w:pict`, chân trang, chú thích vẫn bị pandoc bỏ; loại `w:pict` được tính vào số "không đọc được"). Kiểm HTTP thật 3/11: app chạy trên `datn_mcq_e2e` (worker tắt), `POST /api/materials` bằng giáo viên e2e trả 201, `charCount` 3008 (trước sửa: 1133), cảnh báo `MATHTYPE_UNREADABLE` 16/116. Lưu ý khi đo lại: tải lại đúng file bằng cùng giáo viên trả 200 kèm bản cũ đã lưu (cùng sha256), không chạy code mới; phải dùng giáo viên khác hoặc xóa bản cũ.
+- Trạng thái: Đã sửa.
+
+### L-66 Nhập ngân hàng câu từ Word: bẫy khi đưa lõi tools/bank-import vào backend (bổ sung 3/11)
+- Nhóm: LLM & parse (đầu vào bộ câu hỏi .docx); nhánh `feature/bank-import-api`, V26, `/api/bank-imports`.
+- Triệu chứng/rủi ro tìm thấy khi khảo sát và viết:
+  1. Bộ đếm hạn mức Gemini khởi tạo lúc khởi động bằng `countLlmGeneratedSince` (mọi `generated_question` có
+     `edited_from_question_id IS NULL`): nếu câu nhập nằm trong `generated_question` mà không có cột phân biệt, nhập 161 câu rồi
+     khởi động lại sẽ "tiêu" 161/480 lượt Gemini của cả hệ thống.
+  2. `DocxReader` của tool: `mc:AlternateContent` lọc nhánh `Choice` theo namespace `w` nên không bao giờ khớp, ảnh nằm trong
+     `mc:AlternateContent` bị bỏ qua; đối tượng OLE không phải công thức mà không có ảnh xem trước và `w:drawing` không có
+     `a:blip` cũng mất. Với phạm vi "chỉ nhập câu không ảnh", câu có hình sẽ lọt vào ngân hàng thiếu hình.
+  3. Tool nạp MỌI `word/media/*` và `word/embeddings/*` bằng `readAllBytes`, không giới hạn; DOM của document.xml không có trần.
+  4. Fixture `src/test/resources/mtef/real-*.bin` không rõ nguồn (có thể lấy từ bộ đề thương mại).
+- Cách sửa:
+  1. V26 thêm `generated_question.origin` (`llm`/`import`) + `import_batch_id`; `countLlmGeneratedSince` và các file thống kê
+     (`docs/thong-ke/*.sql`, `docs/experiments/trial/queries.sql`) lọc `origin = 'llm'`. Test
+     `BankImportApiTest.nhapNamMuoiCauRoiKhoiDongLaiBoDemGeminiKhongDoi`.
+  2. `DocxReader` bản backend lấy `Choice` theo namespace `mc`, coi mọi đối tượng vẽ/hình (kể cả không có ảnh nhúng) là ảnh;
+     `DocParser` đăng ký thêm ảnh trong bảng bố cục và giữa "Trả lời"/"Đáp số". Câu có ảnh bị bỏ và đếm (`has_image`).
+  3. Không nạp ảnh; chỉ nạp embedding của công thức gặp trong thân tài liệu, trần 1 MiB/tệp (lớn hơn thì công thức coi như
+     không chuyển được) và 64 MiB tổng (quá thì 422); XML qua `DocxInputGuard.guardedXml` (chặn DOCTYPE/ENTITY, trần 16 MiB);
+     zip qua `ZipSafetyScanner` dùng chung với tài liệu bài học; parse trong permit `PandocLimiter`.
+  4. Thay bằng 7 đối tượng `oleObjectMT*.bin` lấy từ file tự soạn `spikes/mathtype-ole/KIEM_TRA_mo_rong.docx`
+     (`MtefToLatexTest`, `DocxMathTypeTest` cập nhật kỳ vọng). File tự soạn không có hệ phương trình (cases); cases vẫn được
+     test bằng MTEF dựng tay.
+- Chống tái phát: `BankImportParseTest` (15), `BankImportApiTest` (20: riêng tư, rollback, không gọi `LlmClient`, zip bomb,
+  DOCTYPE, quá cỡ, quá nhiều câu, hết hạn, log không chứa nội dung câu), `ExamMarkdownBuilderTest.cauKhongLoiGiaiBiBoKhoiPhanLoiGiai`.
+- Đo trên file thật (3/11, app chạy `datn_mcq_e2e`, worker tắt, giáo viên GV1, bộ k8c3b1): 40 câu đọc được, 26 vào bản xem
+  trước (0 cờ chặn; 24 không có lời giải, 7 cảnh báo LaTeX), bỏ 14 câu có ảnh; xác nhận 26 câu vào ngân hàng riêng tư. Khớp
+  `report.json` offline (`usable_text_only` = 26). Log chỉ có số liệu và id.
+- Bổ sung cùng ngày (sau review): (5) thông báo lỗi ràng buộc của PostgreSQL có "Failing row contains (…)" kèm nội dung
+  câu, và Hibernate ghi nguyên thông báo đó (Hibernate 7: logger `org.hibernate.orm.jdbc.error`, HHH000247, mức WARN; bản cũ:
+  `SqlExceptionHelper`). Khi lưu lô và khi xác nhận: bắt
+  `DataIntegrityViolationException`/`ConstraintViolationException`, chỉ log tên ràng buộc + SQLState + mã lô
+  (`ImportDbErrors`), trả 422 `IMPORT_DATA_INVALID` (CHECK/NOT NULL) hoặc 409 `IMPORT_CONFLICT` (trùng khóa/khóa ngoại); log
+  `org.hibernate.orm.jdbc.*` và `org.hibernate.engine.jdbc.*` bị chặn CHỈ trong phạm vi thao tác nhập (`ImportLogGuard`, turbo
+  filter logback theo MDC). Lưu ý khi viết test log: console đổi bảng mã chữ tiếng Việt, nên so chuỗi ASCII (ví dụ
+  `\frac{3}{4}` trong đề) chứ không so chữ có dấu.
+  (6) Trần 3 lô chờ trước đây kiểm và lưu ở hai transaction khác nhau: nay `ImportBatchWriter.savePreview` lấy
+  `pg_advisory_xact_lock(0x42494D50, ownerId)` rồi kiểm và lưu trong một transaction. Test
+  `viPhamCheckKhiXacNhanTra422VaLogChiCoTenRangBuoc`, `viPhamCheckKhiLuuLoTra422VaLogKhongCoNoiDung`,
+  `luuLoDongThoiKhongVuotTranLoCho` (6 luồng cùng lúc → đúng 3 lô).
+- Hạn chế: chặn log Hibernate chỉ có hiệu lực trong thân phương thức (bước xác nhận flush ngay cuối để mọi lỗi nổ ra trước
+  commit). Câu tf nhận chung một mức cho 4 ý.
+- Trạng thái: Đã sửa.
+
+### L-68 Góp ý giáo viên Toán trên đề 14: vị trí đáp án mcq, văn phong câu hỏi (bổ sung 3/11)
+- Nhóm: LLM & parse
+- Triệu chứng (giáo viên Toán thật xem đề 14): (1) Phần I có 7/12 đáp án A, câu 7-12 đều A (chuỗi `CBABBBAAAAAA`: A=7, B=4, C=1,
+  D=0), thí sinh đoán được. (2) Câu dẫn dài dòng ("Hãy nhận biết…" 1 câu, "Trong các biểu thức đại số sau đây…" 5 câu); dữ
+  kiện không dùng đến ("Cho hình thang cân MNPQ có hai đáy MN và PQ" rồi hỏi dấu hiệu nhận biết chung); thuật ngữ sai "cạnh
+  biên" (1 câu); câu dẫn "... là:" có dấu hai chấm sau "là"; câu sa có "(Nhập đáp án dưới dạng số nguyên hoặc số thập phân
+  gọn nhất)" (1 câu).
+- Nguyên nhân: (1) để model tự chọn thì thiên về A (cùng gốc với L-25 của câu Đúng/Sai); hệ thống không quyết định phân bố
+  chữ đáp án. (2) Prompt ma trận không nói gì về văn phong. Grep prompt thấy KHÔNG có câu nào dạy model viết "(Nhập đáp án…)":
+  model tự thêm vào, nên không có gì để xóa khỏi prompt, chỉ thêm lệnh cấm.
+- Cách sửa (không migration; mcq v6, sa v8, tf v8):
+  - `McqAnswerPlan`: khi tạo đề, gán trước chữ đúng cho mọi chỗ mcq cần sinh theo thứ tự câu trong đề, seed là id đề (qua hàm
+    trộn bit vì id liên tiếp là seed liên tiếp). Chữ đáp án của các chỗ lấy từ ngân hàng (`bank_item.correct_option`, truy vấn
+    native chỉ đọc ở `ExamSlotRepository.findBankCorrectOptions`) được đếm trước, rồi chia chữ cho chỗ cần sinh sao cho toàn đề
+    cân bằng nhất có thể, không để chỗ sinh nào tạo 3 câu liền nhau cùng chữ (12 câu thì mỗi chữ 3 lần). Dòng `Phương án đúng
+    phải là C: …` vào `generation_job.prompt_note`, kèm lệnh cấm lời giải nhắc chữ cái ("Do đó chọn B").
+  - Đổi câu / sinh lại: `chooseBalanced` chọn chữ đang ít nhất trong các chỗ mcq còn lại (tính cả câu ngân hàng), tránh chuỗi dài.
+  - Kiểm sau khi sinh: chữ đúng khác chữ đã giao thì ghi cảnh báo `correct_option: khác chữ đã giao C (nhận A)` vào QC; KHÔNG
+    bật cờ và chưa sinh lại (như `label: khác mẫu mục tiêu` của tf).
+  - `MatrixPromptDraftV0.STYLE_RULES` (cả 3 dạng: câu lệnh ngắn gọn có ví dụ, không dữ kiện thừa, đúng thuật ngữ SGK, không
+    dấu hai chấm sau "là"), `MCQ_OPTION_PUNCTUATION_RULE` (mcq: mỗi phương án kết thúc bằng dấu chấm),
+    `SA_ANSWER_INPUT_RULE` (sa: không ghi hướng dẫn nhập đáp án).
+  - `QuestionWordingCheck` (FormatChecker, chỉ đầu ra LLM, cảnh báo BẬT cờ, không loại câu): "cạnh biên" → "cạnh bên" ở đề dẫn,
+    phương án, ý, lời giải (danh sách `WRONG_TERMS` mở rộng bằng một dòng); "nhập đáp án/đáp số/kết quả" trong câu dẫn sa.
+- Chống tái phát: `McqAnswerPlanTest` (13: 12 câu mỗi chữ 3 lần với 500 seed, lệch tối đa 1 với mọi cỡ, 5 câu ngân hàng đều A + 7
+  chỗ sinh → chỗ sinh không thêm A, B/C/D chia 3,2,2; ít câu ngân hàng thì cả đề vẫn 3-3-3-3; chọn lại khi Đổi câu; đọc lại chữ,
+  bỏ qua khối giáo viên), `QuestionWordingCheckTest` (10), `MatrixPromptDraftV0Test` (văn phong, dấu chấm phương án, hướng dẫn
+  nhập chỉ sa, không lọt vào Solver, dòng chữ đáp án), `QcSummaryReviewReasonsTest.chuDungMcqKhacChuDaGiaoKhongBatCanXemKy`,
+  `ExamBuildTest` (giao chữ chia đều theo seed đề; lệch chữ là cảnh báo không bật cờ; Đổi câu chọn chữ đang thiếu; câu ngân
+  hàng đều A được đếm trước; yêu cầu của giáo viên không đổi chữ hệ thống giao).
+- Đo thật (3/11, app chạy `datn_mcq_e2e`, worker bật, giáo viên GV1; đề 14 trước, đề 15 tạo từ ma trận 4 sau):
+  | | Đề 14 (trước) | Đề 15 (sau) |
+  |---|---|---|
+  | Phân bố đáp án Phần I (12 câu) | A=7 B=4 C=1 D=0, `CBABBBAAAAAA` | A=3 B=3 C=3 D=3, `CACABDBCBDDA` |
+  | Câu dẫn mở bằng "Hãy" / "Trong các" | 1 / 5 | 0 / 2 |
+  | "cạnh biên" | 1 | 0 |
+  | "(Nhập đáp án" trong câu dẫn | 1 | 0 |
+  | Câu dẫn kết thúc "là:" | 1 | 0 |
+  | Số câu bật cờ | 3 | 4 (3 `similar_in_exam`, 1 `solver_multiple_correct`) |
+  Lưu ý khi đọc số: đề 15 có 3 câu lấy từ ngân hàng (1 mcq, 1 tf, 1 sa; câu ngân hàng viết bằng prompt cũ, và 1 trong 2 câu
+  "Trong các" là câu ngân hàng), 11 câu mcq do model sinh. Cả 11 câu sinh đúng chữ đã giao (vết QC không có cảnh báo lệch chữ).
+  Chữ đáp án câu ngân hàng được đếm trước nên cả 12 câu vẫn 3-3-3-3. Chỉ đo 1 đề, chưa đủ để kết luận về mức tuân thủ văn
+  phong; một số câu dẫn mcq vẫn chưa gọn (ví dụ câu cuối hỏi về "hai góc kề một đáy" không có vế kết).
+- Hạn chế / chưa làm: lệch chữ đáp án chưa sinh lại (chỉ cảnh báo); chưa có thống kê tuân thủ chữ trên nhiều đề.
+- Trạng thái: Đã sửa (đã đo 1 đề).
+
 ## QC
 
 ### L-28 Câu được `qc_passed` dù Solver lệch hoặc lỗi (bổ sung từ repo)
@@ -806,6 +999,169 @@ Theo mức độ: Cao 13, Trung bình 25, Thấp 14.
 - Bài học: Mọi đầu vào do người dùng hoặc model ngoài sinh ra khi đưa vào LLM khác (kể cả judge / solver nội bộ) đều phải được bọc ranh giới dữ liệu và trung hòa ký tự ranh giới để chống prompt injection.
 - Trạng thái: Đã sửa.
 
+### L-53 Dedup: `similarity` null ở mọi câu, câu cùng khuôn lọt qua; câu fallback của ô đang sinh lại không là ứng viên (bổ sung 31/10)
+- Nhóm: QC
+- Triệu chứng: trên DB `datn_mcq_e2e`, khi tạo đề mọi dòng dedup có `similarity_score = NULL`; ở đề 2 (tạo theo bài) câu 20 và 21 gần trùng nhau (cùng hỏi hiệu hai bình phương) mà cả hai qua dedup. Đề chạy 2 worker song song (W2-4b).
+- Chẩn đoán (suy luận từ đọc code, chưa đối chiếu dữ liệu thật của đề 2). Ba giả thuyết ban đầu đều sai hoặc thiếu:
+  1. "Câu cùng đề đang sinh không bao giờ là ứng viên": SAI. `ExamSlotSiblings.of` đã đưa vào `DedupScope.extraCandidates` câu của job mới nhất ở chỗ `generating` (câu và `generation_job.question_id` được ghi cùng transaction, trước khi dedup chạy). Test mới đi đúng đường này (chỗ kia `generating`, không `placeGenerated`, Solver lệch để câu 1 ở trạng thái `generated` và khác run với câu 2) đã PASS trên code chưa sửa.
+  2. "Hai worker song song không câu nào thấy câu kia": SAI. Câu lưu sau luôn thấy câu lưu trước vì `question_id` của job đã commit trước khi resolve ứng viên. Race chỉ làm CẢ HAI cùng bị `duplicate` (đánh dư, tốn thêm một lượt sinh lại), không làm lọt cả hai. Không thêm advisory lock; ghi vào backlog.
+  3. "`similarity = NULL` nghĩa là tập ứng viên rỗng": SAI. `DedupChecker.check` chỉ cập nhật `nearestScore`/`nearestId` cho ứng viên qua cả hai chốt chặn (cùng chữ ký số liệu/công thức và cùng phủ định); ứng viên bị chốt chặn loại không được ghi điểm (thiết kế có chủ đích: điểm lưu luôn nhỏ hơn ngưỡng). Câu toán trong cùng bài thường khác số liệu nên hầu hết dòng dedup có `similarity` NULL dù tập ứng viên không rỗng.
+- Nguyên nhân gốc của "câu 20 và 21 lọt": quy tắc "chỉ khác số liệu không tính là trùng" (hoặc cosine dưới ngưỡng 0,90 nếu cùng số liệu nhưng diễn đạt khác). Đây là thiết kế, không phải lỗi phạm vi ứng viên. Quyết định ngày 31/10: giữ nguyên chốt chặn số liệu, giữ nguyên hợp đồng `similarity` (null khi không có ứng viên qua chốt chặn; không đổi javadoc hay `enums.md`). Câu cùng khuôn khác số trong một đề chuyển sang việc riêng "đa dạng trong đề", không xử lý bằng dedup.
+- Lỗ hổng thật tìm thấy khi kiểm giả thuyết: câu lệch Solver ở ô A được đối soát thành `fallback_question_id` của chỗ và chỗ được xếp job sinh lại mới (chưa có `question_id`). Lúc đó `ExamSlotSiblings.of` trả null cho chỗ này (chỗ `generating`, job mới nhất chưa có câu), còn truy vấn SQL cũng không thấy câu fallback (status `generated`, và mỗi ô có run riêng nên nhánh "cùng run" không áp dụng). Câu cùng đề sinh ở ô B trong khoảng đó không bị so với câu fallback, dù nếu lần sinh lại hỏng thì câu fallback vẫn được đưa vào đề (`ExamBuildService.failOrUseFallback`). Test `cauLechSolverCuaChoKhacDangSinhLaiVanLaUngVien` FAIL trước khi sửa (`expected: <duplicate> but was: <generated>`).
+- Cách sửa: `ExamSlotSiblings.of` trả danh sách; với chỗ `generating`, ngoài câu của job mới nhất còn thêm câu `fallback_question_id` (nếu khác câu của job). Vẫn bỏ câu `duplicate`/`format_failed`/`rejected`; không đụng chốt chặn, ngưỡng, hợp đồng `similarity`, truy vấn SQL.
+- Chống tái phát: `ExamInExamDedupTest` (`sinhTrungCauODaKhacDangSinhChiThayQuaJobMoiNhatThiBiDedup` khóa đường `latestJobForSlot` của chỗ đang sinh; `cauLechSolverCuaChoKhacDangSinhLaiVanLaUngVien` khóa ứng viên fallback).
+- Backlog (không làm): hai worker xử lý hai câu giống nhau cùng lúc có thể cùng bị `duplicate`; chấp nhận vì hiếm và chỉ tốn một lượt sinh lại. Nếu cần tránh thì tuần tự hóa dedup theo đề bằng `pg_advisory_xact_lock` (chưa dự án nào dùng advisory lock, `grep advisory` trong `src` không có kết quả).
+- Bài học: `similarity = NULL` không phải bằng chứng ứng viên rỗng; trước khi kết luận lỗi phạm vi ứng viên phải tách "không có ứng viên" khỏi "ứng viên bị chốt chặn loại". Test dedup trong đề phải đi qua đường chỗ kia đang sinh, không chỉ đặt sẵn câu vào chỗ đã `ready`.
+- Trạng thái: Đã sửa (phần fallback). Phần "câu cùng khuôn" chuyển sang việc đa dạng trong đề.
+
+### L-54 Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (bổ sung 31/10)
+- Nhóm: QC
+- Triệu chứng: thẩm định 31/10 trên DB `datn_mcq_e2e` thấy 9 câu mcq có từ 2 phương án đúng trở lên mà Solver vẫn cho qua:
+  - câu 7, 8, 37, 39, 52, 53: phân tích nhân tử, nhiều phương án nhân lại đều bằng đa thức gốc. Ví dụ câu 37 "Phân tích
+    $2x^3 - 6x^2$ thành nhân tử" có cả 4 phương án bằng đa thức gốc;
+  - câu 15, 61: tính chất hình thang cân thiếu chữ "luôn";
+  - câu 25: bản giáo viên sửa có 2 đáp án.
+- Nguyên nhân gốc: prompt `solver-v2-delimited` đã cho phép ghi `multiple`/`none`, nhưng chỉ có một trường kết luận và không bắt
+  xét từng phương án. Solver giải ra một kết quả, gặp phương án đầu tiên khớp thì dừng, ghi chữ cái đó.
+- Đo "trước" (bước 1): công cụ `SolverProbeRunner` (chạy thủ công, không ghi DB, CSV ra ngoài repo). Lệnh đúng có
+  `--server.port=0 --app.worker.enabled=false`; lệnh ban đầu có `--spring.main.web-application-type=none` làm app không khởi
+  động được (SecurityConfig cần ngữ cảnh web), lần thử đó không gọi Gemini.
+- Cách sửa (bước 2):
+  - Prompt `solver-v3-option-check`: Solver giải bài rồi xét TỪNG phương án A–D (đúng/sai, lý do một dòng: khai triển/rút gọn,
+    thay số, đối chiếu điều kiện; khẳng định không "luôn" đúng là sai), trả thêm `options_verdict` và `correct_count`, vẫn giữ
+    `reasoning` và `judge_answer`.
+  - `AnswerSolverChecker` đếm lại từ `options_verdict`, không tin `correct_count`/`judge_answer` khi chúng lệch: 2 trở lên là
+    `multiple`, 0 là `none`. Cả hai là `INCONSISTENT`, nên đi đúng đường Q-2 có sẵn (sinh lại 1 lần, vẫn lỗi thì giữ kèm cờ).
+  - Lý do mới `solver_multiple_correct` / `solver_no_correct`. Kết quả từng phương án ghi vào đầu `solver_reasoning` (V14), không
+    thêm migration.
+  - Phản hồi thiếu hoặc hỏng `options_verdict` được xử lý như Solver cũ và ghi cảnh báo vào log.
+  - v2 vẫn giữ (`app.llm.solver-prompt-version`) để đo lại số "trước".
+- Chống tái phát: `McqSolverOptionCheckTest`, `SolverOptionCheckPromptTest`, `QcSummaryReviewReasonsTest`, `SolverProbeToolTest`,
+  `ExamReconcileErrorSeparationTest` (2 phương án đúng → sinh lại 1 lần → giữ kèm `solver_multiple_correct`; 0 phương án đúng →
+  `solver_no_correct`; 1 đúng khớp → `qc_passed`; 1 đúng khác đáp án → `solver_inconsistent`).
+- Hạn chế: mỗi lượt Solver mcq dài hơn (4 lý do một dòng), nên tốn thêm token; số token đo ở cột `token_count` của công cụ đo.
+  Việc tách lý do dựa vào dòng đầu của ghi chú Solver, nên ai sửa định dạng ghi chú phải sửa cùng `QcSummaryService`.
+- Lần thử 1 (`solver-v3-option-check`, commit `366b4b0`, DB `datn_mcq_e2e`, 29 câu, mỗi phiên bản chạy 2 lần, 31/10):
+  - Bắt được trên 9 câu lỗi: v2 0/9 và 0/9; v3 0/9 và 0/9.
+  - Báo nhầm trên 20 câu tốt: v2 0/19 (câu 27 lỗi 429, vượt 15 lượt/phút) và 0/20; v3 1/20 (câu 35 `multiple`) và 2/20
+    (câu 35 `multiple`, câu 32 `none`). Cả hai là Solver tính sai.
+  - Token trung bình mỗi câu: v2 687 và 684; v3 1206 và 1203. Độ trễ trung bình: v2 1179 và 1087 ms; v3 1640 và 1712 ms.
+  - Ổn định giữa 2 lần: v2 28/28 câu cùng kết luận; v3 28/29 (câu 32 đổi).
+  - Lý do 0/9 (đọc đề trong DB, các id đúng là câu đã thẩm định): Solver hiểu "đúng" hẹp.
+    - 6 câu phân tích nhân tử: Solver chỉ nhận cách phân tích triệt để, vì prompt v3 có cụm "đúng dạng đề yêu cầu".
+    - Câu 15, 61: chính prompt v3 dặn "khẳng định không luôn đúng là sai".
+    - Câu 25: Solver coi "$6$ km" không phải đơn thức vì có đơn vị.
+- Quy tắc nghiệp vụ chốt 31/10: phương án ĐÚNG nếu học sinh bảo vệ được nó là đáp án theo đúng chữ của đề, không thêm yêu cầu
+  đề không nêu.
+  - Phân tích nhân tử: mọi tích nhân lại bằng đa thức đã cho đều đúng, trừ khi đề ghi "triệt để" hoặc "đặt nhân tử chung lớn
+    nhất".
+  - Khẳng định hình học: đề không có "luôn" thì phương án đúng trong ít nhất một trường hợp hợp lệ là đúng.
+  - Đề mơ hồ thì `correct_count` từ 2. Mục tiêu là phát hiện đề mơ hồ, không đoán ý người ra đề.
+- Lần thử 2: prompt `solver-v4-literal-reading` (mặc định) = v3 + quy tắc trên + 2 ví dụ ($2x(x^2 - 3x)$ là phân tích đúng của
+  $2x^3 - 6x^2$; "hai đường chéo vuông góc" của hình thang cân là đúng khi đề không ghi "luôn"). Bỏ hai cụm gây hiểu hẹp của v3.
+  Cùng JSON và cách kết luận với v3. v2, v3 giữ nguyên từng chữ (`SolverPromptFrozenTextTest` ghim SHA-256 của prompt) để đo lại.
+- Kết quả lần thử 2 (`solver-v4-literal-reading`, commit `9c514eb`, cùng DB và 29 câu, chạy 2 lần, 31/10):
+  - Bắt được trên 9 câu lỗi: 7/9 và 5/9.
+    - Câu 37, 39 (4 phương án đúng), 7 (A, B), 8 (A, B, C), 15 (A, B): bắt được ở cả 2 lần. Các phương án Solver cho là đúng
+      khớp với đọc đề.
+    - Câu 52, 53: bắt được ở lần 1, bỏ sót ở lần 2. Lần 1 câu 52 cũng chỉ thấy A, B, bỏ qua D $x(7x - 14y)$ dù D nhân lại bằng
+      đa thức đã cho.
+    - Câu 61, 25: bỏ sót ở cả 2 lần. Đọc đề không thấy phương án thứ hai bảo vệ được ở câu 61; câu 25 Solver vẫn coi "$6$ km"
+      không phải đơn thức. Nếu chỉ tính 7 câu lỗi rõ ràng: 7/7 và 5/7.
+  - Báo nhầm trên 20 câu tốt: 0/19 (câu 27 lỗi 429) và 0/20. Hai lần báo nhầm của v3 (câu 32, 35) không còn.
+  - Token trung bình mỗi câu: 1622 và 1604 (khoảng 2,4 lần v2). Độ trễ trung bình: 1853 và 2133 ms.
+  - Ổn định giữa 2 lần: 26/28 câu cùng kết luận (khác ở câu 52, 53; câu 27 không tính).
+- Bảng TN1 (bắt được trên 9 / báo nhầm trên 20 / token trung bình / ổn định):
+
+  | Phiên bản | Bắt được | Báo nhầm | Token | Ổn định |
+  |---|---|---|---|---|
+  | v2 `solver-v2-delimited` | 0/9, 0/9 | 0/19, 0/20 | 687, 684 | 28/28 |
+  | v3 `solver-v3-option-check` | 0/9, 0/9 | 1/20, 2/20 | 1206, 1203 | 28/29 |
+  | v4 `solver-v4-literal-reading` | 7/9, 5/9 | 0/19, 0/20 | 1622, 1604 | 26/28 |
+
+- Hạn chế còn lại: v4 chưa ổn định với câu phân tích nhân tử có 2 phương án đúng (52, 53). Mỗi tập chỉ có 29 câu, mỗi phiên bản
+  chạy 2 lần, nên các tỉ lệ chỉ mang tính chỉ báo. Hạn mức 15 lượt/phút của gói miễn phí làm 1 lượt mỗi lần đo có thể lỗi 429.
+  - Nhãn "câu lỗi"/"câu tốt" của 29 câu do AI gán trong buổi thẩm định nội dung 31/10, CHƯA được người xác nhận; hai câu 61 và
+    25 còn tranh cãi (vì vậy có cả cách tính trên 7 câu). Số liệu chỉ dùng làm kết quả chính thức sau khi người xác nhận nhãn.
+  - Solver và mô hình sinh câu là cùng một model (`gemini-3.5-flash-lite`): mô hình tự kiểm tra đầu ra của chính nó; chưa thử
+    Solver bằng model khác.
+- Trạng thái: Đã sửa. v4 là mặc định; đã đo trước/sau.
+
+### L-55 Nhiều câu cùng khuôn (chỉ khác số hoặc tên đỉnh) trong một đề; câu mcq lộ đáp án của ý đúng/sai (bổ sung 31/10)
+- Nhóm: QC
+- Triệu chứng: thẩm định 31/10 trên 4 đề của `datn_mcq_e2e` thấy 7 cặp câu cùng khuôn trong cùng một đề, dedup không bắt: câu 57 và 55 (hình thang cân, cùng 75°, cùng nhiễu 105°), 49 và 48 (cùng hỏi bậc, cùng đáp số 5), 34 và 33, 29 và 27, 21 và 17, 62 và BI1 (câu ngân hàng); câu mcq 60 có cùng biểu thức $(4x - 1)^2$ với ý a của câu đúng/sai 56 và phương án C chính là ý a, nên lộ đáp án.
+- Nguyên nhân gốc: không phải lỗi dedup. Quy tắc "câu chỉ khác số liệu không tính là trùng" (chốt chặn số liệu của `DedupChecker`) là ĐÚNG cho ngân hàng và cho câu sinh (L-53), phải giữ. Thiếu một lớp riêng cho phạm vi MỘT đề, nơi hai câu cùng khuôn là lỗi dù khác số; và prompt sinh câu của các chỗ cùng ô không biết các chỗ kia đã có câu gì (hai worker chạy song song, ghi chú "câu thứ k/n" chỉ dặn chung chung).
+- Cách sửa (hai lớp, không migration, không đổi `DedupChecker`):
+  - Lớp 1, phòng lúc sinh: prompt ma trận mcq v4, sa v5, tf v6. Worker nhận job (không phải lúc xếp job, để thấy cả câu worker khác vừa sinh) lấy qua `SlotDedupContext.sameCellQuestionTexts` câu dẫn của các chỗ khác cùng ô trong cùng đề (cùng định nghĩa "câu đang có" với `ExamSlotSiblings.of`: câu hiện tại, câu ngân hàng đang dùng, câu mới nhất và fallback của chỗ đang sinh), đưa vào khối "Các câu đã có trong ô này" (tối đa 6 câu, mỗi câu 200 ký tự) kèm yêu cầu chọn dạng bài hoặc khía cạnh khác, không lặp khuôn chỉ đổi số liệu hay tên điểm. Đổi câu dùng cùng đường nên câu đang bị thay (chính chỗ đó) tự không có trong danh sách. Dòng "câu thứ k/N" thêm phân công cố định: chỗ k được ưu tiên khía cạnh thứ ((k−1) mod m)+1 trong m mức có yêu cầu cần đạt; m = 0 hoặc m < N thì dặn thêm dùng hình thức hỏi khác (đặt trong ghi chú lúc xếp job, `ExamBuildService.outcomeLevels`).
+  - Lớp 2, lưới an toàn: `ExamQuestionSimilarity` (hàm thuần) tính lúc xem đề trong `ExamViewService.view`. Che số bằng `#`, tên điểm/hình 2–5 chữ in hoa bằng `@`, bỏ `$`, chữ thường; cosine 3-gram, ngưỡng `app.exam.similar-threshold` (mặc định 0,82, xem hạn chế (1)). So mcq với mcq (thân câu và phương án) và mcq với từng ý đúng/sai (thân câu, và thân câu ghép từng phương án vì ý thường chứa sẵn biểu thức kết quả). Vượt ngưỡng: câu hệ thống sinh trong cặp thêm lý do `similar_in_exam: <n>` (n là số thứ tự câu kia trong đề); không loại câu, không đổi `generated_question.status`, không ghi DB; câu ngân hàng và câu đã Giữ/Sửa được so nhưng không bị gắn. Chuỗi hiển thị đề xuất: "Gần giống câu {n} trong đề, nên đổi một trong hai câu".
+- Chống tái phát: `ExamQuestionSimilarityTest` (câu 57/55 dựng lại với tên đỉnh và số khác, cặp bậc 49/48, 60/56a lộ đáp án, cặp cùng chủ đề khác dạng hỏi không bị gắn, không so đúng/sai với đúng/sai, ngưỡng, số thứ tự), `MatrixPromptSameCellTest` (khối câu đã có, giới hạn 6×200, công thức khía cạnh), `ExamSimilarInExamTest` (prompt thật qua worker giả: chỗ sau thấy chỗ trước chưa đối soát, không thấy ô khác, Đổi câu loại câu bị thay; xem đề: gắn cờ hai phía, không đổi trạng thái, không ghi DB, câu ngân hàng không bị gắn, đề khác không so).
+- Hạn chế: (1) đối chiếu trên dữ liệu thật (đề 1–4 của `datn_mcq_e2e`, 31/10, app thật cổng 8085, worker tắt, chỉ GET): ở ngưỡng 0,85 bắt 4/6 cặp NÊN gắn — 57/55 (đề 4 C10/C11) 0,9806; 49/48 (C4/C2) 0,9253; 60 với ý của 56 (C6/C14) 0,8933; 34/33 (đề 3 C3/C2) 0,8536 (sát ngưỡng) — và bỏ sót 62/BI1 (đề 4 C3/C1) 0,8259 và 29/27 (đề 2 C3/C2) 0,7494. Cặp KHÔNG nên gắn đều không bị gắn: đề 1 C5/C6 dưới 0,60, đề 4 C7/C8 (52/53) 0,7358. Cờ khác đã bật: đề 3 C7/C8 (37/39) 0,9908 (báo cáo thẩm định cũng ghi cùng khuôn), đề 2 C1/C4 (32/28, bình phương hiệu và bình phương tổng, cùng khuôn) 0,9707, đề 1 C1/C3 (BI1 và 25, cùng hỏi "biểu thức nào là đơn thức/đa thức") 0,8671; đọc nội dung thì cả ba là cùng khuôn nên không có gắn nhầm. Cặp đề 1 C7/C8 (q7/q8) 0,8368 bị bỏ sót dù báo cáo ghi cùng khuôn. Quyết định 31/10 (chủ dự án): mặc định 0,82 (đổi cả `application.yaml` và mặc định trong code; biến `EXAM_SIMILAR_THRESHOLD` vẫn ghi đè được). Lý do: lớp 2 chỉ gắn cờ nên ưu tiên recall. Trên 4 đề, 0,82 gắn 10 cặp (0,85 gắn 7), thêm 3 cặp: 62/BI1 (0,8259), đề 1 q7/q8 (0,8368, báo cáo thẩm định ghi cùng khuôn) và đề 3 q38 với ý a của q43 (0,8480; mcq khai triển $(2x - 5)^2$ với ý khai triển $(3x + 1)^2$: cùng khuôn, khác biểu thức nên không lộ đáp án; cặp biên, chưa có nhãn của người). 0 gắn nhầm trong các cặp đã có nhãn. Cặp cao nhất dưới ngưỡng: 0,7946 (đề 1 q20/q21). Hạn chế: ngưỡng chọn trên chính 4 đề này nên có thể overfit; sẽ kiểm lại ở đợt thẩm định đề mới. Bỏ sót đã biết: 29/27 (0,7494) và mcq với trả lời ngắn (21/17, ngoài phạm vi). Bảng điểm đầy đủ ở dưới; (2) `GET /api/exams` (`needsReviewSlots`) chưa tính lý do này, nên số trong danh sách có thể thấp hơn `needsReviewCount` khi xem đề. Đã cân nhắc và KHÔNG sửa vì chi phí không nhỏ: danh sách tối đa 50 đề, mỗi đề tới 60 chỗ, mà muốn so phải nạp nội dung từng câu (câu ngân hàng hoặc câu sinh, thêm 4 ý với câu tf) và thứ tự ô của đề, tức thêm vài truy vấn mỗi chỗ, gần gấp đôi chi phí hiện có của danh sách (đã gọi `summarize` mỗi chỗ `ready`); (3) item trả về từ Giữ/Đổi/Sửa (không phải xem đề) chưa có lý do này đến khi tải lại đề; (4) chỉ so mcq với mcq và mcq với ý đúng/sai, chưa so đúng/sai với đúng/sai hay trả lời ngắn với nhau; (5) khối "câu đã có" chỉ lấy 6 chỗ đầu của ô (theo thứ tự chỗ) khi ô có hơn 7 câu; (6) khía cạnh đếm theo số MỨC có yêu cầu cần đạt (m ≤ 3), không tách các ý trong một yêu cầu, nên ô mcq/sa (1 mức) luôn rơi vào nhánh "m < N" khi có từ 2 câu. Chủ dự án đồng ý cách hiểu này (31/10). Ma trận mẫu chỉ có 1 yêu cầu cho mỗi mức nên phân công khía cạnh ít tác dụng; đa dạng chủ yếu nhờ khối "câu đã có trong ô này" và câu dặn đổi hình thức hỏi.
+- Bảng điểm mọi cặp có độ giống từ 0,60 trong 4 đề của `datn_mcq_e2e` (31/10, điểm của `ExamQuestionSimilarity`; số là thứ tự câu trong đề, tức C-số; "mcq/tf" là mcq với một ý của câu đúng/sai; cặp dưới 0,60 không liệt kê, trong đó có đề 1 C5/C6). Cột "gắn" là ở mặc định 0,82:
+
+  | Đề | Cặp | Điểm | Gắn | Ghi chú |
+  |---|---|---|---|---|
+  | 1 | 1–2 | 0,7248 | không | |
+  | 1 | 1–3 | 0,8671 | có | BI1 và q25, cùng hỏi "biểu thức nào là đơn thức/đa thức" |
+  | 1 | 2–3 | 0,7021 | không | |
+  | 1 | 2–14 | 0,6093 | không | mcq/tf |
+  | 1 | 3–14 | 0,6106 | không | mcq/tf |
+  | 1 | 6–14 | 0,6771 | không | mcq/tf |
+  | 1 | 7–8 | 0,8368 | có | q7/q8 phân tích nhân tử, báo cáo ghi cùng khuôn |
+  | 1 | 9–10 | 0,7946 | không | q20/q21, cặp cao nhất dưới ngưỡng |
+  | 2 | 1–2 | 0,7363 | không | |
+  | 2 | 1–3 | 0,6754 | không | |
+  | 2 | 1–4 | 0,9707 | có | q32/q28, bình phương hiệu và bình phương tổng |
+  | 2 | 2–3 | 0,7494 | không | q27/q29, NÊN gắn, bỏ sót đã biết |
+  | 2 | 2–4 | 0,7299 | không | |
+  | 2 | 3–4 | 0,6432 | không | |
+  | 3 | 1–2 | 0,7446 | không | |
+  | 3 | 1–3 | 0,7042 | không | |
+  | 3 | 2–3 | 0,8536 | có | q33/q34, NÊN gắn |
+  | 3 | 5–6 | 0,7902 | không | |
+  | 3 | 6–7 | 0,6575 | không | |
+  | 3 | 6–8 | 0,6818 | không | |
+  | 3 | 6–14 | 0,8480 | có | mcq/tf, q38 với ý a của q43; cặp biên, xem trên |
+  | 3 | 7–8 | 0,9908 | có | q37/q39, cùng khuôn theo báo cáo |
+  | 3 | 9–10 | 0,7631 | không | |
+  | 3 | 9–11 | 0,7680 | không | |
+  | 3 | 9–12 | 0,6127 | không | |
+  | 3 | 10–11 | 0,6743 | không | |
+  | 4 | 1–3 | 0,8259 | có | BI1 và q62, NÊN gắn (bỏ sót ở 0,85) |
+  | 4 | 2–4 | 0,9253 | có | q48/q49, NÊN gắn |
+  | 4 | 2–13 | 0,6389 | không | mcq/tf |
+  | 4 | 5–6 | 0,6660 | không | |
+  | 4 | 6–8 | 0,7212 | không | |
+  | 4 | 6–14 | 0,8933 | có | mcq/tf, q60 với ý a của q56, NÊN gắn (lộ đáp án) |
+  | 4 | 7–8 | 0,7358 | không | q52/q53, KHÔNG nên gắn |
+  | 4 | 10–11 | 0,9806 | có | q57/q55, NÊN gắn |
+
+- Bài học: một quy tắc đúng ở phạm vi này (ngân hàng: khác số là khác câu) có thể sai ở phạm vi khác (một đề); xử lý bằng lớp riêng theo phạm vi thay vì nới quy tắc chung.
+- Trạng thái: Đã sửa (chờ đối chiếu dữ liệu thật).
+
+### L-56 Lời giải tự viết "Xin lỗi, tính lại…" rồi đổi dữ kiện; ô phân tích nhân tử dạng trả lời ngắn vẫn ra bài tìm x (bổ sung 31/10)
+- Nhóm: QC
+- Triệu chứng: thẩm định đề 5–7 (sau P2/P4/P5): số câu có lời giải sai tăng từ 1 lên 4; câu 82 có lời giải tự viết "Xin lỗi, tính lại…" rồi đổi dữ kiện của đề. Ô C17 (phân tích nhân tử, trả lời ngắn) ở cả 3 đề ra dạng "tìm x từ lập phương = số".
+- Nguyên nhân gốc: (1) chỉ câu Đúng/Sai có quy tắc chặn lời giải tự sửa (`TfExplanationLeak`); mcq và sa không có, và prompt không dặn lời giải chỉ ghi bản cuối; Solver không đọc lời giải nên không bắt được. (2) Quy tắc ô phân tích nhân tử bản 31/10 (L-trước) chỉ dặn "phải hỏi phân tích", không cho dạng cụ thể nên model vẫn quay về khuôn tìm x.
+- Cách sửa (không migration, không đổi prompt Solver):
+  - Prompt ma trận mcq v5, sa v6, tf v7: hằng riêng `EXPLANATION_RULE` ("Lời giải chỉ trình bày bản cuối cùng, mạch lạc; không ghi quá trình nháp, không xin lỗi, không "tính lại", không đổi dữ kiện của đề") cho cả 3 dạng; `FACTORING_CELL_RULE` (chỉ sa) thay bằng "Đáp án trả lời ngắn phải là một số, nên với ô phân tích đa thức thành nhân tử hãy ra dạng TÍNH NHANH GIÁ TRỊ biểu thức bằng cách phân tích hoặc dùng hằng đẳng thức (ví dụ tính nhanh $x^2 - 2x + 1$ tại $x = 21$, đáp số 400); chọn số liệu để đáp án gọn trong 4 ký tự. KHÔNG ra bài tìm x chỉ cần khai căn"; tf dùng `FACTORING_CELL_RULE_TF` riêng (không có câu "đáp án là một số"): "các ý đúng/sai là khẳng định về KẾT QUẢ PHÂN TÍCH (ví dụ $x^2 - 9 = (x - 3)(x + 3)$) hoặc về kết quả TÍNH NHANH giá trị bằng phân tích hoặc hằng đẳng thức; không biến thành bài tìm x chỉ cần khai căn".
+  - `ExplanationDraftLeak` + `FormatChecker.checkExplanationDraft`, cả 3 dạng, hai nhánh:
+    - Chặn: đầu ra của LLM chứa cụm chắc chắn là nháp thì `format_failed` với thông điệp "Lời giải còn chứa phần nháp/tự sửa; chỉ ghi lời giải cuối cùng." (ghi chú sinh lại nói đúng cách sửa); câu giáo viên viết/sửa và chạy lại QC câu đã lưu chỉ thêm cảnh báo cùng nội dung, không chặn. Câu tf mà `TfExplanationLeak` đã báo tự sửa thì không báo thêm lần nữa.
+    - Nghi ngờ, không chặn: "tính lại", "làm lại", "sửa lại" (cũng gặp trong lời giải bình thường) chỉ ghi cảnh báo `explanation: lời giải có thể còn phần nháp (tính lại, làm lại, sửa lại)` ở mọi nguồn; `QcSummaryService` đổi cảnh báo này thành lý do "cần xem kỹ" mới `explanation_draft_suspect` (không phải `warning: ...`). Không migration, không đổi trạng thái câu; cập nhật `docs/contract/enums.md` và `docs/api/README.md`. Chuỗi hiển thị đề xuất: "Lời giải có thể còn phần nháp, thầy/cô xem lại lời giải". Lời giải đã bị cụm chặn bắt thì không thêm lý do này.
+  - Cụm chặn (so không phân biệt hoa thường và dấu): "xin lỗi", "wait", "sorry", "nhầm" dạng hẹp, "à không". "nhầm" chỉ khớp "tôi nhầm", "em nhầm", "bị nhầm" (không khi theo sau là "lẫn") hoặc "nhầm" ngay trước dấu "," hay "."; "nhầm lẫn thường gặp" không bị chặn. "à không" so có dấu và đứng riêng một từ (bỏ dấu thì trùng "a không âm", a là biến; có dấu mà không đứng riêng thì trùng "mà không", "và không").
+  - Để cờ đầu ra LLM (`QuestionQcInput.llmOutput`) có cho mcq và sa như đã có cho tf: thêm `GenerationService.mcqQcInput`, `shortAnswerQcInput` gắn cờ; worker và sinh đồng bộ dùng chung.
+- Chống tái phát: `FormatCheckerExplanationDraftTest` (chặn cả 3 dạng, không báo hai lần ở tf, giáo viên chỉ cảnh báo, từng cụm chặn kể cả hoa/không dấu, quy tắc "nhầm" và "à không", nhánh nghi ngờ "tính lại/làm lại/sửa lại" ở cả 3 dạng và cả bản giáo viên chỉ cảnh báo, luồng sinh mcq/sa gắn cờ), `QcSummaryReviewReasonsTest` (cảnh báo nghi ngờ thành mã `explanation_draft_suspect`), `MatrixPromptDraftV0Test` (quy tắc mới có ở cả 3 dạng, ô phân tích nhân tử: sa có "đáp án là một số", tf có "KẾT QUẢ PHÂN TÍCH" và không có câu đó; không có ở Solver; phiên bản).
+- Hạn chế: (1) "tôi nhầm lẫn" bị chặn nhưng "đã nhầm" thì không; (2) **lời giải sai mà không có cụm nháp vẫn lọt** (4 trên 5 lỗi Toán còn lại của báo cáo thẩm định nằm ở lời giải, Solver không đọc lời giải): cần một bước kiểm "lời giải khớp đề và đáp án" (đề xuất F.1 của báo cáo thẩm định). **Để sau, chưa làm**; (3) cờ `explanation_draft_suspect` có thể bật với lời giải bình thường (ví dụ "thử tính lại bằng cách khác"): giáo viên chỉ phải đọc lại, câu không bị loại; chưa đo tỉ lệ bật nhầm trên dữ liệu thật; (4) chưa sinh lại đề để đo hiệu quả của hai quy tắc prompt.
+- Trạng thái: Đã sửa (chờ đo trên đề mới).
+
+### L-60 Cờ "gần giống" ghi số câu toàn đề, trang đề đánh số theo Phần; cả hai câu của một cặp đều bị gắn (bổ sung 2/11)
+- Nhóm: QC
+- Triệu chứng: đề 10: cờ `similar_in_exam: 14` trỏ "câu 14" trong khi trang đề đánh "Câu k" lại từ 1 ở từng Phần, giáo viên không tìm được câu; cả hai câu của một cặp cùng bị gắn nên một cặp thành hai cờ.
+- Nguyên nhân gốc: `ExamQuestionSimilarity.findSimilar` đếm vị trí toàn đề (L-55) và trả cả hai phía của cặp.
+- Cách sửa (không migration; **đổi hợp đồng JSON của lý do**): `similar_in_exam: <Phần>.<số>` (ví dụ `similar_in_exam: II.3`), một chuỗi ghép để giữ nguyên kiểu `reviewReasons: string[]`; mỗi cặp chỉ gắn câu có số thứ tự lớn hơn, trỏ về câu đứng trước (câu ngân hàng và câu đã Giữ/Sửa vẫn không bị gắn). `ExamQuestionSimilarity.flag/reason` (hàm thuần, kiểm được không cần DB); `ExamViewService` chỉ gọi lại. `docs/contract/enums.md` và `docs/api/README.md` cập nhật.
+- Frontend (đã làm lượt sau cùng ngày, `front_end/src/utils/exam.utils.ts`): `describeReviewReason` đọc `^(I{1,3})\.(\d+)$` và hiện "Gần giống câu {số} Phần {Phần} trong đề, nên đổi một trong hai câu"; dạng cũ `similar_in_exam: 14` vẫn đọc được. `describeFormatIssue` thêm "đã tự bọc $ …" ("Hệ thống đã tự sửa cách gõ công thức ở {chỗ}. Thầy/cô xem lại.") và "có từ tiếng Anh …" ("Câu có từ tiếng Anh lẫn vào, thầy/cô xem lại câu chữ."). `npm run build` đạt; chưa có test frontend (không có khung test), mới chạy thử tay các chuỗi qua node.
+- Chống tái phát: `ExamQuestionSimilarityTest` (chỉ câu sau có khóa, nhiều câu trước tăng dần, thứ tự quyết định bên bị gắn, `gianCoTheoPhanVaSoTrongPhanChiGanCauSau` qua nhiều Phần, `lyDoMangPhanVaSoTrongPhan`), `ExamSimilarInExamTest` (mức tích hợp: `I.1`, `I.1 + I.2`, câu ngân hàng làm câu trước).
+- Trạng thái: Đã sửa (frontend chưa cập nhật).
+
 ## Hàng đợi/đồng thời
 
 ### L-33 Đổi câu ở chỗ TF vi phạm `chk_es_ready`
@@ -988,6 +1344,73 @@ Theo mức độ: Cao 13, Trung bình 25, Thấp 14.
 - Bài học: xuất file cho phần mềm khác dùng tiếp thì phải kiểm cả siêu dữ liệu của file, không chỉ nội dung.
 - Trạng thái: Đã sửa. Chưa kiểm bằng Word và MathType thật sau bản sửa; mới kiểm XML bên trong file. Tiêu đề (Heading)
   vẫn dùng font theme của pandoc.
+
+### L-61 File Word không có đầu đề đề thi, in mã hệ thống MT… (bổ sung 2/11)
+- Nhóm: Xuất file
+- Triệu chứng: file xuất chỉ có tiêu đề và dòng "Mã đề: MT2610231200001" (mã hệ thống); giáo viên in ra phải tự dựng đầu đề.
+- Cách sửa (không migration): `ExamHeader` + `ExamMarkdownBuilder.headerBlock`: bảng 2 cột không viền (khối openxml thô, vì Markdown của pandoc không bỏ được viền): trái "PHÒNG GD&ĐT ……………" / "TRƯỜNG THCS ……………"; phải "ĐỀ KIỂM TRA <tên kì in hoa>" / "Môn: <môn> <khối> — Thời gian: <phút> phút" / "Mã đề: 101"; dưới bảng "Họ và tên: ……………………… Lớp: ………". Tên kì là tên ma trận bỏ hậu tố "– Môn Khối" ("Giữa kì I – Toán 8" thành "GIỮA KÌ I"); đề sinh theo bài hoặc đề cũ dùng tên đề. `ExamExportService` đọc ma trận và môn. Mã hiển thị 101 (đề gốc; `ExamHeader.displayCode` cho 102… khi có trộn mã đề, hiện chưa có chức năng này). Mã hệ thống chỉ còn ở tên file. Giữ nguyên `--sandbox` và mọi kiểm tra của `PandocSandboxTest`.
+- Chống tái phát: `ExamHeaderTest` (5), `ExamMarkdownBuilderTest` (bảng 2 cột, 1 dòng, không viền, không còn "MT2", thoát XML, chữ ký cũ), `ExamBuildTest.xuatDeRaWordTenFileTheoMaDe` (đọc `document.xml` của file thật: có các dòng đầu đề, không còn "MT2" và không có mã hệ thống; tên file vẫn theo mã đề).
+- Hạn chế: **thời gian làm bài luôn in "…… phút"** vì ma trận chưa có trường thời gian (cần migration và API riêng, chưa làm); chưa mở bằng Word thật để xem bố cục.
+- Trạng thái: Đã sửa (chưa kiểm bằng Word thật).
+
+### L-67 Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11)
+- Nhóm: Xuất file
+- Triệu chứng: không phải lỗi. Đây là ghi nhận kiểm chứng tính năng mới `?equation=mathtype` (commit `c78862d`).
+- Cách kiểm:
+  - Bước 0 (30/10): 876 công thức thật của 4 bộ đề, bộ chuyển đổi được 876/876, 116/116 câu đổi được toàn bộ. Đọc ngược
+    bằng bộ đọc MTEF của `tools/bank-import`: 786 giống LaTeX gốc, 88 tương đương, 2 bộ đọc không dịch được.
+  - Test tự động: `MtefGoldenTest` so cấu trúc MTEF với MTEF do MathType 7.12 sinh (10, 49 và 65 biểu thức mẫu);
+    `MathTypeOleTest`, `MathTypeDocxConverterTest`, `PandocRunnerTest`, `ExamBuildTest.xuatDeRaWordCongThucMathType`.
+  - Xuất thật (01/11): 4 bộ đề qua đúng `ExamMarkdownBuilder` → `PandocRunner` (không qua DB, vì DB dev trống), kết quả
+    310/350/1/221 đối tượng MathType, 0 công thức giữ Equation. Word mở được, đếm đúng số đối tượng, xuất được PDF.
+  - Kiểm tay (người dùng, 02/11): mở bằng MathType, bấm đúp sửa, lưu, mở lại; MathType Lite; in ra giấy: đạt.
+- Ghi nhận khi kiểm: trên máy không có MathType, bấm đúp thì Word hiện "Chuyển đổi công thức sang Office Math … Equation
+  Editor 3.0". Đây là hành vi của Word với mọi đối tượng MathType khi thiếu MathType, file vẫn đúng. Vì vậy mặc định để
+  `omml`, và frontend cần ghi chú khi cho chọn MathType.
+- Còn mở:
+  - `\widehat` trên một chữ cái thành `\hat` (66/876 công thức): không phải lỗi, xem mục bổ sung 3/11 bên dưới;
+  - tên kiểu trong `\1CompObj` là "MathType 6.0 Equation", MathType 7 ghi "7.0" (chép từ spike; MathType vẫn đọc được);
+  - file nặng do ảnh PNG 600 dpi;
+  - chưa chạy thử trong container Linux.
+- **Bổ sung 3/11 – công thức tràn lề, công thức giữa câu, `\widehat`, menu frontend** (xuất đề 14 trên `datn_mcq_e2e` đã
+  chạy end-to-end: 218/218 công thức thành `Equation.DSMT4`). Nguyên tắc chốt: ở chế độ `mathtype` MỌI công thức là đối tượng
+  MathType, không giữ Equation vì lý do bố cục (giáo viên không có MathType trả phí thì không Convert Equations được);
+  `X-Equation-Kept-Omml` chỉ > 0 khi chuyển MTEF thất bại thật.
+  - **Tràn lề (P0):** đối tượng OLE không tự xuống dòng; đề 14 có 2 công thức trong lời giải rộng 726pt và 561pt so với lề
+    chữ 468pt nên bị cắt khi in. Sửa: `PageGeometry` (lề chữ từ `sectPr`; `reference.docx` không khai báo `pgSz`/`pgMar` nên
+    dùng mặc định Word 12240 × 15840, lề 1440 twips; trừ thụt lề đoạn trực tiếp, của danh sách đánh số và của kiểu đoạn),
+    `FormulaBreaker` (ngắt tại dấu quan hệ cấp ngoài cùng, rồi `+`/`−` hai ngôi; không ngắt trong ngoặc, phân số, căn, chỉ số,
+    `\left…\right`, `\begin…\end`; dấu âm đứng đầu hoặc sau toán tử không ngắt), `ParagraphLines` (mỗi dòng công thức một
+    đoạn canh giữa; chữ trước ở lại, chữ sau sang đoạn mới), thu nhỏ kích thước hiển thị khi không ngắt được (header mới
+    `X-Equation-Scaled`, mở qua CORS). Bề rộng công thức đo bằng chính phép dựng ảnh xem trước (`PreviewRenderer.widthPt`).
+  - **Lỗi phát hiện khi xuất đề 14 thật:** lần chạy đầu bộ ngắt vẫn thu nhỏ công thức 726pt thay vì ngắt. Nguyên nhân:
+    pandoc gắn chỉ số vào ngoặc đóng (`(3x−2)^2` thành `(`, `3`, `x`, `−`, `2`, `sSup[")" mũ 2]`), nên bên Equation dấu `(`
+    không bao giờ đóng và không tìm được chỗ ngắt, trong khi bên LaTeX có. Test đơn vị với `m:r` rời không thấy được lỗi này;
+    chỉ test chạy pandoc thật với đúng công thức đề 14 mới đỏ. Sửa: ngoặc đóng nằm trong thân `sSup`/`sSub`/`sSubSup` được
+    tính là đóng ngoặc ở cấp ngoài. Chống tái phát: `MathTypeLayoutTest.congThucRongCuaDe14NgatTaiDauBangKhongThuNho`,
+    `FormulaBreakerTest.ngoacDongNamTrongThanChiSoVanDongNgoacMo`.
+  - **Đo trên đề 14 (3/11, app chạy `datn_mcq_e2e`, worker tắt, GV1, curl):** `equation=omml`: 218 Equation, 0 OLE. `equation=mathtype`:
+    218 công thức thành 224 đối tượng OLE (hai công thức 726pt và 561pt mỗi công thức thành 4 dòng), 0 Equation còn lại,
+    `X-Equation-Kept-Omml: 0`, `X-Equation-Scaled: 0`; đối tượng rộng nhất 421,08pt so với lề chữ 468pt (trước sửa 725,65pt).
+    Mở bằng Word 16 thật: `omml` 7 trang, `mathtype` 8 trang (ComputeStatistics); trang lời giải có hai công thức từng tràn lề
+    hiển thị đủ trong lề. Lần chạy đầu (trước khi sửa lỗi ngoặc đóng trong chỉ số) cho `X-Equation-Scaled: 1`, công thức 726pt bị thu nhỏ ×0,645.
+  - **Chưa làm được:** xuất PDF bằng Word COM (`ExportAsFixedFormat` rồi `SaveAs2`) đều treo trên máy kiểm nên số trang lấy từ
+    Word thay cho PDF; không bấm thử menu frontend trong trình duyệt và không chụp ảnh thông báo (phiên làm việc không có công
+    cụ trình duyệt); `npm run build` đạt. Nhận xét hiển thị: dấu câu đứng ngay sau công thức bị tách (ví dụ ". Khẳng định
+    này Đúng." thành dòng chữ riêng sau các dòng công thức) — chưa xử lý.
+  - **Công thức giữa câu (P1):** kiểm bằng `document.xml` của "Cho $x = 3$." và "Tính $(3)$": công thức vẫn nằm trong
+    đoạn, chữ "Cho ." và "Tính " đúng một dấu cách do pandoc, không thêm khoảng trắng nào trước/sau công thức. Code cũ đã
+    đúng; chỉ thêm test khóa (`MathTypeLayoutTest.congThucGiuaCauNamTrongDongChuKhongKhoangTrangThua`).
+  - **`\widehat` (P1):** pandoc đổi cả `\widehat` và `\hat` thành `m:acc` dấu mũ. Bộ chuyển đã phân biệt theo nền: nền một
+    ký tự dùng dấu mũ gắn vào ký tự (embellishment `EMB_HAT`), nền nhiều ký tự (`ABC`) dùng mẫu mũ rộng `tmHAT` của MathType
+    (đã có trong bộ so với MathType 7.12, `exprs10`). Chỉ có `\widehat{x}` một ký tự ra mũ thường (không phân biệt được với
+    `\hat{x}` sau pandoc; hai dạng hiển thị giống nhau). Thêm test khóa (`MathTypeLayoutTest.muRongChoNenNhieuKyTuMuThuongChoMotKyTu`).
+  - **Frontend:** nút "Xuất file Word" có mũi tên mở menu "Công thức Word (Equation)" (mặc định) và "Công thức MathType
+    (thử nghiệm)"; tên file `<tên đề>-mathtype.docx`; thông báo số công thức không chuyển được và số công thức bị thu nhỏ.
+    Trang đề hiện không có hộp xác nhận cho câu "cần xem kỹ" nên không có gì để giữ nguyên; khóa khi đề đang soạn giữ nguyên.
+- Bài học: với định dạng của phần mềm đóng, kiểm ở ba mức: cấu trúc (so với file do phần mềm sinh), đọc ngược trên dữ
+  liệu thật, và mở bằng chính phần mềm đó. Mức sau không thay được mức trước.
+- Trạng thái: Đã kiểm, dùng được. Còn các mục mở ở trên.
 
 ---
 

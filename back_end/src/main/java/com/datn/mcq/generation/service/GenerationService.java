@@ -291,20 +291,9 @@ public class GenerationService {
         boolean validateLatex = GenerationJobProcessor.isMathSubject(subject.getName());
         boolean runAnswerCheck = req.runAnswerCheck() != null ? req.runAnswerCheck() : true;
 
-        QcPipelineReport qcReport = qcOrchestrator.evaluateAndSave(new QuestionQcInput(
-                saved.getId(),
-                parsed.parseSuccess(),
-                parsed.questionText(),
-                parsed.optionA(),
-                parsed.optionB(),
-                parsed.optionC(),
-                parsed.optionD(),
-                parsed.correctOption(),
-                parsed.explanation(),
-                validateLatex,
-                runAnswerCheck,
-                parsed.parseError()
-        ).withParseWarnings(parsed.parseWarnings()), dedupScopeResolver.resolve(run.getId()));
+        QcPipelineReport qcReport = qcOrchestrator.evaluateAndSave(
+                mcqQcInput(saved.getId(), parsed, validateLatex, runAnswerCheck),
+                dedupScopeResolver.resolve(run.getId()));
         GeneratedQuestion updated = updateStatusAndDifficulty(saved.getId(), qcReport.resultingStatus(), null);
         return new SyncGenerationResponse(GeneratedQuestionSummaryDto.fromEntity(updated), qcReport);
     }
@@ -459,6 +448,25 @@ public class GenerationService {
         statementRepository.saveAll(statements);
     }
 
+    /** Đầu vào QC của câu mcq vừa giải mã (dùng chung cho generate-sync và worker). */
+    public static QuestionQcInput mcqQcInput(
+            Integer questionId, ParsedMcqDto parsed, boolean validateLatex, boolean runAnswerCheck) {
+        return new QuestionQcInput(
+                questionId,
+                parsed.parseSuccess(),
+                parsed.questionText(),
+                parsed.optionA(),
+                parsed.optionB(),
+                parsed.optionC(),
+                parsed.optionD(),
+                parsed.correctOption(),
+                parsed.explanation(),
+                validateLatex,
+                runAnswerCheck,
+                parsed.parseError()
+        ).withParseWarnings(parsed.parseWarnings()).withLlmOutput(true);
+    }
+
     /** Đầu vào QC của câu sa vừa giải mã (dùng chung cho generate-sync và worker). */
     public static QuestionQcInput shortAnswerQcInput(
             Integer questionId, ParsedSaDto parsed, boolean validateLatex, boolean runAnswerCheck) {
@@ -472,7 +480,7 @@ public class GenerationService {
                 validateLatex,
                 runAnswerCheck,
                 parsed.parseError()
-        ).withParseWarnings(parsed.parseWarnings());
+        ).withParseWarnings(parsed.parseWarnings()).withLlmOutput(true);
     }
 
     /**
@@ -552,6 +560,24 @@ public class GenerationService {
                 numQuestions,
                 spec.questionType(),
                 spec.toJson());
+    }
+
+    /** model_name của run chứa câu nhập từ Word (không phải model LLM nào). */
+    public static final String IMPORT_MODEL_NAME = "import-docx";
+    /** prompt_version của run chứa câu nhập từ Word. */
+    public static final String IMPORT_PROMPT_VERSION = "import-docx-v1";
+
+    /**
+     * V26 (nhập từ Word): run production, zero-shot cho câu nhập của một dạng ({@code chk_er_tf_sa_production}), không gắn
+     * model LLM nào; không có job, không gọi LLM. Run chỉ để giữ khóa ngoại (run_id, question_type) của generated_question.
+     */
+    @Transactional
+    public ExperimentRun createImportRun(Integer subjectId, QuestionType type, int numQuestions) {
+        ExperimentRun run = experimentService.createRun(subjectId, Purpose.PRODUCTION, Strategy.ZERO_SHOT,
+                IMPORT_MODEL_NAME, 0.0, IMPORT_PROMPT_VERSION, "", numQuestions, type);
+        run.setStatus("imported");
+        run.setEndedAt(run.getStartedAt());
+        return run;
     }
 
     /**

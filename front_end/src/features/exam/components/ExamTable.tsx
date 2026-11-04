@@ -1,10 +1,11 @@
-import { Badge, Button, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Button, Empty, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
-import { EyeOutlined } from "@ant-design/icons";
+import { EyeOutlined, WarningOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
 import "./ExamTable.css";
-import type { ExamListItem, ExamStatus } from "../types/exam.types";
+import type { ExamKind, ExamListItem, ExamStatus } from "../types/exam.types";
+import { examKindConfig, examStatusConfig } from "../../../utils/exam.utils";
 
 const { Text } = Typography;
 
@@ -16,23 +17,10 @@ interface ExamTableProps {
     pageSize?: number;
     onPageChange?: (page: number, pageSize: number) => void;
     onView?: (exam: ExamListItem) => void;
+    /** Bấm "Tạo đề đầu tiên" ở trạng thái rỗng. */
+    onCreate?: () => void;
 }
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-    draft: { label: "Bản nháp", color: "default" },
-    confirmed: { label: "Đã xác nhận", color: "success" },
-    DRAFT: { label: "Bản nháp", color: "default" },
-    PUBLISHED: { label: "Đã phát hành", color: "success" },
-    ARCHIVED: { label: "Lưu trữ", color: "warning" },
-};
-
-const kindConfig: Record<string, { label: string; color: string }> = {
-    matrix: { label: "Ma trận", color: "blue" },
-    lesson: { label: "Theo bài", color: "purple" },
-    manual: { label: "Thủ công", color: "default" },
-    MATRIX: { label: "Ma trận", color: "blue" },
-    BY_TOPIC: { label: "Theo bài", color: "purple" },
-};
 
 export default function ExamTable({
     data,
@@ -42,13 +30,14 @@ export default function ExamTable({
     pageSize = 10,
     onPageChange,
     onView,
+    onCreate,
 }: ExamTableProps) {
     const columns: ColumnsType<ExamListItem> = [
         {
-            title: "Mã đề",
+            title: "Mã hệ thống",
             dataIndex: "examCode",
             key: "examCode",
-            width: 110,
+            width: 130,
             align: "center",
             render: (_, record) => <Text strong>{record.examCode || "—"}</Text>,
         },
@@ -71,9 +60,10 @@ export default function ExamTable({
             key: "kind",
             width: 110,
             align: "center",
-            render: (kind: string) => {
-                const config = kindConfig[kind] || { label: kind, color: "default" };
-                return <Tag color={config.color}>{config.label}</Tag>;
+            render: (kind: ExamKind) => {
+                // Giá trị lạ (backend thêm loại mới) thì hiện nguyên giá trị
+                const config = examKindConfig[kind] ?? { label: kind, color: "default" };
+                return <Text>{config.label}</Text>;
             },
         },
         {
@@ -91,21 +81,17 @@ export default function ExamTable({
                     <Space direction="vertical" size={2} style={{ display: "flex" }}>
                         <Text>{`${done} / ${total} câu`}</Text>
                         {generating > 0 && (
-                            <Tag color="processing" style={{ fontSize: 11, margin: 0 }}>
-                                {generating} đang sinh...
-                            </Tag>
+                            <Text type="secondary">{generating} đang soạn...</Text>
                         )}
                         {failed > 0 && (
-                            <Tag color="error" style={{ fontSize: 11, margin: 0 }}>
-                                {failed} thất bại
-                            </Tag>
+                            <Text type="danger">{failed} chưa soạn được</Text>
                         )}
                     </Space>
                 );
             },
         },
         {
-            title: "Trạng thái sinh",
+            title: "Tình trạng",
             key: "generatingStatus",
             width: 140,
             align: "center",
@@ -114,12 +100,12 @@ export default function ExamTable({
                 const failed = record.failedSlots ?? 0;
 
                 if (generating > 0) {
-                    return <Tag color="processing">{generating} đang tạo</Tag>;
+                    return <Text>{generating} đang soạn</Text>;
                 }
                 if (failed > 0) {
-                    return <Tag color="error">{failed} lỗi</Tag>;
+                    return <Text type="danger">{failed} chưa soạn được</Text>;
                 }
-                return <Tag color="success">Hoàn tất</Tag>;
+                return <Text>Hoàn tất</Text>;
             },
         },
         {
@@ -131,15 +117,12 @@ export default function ExamTable({
             render: (needsReviewSlots: number = 0) => {
                 if (needsReviewSlots > 0) {
                     return (
-                        <Badge
-                            count={needsReviewSlots}
-                            style={{ backgroundColor: "#faad14" }}
-                        >
-                            <Tag color="warning">Cần xem lại</Tag>
-                        </Badge>
+                        <Tag color="volcano" icon={<WarningOutlined />}>
+                            Cần xem kỹ ({needsReviewSlots})
+                        </Tag>
                     );
                 }
-                return <Tag color="success">Đạt</Tag>;
+                return <Text>Đạt</Text>;
             },
         },
         {
@@ -149,8 +132,8 @@ export default function ExamTable({
             width: 130,
             align: "center",
             render: (status: ExamStatus) => {
-                const config = statusConfig[status] || { label: status, color: "default" };
-                return <Tag color={config.color}>{config.label}</Tag>;
+                const config = examStatusConfig[status] ?? { label: status, color: "default" };
+                return <Text>{config.label}</Text>;
             },
         },
         {
@@ -196,6 +179,17 @@ export default function ExamTable({
                 columns={columns}
                 dataSource={data}
                 loading={loading}
+                locale={{
+                    emptyText: (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có đề nào.">
+                            {onCreate && (
+                                <Button type="primary" size="large" onClick={onCreate}>
+                                    Tạo đề đầu tiên
+                                </Button>
+                            )}
+                        </Empty>
+                    ),
+                }}
                 scroll={{ x: 1150 }}
                 pagination={{
                     current: page,

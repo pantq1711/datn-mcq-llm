@@ -72,6 +72,11 @@ class ExamQuestionEditTest {
     /** Solver giả: mcq trả {@code mcqJudge}, sa {@code saJudge}, tf {@code tfJudges}; có thể lỗi hoặc chạy một móc. */
     static final class EditSolver extends LlmClient {
         String mcqJudge = "B";
+        /**
+         * Solver v3 (xét từng phương án): các chữ cái Solver cho là đúng, nối bằng dấu phẩy ("" là không có phương án nào
+         * đúng). null: trả JSON kiểu Solver cũ chỉ có judge_answer = {@code mcqJudge}.
+         */
+        String mcqOptions;
         String saJudge = "5";
         /** Lời giải thích Solver trả cho mcq và sa (W1-3: được lưu ở quality_check_result.solver_reasoning). */
         String reasoning = "r";
@@ -115,10 +120,26 @@ class ExamQuestionEditTest {
                         + " \"judge_d\": \"" + j[3] + "\"}";
             } else if (SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON.equals(schema)) {
                 body = "{\"reasoning\": \"" + reasoning + "\", \"judge_answer\": \"" + saJudge + "\"}";
+            } else if (mcqOptions != null) {
+                body = optionCheckJson(reasoning, mcqOptions);
             } else {
                 body = "{\"reasoning\": \"" + reasoning + "\", \"judge_answer\": \"" + mcqJudge + "\"}";
             }
             return new LlmCallResult(body, 10, 1.0, 0.0, modelName);
+        }
+
+        /** JSON Solver v3: options_verdict cho A-D, correct_count và judge_answer suy từ các chữ cái đúng. */
+        static String optionCheckJson(String reasoning, String correctLetters) {
+            List<String> correct = correctLetters.isBlank() ? List.of() : List.of(correctLetters.split(","));
+            StringBuilder items = new StringBuilder();
+            for (String opt : List.of("A", "B", "C", "D")) {
+                items.append(items.length() > 0 ? ", " : "").append("{\"option\": \"").append(opt)
+                        .append("\", \"correct\": ").append(correct.contains(opt))
+                        .append(", \"reason\": \"kiểm ").append(opt).append("\"}");
+            }
+            String judge = correct.size() == 1 ? correct.get(0) : correct.isEmpty() ? "none" : "multiple";
+            return "{\"reasoning\": \"" + reasoning + "\", \"options_verdict\": [" + items + "], \"correct_count\": "
+                    + correct.size() + ", \"judge_answer\": \"" + judge + "\"}";
         }
     }
 
@@ -322,6 +343,14 @@ class ExamQuestionEditTest {
         return out;
     }
 
+    /**
+     * Lý do của bước QC, không tính {@code similar_in_exam} (tính lúc xem đề, ExamSimilarInExamTest): hai câu mcq của
+     * FakeGenerator trong cùng một ô cùng khuôn sau khi che số nên luôn bị gắn cờ này.
+     */
+    private static List<String> qcReasons(JsonNode item) {
+        return texts(item.get("reviewReasons")).stream().filter(r -> !r.startsWith("similar_in_exam: ")).toList();
+    }
+
     /** Dấu vết ghi DB của luồng sửa: số câu, số job, số dòng nhật ký, số dòng QC. */
     private List<Integer> footprint() {
         return List.of(count("SELECT count(*) FROM generated_question"), count("SELECT count(*) FROM generation_job"),
@@ -516,10 +545,59 @@ class ExamQuestionEditTest {
         int version = item.get("questionId").asInt();
         assertEquals("$5$", question(version).get("option_a"));
         assertEquals("$5$", item.get("optionA").asText());
-        assertTrue(texts(item.get("reviewReasons")).contains("warning: option_a: đã tự đóng $"), item.toString());
+        assertFalse(texts(item.get("reviewReasons")).contains("warning: option_a: đã tự đóng $"),
+                "2/11: tự đóng $ là hệ thống tự sửa chắc chắn, không bật cờ (cảnh báo vẫn được lưu bên dưới): " + item);
         String warnings = jdbc.queryForObject("SELECT warnings::text FROM quality_check_result WHERE question_id = ?"
                 + " AND check_type = 'format'", String.class, version);
         assertTrue(warnings.contains("option_a: đã tự đóng $"), warnings);
+    }
+
+    /**
+     * F-04 (phần nhỏ): Giữ bị chặn (409 QC_CHECKING, như answer_check) khi câu còn job grounding_check chờ hoặc đang chạy,
+     * để không đưa vào ngân hàng một câu chưa biết có bám tài liệu hay không. Job xong hoặc thất bại thì Giữ được.
+     */
+    @Test
+    void giuBiChanKhiCauConJobGroundingCheckChoHoacChay() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int question = questionOf(slot);
+        int grounding = insert("INSERT INTO generation_job (job_type, run_id, template_id, question_type, question_id,"
+                + " material_context, material_refs, status, attempt, next_run_at, created_at, updated_at)"
+                + " SELECT 'grounding_check', run_id, template_id, question_type, ?, 'ngữ cảnh', '[]'::jsonb, 'pending',"
+                + " 0, now(), now(), now()"
+                + " FROM generation_job WHERE exam_slot_id = ? AND job_type = 'generate'", question, slot);
+
+        for (String active : List.of("pending", "running")) {
+            jdbc.update("UPDATE generation_job SET status = ? WHERE id = ?", active, grounding);
+            assertEquals("QC_CHECKING", json(keep(examId, slot).andExpect(status().isConflict())).get("code").asText(),
+                    active);
+            assertEquals("ready", jdbc.queryForObject("SELECT state FROM exam_slot WHERE id = ?", String.class, slot));
+        }
+        jdbc.update("UPDATE generation_job SET status = 'failed' WHERE id = ?", grounding);
+        keep(examId, slot).andExpect(status().isOk());
+        assertEquals("kept", jdbc.queryForObject("SELECT state FROM exam_slot WHERE id = ?", String.class, slot));
+    }
+
+    /**
+     * F-12 phần 2: giáo viên gõ \frac{1}{2} quên $ thì được tự bọc như parser sinh câu (trước đây 400 FORMAT_INVALID vì LaTeX
+     * nằm ngoài $); cảnh báo "đã tự bọc $" được lưu ở bước format.
+     */
+    @Test
+    void banSuaQuenDollarQuanhLenhLatexDuocTuBocNhuParser() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int base = questionOf(slot);
+        JsonNode item = json(putQuestion(examId, slot, mcqBody(base)
+                .put("optionA", "\\frac{1}{2}")
+                .put("explanation", "Ta có \\frac{1}{2} khi $y \\neq 0$."))
+                .andExpect(status().isOk()));
+        int version = item.get("questionId").asInt();
+        assertEquals("$\\frac{1}{2}$", question(version).get("option_a"));
+        assertEquals("Ta có $\\frac{1}{2}$ khi $y \\neq 0$.", question(version).get("explanation"));
+        String warnings = jdbc.queryForObject("SELECT warnings::text FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type = 'format'", String.class, version);
+        assertTrue(warnings.contains("option_a: đã tự bọc $ quanh"), warnings);
+        assertTrue(warnings.contains("explanation: đã tự bọc $ quanh"), warnings);
     }
 
     /** 27/10 (exam 10 ô 25): giáo viên lưu đơn vị viết "\text{km}" ngoài $ thì được gỡ vỏ và qua format. */
@@ -542,6 +620,27 @@ class ExamQuestionEditTest {
         assertTrue(format.contains("ngoài $ (đã gỡ vỏ) ở option_a"), format);
         assertTrue(texts(item.get("reviewReasons")).stream().noneMatch(t -> t.contains("đã gỡ vỏ")),
                 "gỡ vỏ không đổi nghĩa nên không bật cần xem kỹ: " + item);
+    }
+
+    /** 31/10: ký hiệu độ viết ^\bullet / ^{\triangle} trong bản giáo viên sửa được đổi thành ^{\circ}, \triangle ABC giữ nguyên. */
+    @Test
+    void banSuaCoKyHieuDoBulletTriangleDuocDoiThanhCirc() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int base = questionOf(slot);
+        JsonNode item = json(putQuestion(examId, slot, mcqBody(base)
+                .put("questionText", "Cho $\\triangle ABC$ có góc $A = 75^\\bullet$. Tính góc $B$?")
+                .put("optionA", "$85^{\\triangle}$"))
+                .andExpect(status().isOk()));
+        int version = item.get("questionId").asInt();
+        assertEquals("Cho $\\triangle ABC$ có góc $A = 75^{\\circ}$. Tính góc $B$?", question(version).get("question_text"));
+        assertEquals("$85^{\\circ}$", question(version).get("option_a"));
+        String format = jdbc.queryForObject("SELECT passed || ' ' || warnings::text FROM quality_check_result"
+                + " WHERE question_id = ? AND check_type = 'format'", String.class, version);
+        assertTrue(format.startsWith("true "), format);
+        assertTrue(format.contains("ký hiệu độ"), format);
+        assertTrue(texts(item.get("reviewReasons")).stream().noneMatch(t -> t.contains("ký hiệu độ")),
+                "đổi ký hiệu độ là tự sửa, không bật cần xem kỹ: " + item);
     }
 
     /** 27/10: đáp án sa giáo viên nhập "2.75" được lưu "2,75". */
@@ -641,8 +740,7 @@ class ExamQuestionEditTest {
         assertEquals(calls + 1, SOLVER.calls);
         assertEquals("qc_passed", statusOf(version));
         JsonNode item = viewItem(examId, slot);
-        assertEquals("passed", item.get("qcState").asText());
-        assertEquals("[]", item.get("reviewReasons").toString());
+        assertEquals(List.of(), qcReasons(item), "Solver đồng ý: không còn lý do QC nào");
         assertEquals("done", jdbc.queryForObject("SELECT status FROM generation_job WHERE question_id = ?"
                 + " AND job_type = 'answer_check'", String.class, version));
     }
@@ -659,7 +757,7 @@ class ExamQuestionEditTest {
         JsonNode item = viewItem(examId, slot);
         assertEquals("C", item.get("correctOption").asText());
         assertEquals("needs_review", item.get("qcState").asText());
-        assertEquals(List.of("solver_inconsistent"), texts(item.get("reviewReasons")));
+        assertEquals(List.of("solver_inconsistent"), qcReasons(item));
         assertTrue(item.get("needsReview").asBoolean());
         assertEquals("edited", json(keep(examId, slot).andExpect(status().isOk())).get("state").asText(),
                 "giáo viên vẫn Giữ được sau khi thấy cờ");
@@ -685,7 +783,7 @@ class ExamQuestionEditTest {
                 + " AND check_type = 'answer_check'", version));
         JsonNode item = viewItem(examId, slot);
         assertEquals("needs_review", item.get("qcState").asText());
-        assertEquals(List.of("solver_failed"), texts(item.get("reviewReasons")));
+        assertEquals(List.of("solver_failed"), qcReasons(item));
 
         JsonNode kept = json(keep(examId, slot).andExpect(status().isOk()));
         assertEquals("edited", kept.get("state").asText());
@@ -742,7 +840,7 @@ class ExamQuestionEditTest {
 
         processAll();
         assertEquals("generated", statusOf(v2[0]));
-        assertEquals(List.of("solver_inconsistent"), texts(viewItem(examId, slot).get("reviewReasons")));
+        assertEquals(List.of("solver_inconsistent"), qcReasons(viewItem(examId, slot)));
     }
 
     @Test

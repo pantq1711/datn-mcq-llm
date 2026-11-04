@@ -19,6 +19,7 @@ import com.datn.mcq.bank.repository.BankItemStatementRepository;
 import com.datn.mcq.bank.repository.BankSearchRepository;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
+import com.datn.mcq.enums.QuestionOrigin;
 import com.datn.mcq.enums.QuestionType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,7 +58,7 @@ public class BankService {
      * Tham số null hoặc rỗng là không lọc; giá trị sai thì IllegalArgumentException (400).
      *
      * @param levels (chỉ tf) đúng chuỗi 4 mức a-d, ví dụ {@code easy,easy,medium,hard}
-     * @param origin {@code ai} (mặc định) hoặc {@code import} (để dành cho nhập từ Word, hiện không có câu nào)
+     * @param origin không truyền là mọi nguồn; {@code ai} (câu AI đã duyệt) hoặc {@code import} (câu nhập từ Word, V26)
      * @param q      tìm trong đề, phương án, đáp số và các ý (không phân biệt hoa thường, tối đa 100 ký tự)
      * @param usage  {@code used} hoặc {@code unused}
      * @param sort   {@code newest} (mặc định), {@code oldest}, {@code least_used}, {@code recently_used}
@@ -206,7 +207,8 @@ public class BankService {
                 r.optionB(), r.optionC(), r.optionD(), r.correctOption(), r.explanation(), r.difficulty(),
                 r.createdAt(), r.questionType(), r.questionType() == QuestionType.SA ? r.saAnswer() : null,
                 statementDtos, r.subjectId(), r.subjectName(), r.gradeLevel(), r.topic(), r.content(),
-                new OriginDto("ai", r.reviewMode(), r.edited()), r.usageCount(), r.lastUsedAt());
+                new OriginDto(r.origin() == QuestionOrigin.IMPORT ? "import" : "ai", r.reviewMode(), r.edited()),
+                r.usageCount(), r.lastUsedAt());
     }
 
     private static String blankToNull(String s) {

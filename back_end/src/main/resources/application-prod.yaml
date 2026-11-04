@@ -22,7 +22,12 @@ springdoc:
 
 # Giới hạn bộ nhớ và đồng thời cho môi trường thật VPS 2GB / container app 1GB (W2-4a Mục 1)
 app:
+  # Chờ worker xong job đang gọi Gemini khi tắt ứng dụng (F-09): nhỏ hơn timeout-per-shutdown-phase (30s) và
+  # stop_grace_period của compose (40s). Job không kịp xong thì được trả về pending (không tính lỗi).
+  worker:
+    shutdown-await-ms: 28000
+  # Mặc định giữ nguyên giá trị cũ; đổi bằng biến môi trường (F-11) mà không phải sửa file.
   materials:
-    max-concurrent-extractions: 1
-    pandoc-heap-mb: 256
-    queue-wait: 30s
+    max-concurrent-extractions: ${MATERIAL_MAX_CONCURRENT:1}
+    pandoc-heap-mb: ${MATERIAL_PANDOC_HEAP_MB:256}
+    queue-wait: ${MATERIAL_QUEUE_WAIT:30s}

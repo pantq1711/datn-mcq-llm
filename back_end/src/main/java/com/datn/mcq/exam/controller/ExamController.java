@@ -12,6 +12,8 @@ import com.datn.mcq.exam.dto.ExamViewDtos.ExamPageDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
 import com.datn.mcq.exam.export.ExamExportService;
 import com.datn.mcq.exam.export.ExamExportService.DocxFile;
+import com.datn.mcq.exam.export.EquationFormat;
+import com.datn.mcq.exam.export.ExamHeader;
 import com.datn.mcq.exam.service.ExamActionService;
 import com.datn.mcq.exam.service.ExamBuildService;
 import com.datn.mcq.exam.service.ExamQcTraceService;
@@ -41,6 +43,11 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/exams")
 public class ExamController {
+
+    /** Header của xuất Word dạng MathType; SecurityConfig mở header này cho frontend đọc (CORS). */
+    public static final String EQUATION_KEPT_HEADER = "X-Equation-Kept-Omml";
+    /** Số công thức dài không ngắt được nên bị thu nhỏ cho vừa lề (xuất MathType); cũng mở qua CORS. */
+    public static final String EQUATION_SCALED_HEADER = "X-Equation-Scaled";
 
     private final ExamBuildService examBuildService;
     private final ExamViewService examViewService;
@@ -82,17 +89,34 @@ public class ExamController {
     }
 
     /**
-     * Xuất đề ra Word (.docx, bản cơ bản): đề, rồi trang ĐÁP ÁN và LỜI GIẢI; công thức là Equation gốc của Word. Cần
-     * pandoc trên máy chủ: không có thì 503. Tên file theo mã đề.
+     * Xuất đề ra Word (.docx, bản cơ bản): đề, rồi trang ĐÁP ÁN và LỜI GIẢI. Cần pandoc trên máy chủ: không có thì 503.
+     * Tên file theo mã đề.
+     *
+     * <p>{@code equation}: {@code omml} (mặc định, Equation gốc của Word) hoặc {@code mathtype} (đối tượng MathType,
+     * bấm đúp sửa bằng MathType); giá trị khác 400. Với {@code mathtype}, header {@value #EQUATION_KEPT_HEADER} cho biết số
+     * công thức phải giữ dạng Equation (chưa hỗ trợ, hoặc cả file khi không đổi được).
+     *
+     * <p>{@code durationMinutes} (tùy chọn): thời gian làm bài, số nguyên 5–180, in ở đầu đề; không truyền thì in "……"; giá
+     * trị khác 400.
      */
     @GetMapping("/{examId}/export/docx")
-    public ResponseEntity<byte[]> exportDocx(CurrentUser user, @PathVariable Integer examId) {
-        DocxFile file = examExportService.docx(examId, user.id());
-        return ResponseEntity.ok()
+    public ResponseEntity<byte[]> exportDocx(CurrentUser user, @PathVariable Integer examId,
+                                             @RequestParam(required = false) String equation,
+                                             @RequestParam(required = false) String durationMinutes) {
+        EquationFormat format = EquationFormat.parse(equation);
+        Integer minutes = ExamHeader.parseDuration(durationMinutes);
+        DocxFile file = examExportService.docx(examId, user.id(), format, minutes);
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(ExamExportService.DOCX_CONTENT_TYPE))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(file.fileName()).build().toString())
-                .body(file.content());
+                        ContentDisposition.attachment().filename(file.fileName()).build().toString());
+        if (file.equationsKeptOmml() != null) {
+            response.header(EQUATION_KEPT_HEADER, Integer.toString(file.equationsKeptOmml()));
+        }
+        if (file.equationsScaled() != null) {
+            response.header(EQUATION_SCALED_HEADER, Integer.toString(file.equationsScaled()));
+        }
+        return response.body(file.content());
     }
 
     /** Xem đề (chế độ giáo viên): câu theo phần I-III kèm đáp án, lời giải và cờ "cần xem kỹ". */
@@ -126,8 +150,15 @@ public class ExamController {
      *                    hàng khớp ô, hết câu thì 409 BANK_EXHAUSTED (không tự sinh); giá trị khác thì 400
      * @param instruction yêu cầu bổ sung của giáo viên cho lượt sinh lại này (tùy chọn; trim, tối đa 500 ký tự, dài hơn
      *                    thì 400; trống thì như không có); không dùng với source = bank
+     * @param reason      B7 (V25): lý do Đổi do giáo viên chọn (tùy chọn): wrong_answer, ambiguous_options, off_matrix,
+     *                    duplicate_pattern, latex_format, too_hard, too_easy, other; trống thì không ghi; giá trị khác 400
      */
-    public record ReplaceRequest(String source, String instruction) {}
+    public record ReplaceRequest(String source, String instruction, String reason) {
+        /** Chữ ký trước B7 (không có lý do). */
+        public ReplaceRequest(String source, String instruction) {
+            this(source, instruction, null);
+        }
+    }
 
     /**
      * Đổi câu khác: sinh lại đúng ô qua hàng đợi (có thể kèm yêu cầu của giáo viên) hoặc, với {@code source = "bank"},
@@ -137,7 +168,7 @@ public class ExamController {
     public ExamItemDto replace(CurrentUser user, @PathVariable Integer examId, @PathVariable Integer slotId,
                                @RequestBody(required = false) ReplaceRequest request) {
         return examActionService.replace(examId, slotId, user.id(), request != null ? request.source() : null,
-                request != null ? request.instruction() : null);
+                request != null ? request.instruction() : null, request != null ? request.reason() : null);
     }
 
     /**

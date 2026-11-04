@@ -32,7 +32,7 @@ SELECT g.question_type,
        count(*) FILTER (WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(f.warnings) w
                                       WHERE w LIKE '%: đã tự đóng $')) AS tu_dong_dau_dola
 FROM llm_questions q
-JOIN generated_question g ON g.id = q.id AND g.edited_from_question_id IS NULL
+JOIN generated_question g ON g.id = q.id AND g.edited_from_question_id IS NULL AND g.origin = 'llm'
 JOIN experiment_run r ON r.id = g.run_id AND r.purpose = 'production' AND r.prompt_version LIKE 'matrix-%'
 LEFT JOIN quality_check_result f ON f.question_id = g.id AND f.check_type = 'format'
 LEFT JOIN quality_check_result d ON d.question_id = g.id AND d.check_type = 'dedup'

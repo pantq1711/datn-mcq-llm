@@ -148,6 +148,9 @@ public class LlmClient {
         if (status < 200 || status >= 300) {
             if (status == 429 && rateLimiter != null) {
                 rateLimiter.onRateLimited(parseRetryDelay(response.body()).orElse(null));
+                if (indicatesDailyQuota(response.body())) {
+                    rateLimiter.markDailyQuotaExhausted();
+                }
             }
             throw errorForStatus(status, response.body());
         }
@@ -175,6 +178,14 @@ public class LlmClient {
             }
         }
         return new LlmCallResult(text, totalTokens, latencyMs, 0.0, model);
+    }
+
+    /**
+     * F-18: thân 429 của Gemini có dấu hiệu hết hạn mức NGÀY: tên hạn mức vi phạm có "PerDay" hoặc "RequestsPerDay"
+     * (ví dụ {@code GenerateRequestsPerDayPerProjectPerModel-FreeTier}); hạn mức theo phút ({@code PerMinute}) thì không.
+     */
+    static boolean indicatesDailyQuota(String body) {
+        return body != null && (body.contains("PerDay") || body.contains("RequestsPerDay"));
     }
 
     /**

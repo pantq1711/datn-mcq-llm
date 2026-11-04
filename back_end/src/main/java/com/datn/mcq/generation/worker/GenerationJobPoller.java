@@ -12,6 +12,7 @@ import com.datn.mcq.generation.parser.TfJsonParser;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.llm.prompt.McqProductionSchema;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
+import com.datn.mcq.llm.prompt.McqAnswerPlan;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
@@ -27,8 +28,10 @@ import com.datn.mcq.qc.dto.GroundingResult;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
+import com.datn.mcq.generation.entity.GenerationJob;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -64,6 +67,8 @@ public class GenerationJobPoller {
     private final DedupScopeResolver dedupScopeResolver;
     private final int maxAttempts;
     private final GeminiRateLimiter rateLimiter;
+    /** F-09: true từ lúc {@link GenerationJobWorkerLifecycle#stop} bắt đầu tới khi start lại. */
+    private volatile boolean shuttingDown;
 
     public GenerationJobPoller(
             GenerationJobProcessor processor,
@@ -102,6 +107,16 @@ public class GenerationJobPoller {
             return new ProcessedJobSummary(false, null, null, "idle", null, null);
         }
         GenerationJobProcessor.ClaimedJobContext ctx = claimedOpt.get();
+        // F-27: mọi dòng log trong lúc xử lý job mang jobId/slotId/examId (MDC), dọn ngay khi xong.
+        putMdc(ctx);
+        try {
+            return processClaimed(ctx, runAnswerCheck);
+        } finally {
+            clearMdc();
+        }
+    }
+
+    private ProcessedJobSummary processClaimed(GenerationJobProcessor.ClaimedJobContext ctx, boolean runAnswerCheck) {
         if (ctx.answerCheck()) {
             return processAnswerCheck(ctx);
         }
@@ -144,7 +159,10 @@ public class GenerationJobPoller {
                     ex.getMessage()
             );
         } catch (RuntimeException ex) {
-            var failedJob = processor.recordJobFailure(ctx, ex.getMessage(), maxAttempts);
+            if (interruptedByShutdown(ex)) {
+                return releaseForShutdown(ctx, ex);
+            }
+            var failedJob = recordFailure(ctx, ex.getMessage());
             return new ProcessedJobSummary(
                     true,
                     ctx.jobId(),
@@ -164,13 +182,78 @@ public class GenerationJobPoller {
         } catch (RuntimeException ex) {
             String error = "Lỗi sau lời gọi LLM: " + ex.getMessage();
             LOG.warn("Job {}: {}", ctx.jobId(), error, ex);
-            var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
+            var failedJob = recordFailure(ctx, error);
             return new ProcessedJobSummary(true, ctx.jobId(), null, failedJob.getStatus().getDbValue(), null, error);
         }
     }
 
     private static ProcessedJobSummary staleSummary(Integer jobId) {
         return new ProcessedJobSummary(true, jobId, null, "stale", null, "stale finish");
+    }
+
+    /** F-27: ghi lỗi của job kèm log lý do (loại job, lượt thử), rồi ủy quyền cho {@code recordJobFailure}. */
+    private GenerationJob recordFailure(GenerationJobProcessor.ClaimedJobContext ctx, String error) {
+        GenerationJob job = processor.recordJobFailure(ctx, error, maxAttempts);
+        LOG.warn("Job {} ({}) lỗi ở lượt {}/{}, trạng thái sau lỗi: {}. Lý do: {}", ctx.jobId(),
+                ctx.jobType() != null ? ctx.jobType() : GenerationJob.TYPE_GENERATE, ctx.attempt(), maxAttempts,
+                job.getStatus().getDbValue(), error);
+        return job;
+    }
+
+    /**
+     * F-09: lúc ứng dụng tắt, lời gọi Gemini bị ngắt (luồng bị interrupt, hoặc kết nối bị đóng khi cờ tắt đã bật). Lỗi đó
+     * KHÔNG là lỗi của job: không ghi lỗi, không tăng attempt.
+     */
+    private boolean interruptedByShutdown(RuntimeException ex) {
+        if (shuttingDown || Thread.currentThread().isInterrupted()) {
+            return true;
+        }
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof InterruptedException || t instanceof java.io.InterruptedIOException
+                    || t instanceof java.nio.channels.ClosedByInterruptException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Trả job về pending (hoàn lại lượt thử) và khôi phục cờ interrupt cho vòng lặp worker thoát. */
+    private ProcessedJobSummary releaseForShutdown(GenerationJobProcessor.ClaimedJobContext ctx, RuntimeException ex) {
+        // Xóa cờ interrupt trong lúc ghi DB (tránh hỏng lệnh ghi), rồi đặt lại.
+        boolean wasInterrupted = Thread.interrupted();
+        try {
+            LOG.warn("Job {}: ứng dụng đang tắt, trả về pending (không tính lỗi, không tăng lượt thử): {}", ctx.jobId(),
+                    ex.getMessage());
+            var job = processor.releaseJobOnShutdown(ctx, ex.getMessage());
+            return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), job.getStatus().getDbValue(), null,
+                    "shutdown");
+        } finally {
+            if (wasInterrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /** Lifecycle báo bắt đầu/kết thúc tắt ứng dụng (xem {@link GenerationJobWorkerLifecycle#stop}). */
+    public void setShuttingDown(boolean shuttingDown) {
+        this.shuttingDown = shuttingDown;
+    }
+
+    private void putMdc(GenerationJobProcessor.ClaimedJobContext ctx) {
+        MDC.put("jobId", String.valueOf(ctx.jobId()));
+        if (ctx.examSlotId() != null) {
+            MDC.put("slotId", String.valueOf(ctx.examSlotId()));
+            Integer examId = processor.examIdForSlot(ctx.examSlotId());
+            if (examId != null) {
+                MDC.put("examId", String.valueOf(examId));
+            }
+        }
+    }
+
+    private static void clearMdc() {
+        MDC.remove("jobId");
+        MDC.remove("slotId");
+        MDC.remove("examId");
     }
 
     /**
@@ -186,8 +269,7 @@ public class GenerationJobPoller {
         } catch (StaleJobClaimException ex) {
             return staleSummary(ctx.jobId());
         } catch (RuntimeException ex) {
-            var failedJob = processor.recordJobFailure(ctx, "Lỗi trước lời gọi Solver: " + ex.getMessage(),
-                    maxAttempts);
+            var failedJob = recordFailure(ctx, "Lỗi trước lời gọi Solver: " + ex.getMessage());
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(),
                     null, ex.getMessage());
         }
@@ -209,8 +291,11 @@ public class GenerationJobPoller {
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(),
                     deferredJob.getStatus().getDbValue(), null, ex.getMessage());
         } catch (RuntimeException ex) {
+            if (interruptedByShutdown(ex)) {
+                return releaseForShutdown(ctx, ex);
+            }
             String error = "Không hoàn tất answer_check: " + ex.getMessage();
-            var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
+            var failedJob = recordFailure(ctx, error);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(),
                     null, error);
         }
@@ -222,7 +307,7 @@ public class GenerationJobPoller {
         } catch (RuntimeException ex) {
             String error = "Lỗi sau lời gọi LLM: " + ex.getMessage();
             LOG.warn("Job {}: {}", ctx.jobId(), error, ex);
-            var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
+            var failedJob = recordFailure(ctx, error);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(),
                     null, error);
         }
@@ -241,8 +326,7 @@ public class GenerationJobPoller {
         } catch (StaleJobClaimException ex) {
             return staleSummary(ctx.jobId());
         } catch (RuntimeException ex) {
-            var failedJob = processor.recordJobFailure(ctx, "Lỗi trước lời gọi judge: " + ex.getMessage(),
-                    maxAttempts);
+            var failedJob = recordFailure(ctx, "Lỗi trước lời gọi judge: " + ex.getMessage());
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(), null,
                     ex.getMessage());
         }
@@ -264,8 +348,11 @@ public class GenerationJobPoller {
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(),
                     deferredJob.getStatus().getDbValue(), null, ex.getMessage());
         } catch (RuntimeException ex) {
+            if (interruptedByShutdown(ex)) {
+                return releaseForShutdown(ctx, ex);
+            }
             String error = "Không hoàn tất grounding_check: " + ex.getMessage();
-            var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
+            var failedJob = recordFailure(ctx, error);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(), null,
                     error);
         }
@@ -277,7 +364,7 @@ public class GenerationJobPoller {
         } catch (RuntimeException ex) {
             String error = "Lỗi sau lời gọi judge: " + ex.getMessage();
             LOG.warn("Job {}: {}", ctx.jobId(), error, ex);
-            var failedJob = processor.recordJobFailure(ctx, error, maxAttempts);
+            var failedJob = recordFailure(ctx, error);
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(), null,
                     error);
         }
@@ -319,21 +406,15 @@ public class GenerationJobPoller {
             parseError = parsedSa.parseError();
         } else {
             ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText(), production);
+            // 3/11: chỗ mcq của đề theo ma trận được giao trước chữ đáp án đúng; chữ khác chỉ cảnh báo (không bật cờ, chưa sinh lại).
+            String letterMismatch = parsed.parseSuccess() && parsed.correctOption() != null
+                    ? McqAnswerPlan.mismatchWarning(ctx.mcqAnswerLetter(), parsed.correctOption().getDbValue()) : null;
+            if (letterMismatch != null) {
+                parsed = parsed.withParseWarning(letterMismatch);
+            }
             savedQuestion = processor.saveGeneratedQuestionFromJob(ctx, llmResult, parsed);
-            qcInput = new QuestionQcInput(
-                    savedQuestion.getId(),
-                    parsed.parseSuccess(),
-                    parsed.questionText(),
-                    parsed.optionA(),
-                    parsed.optionB(),
-                    parsed.optionC(),
-                    parsed.optionD(),
-                    parsed.correctOption(),
-                    parsed.explanation(),
-                    ctx.validateLatex(),
-                    runAnswerCheck,
-                    parsed.parseError()
-            ).withParseWarnings(parsed.parseWarnings());
+            qcInput = GenerationService.mcqQcInput(
+                    savedQuestion.getId(), parsed, ctx.validateLatex(), runAnswerCheck);
             parseError = parsed.parseError();
         }
 
@@ -353,6 +434,17 @@ public class GenerationJobPoller {
                     : qcOrchestrator.evaluateAndSave(qcInput, scope);
         } catch (StaleJobClaimException ex) {
             throw ex;
+        } catch (QuotaExhaustedException ex) {
+            // F-18: QcOrchestrator ném tiếp lỗi hết hạn mức ngày khi gọi Solver. Câu đã lưu và qua format, dedup: giữ ở
+            // generated kèm solver_error và xếp job answer_check riêng (tự hoãn tới mốc đặt lại hạn mức), như khi Solver lỗi.
+            LOG.warn("Job {}: chạm hạn mức ngày của Gemini khi chạy Solver nội tuyến, xếp job answer_check riêng: {}",
+                    ctx.jobId(), ex.getMessage());
+            if (!processor.finishGeneratedJob(ctx, savedQuestion.getId(), QuestionStatus.GENERATED,
+                    "Không hoàn tất answer_check: " + ex.getMessage(), null)) {
+                return staleSummary(ctx.jobId());
+            }
+            return new ProcessedJobSummary(true, ctx.jobId(), savedQuestion.getId(), "done",
+                    QuestionStatus.GENERATED.getDbValue(), parseError);
         } catch (RuntimeException ex) {
             String error = "Lỗi sau lời gọi LLM: " + ex.getMessage();
             LOG.warn("Job {}: {}", ctx.jobId(), error, ex);

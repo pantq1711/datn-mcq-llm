@@ -7,7 +7,11 @@ import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.generation.parser.LlmOutputRepair;
+import com.datn.mcq.llm.prompt.McqAnswerPlan;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
+import com.datn.mcq.qc.checker.AnswerSolverChecker;
+import com.datn.mcq.qc.checker.ExplanationDraftLeak;
+import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.GroundingVerdict;
 import com.datn.mcq.qc.dto.TfJudgement;
 import com.datn.mcq.qc.entity.QualityCheckResult;
@@ -21,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Tóm tắt kết quả QC đã lưu của một câu, dùng cho cờ "cần xem kỹ" ở chế độ giáo viên (phần C mục 3). Chỉ đọc. Không
@@ -33,9 +38,15 @@ public class QcSummaryService {
     public static final String SOLVER_INCONSISTENT = "solver_inconsistent";
     public static final String SOLVER_AMBIGUOUS = "solver_ambiguous";
     public static final String SOLVER_UNPARSEABLE = "solver_unparseable";
+    /** Thẩm định 31/10: Solver xét từng phương án thấy từ 2 phương án đúng trở lên (mcq, judge_answer = multiple). */
+    public static final String SOLVER_MULTIPLE_CORRECT = "solver_multiple_correct";
+    /** Thẩm định 31/10: Solver xét từng phương án không thấy phương án nào đúng (mcq, judge_answer = none). */
+    public static final String SOLVER_NO_CORRECT = "solver_no_correct";
     public static final String STATEMENT_UNDECIDABLE = "statement_undecidable";
     public static final String DEDUP_NOT_RUN = "dedup_not_run";
     public static final String WARNING_PREFIX = "warning: ";
+    /** Thẩm định 31/10: lời giải có "tính lại", "làm lại" hoặc "sửa lại" (không chặn, vì cũng gặp trong lời giải bình thường). */
+    public static final String EXPLANATION_DRAFT_SUSPECT = "explanation_draft_suspect";
     /** W1-2: dedup báo trùng (bản giáo viên sửa), dạng "duplicate: &lt;id câu bị trùng&gt;". */
     public static final String DUPLICATE_PREFIX = "duplicate: ";
     /** W2-3: QC "bám tài liệu" kết luận đáp án/lời giải/câu hỏi không khớp tài liệu (chỉ cảnh báo, câu giữ nguyên trạng thái). */
@@ -44,15 +55,54 @@ public class QcSummaryService {
     public static final String GROUNDING_UNKNOWN = "grounding_unknown";
 
     /**
+     * Nhóm cảnh báo format KHÔNG bật cờ "cần xem kỹ" (2/11, sau đo đề 11): hệ thống đã tự sửa và việc sửa chắc chắn không đổi
+     * nghĩa câu, nên giáo viên không cần soát lại. Cảnh báo vẫn được lưu ở {@code quality_check_result.warnings} và vẫn hiện
+     * trong "Kết quả tự kiểm tra" (vết QC). Mọi cảnh báo KHÔNG khớp nhóm này, kể cả cảnh báo chưa biết, bật cờ: thà thừa một
+     * cờ còn hơn lọt câu lỗi. Khi thêm một việc tự sửa mới, thêm mẫu vào đây CHỈ khi sửa đó chắc chắn đúng.
+     * <ul>
+     *   <li>{@code json: đã sửa …}: nhân đôi "\" của lệnh LaTeX, gỡ vỏ {@code \text{}} ngoài $, đổi ký hiệu độ sai thành
+     *       {@code ^{\circ}} (cùng tiền tố {@link LlmOutputRepair#ESCAPE_WARNING_PREFIX}).</li>
+     *   <li>{@code <trường>: đã tự đóng $}: "$" quên đóng ở cuối trường, chỉ khi phần sau trông như công thức VÀ chuỗi gốc có
+     *       đúng 1 dấu "$" chưa thoát (F-02). Từ 3 dấu trở lên, cảnh báo là
+     *       {@code <trường>: đã tự đóng $ khi chuỗi có N dấu $ (có thể đóng sai chỗ)}, KHÔNG khớp mẫu này nên bật cờ.</li>
+     *   <li>{@code <trường>: đã tự bọc $ quanh … LaTeX nằm ngoài $}: biểu thức LaTeX liền mạch ngoài $ được bọc $.</li>
+     *   <li>{@code statement_x: đã bỏ tiền tố …}: bỏ "a)", "b." thừa ở đầu ý tf.</li>
+     * </ul>
+     * Nhãn tf lệch mẫu mục tiêu ({@link TfLabelPattern#isDeviationWarning}) cũng không bật cờ nhưng do model chọn nhãn, không
+     * phải việc tự sửa, nên nằm riêng. Chữ đúng của câu mcq khác chữ đã giao ({@link McqAnswerPlan#isDeviationWarning}, 3/11) cũng
+     * không bật cờ: câu vẫn đúng toán học, chỉ lệch vị trí đáp án; cảnh báo chỉ để thống kê mức tuân thủ.
+     */
+    static final List<Pattern> AUTO_FIXED_WARNING_PATTERNS = List.of(
+            Pattern.compile("^" + Pattern.quote(LlmOutputRepair.ESCAPE_WARNING_PREFIX) + ".*", Pattern.DOTALL),
+            Pattern.compile("^[a-z_]+: đã tự đóng \\$$"),
+            Pattern.compile("^[a-z_]+: đã tự bọc \\$ quanh .*", Pattern.DOTALL),
+            Pattern.compile("^statement_[a-d]: đã bỏ tiền tố .*", Pattern.DOTALL));
+
+    /** True khi cảnh báo thuộc nhóm hệ thống đã tự sửa chắc chắn ({@link #AUTO_FIXED_WARNING_PATTERNS}), không bật cờ. */
+    public static boolean isAutoFixedWarning(String warning) {
+        return warning != null && AUTO_FIXED_WARNING_PATTERNS.stream().anyMatch(p -> p.matcher(warning).matches());
+    }
+
+    /**
      * @param answerCheckPassed null khi không có dòng answer_check (Solver chưa chạy hoặc lỗi)
      * @param warnings          cảnh báo bước format (V5)
      * @param duplicateOf       (W1-2) câu bị trùng khi dòng dedup không qua; null khi không trùng
      * @param grounding         (W2-3) kết luận "bám tài liệu"; null khi câu không có kết quả (không dùng tài liệu, chưa chấm
      *                          hoặc chấm lỗi)
+     * @param judgeAnswer       mcq: đáp án Solver đã lưu (A-D, multiple, none); null với dạng khác hoặc khi chưa có dòng
+     * @param solverOptionCheck true khi ghi chú Solver có khối xét từng phương án (Solver v3); chỉ khi đó multiple/none mới
+     *                          tách thành lý do riêng, kết quả Solver cũ giữ {@code solver_inconsistent}
      */
     public record QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
                             boolean hasUndecidable, List<String> warnings, Integer duplicateOf,
-                            GroundingVerdict grounding) {
+                            GroundingVerdict grounding, AnswerChoice judgeAnswer, boolean solverOptionCheck) {
+
+        public QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
+                         boolean hasUndecidable, List<String> warnings, Integer duplicateOf,
+                         GroundingVerdict grounding) {
+            this(dedupRan, answerCheckPassed, judgeSaKind, hasUndecidable, warnings, duplicateOf, grounding, null,
+                    false);
+        }
 
         public QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
                          boolean hasUndecidable, List<String> warnings, Integer duplicateOf) {
@@ -62,6 +112,11 @@ public class QcSummaryService {
         public QcSummary(boolean dedupRan, Boolean answerCheckPassed, SaJudgeKind judgeSaKind,
                          boolean hasUndecidable, List<String> warnings) {
             this(dedupRan, answerCheckPassed, judgeSaKind, hasUndecidable, warnings, null, null);
+        }
+
+        /** Cảnh báo "label: 4 ý cùng nhãn T|F" của câu Đúng/Sai (2/11: đối soát đề sinh lại chỗ có câu này); rỗng nếu không có. */
+        public Optional<String> sameLabelWarning() {
+            return warnings.stream().filter(w -> w.startsWith(FormatChecker.SAME_LABEL_WARNING_PREFIX)).findFirst();
         }
 
         /** Lý do "cần xem kỹ"; rỗng khi câu qua QC sạch. */
@@ -77,6 +132,10 @@ public class QcSummaryService {
                     reasons.add(SOLVER_AMBIGUOUS);
                 } else if (judgeSaKind == SaJudgeKind.UNPARSEABLE) {
                     reasons.add(SOLVER_UNPARSEABLE);
+                } else if (solverOptionCheck && judgeAnswer == AnswerChoice.MULTIPLE) {
+                    reasons.add(SOLVER_MULTIPLE_CORRECT);
+                } else if (solverOptionCheck && judgeAnswer == AnswerChoice.NONE) {
+                    reasons.add(SOLVER_NO_CORRECT);
                 } else {
                     reasons.add(SOLVER_INCONSISTENT);
                 }
@@ -93,9 +152,13 @@ public class QcSummaryService {
                 reasons.add(DEDUP_NOT_RUN);
             }
             for (String w : warnings) {
-                // Ngày 23/10: cảnh báo đã sửa escape LaTeX không bật cờ; "đã tự đóng $" và các cảnh báo khác vẫn bật.
-                // Từ 26/10: nhãn tf lệch mẫu mục tiêu là hợp lệ, cũng không bật cờ (vẫn lưu ở warnings và hiện trong vết QC).
-                if (!w.startsWith(LlmOutputRepair.ESCAPE_WARNING_PREFIX) && !TfLabelPattern.isDeviationWarning(w)) {
+                // Mọi cảnh báo đều được lưu và hiện ở vết QC; chỉ nhóm AUTO_FIXED_WARNING_PATTERNS (hệ thống đã tự sửa chắc
+                // chắn) và nhãn tf lệch mẫu mục tiêu (26/10) không bật cờ. Mọi cảnh báo còn lại, kể cả cảnh báo chưa biết,
+                // bật cờ (2/11). Từ 31/10: lời giải có "tính lại"/"làm lại"/"sửa lại" bật mã riêng thay vì "warning: ...".
+                if (ExplanationDraftLeak.SUSPECT_WARNING.equals(w)) {
+                    reasons.add(EXPLANATION_DRAFT_SUSPECT);
+                } else if (!isAutoFixedWarning(w) && !TfLabelPattern.isDeviationWarning(w)
+                        && !McqAnswerPlan.isDeviationWarning(w)) {
                     reasons.add(WARNING_PREFIX + w);
                 }
             }
@@ -178,8 +241,9 @@ public class QcSummaryService {
         Optional<QualityCheckResult> dedup = resultRepository.findByQuestionIdAndCheckType(questionId, CheckType.DEDUP);
         Optional<QualityCheckResult> answer =
                 resultRepository.findByQuestionIdAndCheckType(questionId, CheckType.ANSWER_CHECK);
-        boolean undecidable = answer.isPresent() && statementRepository
-                .findByQcResultIdOrderByPositionAsc(answer.get().getId()).stream()
+        // F-07: chỉ câu Đúng/Sai có dòng ý (answer_check_statement); mcq và sa không cần truy vấn này.
+        boolean undecidable = answer.isPresent() && answer.get().getQuestionType() == QuestionType.TF
+                && statementRepository.findByQcResultIdOrderByPositionAsc(answer.get().getId()).stream()
                 .anyMatch(s -> s.getJudgeLabel() == TruthChoice.UNDECIDABLE);
         return new QcSummary(
                 dedup.isPresent(),
@@ -190,6 +254,9 @@ public class QcSummaryService {
                 dedup.filter(d -> Boolean.FALSE.equals(d.getPassed()))
                         .map(QualityCheckResult::getComparedToQuestionId).orElse(null),
                 groundingRepository.findByQuestionId(questionId).map(g -> GroundingVerdict.fromDb(g.getVerdict()))
-                        .orElse(null));
+                        .orElse(null),
+                answer.map(QualityCheckResult::getJudgeAnswer).orElse(null),
+                answer.map(QualityCheckResult::getSolverReasoning)
+                        .filter(r -> r.startsWith(AnswerSolverChecker.OPTIONS_VERDICT_PREFIX)).isPresent());
     }
 }

@@ -8,6 +8,7 @@ import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
+import com.datn.mcq.llm.client.QuotaExhaustedException;
 import com.datn.mcq.llm.dto.LlmUsage;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.FormatChecker;
@@ -114,7 +115,7 @@ public class QcOrchestrator {
                 null,
                 null,
                 null,
-                formatOutcome.answerWarnings(),
+                storedWarnings(formatOutcome),
                 // V8 (ngày 23/10): lý do format không qua (kể cả lỗi giải mã JSON) lưu ở cột errors; NULL khi qua.
                 formatOutcome.passed() ? null : formatOutcome.errors()
         );
@@ -198,6 +199,10 @@ public class QcOrchestrator {
                 saJudgeAnswer = verdict.saJudgeAnswer();
                 tfJudgements = verdict.tfJudgements();
                 answerCheckStatus = verdict.status();
+            } catch (QuotaExhaustedException ex) {
+                // F-18: hết hạn mức NGÀY của Gemini không phải lỗi của Solver hay của câu: ném tiếp để nơi gọi hoãn việc
+                // (job) hoặc trả 429, không ghi nhận thành ERROR.
+                throw ex;
             } catch (RuntimeException ex) {
                 answerCheckStatus = AnswerCheckStatus.ERROR;
                 answerCheckPassed = null;
@@ -256,7 +261,9 @@ public class QcOrchestrator {
      * Gọi Solver cho một câu (gọi mạng, KHÔNG ghi DB, không mở transaction). Ném lỗi khi không có kết quả hợp lệ (lỗi
      * mạng/HTTP, hết thời gian chờ, JSON hỏng, thiếu hoặc sai judge_*), nơi gọi coi là ERROR.
      * <ul>
-     *   <li>mcq: so judge_answer với correct_option;</li>
+     *   <li>mcq: Solver v3 xét từng phương án; khớp khi đúng một phương án đúng và trùng correct_option, nhiều hoặc
+     *       không có phương án đúng là không khớp ({@code multiple}/{@code none}); thiếu options_verdict thì so
+     *       judge_answer với correct_option như cũ;</li>
      *   <li>sa (V4): so đáp số theo giá trị; ambiguous và không phân tích được là kết quả hợp lệ không khớp;</li>
      *   <li>tf (GĐ3): khớp khi đủ 4 ý khớp; có ý lệch hoặc undecidable là không khớp.</li>
      * </ul>
@@ -285,7 +292,12 @@ public class QcOrchestrator {
                 input.questionText(), input.optionA(), input.optionB(), input.optionC(), input.optionD(),
                 input.correctOption());
         return new SolverVerdict(QuestionType.MCQ, mcq.passed(), mcq.judgeModel(), mcq.reasoning(), mcq.judgeAnswer(),
-                null, null, null, mcq.usage());
+                null, null, null, mcq.usage(), mcq.optionCorrect());
+    }
+
+    /** Phiên bản prompt Solver mcq đang dùng (công cụ đo đối chiếu trước khi gọi). */
+    public String solverPromptVersion() {
+        return answerSolverChecker.promptVersion();
     }
 
     /**
@@ -505,6 +517,17 @@ public class QcOrchestrator {
     }
 
     /** Mảng JSON các chuỗi; null khi không có cảnh báo. */
+    /**
+     * Cảnh báo bước format cần lưu: nhóm answerWarnings (cảnh báo giải mã, nhãn tf, đáp số) rồi nhóm warnings (lệnh LaTeX
+     * không hỗ trợ, lời giải có thể còn nháp, từ tiếng Anh…). Trước 2/11 chỉ lưu nhóm đầu nên nhóm sau không bao giờ thành lý
+     * do "cần xem kỹ" (đề 11 câu 190 và 192: "210^\toRadians" qua QC không cờ).
+     */
+    static List<String> storedWarnings(FormatChecker.FormatCheckOutcome outcome) {
+        java.util.LinkedHashSet<String> all = new java.util.LinkedHashSet<>(outcome.answerWarnings());
+        all.addAll(outcome.warnings());
+        return new java.util.ArrayList<>(all);
+    }
+
     static String writeWarnings(List<String> warnings) {
         return JsonStringArray.write(warnings);
     }

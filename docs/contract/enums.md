@@ -31,6 +31,8 @@ Java: đặt tên hằng kiểu `ZERO_SHOT`, `FEW_SHOT_STRUCTURED`... và có b�
 | `TruthChoice` (V4) | `teacher_review_statement.reviewer_label`, `answer_check_statement.judge_label` |
 | `SaAnswerKind` (V4) | `teacher_review.reviewer_sa_kind` |
 | `SaJudgeKind` (V4) | `quality_check_result.judge_sa_kind` |
+| `QuestionOrigin` (V26) | `generated_question.origin` |
+| `ImportBatchStatus` (V26) | `import_batch.status` (chưa có enum Java, hằng ở `ImportBatch.STATUS_*`) |
 
 ## 2. Giá trị của từng enum
 
@@ -236,6 +238,21 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
 | `ambiguous` | Solver báo đề có nhiều cách hiểu cho ra đáp số khác nhau |
 | `unparseable` | Solver trả chuỗi không phân tích được thành số, không so tự động được (tính INCONSISTENT) |
 
+### `QuestionOrigin` (V26)
+
+| Giá trị trong DB | Hiển thị / ý nghĩa |
+|---|---|
+| `llm` | Câu do LLM sinh, kể cả bản giáo viên sửa (mọi dòng trước V26). API ngân hàng trả `origin.type = ai` |
+| `import` | Câu nhập từ Word (`/api/bank-imports`). API ngân hàng trả `origin.type = import` |
+
+### `ImportBatchStatus` (V26)
+
+| Giá trị trong DB | Hiển thị / ý nghĩa |
+|---|---|
+| `preview` | Bản xem trước chờ giáo viên xác nhận (có `preview`, hạn `expires_at` 24 giờ) |
+| `confirmed` | Đã xác nhận: câu đã vào ngân hàng riêng tư, `preview` đã xóa (NULL), có `confirmed_at`, `imported_count` |
+| `expired` | Quá hạn chưa xác nhận: `preview` đã xóa (NULL). Lô `preview` bị hủy thì xóa hẳn dòng, không có trạng thái riêng |
+
 ## 3. Quy tắc đi kèm (cần nhớ khi code, DB không tự đảm bảo hết)
 
 - **Đáp án đúng luôn do giáo viên quyết.** API lấy câu để chấm không được trả `correct_option` về form, kể cả trong JSON ẩn. Backend tự so để ra `answer_correct`.
@@ -293,6 +310,17 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - `exam_slot_action.replace_source` (V16, W1-4): `bank` (Đổi bằng câu ngân hàng) hoặc `generate` (sinh mới); bắt buộc với
     dòng `replace`, NULL với `keep`/`edit`; dòng replace trước V16 được điền `generate`. Với dòng `replace`,
     `generated_question_id`/`bank_item_id` là câu bị đổi RA khỏi chỗ.
+  - Mã lỗi hết hạn mức gọi Gemini trong ngày (F-18, 3/11): `LLM_DAILY_QUOTA_EXHAUSTED` (HTTP 429 kèm `Retry-After`, `QuotaExhaustedException`).
+    Tạo đề (`build`, `build-by-lesson`) và Đổi bằng sinh mới kiểm hạn mức ngày của Gemini (`GeminiRateLimiter`) TRƯỚC khi trừ
+    `generation_quota` của giáo viên và xếp job; hết thì trả mã này và không ghi gì. QC Solver gặp hết hạn mức ngày giữa chừng
+    thì ném tiếp `QuotaExhaustedException` (không ghi `answer_check` ERROR): job sinh câu giữ câu ở `generated` và xếp job
+    `answer_check` riêng, job `answer_check`/`grounding_check` được hoãn tới mốc đặt lại. 429 của Gemini có `PerDay` /
+    `RequestsPerDay` trong thân đánh dấu hết hạn mức ngày.
+  - `exam_slot_action.replace_reason` (V25, B7): lý do giáo viên chọn khi Đổi (tùy chọn), chỉ dòng `replace`, `VARCHAR(40)` có
+    CHECK `chk_esa_replace_reason`: `wrong_answer` (đáp án sai), `ambiguous_options` (phương án mơ hồ / nhiều đáp án), `off_matrix`
+    (lệch ma trận), `duplicate_pattern` (trùng khuôn với câu khác), `latex_format` (lỗi công thức / định dạng), `too_hard`,
+    `too_easy`, `other`; NULL khi không chọn và với `keep`/`edit`/dòng `replace` trước V25. API nhận qua trường `reason` của
+    `POST .../replace`, giá trị ngoài danh sách là 400 `INVALID_REQUEST`.
   - `exam_slot_action.action`: `keep`, `edit`, `replace` (`edit_distance` chỉ với `edit`). `instruction` (V9): yêu cầu bổ sung của giáo viên khi Đổi câu, 1–500 ký tự, chỉ dòng `replace`; NULL khi không có. `changed_fields` (V13): chỉ dòng `edit` (xem mục "Giáo viên sửa câu trong đề").
   - `teacher_review.review_mode`: `blind` (mặc định cột; chỉ còn ở dữ liệu cũ vì form chấm mù đã gỡ ngày 25/10) hoặc `assisted` (Giữ/Sửa ở chế độ giáo viên,
     mọi dòng mới). Đánh giá `assisted` bị loại khỏi mọi chỉ số chấm mù cũ (`answer_correct`, duyệt không sửa).
@@ -337,16 +365,43 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     Không có cột tiền: `LlmClient` không tính giá (`cost_usd` luôn 0). Tổng hợp: `docs/thong-ke/06-chi-phi.sql`. Không đưa ra API.
   - Lý do "cần xem kỹ" thêm (W2-3): `grounding_not_supported`, `grounding_unknown` (từ kết quả), `grounding_pending`, `grounding_failed`
     (từ trạng thái job).
+  - Lý do "cần xem kỹ" thêm (thẩm định 31/10, câu `mcq`, Solver xét từng phương án `solver-v3-option-check`/`solver-v4-literal-reading`): `solver_multiple_correct` (Solver xét từng
+    phương án thấy từ 2 phương án đúng, `judge_answer = 'multiple'`), `solver_no_correct` (không phương án nào đúng,
+    `judge_answer = 'none'`). Thay cho `solver_inconsistent` ở hai trường hợp này; chỉ áp cho kết quả có khối xét từng phương án
+    (mục 4.6). Chuỗi hiển thị đề xuất cho frontend: "Có thể có hơn một phương án đúng, thầy/cô kiểm tra lại" và "Hệ thống không tìm
+    được phương án đúng, thầy/cô kiểm tra lại".
   - `lesson_material.extracted_text`: văn bản thường (docx đã làm sạch markdown, giữ `$...$`); xem `docs/api/README.md` mục 9.3.
   - `bank_item.visible_to_user_id` (V19): NULL là câu dùng chung (mọi câu cũ); khác NULL thì chỉ người dùng đó thấy và dùng
     lại. Đặt khi Giữ câu sinh từ đề có tài liệu đính kèm. Không xóa dây chuyền theo `users`.
-  - Cờ "cần xem kỹ" bỏ qua cảnh báo `json: đã sửa ... escape LaTeX` (vẫn lưu ở `warnings`); cảnh báo `<trường>: đã tự đóng $` và các cảnh báo khác vẫn bật cờ.
+  - Lý do "cần xem kỹ" thêm (thẩm định 31/10, câu cùng khuôn trong MỘT đề): `similar_in_exam: <Phần>.<số>` (**dạng đổi 2/11**; trước đó `similar_in_exam: <n>` với `n` là số thứ tự toàn đề, trang đề đánh số theo Phần nên dễ nhầm) — câu hệ thống sinh (chưa Giữ, không phải câu ngân hàng) cùng khuôn với câu đứng TRƯỚC nó trong CHÍNH đề này; `<Phần>` là `I`/`II`/`III`, `<số>` là số "Câu k" trong Phần đó (đếm từ 1 theo thứ tự hiển thị; mỗi chỗ một số, kể cả chỗ chưa có câu). Mỗi cặp chỉ câu có số thứ tự lớn hơn bị gắn; mỗi câu trước một lý do (`similar_in_exam: I.2`, `similar_in_exam: II.1`...). Tính lúc xem đề (`GET /api/exams/{id}`, `ExamQuestionSimilarity`), **không lưu DB, không có migration, không đổi `generated_question.status`, không loại câu**; chỉ bật `needsReview`, đưa `qcState` từ `passed` về `needs_review` (`checking` giữ nguyên) và cộng vào `needsReviewCount`. Danh sách đề (`GET /api/exams`, `needsReviewSlots`) chưa tính lý do này. Khuôn: bỏ `$`, thay mọi số bằng `#`, thay cụm 2–5 chữ in hoa (tên điểm, tên hình) bằng `@`, chữ thường, gộp khoảng trắng; độ giống là cosine 3-gram ký tự, ngưỡng `app.exam.similar-threshold` (`EXAM_SIMILAR_THRESHOLD`, mặc định 0,82, chọn trên 4 đề của `datn_mcq_e2e`, xem dev-log L-55). So câu trắc nghiệm với câu trắc nghiệm (thân câu và tập phương án) và câu trắc nghiệm với từng ý của câu đúng/sai (bắt câu trắc nghiệm làm lộ đáp án một ý); câu ngân hàng và câu đã Giữ/Sửa được so nhưng không bị gắn cờ (chỉ câu hệ thống sinh trong cặp bị gắn). Không đổi quy tắc dedup của ngân hàng và của câu sinh (câu chỉ khác số liệu không tính là trùng vẫn đúng ở đó); đề khác không bao giờ được so. Chuỗi hiển thị đề xuất cho frontend: "Gần giống câu {n} trong đề, nên đổi một trong hai câu".
+  - Chống câu cùng khuôn lúc sinh (thẩm định 31/10, prompt ma trận mcq v4, sa v5, tf v6): prompt sinh câu cho một chỗ có khối "Các câu đã có trong ô này" (câu dẫn cắt 200 ký tự, tối đa 6 câu của các chỗ khác cùng ô trong cùng đề, đọc lúc worker nhận job; Đổi câu không gồm câu đang bị thay) và dòng "câu thứ k/N" giao khía cạnh thứ ((k−1) mod m)+1 trong m yêu cầu cần đạt của ô (m = số mức có yêu cầu cần đạt mà prompt liệt kê); m = 0 hoặc m < N thì dặn thêm dùng hình thức hỏi khác các câu cùng ô. Không thêm cột hay bảng.
+  - Lý do "cần xem kỹ" thêm (thẩm định 31/10, mọi dạng câu): `explanation_draft_suspect` — lời giải có "tính lại", "làm lại" hoặc "sửa lại" (không phân biệt hoa thường và dấu). Các cụm này cũng gặp trong lời giải bình thường nên **không chặn**: bước format chỉ ghi cảnh báo `explanation: lời giải có thể còn phần nháp (tính lại, làm lại, sửa lại)` vào `warnings` (không đổi `format_failed`, không đổi `generated_question.status`, không migration) và `QcSummaryService` đổi cảnh báo đó thành mã `explanation_draft_suspect` thay vì `warning: ...`. Áp cho cả câu LLM sinh lẫn bản giáo viên sửa. Chuỗi hiển thị đề xuất cho frontend: "Lời giải có thể còn phần nháp, thầy/cô xem lại lời giải". Các cụm chắc chắn là nháp ("xin lỗi", "sorry", "wait", "nhầm" dạng hẹp, "à không") thì **chặn** câu LLM sinh (`format_failed`, lỗi "Lời giải còn chứa phần nháp/tự sửa; chỉ ghi lời giải cuối cùng."); bản giáo viên sửa chỉ có cảnh báo cùng nội dung (`warning: Lời giải còn chứa phần nháp/tự sửa; ...`). Lời giải đã bị cụm chặn bắt thì không thêm `explanation_draft_suspect`. Xem dev-log L-56.
+  - **Cảnh báo nào bật cờ "cần xem kỹ" (2/11, `QcSummaryService.AUTO_FIXED_WARNING_PATTERNS`).** Mọi cảnh báo của bước format đều được lưu ở `quality_check_result.warnings` và hiện trong "Kết quả tự kiểm tra"; chỉ lý do `reviewReasons` khác nhau:
+    - **KHÔNG bật cờ** (hệ thống đã tự sửa chắc chắn, không đổi nghĩa câu): `json: đã sửa …` (nhân đôi `\` của lệnh LaTeX, gỡ `\text{}` ngoài `$`, đổi ký hiệu độ sai thành `^{\circ}`); `<trường>: đã tự đóng $` (**chỉ khi chuỗi gốc có ĐÚNG 1 dấu `$` chưa thoát**, F-02, 3/11); `<trường>: đã tự bọc $ quanh … LaTeX nằm ngoài $`; `statement_x: đã bỏ tiền tố …`; `label: khác mẫu mục tiêu …` (và dạng cũ `khác mẫu bắt buộc`; nhãn do model chọn, không phải việc tự sửa).
+    - **BẬT cờ** (`warning: <cảnh báo>`; riêng lời giải có "tính lại/làm lại/sửa lại" là mã `explanation_draft_suspect`): lệnh hoặc môi trường LaTeX không hỗ trợ (`Lệnh \x không hỗ trợ…`, `môi trường x không hỗ trợ`); lỗi LaTeX của lời giải (kể cả `Có lệnh LaTeX nằm ngoài cặp $…$` của bản giáo viên, ngoặc lệch…); lời giải còn nháp (`Lời giải còn chứa phần nháp/tự sửa…` ở bản giáo viên); `<trường>: có từ tiếng Anh ngoài công thức (…)`; `label: 4 ý cùng nhãn T|F`; `answer: phân số chưa tối giản`; **và mọi cảnh báo chưa biết** (mặc định bật, an toàn hơn).
+    - Trước 2/11 `đã tự đóng $` bật cờ; nay không, **trừ khi chuỗi gốc có từ 3 dấu `$` chưa thoát trở lên** (3/11, F-02: vị trí đóng có thể sai chỗ). Khi đó cảnh báo mang tên khác `<trường>: đã tự đóng $ khi chuỗi có N dấu $ (có thể đóng sai chỗ)`, KHÔNG khớp mẫu không bật cờ nên hiện `warning: <trường>: đã tự đóng $ khi chuỗi có N dấu $ …` trong `reviewReasons` (frontend: `describeFormatIssue`). Thêm một việc tự sửa mới thì chỉ đưa vào nhóm không bật cờ khi chắc chắn đúng.
+    - Vết QC (`qc.format.autoRepairs` / `warnings`) phân loại bằng cùng hàm `QcSummaryService.isAutoFixedWarning` (một nguồn duy nhất, F-12, 3/11): cảnh báo tự sửa → `autoRepairs`, còn lại (kể cả cảnh báo bật cờ) → `warnings`.
+  - Lưu cảnh báo bước format (2/11, dev-log L-63): `quality_check_result.warnings` nay chứa CẢ cảnh báo giải mã/nhãn/đáp số lẫn cảnh báo LaTeX của `FormatChecker` (`<trường>: Lệnh \x không hỗ trợ…`, môi trường không hỗ trợ), `explanation: lời giải có thể còn phần nháp…` và từ tiếng Anh; trước đó nhóm thứ hai không được lưu nên không bật cờ. Ký hiệu độ viết sai (`^\bullet`, `^\triangle`, `^\toRadians`, `^\rceil`, `^\lceil`, `^\degree`, `^\deg`, `^\circle`, `^\o`) sau chữ số hoặc `}` được đổi thành `^{\circ}` ở bước giải mã. `^\cdot` KHÔNG nằm trong danh sách này từ 3/11 (F-02): `\cdot` là dấu nhân, đổi thành độ sẽ đổi nghĩa mà không bật cờ.
+  - Cảnh báo mới (2/11, thẩm định UX đề 10; xem dev-log L-57 đến L-62), đều lưu ở `quality_check_result.warnings` và bật cờ `warning: ...`:
+    - `<trường>: đã tự bọc $ quanh công thức LaTeX nằm ngoài $` (hoặc `... quanh <N> công thức ...` khi N > 1): bước giải mã ở chế độ sửa (chỉ đầu ra LLM của run `production`, mọi trường văn bản trừ `answer` của `sa`) thấy lệnh LaTeX (`\frac`, `\sqrt`, `\cdot`... trong danh sách cho phép, trừ `\text`/`\begin`/`\end`) hoặc mũ/chỉ số `^{`/`_{` nằm ngoài `$...$` và tự bọc `$...$` quanh biểu thức liền mạch: các "từ" (tách theo khoảng trắng ngoài ngoặc nhọn) không có chữ có dấu tiếng Việt, không là từ chỉ gồm từ 2 chữ cái ASCII trở lên (tiếng Anh, "Ta", "Cho"), ngoặc nhọn cân, không đi qua dấu hết câu; dấu câu cuối nằm ngoài `$`. Ví dụ `Ta có \frac{a}{b} = 2` thành `Ta có $\frac{a}{b} = 2$`. `\n` (gạch rồi n) không là lệnh. Không chắc (số `$` lẻ, ngoặc nhọn lệch, lệnh lạ) thì giữ nguyên: câu hỏi, phương án, ý vẫn là lỗi chặn `format_failed` như trước (sinh lại); **lời giải của đầu ra LLM** trước đây chỉ là cảnh báo nay cũng là lỗi chặn `explanation: Có lệnh LaTeX nằm ngoài cặp $...$ (...)` trong ca này (lời giải giáo viên viết/sửa vẫn chỉ là cảnh báo). Bộ kiểm tra LaTeX (`LatexValidationRules`) cũng báo `^{`/`_{` ngoài `$` như lệnh ngoài `$`. Chuỗi hiển thị đề xuất: "Công thức ở {nơi} chưa nằm trong dấu $, hệ thống đã tự thêm. Thầy/cô kiểm tra lại".
+    - `<trường>: có từ tiếng Anh ngoài công thức (<từ>, ...)`: câu do LLM sinh có từ tiếng Anh đứng riêng (`and`, `or`, `the`, `is`, `true`, `false`; không phân biệt hoa thường; ngoài `$...$`) ở đề dẫn, phương án, ý hoặc lời giải. Chỉ cảnh báo, không loại câu; chữ giáo viên viết không bị kiểm. Chuỗi hiển thị đề xuất: "Có từ tiếng Anh trong {nơi}, thầy/cô xem lại".
+  - Câu `tf` có 4 ý cùng nhãn (2/11): vẫn chỉ là cảnh báo `label: 4 ý cùng nhãn T|F` ở bước format (**không** phải lỗi chặn: câu không bị `format_failed` nên vẫn Giữ được). Khác trước: khi đối soát đề thấy cảnh báo này và chỗ còn lượt (`attempts` < 3) thì sinh lại chỗ (đường sinh lại sẵn có: câu cũ làm dự phòng như câu lệch Solver, `prompt_note` của lần sinh lại có dòng "Lần sinh trước bị loại vì: label: 4 ý cùng nhãn T ..."); hết lượt hoặc lần sinh lại hỏng thì dùng lại câu đó kèm cờ `warning: label: 4 ý cùng nhãn T` như cũ.
+  - Lời giải còn phần nháp (cụm chắc chắn, chặn câu LLM sinh, `format_failed`): từ 2/11 thêm các cụm giải thích việc rút gọn đáp số cho vừa khung 4 ký tự: `ký tự`, `để đáp án gọn`, `cho gọn`, `đổi đơn vị ... để ...` (trong cùng một câu, chỉ khi sau "để" có gọn / vừa / đáp án / 4 ký tự; thu hẹp ngày 2/11). Không phân biệt hoa thường và dấu; "đơn vị đo", "Đổi 30 phút = 0,5 giờ.", "Đổi đơn vị phút sang giờ để tính kết quả" không khớp. Chữ giáo viên chỉ cảnh báo như các cụm cũ.
+  - Prompt ma trận `sa` v7 (`matrix-sa-v7-draft`, 2/11): quy tắc đáp án thay "đổi đơn vị để đáp án gọn" (đã gây đáp án 100 thay 10000) bằng "chọn số liệu ngay từ đầu để đáp số đúng tự nhiên là số nguyên hoặc thập phân tối đa 4 ký tự; tuyệt đối không đổi đơn vị, không chia/nhân kết quả, không làm tròn để rút gọn; nếu đề cần làm tròn thì câu dẫn phải ghi rõ làm tròn đến đâu". Run cũ giữ `matrix-sa-v6-draft` trở về trước.
+  - Prompt ma trận `mcq` v6 (`matrix-mcq-v6-draft`), `sa` v8 (`matrix-sa-v8-draft`), `tf` v8 (`matrix-tf-v8-draft`) (3/11, góp ý giáo viên Toán thật trên đề 14; dev-log L-68). Run cũ giữ `matrix-mcq-v5-draft`, `matrix-sa-v7-draft`, `matrix-tf-v7-draft` trở về trước.
+    - Văn phong (cả 3 dạng, `MatrixPromptDraftV0.STYLE_RULES`): câu lệnh ngắn gọn đi thẳng vào yêu cầu (không mở đầu dài như "Hãy nhận biết…", "Trong các biểu thức đại số sau đây…" khi không cần); không đưa dữ kiện không dùng đến; dùng đúng thuật ngữ SGK ("cạnh bên", không "cạnh biên"); câu dẫn dạng câu nối kết thúc bằng "là" thì không có dấu hai chấm. Riêng `mcq`: mỗi phương án kết thúc bằng dấu chấm (sau dấu `$` đóng công thức). Riêng `sa`: câu dẫn không ghi hướng dẫn nhập đáp án ("(Nhập đáp án dưới dạng…)"); yêu cầu làm tròn khi đề cần vẫn phải ghi.
+    - Chữ đáp án đúng của câu `mcq` do HỆ THỐNG giao trước (`McqAnswerPlan`), không để model tự chọn (đề 14 Phần I có 7/12 đáp án A). Lúc tạo đề, mọi chỗ mcq cần sinh được gán một chữ A-D theo thứ tự câu trong đề, seed là id đề: đếm trước chữ đáp án của các chỗ lấy từ ngân hàng (`bank_item.correct_option`), rồi chia chữ cho chỗ cần sinh sao cho toàn đề cân bằng nhất có thể (12 câu thì mỗi chữ 3 lần) và không để chỗ sinh nào tạo ra 3 câu liền nhau cùng chữ. Đổi câu hay sinh lại chọn chữ đang ít nhất trong các chỗ mcq còn lại. Chữ đã giao ghi trong `generation_job.prompt_note` dưới dạng dòng `Phương án đúng phải là C: …` (đọc lại chỉ từ phần hệ thống viết, không từ khối yêu cầu của giáo viên); prompt cấm lời giải nhắc chữ cái phương án ("Do đó chọn B").
+  - Cảnh báo `correct_option: khác chữ đã giao <chữ đã giao> (nhận <chữ nhận>)` (3/11): chữ đúng của câu mcq do model trả về khác chữ đã giao. Lưu ở `quality_check_result.warnings` (hiện ở vết QC), **KHÔNG bật cờ "cần xem kỹ"** (câu vẫn đúng toán học, chỉ lệch vị trí đáp án; như `label: khác mẫu mục tiêu …` của tf) và chưa sinh lại chỗ. Dùng để thống kê mức tuân thủ.
+  - Cảnh báo văn phong mới (3/11), chỉ cho đầu ra LLM, lưu ở `quality_check_result.warnings`, **bật cờ** `warning: ...`, câu không bị loại:
+    - `<trường>: dùng sai thuật ngữ "<sai>" (SGK: "<đúng>")`: hiện chỉ có `cạnh biên` → `cạnh bên` (không phân biệt hoa thường, khoảng trắng giữa hai từ tùy ý); danh sách `QuestionWordingCheck.WRONG_TERMS` mở rộng bằng cách thêm một dòng. Kiểm ở đề dẫn, phương án, ý và lời giải.
+    - `question_text: có hướng dẫn nhập đáp án trong câu dẫn`: chỉ câu `sa` (khớp "nhập đáp án", "nhập đáp số", "nhập kết quả").
+  - Mẫu ma trận "Giữa kì I – Toán 8" (`docs/sample`, `back_end/src/main/resources/samples`): bỏ ghi chú nội bộ ("Mức: Biết = easy, Hiểu = medium, Vận dụng = hard", "Cần giáo viên xác nhận") khỏi `source` và `notes` hiện cho giáo viên. Ma trận đã tạo từ mẫu trước 2/11 vẫn giữ chữ cũ trong `exam_matrix.source`/`notes` (không sửa dữ liệu).
 
 - Giáo viên sửa câu trong đề (W1-2, V13, ngày 24/10):
   - Chỉ sửa được chỗ `ready` có câu hệ thống sinh (chưa Giữ). Chỗ `kept`/`edited`, chỗ đang sinh/hỏng và chỗ lấy câu từ ngân hàng không sửa được (sửa câu ngân hàng là việc riêng, chưa làm).
   - Mỗi lần sửa tạo **một dòng `generated_question` mới** (bản sửa), không bao giờ sửa dòng cũ: `edited_from_question_id` trỏ bản ngay trước (bản gốc LLM là đầu chuỗi, `edited_from_question_id IS NULL`). Bản sửa cùng `template_id`, `run_id`, `question_type`; chép `llm_difficulty` (mcq/sa) và mức từng ý (tf) của bản trước (không sửa mức độ, không định nghĩa lại `llm_difficulty`, Q-5); `raw_llm_output = ''`, `parse_success = TRUE`, token/độ trễ/chi phí NULL. Câu tf: nhãn giáo viên ghi ở `generated_question_statement.llm_label` của bản sửa. Nội dung một bản không đổi sau khi tạo, nên kết quả QC (`quality_check_result` theo `question_id`) luôn gắn đúng bản. DB chặn bản sửa khác dạng câu (khóa ngoại kép) và hai bản sửa từ cùng một bản (UNIQUE).
-  - **Mọi truy vấn thống kê về đầu ra LLM** (số câu sinh, tỉ lệ `qc_passed`, kết quả Solver, dedup, chi phí...) **phải lọc `generated_question.edited_from_question_id IS NULL`**; bản giáo viên sửa không phải đầu ra LLM. Thống kê sửa câu lấy từ `exam_slot_action` (`action = 'edit'`).
-  - QC của bản sửa: format (FormatChecker, như câu sinh ra) và dedup chạy ngay trong request; dedup loại trừ cả chuỗi bản trước (gồm bản gốc LLM). Trước đó các trường văn bản được trim và tự đóng `$` quên ở cuối trường (cảnh báo `<trường>: đã tự đóng $` trong `warnings`, bật cờ cần xem kỹ). Lỗi format chặn thì từ chối (400), không ghi gì. Trạng thái luôn do `QcStatusDecider` quyết (Q-2).
+  - **Mọi truy vấn thống kê về đầu ra LLM** (số câu sinh, tỉ lệ `qc_passed`, kết quả Solver, dedup, chi phí...) **phải lọc `generated_question.edited_from_question_id IS NULL`**; bản giáo viên sửa không phải đầu ra LLM. Thống kê sửa câu lấy từ `exam_slot_action` (`action = 'edit'`). Từ V26 phải lọc thêm **`generated_question.origin = 'llm'`** (câu nhập từ Word không phải đầu ra LLM), kể cả bộ đếm lượt gọi Gemini khi khởi động (`countLlmGeneratedSince`).
+  - QC của bản sửa: format (FormatChecker, như câu sinh ra) và dedup chạy ngay trong request; dedup loại trừ cả chuỗi bản trước (gồm bản gốc LLM). Trước đó các trường văn bản được trim và tự đóng `$` quên ở cuối trường (cảnh báo `<trường>: đã tự đóng $` trong `warnings`; từ 2/11 không bật cờ, trừ chuỗi gốc có từ 3 dấu `$`). Từ 3/11 (F-12) đường giáo viên sửa cũng bọc `$` quanh lệnh LaTeX liền mạch nằm ngoài `$...$` như parser sinh câu (cảnh báo `<trường>: đã tự bọc $ quanh …`, trừ đáp số `sa`), thay vì 400. Lỗi format chặn thì từ chối (400), không ghi gì. Trạng thái luôn do `QcStatusDecider` quyết (Q-2).
   - Solver: đổi đề, phương án/ý hoặc đáp án/đáp số/nhãn thì xếp job `generation_job.job_type = 'answer_check'` (có `question_id` là bản sửa, `exam_slot_id` NULL); chỉ đổi lời giải thì không gọi LLM mà chép dòng `answer_check` của bản trước (Solver không thấy lời giải; quyết định D5 ngày 24/10). Job `answer_check` dùng cùng hàng đợi, claim, thử lại (`max-attempts`, backoff) và phục hồi job kẹt như job sinh câu; thiếu API key thì `failed` ngay. Kết quả Solver chỉ ghi vào QC, không bao giờ đổi đáp án giáo viên; lệch thì `solver_inconsistent`, lỗi/hết lượt thì `solver_failed`, không bao giờ coi là đạt. Sửa tiếp khi job của bản trước còn chờ: job đó `failed`, `last_error = 'superseded'`; kết quả về muộn của bản đã bị thay không được ghi (job `done`, `last_error = 'skipped: superseded'`).
   - Bản sửa trùng câu khác: câu `duplicate`, lý do `duplicate: <id>`, không gọi Solver, không Giữ được (sửa tiếp hoặc Đổi câu khác).
   - Giữ: bị chặn (409 `QC_CHECKING`) khi job `answer_check` của câu còn `pending`/`running`; job `failed` thì Giữ được kèm cờ. Giữ bản sửa thì chỗ thành `edited` (câu chưa sửa vẫn `kept`); `bank_item.source_question_id` là bản sửa, truy ngược bản gốc LLM qua `edited_from_question_id`.
@@ -358,7 +413,15 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - `generated_question.solver_error` (V14; cập nhật W2-4b): lý do Solver LỖI với câu sinh từ job (mạng, hết thời gian chờ, phản hồi hỏng), tối đa 1000 ký tự. Lỗi không tạo dòng `answer_check` (`chk_qcr_judge_only_answer_check` bắt buộc kết quả Solver hợp lệ). Khi Solver lỗi kỹ thuật ngay trong `finishGeneratedJob` của câu gốc LLM (đã qua format + dedup), hệ thống xếp một job `generation_job.job_type = 'answer_check'` cho chính câu đó (thử lại tối đa `max-attempts` lần riêng bước Solver, không sinh lại câu mới); đối soát giữ chỗ ở `generating` khi job `answer_check` còn `pending`/`running`, nếu thành công thì xóa `solver_error` về `NULL` và câu thành `qc_passed`, nếu `failed` hết lượt thì cập nhật `solver_error` và giữ câu ở `ready` kèm lý do `solver_failed` trong `reviewReasons` (tách khỏi `solver_inconsistent` mới sinh lại câu tối đa 1 lần theo Q-2). Ba trạng thái Solver của một câu: **chưa chạy** (không có dòng `answer_check`, `solver_error` NULL, không có job `answer_check` `failed`), **lỗi** (`solver_error` có giá trị hoặc job `answer_check` ở trạng thái `failed` — `reviewReasons` trả `solver_failed`; khi job `answer_check` đang `pending`/`running` thì trả `solver_pending`), **lệch** (có dòng `answer_check`, `passed = FALSE` — `reviewReasons` trả `solver_inconsistent`). Chỉ đường job ghi `solver_error`; sinh đồng bộ và chạy lại QC không ghi. **Việc phải làm trước khi dùng cho thí nghiệm Solver (đã duyệt 24/10):** khi làm công cụ thí nghiệm Solver, phải ghi `solver_error` (và `solver_reasoning`) cả ở đường sinh đồng bộ (`GenerationService.generate*Sync`) và đường chạy lại QC (`QcRerunService`), nếu không thống kê "Solver lỗi" sẽ lẫn vào "chưa chạy" ở hai đường đó.
   - Dedup câu trong cùng đề: câu sinh cho một chỗ (job có `exam_slot_id`) và bản giáo viên sửa được so thêm với nội dung các câu đang nằm ở những chỗ khác cùng dạng của đề: câu hiện tại của chỗ (kể cả `generated` chưa qua Solver), văn bản bản ngân hàng đang dùng (có thể đã sửa lúc duyệt, nên khác câu nguồn), câu vừa sinh của chỗ đang sinh. Ứng viên của câu ngân hàng mang id câu nguồn (`generated_question.id`), nên `quality_check_result.compared_to_question_id` trỏ tới câu nguồn. Câu đã bị Đổi ra khỏi chỗ, câu `format_failed`/`duplicate`/`rejected` không tính.
   - Chọn câu ngân hàng khi tạo đề: mỗi câu chỉ vào một chỗ của đề; giữa các đề chỉ xếp hạng mềm (không cấm): ít đề khác dùng trước, hòa thì lần dùng gần nhất (`exam.created_at` lớn nhất) cũ hơn trước, hòa nữa theo `bank_item.id`. "Dùng" là có `exam_slot.bank_item_id` hoặc `exam_question.bank_item_id` của một đề (mọi giáo viên, trừ đề đang tạo); Đổi câu bỏ `bank_item_id` khỏi chỗ nên không còn tính. Đổi luôn sinh câu mới (chưa lấy từ ngân hàng).
-  - `bank_item` không có cột môn, khối, chủ đề: lọc nối qua `source_question_id` → `generated_question.template_id` → `question_template` (`subject_id`, `grade_level`, `topic`) và `exam_matrix_cell.content` của ô dùng template đó. `origin.type` hiện chỉ có `ai`; `import` dành cho câu nhập từ Word sau này (khi đó phải nới `source_question_id`/`review_id` NOT NULL bằng migration riêng).
+  - `bank_item` không có cột môn, khối, chủ đề: lọc nối qua `source_question_id` → `generated_question.template_id` → `question_template` (`subject_id`, `grade_level`, `topic`) và `exam_matrix_cell.content` của ô dùng template đó. `origin.type` là `ai` (câu nguồn `origin = 'llm'`) hoặc `import` (câu nguồn `origin = 'import'`, V26); tham số lọc `origin=ai|import` của `GET /api/bank-items` lọc theo cột này, không truyền là mọi nguồn. Câu nhập theo mô hình B1 (quyết định 3/11) vẫn đi qua `generated_question` và `teacher_review` nên không phải nới `source_question_id`/`review_id`. Chuỗi phiên bản (`provenance.versions[].kind`) của câu nhập là `import`.
+
+- Nhập ngân hàng câu từ Word (V26, quyết định 3/11, `/api/bank-imports`):
+  - Xác nhận tạo trong MỘT transaction: một `question_template` (môn Toán, khối và chủ đề của lô, `source_question = 'Nhập từ Word: <tên hiển thị>'`), một `experiment_run` mỗi dạng câu (`production`, `zero-shot`, `model_name = 'import-docx'`, `prompt_version = 'import-docx-v1'`, `prompt_text = ''`, `status = 'imported'`), mỗi câu một `generated_question` (`origin = 'import'`, `import_batch_id`, `status = 'in_bank'`, `raw_llm_output = ''`, `parse_success = TRUE`, `llm_difficulty` NULL, `final_difficulty` theo file với mcq/sa), `generated_question_statement` cho tf (`llm_label` là nhãn trong file, `llm_difficulty` NULL, `final_difficulty` theo file), `teacher_review` (`production`, `assisted`, `approved_as_is`, người duyệt là người tải, `answer_correct = TRUE` với mcq/sa), `teacher_review_statement` cho tf, và `bank_item` + `bank_item_statement` với `visible_to_user_id` = người tải (không bao giờ là câu dùng chung). CHECK `chk_gq_import_not_llm`: câu nhập không có `edited_from_question_id` và `llm_difficulty`.
+  - Mức: `NB` → `easy`, `TH` → `medium`, `VD`/`VDC` → `hard`; câu không có nhãn mức có cờ chặn `level_missing`. **Hạn chế:** file chỉ ghi một mức cho cả câu tf, nên cả 4 ý nhận chung mức của câu (khi tạo đề, câu tf nhập chỉ khớp ô có 4 mức giống nhau).
+  - Không gọi LLM ở bất kỳ bước nào, không xếp job Solver (`answer_check`), không có dòng `quality_check_result`; không tính vào hạn mức sinh câu (D1, `generation_quota`) và bộ đếm Gemini.
+  - Câu bị bỏ (đếm theo lý do trong `import_batch.skipped_counts` và `skipped` của API): `has_image` (ảnh, hình vẽ, ảnh công thức, đối tượng vẽ), `formula_unsupported` (công thức MathType chưa chuyển được), `has_table` (bảng dữ liệu trong đề).
+  - Cờ chặn (câu không chọn được, 422 `IMPORT_ITEM_BLOCKED`): `level_missing`, `sa_answer_format` (đáp số không đạt STRICT, giữ nguyên văn), `latex_error`, `leak_suspect` (chuỗi giống tên tác giả bộ đề hoặc dòng quảng cáo/liên kết), mọi `answer_*` và `structure_*` (`answer_missing`, `answer_ambiguous`, `answer_conflict`, `structure_options_not_found`, `structure_statements_N`, `structure_empty_field`). Cờ thông tin: `no_solution` (explanation NULL; xuất Word bỏ khối lời giải của câu đó), `duplicate_in_bank`, `duplicate_in_batch`, `latex_warning`, `solution_latex_error`, `formula_partial`, `plain_math_vertalign`, `hint_after_statements`, `empty_formula`.
+  - Không lưu file gốc, tên file gốc hay phần "GV …" của tên file; `display_name` là tên đã làm sạch.
 
 ## 4. JSON mà LLM phải trả
 
@@ -400,7 +463,7 @@ SỐ NGUYÊN hoặc SỐ THẬP PHÂN, tối đa 4 ký tự tính cả dấu `-`
 - Trước khi kiểm: trim, bỏ cặp `$...$` (hoặc `$$...$$`) bao cả chuỗi, đổi `−` (U+2212) thành `-`, `{,}` thành `,`, dấu `.` thành `,`.
 - Nhận: `^-?[0-9]+(,[0-9]+)?$`, dài tối đa 4 ký tự sau khi chuẩn hóa. Ví dụ `5`, `-12`, `2,75`, `2.75` (thành `2,75`), `$1,5$`, `0,5`, `1234`.
 - Từ chối: phân số (`\frac{11}{4}`, `11/4`), hỗn số (`$3\frac{1}{4}$`), căn (`2\sqrt{3}`), đơn vị (`6 km`), quá 4 ký tự (`12,345`, `-1234`),
-  dấu phẩy cuối (`3,`), chữ số 0 thừa ở đầu (`05`), số 0 mang dấu âm (`-0`). Thông báo (`format_failed`, ghi chú sinh lại): `đáp án phải là số nguyên hoặc thập phân tối đa 4 ký tự (gồm dấu - và dấu phẩy), không dùng phân số/căn; nếu kết quả lẻ thì đề phải ghi rõ làm tròn đến hàng nào`.
+  dấu phẩy cuối (`3,`), chữ số 0 thừa ở đầu (`05`), số 0 mang dấu âm (`-0`). Thông báo (`format_failed`, ghi chú sinh lại): `Đáp số phải là số nguyên hoặc thập phân tối đa 4 ký tự. Hãy chọn lại số liệu của đề để đáp số tự nhiên thỏa điều kiện; không đổi đơn vị, không nhân/chia hay làm tròn kết quả để rút gọn.` (từ 2/11; trước đó `đáp án phải là … nếu kết quả lẻ thì đề phải ghi rõ làm tròn đến hàng nào`, còn trong dữ liệu `quality_check_result.errors` cũ). Frontend nhận ra theo phần đầu "Đáp số phải là" hoặc "đáp án phải là", không so cả câu.
 - Lưu trữ: đáp án đạt STRICT được lưu ở dạng đã chuẩn hóa (`2.75` và `$2,75$` đều lưu `2,75`) ở cả đường sinh câu và đường giáo viên sửa; đáp án không đạt giữ nguyên văn để báo lỗi.
 - Kết quả không gọn trong 4 ký tự thì đề phải yêu cầu làm tròn rõ ràng (ví dụ "làm tròn đến hàng phần mười"); hệ thống không tự đổi phân số sang thập phân.
 - Không đổi: đáp số Solver (`judge_sa_answer`) và so khớp khi dedup đọc ở chế độ rộng LENIENT, vẫn nhận phân số và căn để so giá trị với đáp án câu.
@@ -492,5 +555,69 @@ Solver chỉ thấy đề dẫn và 4 ý, không thấy nhãn và lời giải c
   "judge_c": "F",
   "reasoning_d": "$1 + \\frac{1}{x}$ nguyên khi $x = \\pm 1$, loại $x = 1$, còn một giá trị.",
   "judge_d": "F"
+}
+```
+
+### 4.6. Solver câu `mcq` (4 trường, `solver-v4-literal-reading` và `solver-v3-option-check`, thẩm định 31/10)
+
+Solver chỉ thấy đề và 4 phương án, không thấy đáp án và lời giải của câu. Solver giải bài rồi xét **từng** phương án A–D,
+không dừng ở phương án đầu tiên khớp. Thứ tự: `reasoning`, `options_verdict`, `correct_count`, `judge_answer`.
+
+- `solver-v4-literal-reading` (mặc định): một phương án là ĐÚNG nếu học sinh bảo vệ được nó là đáp án theo đúng chữ của đề,
+  không thêm yêu cầu đề không nêu.
+  - Phân tích nhân tử: mọi tích nhân lại bằng đa thức đã cho đều đúng, trừ khi đề ghi "triệt để" hoặc "đặt nhân tử chung
+    lớn nhất".
+  - Khẳng định hình học không có "luôn": phương án đúng trong ít nhất một trường hợp hợp lệ thì là đúng.
+  - Đề mơ hồ khiến từ 2 phương án bảo vệ được thì `correct_count` từ 2.
+- `solver-v3-option-check` (lần thử 1): cùng JSON, nhưng hiểu "đúng" hẹp (chỉ nhận cách phân tích triệt để; khẳng định không
+  "luôn" đúng là sai).
+- `solver-v2-delimited` (2 trường `reasoning`, `judge_answer`): Solver cũ.
+
+v2 và v3 giữ nguyên để đo lại, chọn bằng `app.llm.solver-prompt-version`. Bảng dưới áp cho cả v3 và v4.
+
+| Trường | Kiểu | Ý nghĩa |
+|---|---|---|
+| `reasoning` | chuỗi | Lời giải của Solver |
+| `options_verdict` | mảng 4 đối tượng `{option, correct, reason}` | `option` là `A`..`D` (mỗi chữ cái một lần, không cần đúng thứ tự, trim, không phân biệt hoa thường); `correct` là `true`/`false`; `reason` là lý do một dòng |
+| `correct_count` | số nguyên | Số phương án đúng do Solver tự đếm (chỉ để đối chiếu) |
+| `judge_answer` | chuỗi `A`..`D`, `multiple`, `none` | Kết luận do Solver ghi (chỉ để đối chiếu khi có `options_verdict` hợp lệ) |
+
+Backend đếm số phương án đúng từ chính `options_verdict`. `correct_count` hoặc `judge_answer` lệch thì ghi cảnh báo vào
+log và vẫn theo `options_verdict`.
+
+`options_verdict` có nhưng hỏng (không đủ 4 phần tử A-D hợp lệ: thiếu, trùng chữ cái, `correct` không phải boolean, phần tử
+không phải đối tượng) với prompt xét từng phương án (v3, v4) (F-03, 3/11): đã đọc được từ 2 phương án `correct = true` ở những
+phần tử hợp lệ thì vẫn là `multiple` (`solver_multiple_correct`, không qua); còn lại là Solver lỗi (ERROR, đi đường job
+`answer_check` thử lại), KHÔNG so `judge_answer` rồi cho qua. Thiếu hẳn `options_verdict` thì vẫn so `judge_answer` như Solver
+cũ; prompt v2 không có trường này nên giữ cách so cũ.
+
+| Số phương án đúng | `quality_check_result.judge_answer` | `answerCheckStatus` | `reviewReasons` |
+|---|---|---|---|
+| 1, trùng đáp án câu | chữ cái đó | `CONSISTENT` | không có |
+| 1, khác đáp án câu | chữ cái đó | `INCONSISTENT` | `solver_inconsistent` |
+| từ 2 trở lên | `multiple` | `INCONSISTENT` | `solver_multiple_correct` |
+| 0 | `none` | `INCONSISTENT` | `solver_no_correct` |
+| thiếu hoặc hỏng `options_verdict` (không phải mảng 4 phần tử, thiếu/trùng chữ cái, `correct` không phải true/false) | theo `judge_answer` như Solver cũ | như Solver cũ | `solver_inconsistent` khi lệch (kể cả `multiple`/`none`), không gắn lý do mới |
+| JSON hỏng, khóa trùng, lỗi gọi; hoặc thiếu `options_verdict` hợp lệ mà `judge_answer` thiếu/sai | không ghi dòng | `ERROR` | `solver_failed`/`solver_pending` như cũ |
+
+- `MULTIPLE_CORRECT` (`multiple`) và `NO_CORRECT` (`none`) là kết luận `INCONSISTENT`, đi đúng đường Q-2: câu mới sinh được
+  giữ làm câu dự phòng và sinh lại 1 lần; vẫn lỗi thì giữ câu kèm cờ. Không thêm giá trị `AnswerCheckStatus`, không thêm cột.
+- Kết quả từng phương án không có cột riêng: được ghi vào đầu `quality_check_result.solver_reasoning` (V14), dòng đầu là
+  `[Xét từng phương án] <số>/4 phương án đúng`, mỗi phương án một dòng `A: đúng – <lý do>`, rồi một dòng trống và
+  `reasoning`. `QcSummaryService` chỉ tách `solver_multiple_correct`/`solver_no_correct` khi ghi chú bắt đầu bằng
+  `[Xét từng phương án]`; dòng lưu trước v3 có `multiple`/`none` vẫn là `solver_inconsistent`. Ghi chú bị cắt ở 4000 ký tự
+  từ cuối, nên dòng đầu luôn còn; khi chép kết quả Solver sang bản sửa chỉ đổi lời giải, ghi chú được chép nguyên.
+
+```json
+{
+  "reasoning": "$2x^3 - 6x^2 = 2x^2(x - 3)$.",
+  "options_verdict": [
+    {"option": "A", "correct": true, "reason": "Khai triển $2x^2(x-3) = 2x^3 - 6x^2$."},
+    {"option": "B", "correct": true, "reason": "Khai triển $2x(x^2 - 3x) = 2x^3 - 6x^2$."},
+    {"option": "C", "correct": false, "reason": "Khai triển $x^2(2x + 6) = 2x^3 + 6x^2$, khác đề."},
+    {"option": "D", "correct": false, "reason": "$2(x^3 - 6x)$ khai triển ra $2x^3 - 12x$, khác đề."}
+  ],
+  "correct_count": 2,
+  "judge_answer": "multiple"
 }
 ```

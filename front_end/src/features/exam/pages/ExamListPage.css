@@ -22,6 +22,13 @@
     width: 100%;
 }
 
+/* Thêm class cho khu vực chứa thanh lọc */
+.exam-list-filter-bar {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+}
+
 @media (max-width: 576px) {
     .exam-list-page-header-content {
         flex-direction: column;

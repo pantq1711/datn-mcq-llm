@@ -1,4 +1,31 @@
-# React + TypeScript + Vite
+# Frontend (React + TypeScript + Vite)
+
+## Quy ước chữ hiển thị
+
+Áp dụng cho mọi chữ người dùng nhìn thấy (nhãn, nút, thông báo, tooltip). Tên component, biến và comment trong code
+giữ nguyên (`QcTraceModal`, `slotId`, `failureReason`...).
+
+| Dùng | Không dùng |
+|---|---|
+| lần soạn | lần sinh |
+| câu (câu này, thay câu này) | chỗ, slot |
+| tự kiểm tra, hệ thống tự giải | QC, Solver |
+| lỗi khi soạn câu | job, prompt, token, LLM, tên model |
+| Biết / Hiểu / Vận dụng | Dễ / Trung bình / Khó, easy / medium / hard |
+
+- Lỗi kỹ thuật backend trả về (ví dụ `job.error`) không hiện thẳng: hiện câu dễ hiểu, đặt nguyên văn trong tooltip
+  "Chi tiết".
+- Chữ do backend trả về và hiện nguyên văn (`error` của API, lý do bám tài liệu, lập luận của hệ thống) nằm ngoài
+  phạm vi này; cần sửa ở backend nếu có thuật ngữ kỹ thuật.
+
+Trước khi duyệt PR có thêm chữ hiển thị, chạy trong `front_end` (bỏ qua kết quả nằm trong comment hoặc tên biến):
+
+```bash
+grep -rnE "lần sinh|[Cc]hỗ |Solver|\bQC\b|\bjob\b|\bslot\b" src --include=*.tsx --include=*.ts \
+  | grep -v "question-generation\|experiment\|teacher-review\|test-katex"
+```
+
+## Ghi chú mẫu Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

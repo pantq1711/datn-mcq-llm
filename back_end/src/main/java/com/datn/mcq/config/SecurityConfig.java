@@ -103,7 +103,10 @@ public class SecurityConfig {
         cors.setAllowedOriginPatterns(properties.cors().allowedOrigins());
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT));
-        cors.setExposedHeaders(List.of(HttpHeaders.CONTENT_DISPOSITION, HttpHeaders.WWW_AUTHENTICATE));
+        // X-Equation-Kept-Omml / X-Equation-Scaled: xuất Word dạng MathType, số công thức giữ Equation / bị thu nhỏ
+        // cho vừa lề (ExamController)
+        cors.setExposedHeaders(List.of(HttpHeaders.CONTENT_DISPOSITION, HttpHeaders.WWW_AUTHENTICATE,
+                "X-Equation-Kept-Omml", "X-Equation-Scaled"));
         cors.setAllowCredentials(true);
         cors.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -138,6 +141,7 @@ public class SecurityConfig {
                         // Chức năng giáo viên (H4: admin không dùng). Form chấm chỉ cần giáo viên đăng nhập (H5, Q-6).
                         .requestMatchers("/api/exam-matrices", "/api/exam-matrices/**", "/api/exams", "/api/exams/**",
                                 "/api/materials", "/api/materials/**",
+                                "/api/bank-imports", "/api/bank-imports/**",
                                 "/api/reviews/**").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.GET, "/api/bank-items", "/api/bank-items/**", "/api/catalog/**")
                         .hasAnyRole("TEACHER", "ADMIN")

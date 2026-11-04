@@ -14,6 +14,7 @@ export default function CreateUserModal({ open, onCancel, onSuccess }: CreateUse
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async () => {
+        if (loading) return; // Enter bấm liên tiếp không gửi hai lần
         try {
             const values = await form.validateFields();
             setLoading(true);
@@ -58,7 +59,7 @@ export default function CreateUserModal({ open, onCancel, onSuccess }: CreateUse
                         { max: 255, message: "Họ và tên tối đa 255 ký tự" },
                     ]}
                 >
-                    <Input placeholder="Ví dụ: Nguyễn Văn A" />
+                    <Input placeholder="Ví dụ: Nguyễn Văn A" onPressEnter={handleSubmit} />
                 </Form.Item>
 
                 <Form.Item
@@ -69,7 +70,7 @@ export default function CreateUserModal({ open, onCancel, onSuccess }: CreateUse
                         { type: "email", message: "Email không đúng định dạng" },
                     ]}
                 >
-                    <Input placeholder="Ví dụ: gv.toan@truong.edu.vn" />
+                    <Input placeholder="Ví dụ: gv.toan@truong.edu.vn" onPressEnter={handleSubmit} />
                 </Form.Item>
 
                 <Form.Item
@@ -81,7 +82,7 @@ export default function CreateUserModal({ open, onCancel, onSuccess }: CreateUse
                         { max: 72, message: "Mật khẩu tối đa 72 ký tự" },
                     ]}
                 >
-                    <Input.Password placeholder="Tối thiểu 8 ký tự" />
+                    <Input.Password placeholder="Tối thiểu 8 ký tự" onPressEnter={handleSubmit} />
                 </Form.Item>
             </Form>
         </Modal>

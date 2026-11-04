@@ -20,6 +20,8 @@ import java.util.List;
  * @param tfLabels     tf: nhãn Solver cho 4 ý theo thứ tự a-d; null với dạng khác
  * @param usage        token và độ trễ của lượt gọi Solver cho ra kết quả này; null khi kết quả được CHÉP từ bản trước
  *                     (không có lượt gọi nào, nên không được tính chi phí lần nữa)
+ * @param mcqOptionCorrect mcq (Solver v3): kết luận từng phương án A-D; null với dạng khác, Solver cũ, phản hồi thiếu
+ *                     {@code options_verdict} và kết quả chép. Không lưu cột riêng: đã nằm trong ghi chú Solver (V14).
  */
 public record SolverVerdict(
         QuestionType questionType,
@@ -30,16 +32,26 @@ public record SolverVerdict(
         SaJudgeKind saJudgeKind,
         String saJudgeAnswer,
         List<TruthChoice> tfLabels,
-        LlmUsage usage
+        LlmUsage usage,
+        List<Boolean> mcqOptionCorrect
 ) {
     public SolverVerdict {
         tfLabels = tfLabels == null ? null : List.copyOf(tfLabels);
+        mcqOptionCorrect = mcqOptionCorrect == null ? null : List.copyOf(mcqOptionCorrect);
+    }
+
+    public SolverVerdict(QuestionType questionType, boolean passed, String judgeModel, String reasoning,
+                         AnswerChoice judgeAnswer, SaJudgeKind saJudgeKind, String saJudgeAnswer,
+                         List<TruthChoice> tfLabels, LlmUsage usage) {
+        this(questionType, passed, judgeModel, reasoning, judgeAnswer, saJudgeKind, saJudgeAnswer, tfLabels, usage,
+                null);
     }
 
     public SolverVerdict(QuestionType questionType, boolean passed, String judgeModel, String reasoning,
                          AnswerChoice judgeAnswer, SaJudgeKind saJudgeKind, String saJudgeAnswer,
                          List<TruthChoice> tfLabels) {
-        this(questionType, passed, judgeModel, reasoning, judgeAnswer, saJudgeKind, saJudgeAnswer, tfLabels, null);
+        this(questionType, passed, judgeModel, reasoning, judgeAnswer, saJudgeKind, saJudgeAnswer, tfLabels, null,
+                null);
     }
 
     public AnswerCheckStatus status() {

@@ -17,10 +17,12 @@ import com.datn.mcq.generation.dto.ParsedSaDto;
 import com.datn.mcq.generation.dto.ParsedTfDto;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.generation.service.PreviousQuestionLookup;
+import com.datn.mcq.generation.service.SlotDedupContext;
 import com.datn.mcq.generation.service.TrueFalseQuestionStore;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
+import com.datn.mcq.llm.prompt.McqAnswerPlan;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
@@ -39,6 +41,7 @@ import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import com.datn.mcq.qc.service.GroundingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,6 +91,8 @@ public class GenerationJobProcessor {
             Purpose purpose,
             /* mẫu nhãn bắt buộc của job tf theo ma trận (TfLabelPattern, đọc từ prompt_note); null với job khác */
             String tfLabelPattern,
+            /* chữ đáp án đúng đã giao cho chỗ mcq của đề theo ma trận (McqAnswerPlan, đọc từ prompt_note); null với job khác */
+            String mcqAnswerLetter,
             /* V13 (W1-2): loại job; với answer_check chỉ có jobId, runId, templateId, attempt, questionType, questionId */
             String jobType,
             /* answer_check: bản giáo viên sửa cần chạy lại Solver; null với job sinh câu */
@@ -128,6 +133,13 @@ public class GenerationJobProcessor {
     /** W2-3: lưu kết quả grounding; nạp bằng field để không đổi constructor. */
     @Autowired
     private GroundingService groundingService;
+
+    /**
+     * Lớp 1 chống câu cùng khuôn: nguồn "câu khác cùng ô" của đề. Bean cài đặt nằm ở module exam, phụ thuộc ngược lại
+     * generation nên lấy muộn (như {@link DedupScopeResolver}); nạp bằng field để không đổi constructor.
+     */
+    @Autowired
+    private ObjectProvider<SlotDedupContext> slotContext;
 
     public GenerationJobProcessor(
             GenerationJobRepository generationJobRepository,
@@ -183,14 +195,14 @@ public class GenerationJobProcessor {
         if (GenerationJob.TYPE_ANSWER_CHECK.equals(job.getJobType())) {
             // W1-2: job chạy lại Solver cho bản giáo viên sửa, không dựng prompt sinh câu.
             return Optional.of(new ClaimedJobContext(job.getId(), job.getRunId(), job.getTemplateId(), nextAttempt,
-                    null, null, null, null, null, false, jobQuestionType, List.of(), null, null,
+                    null, null, null, null, null, false, jobQuestionType, List.of(), null, null, null,
                     job.getJobType(), job.getQuestionId(), null, claimSeq));
         }
 
         if (GenerationJob.TYPE_GROUNDING_CHECK.equals(job.getJobType())) {
             // W2-3: job chấm "bám tài liệu", không dựng prompt sinh câu; đoạn tài liệu đọc ở prepareGrounding.
             return Optional.of(new ClaimedJobContext(job.getId(), job.getRunId(), job.getTemplateId(), nextAttempt,
-                    null, null, null, null, null, false, jobQuestionType, List.of(), null, null,
+                    null, null, null, null, null, false, jobQuestionType, List.of(), null, null, null,
                     job.getJobType(), job.getQuestionId(), null, claimSeq));
         }
 
@@ -214,7 +226,7 @@ public class GenerationJobProcessor {
         String prompt = matrix
                 ? MatrixPromptDraftV0.buildGenerationPrompt(MatrixCellSpec.fromJson(run.getHyperparams()),
                         previousQuestionLookup.recentForMatrix(tpl.getId(), questionType), job.getPromptNote(),
-                        job.getMaterialContext())
+                        job.getMaterialContext(), sameCellQuestions(job.getExamSlotId()))
                 : questionType == QuestionType.TF
                 ? TfPromptDraftV0.buildGenerationPrompt(
                         subject.getName(),
@@ -257,11 +269,22 @@ public class GenerationJobProcessor {
             statementLevels,
             run.getPurpose(),
             matrix && questionType == QuestionType.TF ? TfLabelPattern.fromNote(job.getPromptNote()) : null,
+            matrix && questionType == QuestionType.MCQ ? McqAnswerPlan.fromNote(job.getPromptNote()) : null,
             job.getJobType(),
             null,
             job.getExamSlotId(),
             claimSeq
         ));
+    }
+
+    /**
+     * Thẩm định 31/10 (lớp 1): câu dẫn của các câu khác cùng ô trong cùng đề của chỗ {@code examSlotId}, đưa vào prompt để
+     * model chọn dạng bài khác. Đọc lúc worker nhận job (không phải lúc xếp job) để thấy cả câu mà worker khác vừa sinh.
+     * Job không thuộc chỗ nào (sinh lẻ) hoặc không có nguồn ứng viên thì rỗng.
+     */
+    private List<String> sameCellQuestions(Integer examSlotId) {
+        SlotDedupContext context = examSlotId == null || slotContext == null ? null : slotContext.getIfAvailable();
+        return context == null ? List.of() : context.sameCellQuestionTexts(examSlotId);
     }
 
     // ---------- hàng rào claim (W2-4b, A) ----------
@@ -715,6 +738,44 @@ public class GenerationJobProcessor {
         job.setLastError(TextClip.clip("quota: " + reason, MAX_SOLVER_ERROR));
         job.setUpdatedAt(LocalDateTime.now());
         return generationJobRepository.save(job);
+    }
+
+    /**
+     * F-09: job đang gọi Gemini thì ứng dụng tắt (cờ running = false hoặc luồng bị interrupt): trả về {@code pending} chạy
+     * lại ngay lúc khởi động sau, xóa {@code started_at} và hoàn lại lượt {@code attempt} đã tăng lúc nhận job (không tính
+     * lỗi, không backoff). Rào bằng {@link #holdsClaim} như {@link #deferJobOnQuotaExhausted}.
+     */
+    @Transactional
+    public GenerationJob releaseJobOnShutdown(ClaimedJobContext ctx, String reason) {
+        boolean owned = holdsClaim(ctx);
+        GenerationJob job = generationJobRepository.findById(ctx.jobId())
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy generation_job id=" + ctx.jobId()));
+        if (!owned) {
+            LOG.warn("stale finish: job {} (claim_seq {}) không còn running với claim_seq này, bỏ việc trả job khi tắt app",
+                    ctx.jobId(), ctx.claimSeq());
+            return job;
+        }
+        int currentAttempt = job.getAttempt() != null ? job.getAttempt() : 1;
+        job.setStatus(JobStatus.PENDING);
+        job.setAttempt(Math.max(0, currentAttempt - 1));
+        job.setNextRunAt(LocalDateTime.now());
+        job.setStartedAt(null);
+        job.setLastError(TextClip.clip("shutdown: " + reason, MAX_SOLVER_ERROR));
+        job.setUpdatedAt(LocalDateTime.now());
+        return generationJobRepository.save(job);
+    }
+
+    /** F-27: ID đề của chỗ {@code examSlotId} để gắn nhật ký; null khi không có chỗ hoặc không tra được. Không ném lỗi. */
+    public Integer examIdForSlot(Integer examSlotId) {
+        if (examSlotId == null || slotContext == null) {
+            return null;
+        }
+        try {
+            SlotDedupContext context = slotContext.getIfAvailable();
+            return context == null ? null : context.examIdForSlot(examSlotId);
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 
     public static boolean isMathSubject(String subjectName) {

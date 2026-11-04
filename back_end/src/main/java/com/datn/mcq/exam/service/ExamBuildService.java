@@ -21,6 +21,7 @@ import com.datn.mcq.experiment.entity.ExperimentRun;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.llm.prompt.McqAnswerPlan;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
@@ -77,11 +78,14 @@ public class ExamBuildService {
     private final QcSummaryService qcSummaryService;
     private final ExamContextService contextService;
     private final MaterialPassageService passageService;
+    private final GenerationQuotaService generationQuota;
 
     public ExamBuildService(ExamRepository examRepository, ExamSlotRepository slotRepository,
                             MatrixService matrixService, GenerationService generationService,
                             CatalogService catalogService, QcSummaryService qcSummaryService,
-                            ExamContextService contextService, MaterialPassageService passageService) {
+                            ExamContextService contextService, MaterialPassageService passageService,
+                            GenerationQuotaService generationQuota) {
+        this.generationQuota = generationQuota;
         this.examRepository = examRepository;
         this.slotRepository = slotRepository;
         this.matrixService = matrixService;
@@ -150,6 +154,9 @@ public class ExamBuildService {
         int fromBank = 0;
         int jobs = 0;
         String lastTfPattern = null;
+        // Bước 1: tạo chỗ và lấy câu ngân hàng cho từng ô; chưa xếp job nào.
+        List<CellPlan> plans = new ArrayList<>();
+        int toGenerate = 0;
         for (ExamMatrixCell cell : cells) {
             List<ExamSlot> slots = new ArrayList<>();
             for (int i = 1; i <= cell.getQuestionCount(); i++) {
@@ -177,6 +184,20 @@ public class ExamBuildService {
                     missing.add(slots.get(i));
                 }
             }
+            plans.add(new CellPlan(cell, slots, missing, cellInstruction));
+            toGenerate += missing.size();
+        }
+        // D1: giữ chỗ cho đúng số câu phải sinh (câu ngân hàng không tính) rồi mới xếp job, cùng transaction; vượt trần thì
+        // 429 và toàn bộ đề vừa tạo rollback.
+        generationQuota.reserve(actorId, toGenerate);
+        // Góp ý giáo viên 3/11: chữ đáp án đúng giao trước cho mọi chỗ mcq cần sinh, chia đều A/B/C/D theo seed của đề.
+        Map<Integer, String> mcqLetters = assignMcqLetters(plans, exam.getId());
+        // Bước 2: xếp job sinh câu cho phần thiếu.
+        for (CellPlan plan : plans) {
+            ExamMatrixCell cell = plan.cell();
+            List<ExamSlot> slots = plan.slots();
+            List<ExamSlot> missing = plan.missing();
+            String cellInstruction = plan.instruction();
             if (!missing.isEmpty()) {
                 MatrixCellSpec spec = spec(cell, matrix, subject, cellInstruction);
                 ExperimentRun run = generationService.createMatrixRun(subject.getId(), spec, missing.size());
@@ -187,10 +208,14 @@ public class ExamBuildService {
                     slot.setAttempts(1);
                     slot.setState(ExamSlot.GENERATING);
                     List<String> note = new ArrayList<>();
-                    addLine(note, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount()));
+                    addLine(note, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount(),
+                            outcomeLevels(cell)));
                     if (cell.getQuestionType() == QuestionType.TF) {
                         lastTfPattern = TfLabelPattern.choose(lastTfPattern, ThreadLocalRandom.current());
                         note.add(TfLabelPattern.promptLine(lastTfPattern));
+                    }
+                    if (cell.getQuestionType() == QuestionType.MCQ) {
+                        note.add(McqAnswerPlan.promptLine(mcqLetters.get(slot.getId())));
                     }
                     generationService.enqueueMatrixJob(run.getId(), cell.getTemplateId(), spec, slot.getId(),
                             start, joinNote(note),
@@ -203,6 +228,50 @@ public class ExamBuildService {
         return new BuildResultDto(exam.getId(), exam.getExamCode(), exam.getTitle(),
                 matrix.isLesson() ? null : matrix.getId(), total, fromBank, jobs, matrix.getKind());
     }
+
+    /**
+     * Chữ đáp án đúng cho các chỗ mcq cần sinh của đề ({@link McqAnswerPlan#assignAround}, seed là id đề). Thứ tự là thứ tự câu
+     * trong đề (ô rồi số chỗ); chữ đáp án của các chỗ lấy từ ngân hàng được đếm trước, để toàn đề cân bằng nhất có thể.
+     */
+    private Map<Integer, String> assignMcqLetters(List<CellPlan> plans, long seed) {
+        List<ExamSlot> all = new ArrayList<>();
+        for (CellPlan plan : plans) {
+            if (plan.cell().getQuestionType() == QuestionType.MCQ) {
+                all.addAll(plan.slots());
+            }
+        }
+        Map<Integer, String> bank = bankLetters(all.stream().map(ExamSlot::getBankItemId)
+                .filter(java.util.Objects::nonNull).toList());
+        List<String> fixed = new ArrayList<>(all.size());
+        for (ExamSlot slot : all) {
+            // chỗ cần sinh là null; chỗ ngân hàng giữ chữ của câu (không đọc được thì "?" để không bị coi là chỗ sinh)
+            fixed.add(slot.getBankItemId() == null ? null : bank.getOrDefault(slot.getBankItemId(), "?"));
+        }
+        List<String> letters = McqAnswerPlan.assignAround(fixed, seed);
+        Map<Integer, String> out = new LinkedHashMap<>();
+        for (int i = 0; i < all.size(); i++) {
+            if (all.get(i).getBankItemId() == null) {
+                out.put(all.get(i).getId(), letters.get(i));
+            }
+        }
+        return out;
+    }
+
+    /** Chữ đáp án đúng của các câu ngân hàng (id -> A-D); id không có thì vắng mặt. */
+    private Map<Integer, String> bankLetters(java.util.Collection<Integer> bankItemIds) {
+        Map<Integer, String> out = new java.util.HashMap<>();
+        if (bankItemIds.isEmpty()) {
+            return out;
+        }
+        for (Object[] row : slotRepository.findBankCorrectOptions(new LinkedHashSet<>(bankItemIds))) {
+            // correct_option là char(1): JDBC trả Character (hoặc String tùy kiểu cột), nên đổi qua toString
+            out.put(((Number) row[0]).intValue(), String.valueOf(row[1]).strip());
+        }
+        return out;
+    }
+
+    /** Kế hoạch của một ô lúc tạo đề: các chỗ, phần chỗ chưa có câu ngân hàng (cần sinh) và yêu cầu thêm hiệu lực của ô. */
+    private record CellPlan(ExamMatrixCell cell, List<ExamSlot> slots, List<ExamSlot> missing, String instruction) {}
 
     /**
      * Câu ngân hàng khớp một ô, đã xếp hạng mềm theo số lần dùng và đã loại câu đã có trong đề {@code examId} hoặc đã bị
@@ -283,6 +352,12 @@ public class ExamBuildService {
      * trùng. Gọi trong transaction của nơi gọi.
      */
     void reconcile(Integer examId) {
+        // F-07: đề không còn chỗ generating thì không có gì để đối soát: bỏ qua, KHÔNG khóa. Kiểm bằng truy vấn không khóa;
+        // nếu một chỗ vừa chuyển sang generating ngay sau đây (Đổi câu của request khác) thì lần xem kế tiếp sẽ đối soát nó.
+        if (!slotRepository.existsByExamIdAndState(examId, ExamSlot.GENERATING)) {
+            return;
+        }
+        // Có chỗ generating: khóa như cũ rồi đọc lại state SAU khi khóa (có thể đã đổi giữa hai bước).
         for (ExamSlot slot : slotRepository.lockByExamId(examId)) {
             if (ExamSlot.GENERATING.equals(slot.getState())) {
                 reconcileSlot(slot);
@@ -316,7 +391,12 @@ public class ExamBuildService {
         }
         GeneratedQuestion q = generationService.getQuestionById(job.getQuestionId());
         switch (q.getStatus()) {
-            case QC_PASSED, IN_BANK -> useQuestion(slot, q.getId());
+            case IN_BANK -> useQuestion(slot, q.getId());
+            case QC_PASSED -> {
+                if (!retryForSameLabel(slot, q)) {
+                    useBest(slot, q);
+                }
+            }
             case GENERATED -> {
                 // W2-4b: tách ERROR (Solver lỗi kỹ thuật, đang chờ job answer_check hoặc đã failed) với INCONSISTENT.
                 Optional<GenerationJob> check = generationService.latestAnswerCheckJob(q.getId());
@@ -325,17 +405,75 @@ public class ExamBuildService {
                     return;
                 }
                 boolean solverInconsistent = Boolean.FALSE.equals(qcSummaryService.summarize(q.getId()).answerCheckPassed());
-                if (solverInconsistent && slot.getSolverRetries() < MAX_SOLVER_RETRIES && slot.getAttempts() < MAX_ATTEMPTS) {
-                    slot.setFallbackQuestionId(q.getId());
-                    slot.setSolverRetries(slot.getSolverRetries() + 1);
-                    enqueueRetry(slot);
-                } else {
-                    useQuestion(slot, q.getId());
+                if (solverInconsistent) {
+                    // F-01: câu lệch Solver không đi đường "sinh lại vì cùng nhãn"; chỉ được thử lại vì lệch Solver.
+                    if (slot.getSolverRetries() < MAX_SOLVER_RETRIES && slot.getAttempts() < MAX_ATTEMPTS) {
+                        offerFallback(slot, q);
+                        slot.setSolverRetries(slot.getSolverRetries() + 1);
+                        enqueueRetry(slot);
+                    } else {
+                        useBest(slot, q);
+                    }
+                } else if (!retryForSameLabel(slot, q)) {
+                    useBest(slot, q);
                 }
             }
             default -> retryOrFail(slot);
         }
         slotRepository.save(slot);
+    }
+
+    /** Cảnh báo "4 ý cùng nhãn" đã lưu của câu tf (V5), nếu có. */
+    private Optional<String> sameLabelWarning(GeneratedQuestion q) {
+        if (q.getQuestionType() != QuestionType.TF) {
+            return Optional.empty();
+        }
+        return qcSummaryService.summarize(q.getId()).sameLabelWarning();
+    }
+
+    /**
+     * Câu tf có 4 ý cùng nhãn (2/11, thẩm định UX đề 10) còn lượt thì sinh lại chỗ, giữ câu này làm dự phòng như câu lệch
+     * Solver ({@code failOrUseFallback}): hết lượt hoặc lần sinh lại hỏng thì dùng lại câu đó, cảnh báo vẫn hiện thành cờ
+     * "cần xem kỹ". Không dùng lỗi chặn ở bước format vì câu format_failed không Giữ được và hết lượt thì chỗ hỏng.
+     */
+    private boolean retryForSameLabel(ExamSlot slot, GeneratedQuestion q) {
+        if (slot.getAttempts() >= MAX_ATTEMPTS || sameLabelWarning(q).isEmpty()) {
+            return false;
+        }
+        offerFallback(slot, q);
+        enqueueRetry(slot);
+        return true;
+    }
+
+    /** Thứ hạng câu làm câu dự phòng (F-01): GENERATED (lệch Solver, Solver lỗi) &lt; QC_PASSED có cảnh báo cùng nhãn &lt; câu sạch. */
+    private static final int RANK_GENERATED = 1;
+    private static final int RANK_QC_PASSED_WITH_WARNING = 2;
+    private static final int RANK_CLEAN = 3;
+
+    private int rank(GeneratedQuestion q) {
+        if (q.getStatus() == QuestionStatus.QC_PASSED || q.getStatus() == QuestionStatus.IN_BANK) {
+            return sameLabelWarning(q).isPresent() ? RANK_QC_PASSED_WITH_WARNING : RANK_CLEAN;
+        }
+        return RANK_GENERATED;
+    }
+
+    /** Chỉ ghi câu dự phòng khi chưa có hoặc câu mới TỐT HƠN câu dự phòng hiện có (không ghi đè theo thứ tự thời gian). */
+    private void offerFallback(ExamSlot slot, GeneratedQuestion q) {
+        Integer current = slot.getFallbackQuestionId();
+        if (current == null || rank(q) > rank(generationService.getQuestionById(current))) {
+            slot.setFallbackQuestionId(q.getId());
+        }
+    }
+
+    /** Hết lượt: dùng câu tốt nhất giữa câu cuối {@code last} và câu dự phòng (bằng hạng thì lấy câu cuối). */
+    private void useBest(ExamSlot slot, GeneratedQuestion last) {
+        Integer fallbackId = slot.getFallbackQuestionId();
+        if (fallbackId != null && !fallbackId.equals(last.getId())
+                && rank(generationService.getQuestionById(fallbackId)) > rank(last)) {
+            useQuestion(slot, fallbackId);
+            return;
+        }
+        useQuestion(slot, last.getId());
     }
 
     private void retryOrFail(ExamSlot slot) {
@@ -412,6 +550,24 @@ public class ExamBuildService {
                 : new GenerationService.MaterialSnapshot(selection.context(), selection.refsJson());
     }
 
+    /**
+     * Các mức có yêu cầu cần đạt mà prompt của ô liệt kê (mcq/sa: mức của câu; tf: mức của 4 ý), theo thứ tự trong prompt
+     * ({@link Difficulty#values()}). Số mức này là m trong phân công khía cạnh của {@link MatrixPromptDraftV0#slotLine}.
+     */
+    static List<Difficulty> outcomeLevels(ExamMatrixCell cell) {
+        List<Difficulty> used = cell.getQuestionType() == QuestionType.TF
+                ? MatrixService.statementLevels(cell)
+                : List.of(cell.getDifficulty());
+        List<Difficulty> out = new ArrayList<>();
+        for (Difficulty level : Difficulty.values()) {
+            String text = cell.learningOutcome(level);
+            if (used.contains(level) && text != null && !text.isBlank()) {
+                out.add(level);
+            }
+        }
+        return out;
+    }
+
     /** Nội dung và yêu cầu cần đạt của ô, để khớp đoạn tài liệu (cùng với tên bài/chủ đề của ô). */
     static String selectionDetails(MatrixCellSpec spec) {
         List<String> parts = new ArrayList<>();
@@ -430,20 +586,68 @@ public class ExamBuildService {
      */
     String promptNote(ExamSlot slot, ExamMatrixCell cell, String instruction) {
         List<String> lines = new ArrayList<>();
-        addLine(lines, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount()));
+        addLine(lines, MatrixPromptDraftV0.slotLine(slot.getSlotNo(), cell.getQuestionCount(), outcomeLevels(cell)));
         if (cell.getQuestionType() == QuestionType.TF) {
             lines.add(TfLabelPattern.promptLine(
                     TfLabelPattern.choose(latestTfPattern(slot), ThreadLocalRandom.current())));
+        }
+        if (cell.getQuestionType() == QuestionType.MCQ) {
+            lines.add(McqAnswerPlan.promptLine(replacementLetter(slot)));
         }
         Optional<GenerationJob> previous = generationService.latestJobForSlot(slot.getId());
         if (previous.isPresent() && previous.get().getQuestionId() != null) {
             GeneratedQuestion q = generationService.getQuestionById(previous.get().getQuestionId());
             if (q.getStatus() == QuestionStatus.FORMAT_FAILED) {
                 addLine(lines, MatrixPromptDraftV0.retryHint(qcSummaryService.formatErrors(q.getId())));
+            } else {
+                sameLabelWarning(q).ifPresent(w -> addLine(lines, MatrixPromptDraftV0.retryHint(
+                        List.of(w + " (ít nhất một ý phải có nhãn khác; nhãn phải theo đúng/sai thật của khẳng định)"))));
             }
         }
         addLine(lines, MatrixPromptDraftV0.teacherBlock(instruction));
         return joinNote(lines);
+    }
+
+    /**
+     * Chữ đáp án đúng cho job sinh lại hay Đổi câu của chỗ mcq {@code slot}: chữ đang ít nhất trong các chỗ mcq khác của đề
+     * ({@link McqAnswerPlan#chooseBalanced}), không tạo 3 câu liền nhau cùng chữ. Chữ của chỗ khác là chữ đúng của câu đang
+     * dùng; chỗ lấy từ ngân hàng là chữ của câu ngân hàng; chưa có câu thì chữ đã giao trong job mới nhất của chỗ; chưa biết thì
+     * bỏ qua.
+     */
+    private String replacementLetter(ExamSlot slot) {
+        List<ExamSlot> mcq = slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(slot.getExamId()).stream()
+                .filter(s -> s.getQuestionType() == QuestionType.MCQ).toList();
+        Map<Integer, String> bank = bankLetters(mcq.stream().filter(s -> !s.getId().equals(slot.getId()))
+                .filter(s -> s.getGeneratedQuestionId() == null).map(ExamSlot::getBankItemId)
+                .filter(java.util.Objects::nonNull).toList());
+        List<String> sequence = new ArrayList<>();
+        int index = -1;
+        for (ExamSlot other : mcq) {
+            if (other.getId().equals(slot.getId())) {
+                index = sequence.size();
+                sequence.add(null);
+            } else {
+                sequence.add(currentLetter(other, bank));
+            }
+        }
+        if (index < 0) {
+            sequence.add(null);
+            index = sequence.size() - 1;
+        }
+        return McqAnswerPlan.chooseBalanced(sequence, index, ThreadLocalRandom.current());
+    }
+
+    private String currentLetter(ExamSlot other, Map<Integer, String> bank) {
+        if (other.getGeneratedQuestionId() != null) {
+            var option = generationService.getQuestionById(other.getGeneratedQuestionId()).getCorrectOption();
+            if (option != null) {
+                return option.getDbValue();
+            }
+        } else if (other.getBankItemId() != null && bank.containsKey(other.getBankItemId())) {
+            return bank.get(other.getBankItemId());
+        }
+        return generationService.latestJobForSlot(other.getId())
+                .map(j -> McqAnswerPlan.fromNote(j.getPromptNote())).orElse(null);
     }
 
     /** Mẫu nhãn bắt buộc của job tf mới nhất thuộc các chỗ khác cùng đề; null khi chưa có. */

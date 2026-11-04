@@ -62,11 +62,12 @@ public interface GeneratedQuestionRepository extends JpaRepository<GeneratedQues
 
     /**
      * W2-4b (C): đếm số câu do LLM sinh ({@code edited_from_question_id IS NULL}) từ mốc {@code since} trở đi để khởi tạo
-     * bộ đếm hạn mức ngày của Gemini khi ứng dụng khởi động.
+     * bộ đếm hạn mức ngày của Gemini khi ứng dụng khởi động. V26: câu nhập từ Word ({@code origin = 'import'}) không phải
+     * lượt gọi Gemini nên không tính.
      */
     @Query(value = """
             SELECT count(*) FROM generated_question
-            WHERE edited_from_question_id IS NULL AND created_at >= :since
+            WHERE edited_from_question_id IS NULL AND origin = 'llm' AND created_at >= :since
             """, nativeQuery = true)
     int countLlmGeneratedSince(@Param("since") LocalDateTime since);
 }

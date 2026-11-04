@@ -7,6 +7,7 @@ import com.datn.mcq.generation.dto.ParsedSaDto;
 import com.datn.mcq.generation.dto.ParsedTfDto;
 import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.dto.QuestionQcInput;
+import com.datn.mcq.qc.service.QcSummaryService;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -163,11 +164,14 @@ class LlmOutputRepairTest {
         ParsedTfDto p = TfJsonParser.parse(RAW_ID24, true);
         assertEquals("Khai triển theo hằng đẳng thức: $(a + b)^3 = a^3 + 3a^2b + 3ab^2 + b^3$.", p.statements().get(1));
         assertEquals("Giá trị của biểu thức $A$ tại $x = -2024$ bằng $25$.", p.statements().get(3));
-        assertEquals(List.of("statement_b: đã tự đóng $", "statement_d: đã tự đóng $"), p.parseWarnings());
+        // F-02: statement_b có đúng 1 "$" chưa thoát (nhóm không bật cờ); statement_d có 5 "$" nên là cảnh báo bật cờ.
+        List<String> expectedWarnings = List.of("statement_b: đã tự đóng $",
+                "statement_d: đã tự đóng $ khi chuỗi có 5 dấu $ (có thể đóng sai chỗ)");
+        assertEquals(expectedWarnings, p.parseWarnings());
         FormatChecker.FormatCheckOutcome out = checker.check(QuestionQcInput.trueFalse(24, true, p.questionText(),
                 p.statements(), p.labels(), p.explanation(), true, false, null, p.parseWarnings()));
         assertTrue(out.passed(), out.errors().toString());
-        assertEquals(List.of("statement_b: đã tự đóng $", "statement_d: đã tự đóng $"), out.answerWarnings());
+        assertEquals(expectedWarnings, out.answerWarnings());
     }
 
     @Test
@@ -262,6 +266,177 @@ class LlmOutputRepairTest {
         assertTrue(p.parseWarnings().contains("json: đã sửa 2 \\text{} ngoài $ (đã gỡ vỏ) ở question_text"),
                 p.parseWarnings().toString());
         assertTrue(p.parseWarnings().contains("json: đã sửa 1 \\text{} ngoài $ (đã gỡ vỏ) ở option_b"),
+                p.parseWarnings().toString());
+    }
+
+    // ---------- ký hiệu độ bị viết thành ^\bullet / ^\triangle (31/10: thẩm định nội dung, câu 40, 42, 44, 47, 55, 57) ----------
+
+    @Test
+    void kyHieuDoBulletHoacTriangleSauChuSoThanhCirc() {
+        Object[][] cases = {
+                {"$75^\\bullet$", "$75^{\\circ}$", 1},
+                {"$85^{\\triangle}$", "$85^{\\circ}$", 1},
+                {"$360 ^ \\bullet$", "$360^{\\circ}$", 1},
+                {"$90^{\\bullet}$", "$90^{\\circ}$", 1},
+                {"$\\widehat{A} = 60^ { \\triangle }$", "$\\widehat{A} = 60^{\\circ}$", 1},
+                {"$x^{2}$ và $(x+10)^{\\circ}$ và $95^\\bullet$", "$x^{2}$ và $(x+10)^{\\circ}$ và $95^{\\circ}$", 1},
+                {"Góc $A = 75^\\bullet$, góc $B = 85^{\\triangle}$.", "Góc $A = 75^{\\circ}$, góc $B = 85^{\\circ}$.", 2},
+                {"$$30^\\bullet$$", "$$30^{\\circ}$$", 1},
+        };
+        for (Object[] c : cases) {
+            LlmOutputRepair.DegreeRepair r = LlmOutputRepair.fixDegreeSymbol((String) c[0]);
+            assertEquals(c[1], r.text(), (String) c[0]);
+            assertEquals(c[2], r.fixed(), (String) c[0]);
+        }
+    }
+
+    @Test
+    void bulletTriangleNgoaiNguCanhDoGiuNguyen() {
+        for (String keep : List.of(
+                "$\\triangle ABC$",
+                "$a^\\bullet$",
+                "$a^{\\triangle}$",
+                "$(2x)^\\bullet$",
+                "$2x^\\bullet$ sai chữ cái",
+                "$75^\\bulletx$",
+                "$75^{\\circ}$",
+                "$75^\\triangleq 1$",
+                "75^\\bullet",
+                "Giá \\$5, góc 75^\\bullet và $x$.",
+                "$75 \\bullet 2$",
+                "$\\triangle ABC$ có góc $A = 75^{\\circ}$")) {
+            LlmOutputRepair.DegreeRepair r = LlmOutputRepair.fixDegreeSymbol(keep);
+            assertEquals(keep, r.text(), keep);
+            assertEquals(0, r.fixed(), keep);
+        }
+        assertNull(LlmOutputRepair.fixDegreeSymbol(null).text());
+    }
+
+    /**
+     * 2/11 (đề 11, câu 190 và 192): Gemini viết "210^\toRadians" và "210^\rceil" thay cho "210^\circ". Cùng bước chuẩn hóa
+     * ký hiệu độ mở rộng sang toRadians, rceil, lceil, degree, deg, circle, o, cdot (dạng ^\X và ^{\X}).
+     */
+    @Test
+    void kyHieuDoMoRongToRadiansRceilVaCacBienThe() {
+        for (String x : List.of("bullet", "triangle", "toRadians", "rceil", "lceil", "degree", "deg", "circle", "o")) {
+            for (String form : List.of("$210^\\" + x + "$", "$210^{\\" + x + "}$", "$210 ^ \\" + x + "$", "$210^{ \\" + x + " }$")) {
+                LlmOutputRepair.DegreeRepair r = LlmOutputRepair.fixDegreeSymbol(form);
+                assertEquals("$210^{\\circ}$", r.text(), form);
+                assertEquals(1, r.fixed(), form);
+            }
+        }
+        // sau dấu "}" (ví dụ góc viết trong ngoặc nhọn) và hai ký hiệu trong một câu
+        assertEquals("$\\widehat{A} = {60}^{\\circ}$", LlmOutputRepair.fixDegreeSymbol("$\\widehat{A} = {60}^\\toRadians$").text());
+        LlmOutputRepair.DegreeRepair two = LlmOutputRepair.fixDegreeSymbol("Góc $A = 30^\\rceil$ và $B = 40^{\\lceil}$.");
+        assertEquals("Góc $A = 30^{\\circ}$ và $B = 40^{\\circ}$.", two.text());
+        assertEquals(2, two.fixed());
+    }
+
+    /**
+     * F-02 (soát ngoài): "\cdot" là dấu nhân, không phải ký hiệu độ ("$30^\cdot$" có thể là lũy thừa chưa viết xong): giữ
+     * nguyên, không đổi thành ^{\circ} (đổi sai làm đổi nghĩa câu mà vẫn không bật cờ).
+     */
+    @Test
+    void cdotKhongBiDoiThanhKyHieuDo() {
+        for (String keep : List.of("$210^\\cdot$", "$210^{\\cdot}$", "$210 ^ \\cdot$", "$x = 30^{ \\cdot }$")) {
+            LlmOutputRepair.DegreeRepair r = LlmOutputRepair.fixDegreeSymbol(keep);
+            assertEquals(keep, r.text(), keep);
+            assertEquals(0, r.fixed(), keep);
+        }
+    }
+
+    private static List<String> warningsOfMcq(String questionText, String optionA) {
+        String raw = "{\"question_text\": " + SimpleJson.quote(questionText) + ", \"option_a\": "
+                + SimpleJson.quote(optionA) + ", \"option_b\": \"$2$\", \"option_c\": \"$3$\", \"option_d\": \"$4$\","
+                + " \"correct_option\": \"B\", \"explanation\": \"Vì $x = 2$.\"}";
+        ParsedMcqDto p = McqJsonParser.parse(raw, true);
+        assertTrue(p.parseSuccess(), p.parseError());
+        return p.parseWarnings();
+    }
+
+    /**
+     * F-02: "đã tự đóng $" chỉ thuộc nhóm KHÔNG bật cờ khi chuỗi gốc có ĐÚNG 1 dấu $ chưa thoát (quên đóng một công thức).
+     * Từ 3 dấu trở lên, vị trí đóng có thể sai nên cảnh báo mang tên khác và bật cờ "cần xem kỹ".
+     */
+    @Test
+    void tuDongDongDollarChiKhongBatCoKhiChuoiGocCoDungMotDauDollar() {
+        List<String> single = warningsOfMcq("Bậc của đơn thức là:", "$5");
+        assertEquals(List.of("option_a: đã tự đóng $"), single);
+        assertTrue(QcSummaryService.isAutoFixedWarning(single.get(0)));
+        assertEquals(List.of(), new QcSummaryService.QcSummary(true, true, null, false, single).reviewReasons());
+
+        List<String> multi = warningsOfMcq("Cho $a, $b và $x = 3", "$5");
+        String w = multi.stream().filter(s -> s.startsWith("question_text: đã tự đóng $")).findFirst().orElseThrow();
+        assertFalse(w.equals("question_text: đã tự đóng $"), "từ 3 dấu $ trở lên phải có tên cảnh báo khác: " + w);
+        assertFalse(QcSummaryService.isAutoFixedWarning(w), "không thuộc nhóm tự sửa chắc chắn: " + w);
+        assertEquals(List.of("warning: " + w),
+                new QcSummaryService.QcSummary(true, true, null, false, List.of(w)).reviewReasons(),
+                "bật cờ cần xem kỹ");
+    }
+
+    @Test
+    void dollarThoatKhongTinhVaoSoDauDollar() {
+        // "\$" là đô la, không phải dấu công thức: chuỗi gốc chỉ có đúng 1 "$" chưa thoát nên vẫn là nhóm không bật cờ.
+        List<String> w = warningsOfMcq("Giá \\$5 và $x = 2", "$5");
+        assertTrue(w.contains("question_text: đã tự đóng $"), w.toString());
+    }
+
+    @Test
+    void kyHieuDoMoRongGiuNguyenCacDangKhongPhaiDo() {
+        for (String keep : List.of(
+                "$x^{\\prime}$", "$x^\\prime$", "$2^{\\prime}$", "$75^\\circ$", "$75^{\\circ}$",
+                "$\\triangle ABC$", "$\\triangle ABC$ có góc $A = 75^{\\circ}$",
+                "$a^\\toRadians$", "$x^\\rceil$", "$x^{\\deg}$", "$(2x)^\\cdot$",     // sau chữ cái hoặc ")": không phải số đo độ
+                "$75^\\degrees$", "$75^\\ox$", "$75^\\cdots$", "$75^\\toRadiansX$",   // lệnh khác chỉ có tiền tố trùng
+                "210^\\toRadians", "Giá \\$5 và 210^\\rceil")) {                    // ngoài $ không đụng
+            LlmOutputRepair.DegreeRepair r = LlmOutputRepair.fixDegreeSymbol(keep);
+            assertEquals(keep, r.text(), keep);
+            assertEquals(0, r.fixed(), keep);
+        }
+    }
+
+    /** Dạng thật của lần chạy: trong JSON là "\t" (tab) và "\r" (xuống dòng), bước sửa escape đưa về lệnh rồi mới chuẩn hóa độ. */
+    @Test
+    void cauMcqDe11ToRadiansVaRceilDuocSuaThanhDo() {
+        String raw = "{\"question_text\": \"Cho tứ giác $ABCD$ có $\\\\widehat{A} + \\\\widehat{B} = 210^\\toRadians$ và $E = 30^\\rceil$.\","
+                + " \"option_a\": \"$150^\\\\circ$\", \"option_b\": \"$140^\\\\circ$\", \"option_c\": \"$160^\\\\circ$\","
+                + " \"option_d\": \"$90^\\\\circ$\", \"correct_option\": \"A\", \"explanation\": \"Bằng $360^\\\\circ - 210^\\toRadians$.\"}";
+        ParsedMcqDto p = McqJsonParser.parse(raw, true);
+        assertTrue(p.parseSuccess(), p.parseError());
+        assertEquals("Cho tứ giác $ABCD$ có $\\widehat{A} + \\widehat{B} = 210^{\\circ}$ và $E = 30^{\\circ}$.", p.questionText());
+        assertEquals("Bằng $360^\\circ - 210^{\\circ}$.", p.explanation());
+        assertTrue(p.parseWarnings().contains("json: đã sửa 1 ký hiệu độ (^\\bullet, ^\\triangle thành ^{\\circ}) ở explanation"),
+                p.parseWarnings().toString());
+    }
+
+    @Test
+    void textFieldSuaKyHieuDoVaGhiCanhBao() {
+        List<String> warnings = new ArrayList<>();
+        assertEquals("Biết $\\widehat{A} = 75^{\\circ}$ và $\\triangle ABC$ cân.",
+                LlmOutputRepair.textField("question_text", "Biết $\\widehat{A} = 75^\\bullet$ và $\\triangle ABC$ cân.",
+                        true, true, warnings));
+        assertEquals(List.of("json: đã sửa 1 ký hiệu độ (^\\bullet, ^\\triangle thành ^{\\circ}) ở question_text"),
+                warnings);
+
+        List<String> strictWarnings = new ArrayList<>();
+        assertEquals("$75^\\bullet$", LlmOutputRepair.textField("option_a", "$75^\\bullet$", false, true, strictWarnings));
+        assertEquals(List.of(), strictWarnings, "giải mã chặt không sửa");
+    }
+
+    @Test
+    void cauMcqKyHieuDoSaiDuocSuaKhiParseOCheDoSua() {
+        String raw = "{\"question_text\": \"Cho hình thang cân $EFGH$, góc $E$ bằng $75^\\\\bullet$.\","
+                + " \"option_a\": \"$75^\\\\bullet$\", \"option_b\": \"$105^{\\\\triangle}$\", \"option_c\": \"$90^\\\\circ$\","
+                + " \"option_d\": \"$120^\\\\circ$\", \"correct_option\": \"A\", \"explanation\": \"Góc bằng $75^\\\\bullet$.\"}";
+        ParsedMcqDto strict = McqJsonParser.parse(raw);
+        assertEquals("$75^\\bullet$", strict.optionA(), "giải mã chặt giữ nguyên");
+        ParsedMcqDto p = McqJsonParser.parse(raw, true);
+        assertTrue(p.parseSuccess(), p.parseError());
+        assertEquals("Cho hình thang cân $EFGH$, góc $E$ bằng $75^{\\circ}$.", p.questionText());
+        assertEquals("$75^{\\circ}$", p.optionA());
+        assertEquals("$105^{\\circ}$", p.optionB());
+        assertEquals("Góc bằng $75^{\\circ}$.", p.explanation());
+        assertTrue(p.parseWarnings().contains("json: đã sửa 1 ký hiệu độ (^\\bullet, ^\\triangle thành ^{\\circ}) ở option_b"),
                 p.parseWarnings().toString());
     }
 

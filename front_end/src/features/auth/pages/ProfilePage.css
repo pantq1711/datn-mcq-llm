@@ -15,6 +15,16 @@
 /* ===== Page wrapper ===== */
 .profile-page {
     width: 100%;
+    /* Khung nội dung của AppLayout không có padding */
+    padding: 24px;
+}
+
+.profile-password-card {
+    margin-top: 16px;
+}
+
+.profile-password-card .ant-form {
+    max-width: 420px;
 }
 
 /* ===== Card ===== */
@@ -78,7 +88,7 @@
 .profile-id {
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 13px;
-    color: #8c8c8c;
+    color: rgba(0, 0, 0, 0.65);
 }
 
 /* ===== Responsive ===== */

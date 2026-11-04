@@ -164,8 +164,12 @@ class ExamQcTraceTest extends ExamFlowTestBase {
         assertEquals("qc_passed", llm.get("status").asText());
         assertTrue(llm.get("qc").get("format").get("passed").asBoolean());
         assertEquals(List.of("option_a: đã tự đóng $"), texts(llm.get("qc").get("format").get("autoRepairs")));
-        assertEquals(List.of(), texts(llm.get("qc").get("format").get("warnings")));
-        assertTrue(texts(llm.get("reviewReasons")).contains("warning: option_a: đã tự đóng $"));
+        // 3/11: LLM giả luôn trả B nên có thể lệch chữ đáp án đã giao; đó là cảnh báo duy nhất được phép (không bật cờ).
+        assertTrue(texts(llm.get("qc").get("format").get("warnings")).stream()
+                .allMatch(com.datn.mcq.llm.prompt.McqAnswerPlan::isDeviationWarning),
+                texts(llm.get("qc").get("format").get("warnings")).toString());
+        assertFalse(texts(llm.get("reviewReasons")).contains("warning: option_a: đã tự đóng $"),
+                "2/11: tự đóng $ vẫn hiện ở autoRepairs nhưng không là lý do cần xem kỹ");
         JsonNode dedup = llm.get("qc").get("dedup");
         assertTrue(dedup.get("passed").asBoolean());
         double stored = jdbc.queryForObject("SELECT threshold_used FROM quality_check_result WHERE question_id = ?"

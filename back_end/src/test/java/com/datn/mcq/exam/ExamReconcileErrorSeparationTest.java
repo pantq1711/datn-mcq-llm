@@ -297,6 +297,87 @@ class ExamReconcileErrorSeparationTest extends ExamFlowTestBase {
         assertEquals(List.of("solver_inconsistent"), reasons(firstItem(examId)));
     }
 
+    // ---------- 4b. Solver v3 xét từng phương án (thẩm định 31/10): MULTIPLE_CORRECT / NO_CORRECT theo đường Q-2 ----------
+
+    private String judgeAnswerOfSlot(int slot) {
+        return jdbc.queryForObject("SELECT qcr.judge_answer FROM quality_check_result qcr JOIN exam_slot s"
+                + " ON s.generated_question_id = qcr.question_id WHERE s.id = ? AND qcr.check_type = 'answer_check'",
+                String.class, slot);
+    }
+
+    private String solverReasoningOfSlot(int slot) {
+        return jdbc.queryForObject("SELECT qcr.solver_reasoning FROM quality_check_result qcr JOIN exam_slot s"
+                + " ON s.generated_question_id = qcr.question_id WHERE s.id = ? AND qcr.check_type = 'answer_check'",
+                String.class, slot);
+    }
+
+    @Test
+    void solverThayHaiPhuongAnDungThiSinhLai1LanRoiGiuKemCoSolverMultipleCorrect() throws Exception {
+        SOLVER.mcqOptions = "A,B";
+        int examId = build(matrixId).get("examId").asInt();
+        int slot = slotId(examId, cell1, 1);
+
+        settle(examId);
+
+        assertEquals(0, count("SELECT count(*) FROM generation_job WHERE job_type = 'answer_check'"),
+                "nhiều phương án đúng là kết quả hợp lệ, không phải lỗi kỹ thuật");
+        assertEquals(2, generator.mcqPrompts.size(), "Q-2: sinh lại đúng 1 lần như INCONSISTENT");
+        Map<String, Object> s = jdbc.queryForMap("SELECT state, attempts, solver_retries FROM exam_slot WHERE id = ?",
+                slot);
+        assertEquals("ready", s.get("state"));
+        assertEquals(2, s.get("attempts"));
+        assertEquals(1, s.get("solver_retries"));
+        assertEquals("multiple", judgeAnswerOfSlot(slot));
+        String notes = solverReasoningOfSlot(slot);
+        assertTrue(notes.startsWith("[Xét từng phương án] 2/4 phương án đúng"), notes);
+        assertTrue(notes.contains("A: đúng – kiểm A") && notes.contains("C: sai – kiểm C"), notes);
+        JsonNode item = firstItem(examId);
+        assertTrue(item.get("needsReview").asBoolean());
+        assertEquals(List.of("solver_multiple_correct"), reasons(item));
+    }
+
+    @Test
+    void solverKhongThayPhuongAnNaoDungThiSinhLai1LanRoiGiuKemCoSolverNoCorrect() throws Exception {
+        SOLVER.mcqOptions = "";
+        int examId = build(matrixId).get("examId").asInt();
+        int slot = slotId(examId, cell1, 1);
+
+        settle(examId);
+
+        assertEquals(2, generator.mcqPrompts.size(), "Q-2: sinh lại đúng 1 lần");
+        assertEquals(1, count("SELECT solver_retries FROM exam_slot WHERE id = ?", slot));
+        assertEquals("none", judgeAnswerOfSlot(slot));
+        assertEquals(List.of("solver_no_correct"), reasons(firstItem(examId)));
+    }
+
+    @Test
+    void solverThayDungMotPhuongAnKhopDapAnThiQcPassedKhongSinhLai() throws Exception {
+        SOLVER.mcqOptions = "B";
+        int examId = build(matrixId).get("examId").asInt();
+        int slot = slotId(examId, cell1, 1);
+
+        settle(examId);
+
+        assertEquals(1, generator.mcqPrompts.size());
+        assertEquals("B", judgeAnswerOfSlot(slot));
+        JsonNode item = firstItem(examId);
+        assertEquals("passed", item.get("qcState").asText());
+        assertEquals(List.of(), reasons(item));
+    }
+
+    @Test
+    void solverThayDungMotPhuongAnKhacDapAnThiVanLaSolverInconsistent() throws Exception {
+        SOLVER.mcqOptions = "C";
+        int examId = build(matrixId).get("examId").asInt();
+        int slot = slotId(examId, cell1, 1);
+
+        settle(examId);
+
+        assertEquals(2, generator.mcqPrompts.size(), "Q-2: sinh lại đúng 1 lần");
+        assertEquals("C", judgeAnswerOfSlot(slot));
+        assertEquals(List.of("solver_inconsistent"), reasons(firstItem(examId)));
+    }
+
     // ---------- 5. ERROR ở grounding ----------
 
     @Test

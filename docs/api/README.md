@@ -30,7 +30,7 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 | Mã | Khi nào |
 |---|---|
 | 400 | Dữ liệu không hợp lệ, ví dụ thiếu trường bắt buộc, gửi trường không áp dụng cho dạng câu, hoặc bản sửa còn lỗi LaTeX fatal |
-| 401 | Chưa đăng nhập (`UNAUTHENTICATED`), token hết hạn (`TOKEN_EXPIRED`), token sai (`TOKEN_INVALID`), đăng nhập sai (`INVALID_CREDENTIALS`), refresh không hợp lệ (`REFRESH_INVALID`) |
+| 401 | Chưa đăng nhập (`UNAUTHENTICATED`), token hết hạn (`TOKEN_EXPIRED`), token sai (`TOKEN_INVALID`), đăng nhập sai (`INVALID_CREDENTIALS`), refresh không hợp lệ (`REFRESH_INVALID`), refresh bị tab khác vượt trước (`REFRESH_RACE`: chờ 1 giây, thử lại một lần; mục 8) |
 | 403 | Sai vai trò (`FORBIDDEN`), ví dụ giáo viên gọi API quản trị, admin gọi API của giáo viên |
 | 404 | Không tìm thấy bản ghi, ví dụ `subjectId` hoặc `templateId` không tồn tại. Ma trận, đề của giáo viên khác cũng trả 404 (giống id không tồn tại) |
 | 409 | Xung đột trạng thái, ví dụ nộp đánh giá cho câu `duplicate` hoặc nộp lại câu experiment. Có mã máy đọc được ở một số luồng: `MATRIX_IN_USE`, `BANK_EXHAUSTED`, `SLOT_*`, `VERSION_CONFLICT`, `QC_CHECKING`. W1-4 (K-5): hai thao tác đồng thời làm vi phạm khóa ngoại hoặc khóa duy nhất trả 409 `FOREIGN_KEY_CONFLICT` / `UNIQUE_CONFLICT` ("hãy tải lại rồi thử lại"), không lộ tên ràng buộc |
@@ -90,6 +90,9 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | POST | `/api/materials` | Tải tài liệu bài học (.docx, .pdf, .txt; multipart, tối đa 10 MB). Chỉ lưu văn bản đã trích (mục 9) |
 | GET | `/api/materials` | Tài liệu của tôi, mới nhất trước, có phân trang, không kèm văn bản (mục 9) |
 | GET, DELETE | `/api/materials/{id}` | Chi tiết kèm 500 ký tự đầu của văn bản / xóa tài liệu của tôi (mục 9) |
+| POST | `/api/bank-imports` | Nhập ngân hàng câu từ Word: tải bộ câu hỏi .docx → bản xem trước kèm cờ (mục 10). Không gọi AI |
+| GET, DELETE | `/api/bank-imports/{id}` | Xem lại / hủy một lần nhập của tôi (mục 10) |
+| POST | `/api/bank-imports/{id}/confirm` | Đưa các câu chọn vào ngân hàng RIÊNG TƯ của tôi (mục 10) |
 | GET | `/api/exams/{id}/progress` | Tiến độ theo ô |
 | GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
@@ -97,7 +100,7 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | POST | `/api/exams/{id}/slots/{slotId}/keep` | Giữ câu (vào ngân hàng) |
 | POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác: `source = generate` (mặc định) sinh lại đúng ô, có thể kèm yêu cầu của giáo viên; `source = bank` lấy câu ngân hàng khớp ô, hết thì 409 `BANK_EXHAUSTED` (mục 7.5) |
 | PUT | `/api/exams/{id}/slots/{slotId}/question` | Sửa câu của chỗ chưa Giữ (mục 7.5a); QC chạy lại, Solver qua hàng đợi |
-| GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; cần pandoc trên máy chủ |
+| GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; `?equation=omml` (mặc định) hoặc `mathtype` (mục 7.6); cần pandoc trên máy chủ |
 
 Chạy lại QC cho câu `generated` (quy tắc QC-RERUN, quyết định 6 ngày 22/10) đã có ở tầng service (`QcRerunService`, cả ba
 dạng) cho công cụ thí nghiệm, không có endpoint HTTP.
@@ -390,7 +393,8 @@ câu bằng Giữ / Đổi / Sửa trong màn đề (mục 7). Số mục giữ 
 **Sửa đầu ra LLM ở run production (ngày 23/10).** Trước khi giải mã JSON, dấu `\` của lệnh LaTeX chưa nhân đôi trong
 chuỗi được nhân đôi (ví dụ `"$75^\circ$"` một dấu gạch); sau khi giải mã, trường có `$` lẻ mà phần sau `$` cuối trông
 như công thức được tự đóng `$` ở cuối trường, trước dấu câu. Mỗi lần sửa ghi cảnh báo vào `answerWarnings`/`warnings`
-(`json: đã sửa 1 escape LaTeX (\circ)`, `statement_b: đã tự đóng $`). `$` lẻ ở giữa câu vẫn là lỗi format. MCQ
+(`json: đã sửa 1 escape LaTeX (\circ)`, `statement_b: đã tự đóng $`; từ 3 dấu `$` chưa thoát trở lên cảnh báo là
+`statement_b: đã tự đóng $ khi chuỗi có N dấu $ (có thể đóng sai chỗ)` và bật cờ "cần xem kỹ"). `$` lẻ ở giữa câu vẫn là lỗi format. MCQ
 production gọi Gemini kèm schema JSON như `sa`/`tf`. Lý do format không qua (kể cả lỗi giải mã JSON) lưu ở
 `quality_check_result.errors` (V8). Run `experiment` không áp dụng; chi tiết ở `enums.md` mục 3.
 
@@ -483,8 +487,14 @@ POST /api/exam-matrices
 ```
 
 - Phần I chỉ chứa `mcq`, phần II chỉ `tf`, phần III chỉ `sa` (DB cũng kiểm). `mcq`/`sa` cần `difficulty`; `tf` cần
-  `statementDifficulties` gồm đúng 4 mức (ý a-d) và không có `difficulty`. `questionCount` từ 1 đến 50.
+  `statementDifficulties` gồm đúng 4 mức (ý a-d) và không có `difficulty`. `questionCount` từ 1 đến 50 mỗi ô; **tổng
+  `questionCount` của cả ma trận tối đa 60** (D1, xem 7.2b), vượt thì 400 `Một ma trận tối đa 60 câu (hiện N)` khi tạo hoặc sửa.
 - `learningOutcomes` chỉ nhận khóa `easy`, `medium`, `hard` và phải có yêu cầu cần đạt cho mọi mức ô dùng.
+- **Độ dài trường ô (D2, vì các trường này đi vào prompt):** `content` tối đa 1000 ký tự; mỗi yêu cầu cần đạt tối đa 500 ký
+  tự; `learningOutcomes` tối đa 10 mục (đo theo ký tự sau trim). Vượt thì 400, ví dụ `Ô 2: content dài tối đa 1000 ký tự
+  (hiện 1203)`, `Ô 1: yêu cầu cần đạt mức easy dài tối đa 500 ký tự (hiện 640)`, `Ô 1: learningOutcomes tối đa 10 mục (hiện 11)`.
+  Áp cho tạo/sửa ma trận và sinh theo bài (`content`, `learningOutcomes` của body). Ô lưu từ trước vẫn đọc được; khi dựng
+  prompt các trường vẫn bị cắt theo đúng ba trần này. "Yêu cầu thêm cho AI" giữ trần 1000 ký tự (`INSTRUCTION_TOO_LONG`).
 - Mỗi ô tạo một `question_template` (`templateId`) để dùng lại pipeline sinh câu.
 - `totals.commandsByLevel` đếm lệnh hỏi: mỗi câu `mcq`/`sa` một lệnh hỏi, mỗi câu `tf` 4 lệnh hỏi theo mức của 4 ý.
 - Lỗi dữ liệu trả 400 nêu số ô, ví dụ `Ô 2: câu đúng/sai phải có statementDifficulties gồm đúng 4 mức`; `subjectId`
@@ -628,8 +638,8 @@ POST /api/exams/build-by-lesson
   (phạm vi trong bài), `title` (trống thì lấy tên bài, tối đa 255), `learningOutcomes` (khóa `easy`, `medium`, `hard`).
 - `cells`: mỗi phần tử là một nhóm câu cùng dạng và mức: `mcq`/`sa` cần `difficulty`; `tf` dùng `statementDifficulties`
   (4 mức ý a-d) và KHÔNG có `difficulty`; `tf` bỏ trống `statementDifficulties` thì mặc định dễ, dễ, vừa, khó. Phần I/II/III
-  suy từ dạng câu. `questionCount` 1-50 mỗi nhóm. **Tổng số câu tối đa 50 mỗi lần**; vượt thì 400 (`Một lần sinh theo bài
-  tối đa 50 câu (hiện N)`).
+  suy từ dạng câu. `questionCount` 1-50 mỗi nhóm. **Tổng số câu tối đa 60 mỗi lần** (D1; trước đây 50; cấu hình
+  `GENERATION_MAX_QUESTIONS_PER_EXAM`, xem 7.2b); vượt thì 400 (`Một lần sinh theo bài tối đa 60 câu (hiện N)`).
 - Tùy chọn (W2-3): `materialIds` (tài liệu bài học của chính người gọi, mục 9, tối đa 5 khác nhau) và `extraInstruction`
   ("yêu cầu thêm cho AI", tối đa 1000 ký tự). Áp cho CẢ lần sinh (mọi nhóm câu). Có tài liệu hoặc yêu cầu thì bỏ qua ngân
   hàng, sinh mọi chỗ qua hàng đợi; quy tắc, lỗi và cách đưa vào prompt như mục 7.2 (khối "yêu cầu thêm" là DỮ LIỆU, không
@@ -651,6 +661,35 @@ POST /api/exams/build-by-lesson
   giữ nguyên nghĩa nên API cũ không vỡ; chỗ lấy tên bài là `MatrixService.resolveLesson`. Tên bài vẫn là chủ đề khớp ngân
   hàng, nên câu cũ sinh theo chuỗi vẫn dùng lại được nếu tên trùng danh mục. "Yêu cầu thêm cho AI" đã nằm ở `MatrixCellSpec`
   (JSON ở `experiment_run.hyperparams`, khóa `extraInstruction`; run cũ không có khóa này).
+
+### 7.2b. Giới hạn theo từng giáo viên (D1)
+
+Để một giáo viên không làm tắc hàng đợi sinh câu dùng chung và không cạn quota Gemini của cả hệ thống. Chỉ câu hệ thống
+phải **sinh mới** bị tính; câu lấy từ ngân hàng (lúc tạo đề, hoặc Đổi bằng `source = "bank"`) không tính. Ngưỡng đặt bằng biến
+môi trường (`app.generation-limits.*`, xem `docs/deploy/README.md`):
+
+| Giới hạn | Mặc định | Biến | Lỗi |
+|---|---|---|---|
+| Tổng số câu của một ma trận hoặc một đề sinh theo bài | 60 | `GENERATION_MAX_QUESTIONS_PER_EXAM` | 400 (không `code`), `Một ma trận tối đa 60 câu (hiện N)` / `Một lần sinh theo bài tối đa 60 câu (hiện N)`; kiểm khi tạo, sửa ma trận và `build-by-lesson` |
+| Job sinh câu đang chờ hoặc đang chạy của giáo viên (đếm qua `exam_slot` → `exam.created_by`) | 60 | `GENERATION_MAX_PENDING_JOBS` | **429** `GENERATION_QUEUE_LIMIT` |
+| Số câu yêu cầu sinh mỗi ngày (giờ Việt Nam, UTC+7), tính cả Đổi câu bằng sinh mới | 120 | `GENERATION_MAX_DAILY_QUESTIONS` | **429** `DAILY_GENERATION_LIMIT` kèm header `Retry-After` (giây tới 0 giờ giờ Việt Nam kế tiếp) |
+
+- Áp ở `POST /api/exams/build`, `POST /api/exams/build-by-lesson` và `POST /api/exams/{id}/slots/{slotId}/replace` (mặc định
+  hoặc `source = "generate"`). Yêu cầu bị chặn không để lại gì (không đề, không ma trận ẩn, không job, chỗ giữ nguyên).
+  Tạo đề cần N câu sinh mới thì kiểm "đang chờ + N" và "đã dùng hôm nay + N" so với trần.
+- Thử lại tự động của hệ thống (job lỗi, câu lệch Solver) và việc sửa câu (job Solver) không tính vào hai trần này.
+- `GENERATION_QUEUE_LIMIT`: `error` = "Thầy/cô đang có quá nhiều câu chờ soạn. Vui lòng đợi các đề hiện tại soạn xong rồi tạo
+  tiếp." Không có `Retry-After`: frontend hiện thông báo, cho thử lại sau khi đề đang soạn xong.
+- `DAILY_GENERATION_LIMIT`: `error` nêu trần, số đã dùng, số còn lại, số câu yêu cầu cần và thời điểm được tạo tiếp (từ 0
+  giờ ngày hôm sau, giờ Việt Nam); khi trần ngày đã hết, kiểm trần ngày trước trần hàng đợi.
+- **Hết lượt gọi Gemini trong ngày của cả hệ thống (F-18):** trước khi trừ hạn mức giáo viên và xếp job, `build`,
+  `build-by-lesson` và `replace` (sinh mới) kiểm hạn mức ngày của Gemini dùng chung (`app.llm.daily-quota`, đặt lại 00:00
+  giờ Thái Bình Dương; 429 của Gemini có `PerDay`/`RequestsPerDay` cũng đánh dấu hết hạn mức ngày). Hết thì **429**
+  `LLM_DAILY_QUOTA_EXHAUSTED` kèm `Retry-After` (giây tới lúc mở lại), KHÔNG trừ hạn mức giáo viên, không để lại gì (không
+  đề, không job, chỗ giữ nguyên). Đề đủ câu từ ngân hàng (không cần sinh) và Đổi bằng `source = bank` không bị chặn.
+  Frontend hiện "Hệ thống đã dùng hết lượt soạn câu hôm nay, thầy/cô thử lại sau HH:MM" (giờ Việt Nam, từ `Retry-After`).
+- Hai request song song của cùng giáo viên được tuần tự hóa (khóa dòng `generation_quota` của giáo viên trong transaction
+  tạo job), nên không thể cùng lọt trần. Hạn chế: bộ đếm ngày chỉ ghi khi tạo job; không hoàn lại khi job sau đó lỗi.
 
 ### 7.3. Tiến độ
 
@@ -682,14 +721,25 @@ khác để sinh lại).
   Chỗ chưa có câu chỉ có phần định danh và `state` (`generating`, `failed`).
 - `source`: `bank` (lấy từ ngân hàng) hoặc `generated`. Câu từ ngân hàng và câu đã Giữ hiển thị bản trong ngân hàng,
   không gắn cờ.
-- `reviewReasons`: `solver_inconsistent` (Solver lệch), `solver_ambiguous`, `solver_unparseable` (`sa`),
-  `statement_undecidable` (`tf`), `solver_not_run` (Solver chưa chạy hoặc lỗi), `dedup_not_run`, và
+- `reviewReasons`: `solver_inconsistent` (Solver lệch), `solver_multiple_correct` và `solver_no_correct` (`mcq`, Solver xét từng
+  phương án thấy từ 2 phương án đúng / không phương án nào đúng; xem `docs/contract/enums.md` mục 4.6), `solver_ambiguous`, `solver_unparseable` (`sa`),
+  `statement_undecidable` (`tf`), `solver_not_run` (Solver chưa chạy hoặc lỗi), `dedup_not_run`,
+  `explanation_draft_suspect` (lời giải có "tính lại", "làm lại" hoặc "sửa lại", không chặn câu; chuỗi hiển thị đề xuất:
+  "Lời giải có thể còn phần nháp, thầy/cô xem lại lời giải"; xem `docs/contract/enums.md`), và
   `warning: <cảnh báo format>` (ví dụ `warning: label: 4 ý cùng nhãn T`, `warning: option_a: đã tự đóng $`,
   `warning: label: khác mẫu mục tiêu T,F,F,T (nhận T,T,F,F)`; dữ liệu trước 26/10 ghi `khác mẫu bắt buộc`). Cảnh báo `json: đã sửa ... escape LaTeX` không phải lý
   do (vẫn lưu trong `warnings`). Từ 26/10 cảnh báo `label: khác mẫu mục tiêu ...` (mẫu nhãn tf là mục tiêu, lệch vì tính đúng là hợp lệ)
   cũng không phải lý do (vẫn lưu trong `warnings` và hiện trong vết QC), ví dụ ở trên chỉ còn các cảnh báo khác. `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
   `solver_pending` (Solver đang kiểm lại, thay `solver_not_run`), `solver_failed` (kiểm lại thất bại) và
   `duplicate: <id>` (bản sửa trùng câu khác).
+- `similar_in_exam: <Phần>.<số>` (thẩm định 31/10; **đổi dạng 2/11**): câu hệ thống sinh cùng khuôn (chỉ khác số hoặc tên
+  điểm/hình) với câu đứng TRƯỚC nó trong chính đề này, hoặc câu trắc nghiệm làm lộ đáp án một ý của câu đúng/sai. `<Phần>`
+  là `I`, `II` hoặc `III` và `<số>` là số "Câu k" trong Phần đó, đúng cách đánh số của trang đề và file Word (ví dụ
+  `similar_in_exam: II.3` là Phần II, Câu 3; trước 2/11 là số thứ tự toàn đề như `similar_in_exam: 14`, dễ nhầm với trang đề).
+  Mỗi cặp chỉ câu có số thứ tự lớn hơn bị gắn (câu đứng trước không bị gắn); một câu giống nhiều câu trước thì mỗi câu trước một
+  lý do. Tính lúc xem đề, không lưu, không đổi trạng thái câu; câu ngân hàng và câu đã Giữ/Sửa không bị gắn. `qcState` về
+  `needs_review`. Chỉ `GET /api/exams/{id}` có lý do này; `needsReviewSlots` của `GET /api/exams` chưa tính. Chuỗi hiển thị đề
+  xuất: "Gần giống Câu {số} Phần {Phần} trong đề, nên đổi một trong hai câu". Frontend đọc được cả dạng cũ (chỉ có số, dữ liệu trước 2/11) lẫn dạng mới.
 - W2-3, câu sinh từ đề có tài liệu bài học (mục 7.2, 9) có thêm lý do của QC "bám tài liệu" (mục 7.7a):
   `grounding_not_supported` (judge cho là đáp án, lời giải hoặc câu hỏi không khớp tài liệu), `grounding_unknown` (đoạn tài
   liệu không đủ để kết luận, hoặc judge nói "bám tài liệu" mà trích dẫn không kiểm chứng được), `grounding_pending` (đang chờ
@@ -733,7 +783,11 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
 - Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`, `edit`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại
   khỏi chỉ số của form chấm mù cũ (`answer_correct`, duyệt không sửa).
 - **Chưa có:** sửa câu đã nằm trong ngân hàng, ráp đề, trộn mã đề, đề dự phòng, xuất PDF.
-- **Đổi bằng câu ngân hàng (W1-4, D5-B):** `POST .../replace` nhận `{"source": "bank" | "generate", "instruction"?}`. Bỏ
+- **Lý do Đổi (B7, V25):** `POST .../replace` nhận thêm trường tùy chọn `reason` ∈ `wrong_answer`, `ambiguous_options`,
+  `off_matrix`, `duplicate_pattern`, `latex_format`, `too_hard`, `too_easy`, `other` (không phân biệt hoa thường), lưu ở
+  `exam_slot_action.replace_reason`. Bỏ trống thì không ghi lý do; giá trị khác thì 400 `INVALID_REQUEST` trước mọi thay
+  đổi. Dùng cho thống kê dùng thử: `docs/experiments/trial/queries.sql`.
+- **Đổi bằng câu ngân hàng (W1-4, D5-B):** `POST .../replace` nhận `{"source": "bank" | "generate", "instruction"?, "reason"?}`. Bỏ
   trống `source` (hoặc không gửi body) là `generate`: giữ nguyên hành vi cũ (sinh mới qua hàng đợi), nên client cũ không vỡ.
   - `bank`: lấy ngay câu ngân hàng khớp ô, cùng tiêu chí và xếp hạng mềm như lúc tạo đề (mục 7.2; đề theo bài: 7.2a).
     Không có job, không gọi LLM. Trả câu như 7.4 với `state = ready`, `source = bank`, `bankItemId`, không có cờ. Chỗ
@@ -806,20 +860,101 @@ PUT /api/exams/12/slots/101/question
 ### 7.6. Xuất đề ra Word
 
 ```http
-GET /api/exams/12/export/docx   → 200, file MT2610231200001.docx (Content-Disposition: attachment)
+GET /api/exams/12/export/docx                    → 200, file MT2610231200001.docx (Content-Disposition: attachment)
+GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đối tượng MathType; header X-Equation-Kept-Omml: 0, X-Equation-Scaled: 0
+GET /api/exams/12/export/docx?equation=abc       → 400
 ```
 
-- Bản cơ bản: tiêu đề và mã đề; PHẦN I/II/III với tên phần đầy đủ (PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn,
-  PHẦN II. Câu trắc nghiệm đúng sai, PHẦN III. Câu trắc nghiệm trả lời ngắn); "Câu k." đánh số lại từ 1 trong từng
-  phần; `mcq` mỗi phương án một dòng "A. ..."; `tf` các ý "a) ..."; `sa` chỉ có đề. Sau một ngắt trang là "ĐÁP ÁN"
+- **Khuôn đề kiểm tra THCS (4/11, theo mẫu của một trường):** tham số tùy chọn `durationMinutes` (số nguyên 5–180, ngoài khoảng
+  hoặc không phải số là 400) điền "(Thời gian làm bài N phút không kể thời gian giao đề)"; không truyền thì "……". File khổ A4
+  (lề trái 2 cm = 1134 twips, phải/trên/dưới 1 cm = 567, đầu trang 283, chân trang 567; hằng số ở `ExamPage`), Times New Roman 12
+  cho mọi kiểu kể cả tiêu đề (đậm, đen), giãn dòng 1,15, cách đoạn ≤ 3 pt. Hai section A4 cùng lề (bề rộng chữ 10205 twips =
+  510,25 pt, bộ ngắt dòng MathType đọc đúng số này): section đề và section đáp án (ngắt section trước "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM",
+  đánh số trang lại từ 1). Chân trang cả hai section: đường kẻ trên, chữ trái "Mã đề 101" (section đáp án: "Đáp án mã đề
+  101"), tab phải tại lề phải rồi "Trang x/y" (trường PAGE/SECTIONPAGES, y chỉ tính trang của section). Không còn dòng "(Đề có N
+  trang)". Đầu mỗi phần là tiêu đề đậm in hoa kèm tổng điểm = điểm một câu × số câu theo `app.exam.scoring` (phần II: điểm đúng cả
+  4 ý), ví dụ "PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN (3,0 điểm)", rồi một dòng hướng dẫn nghiêng ("Học sinh chọn một đáp án đúng duy
+  nhất từ câu 1 đến câu N." / "Học sinh trả lời Đúng (Đ) hoặc Sai (S) cho từng ý a), b), c), d) trong mỗi câu." / "Học sinh viết
+  câu trả lời ngắn gọn (kết quả số) từ câu 1 đến câu N."). "Câu k." đậm, KHÔNG thụt lề treo (dòng sau về lề trái); cuối đề
+  "------ HẾT ------" đậm nghiêng. Phương án A–D và ý a)–d) mở đầu bằng một tab tới mốc 283 (nhãn "A." / "a)" đậm); phương án
+  xếp cột bằng tab (không dùng bảng): mọi phương án ≤ W/4 − 20pt thì 1 dòng 4 cột (tab tại 283, 2764, 5244, 7725), ≤ W/2 − 20pt
+  thì 2 dòng 2 cột (283, 5244), còn lại mỗi phương án một dòng (W = bề rộng dòng sau mốc 283 = 496,1pt; `OptionLayout`; mẫu
+  trường dùng bước 2622 cho bề rộng chữ cũ nên được co lại để cột cuối vừa lề phải). Phương án và ý đúng/sai thêm dấu chấm cuối nếu
+  chưa có dấu kết câu; câu dẫn "…là:" thành "…là" (chỉ trong file xuất). Sang trang mới: "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101"
+  với bảng đáp án từng phần (phần I 12 câu mỗi bảng, phần II "Câu | Ý | Đáp án", phần III 6 câu mỗi bảng) và điểm lấy từ
+  `app.exam.scoring`; rồi "LỜI GIẢI CHI TIẾT" ("Câu k. Chọn C." / "a) Đúng." / "Câu k. Đáp án: 10." đậm, lấy từ dữ liệu đáp án;
+  câu không có lời giải chỉ còn dòng nhãn). Mô tả chi tiết đầu đề ở mục kế.
+- **Đầu đề (theo mẫu trường, 4/11):** bảng 2 cột không viền (cột 4194 : 6011 twips). Cột trái, đậm, căn giữa: "UBND PHƯỜNG
+  ……………" và "TRƯỜNG THCS ……………". Cột phải, căn giữa: "Thứ..... ngày........ tháng..... năm <năm hiện tại>" (nghiêng), "ĐỀ KIỂM
+  TRA <tên kì in hoa>" (đậm; tên ma trận của đề, bỏ phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8" thành "GIỮA KÌ I"; đề sinh
+  theo bài hoặc đề cũ không có ma trận dùng tên đề), "NĂM HỌC <y> - <y+1>" (đậm; y = năm hiện tại nếu tháng ≥ 8, ngược lại năm
+  trước), "Môn: <môn>, Lớp: <khối>." (đậm; thiếu thì "……") và "(Thời gian làm bài <N> phút không kể thời gian giao đề)" (nghiêng).
+  Dưới đó là bảng có viền 3 cột bằng nhau, toàn chiều rộng: hàng tiêu đề đậm căn giữa "Mã đề | Điểm bài thi | Mã phách", hàng 2
+  cao 1440 twips (như mẫu) với mã đề đậm căn giữa ở ô 1, hai ô còn lại để trống. Không còn dòng "Họ và tên/Lớp" và "(Đề có N
+  trang)". Mã đề in ra là số 3 chữ số, 101 cho đề gốc (chưa có chức năng trộn mã đề); **mã hệ thống `MT…` không in ra nội dung
+  file**, chỉ còn ở tên
+  file tải về (`Content-Disposition`). Đầu đề viết bằng khối openxml thô do `ExamMarkdownBuilder` chèn (như ngắt trang) vì
+  Markdown của pandoc không bỏ được viền bảng; chữ trong đó được thoát XML.
+- Bản cơ bản: PHẦN I/II/III (PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN, PHẦN II. TRẮC NGHIỆM ĐÚNG/SAI,
+  PHẦN III. TRẮC NGHIỆM TRẢ LỜI NGẮN); "Câu k." đánh số lại từ 1 trong từng
+  phần; `mcq` các phương án "A. ..." xếp cột bằng tab; `tf` các ý "a) ..."; `sa` chỉ có đề. Sau một ngắt section là "ĐÁP ÁN"
   (`mcq` chữ cái, `tf` chuỗi Đ/S theo thứ tự a–d như `ĐSĐS`, `sa` đáp số) rồi "LỜI GIẢI" từng câu.
 - Đáp án đúng trong phần đề CHƯA đánh dấu (tùy chọn gạch chân cho phần mềm trộn đề làm sau).
 - Chỉ xuất nội dung các chỗ đã có câu (`ready`, `kept`, `edited`); chỗ `failed` ghi "[Chưa có câu – cần sinh lại]",
   chỗ đang sinh ghi "[Chưa có câu – đang sinh]"; ở ĐÁP ÁN và LỜI GIẢI các chỗ này ghi "—". Xuất đề cũng đối soát như
   xem đề (7.4).
-- Cách làm: dựng Markdown từ dữ liệu xem đề rồi gọi `pandoc -f markdown+tex_math_dollars -t docx
+- Cách làm: dựng Markdown từ dữ liệu xem đề rồi gọi `pandoc --sandbox -f markdown+tex_math_dollars -t docx
   --reference-doc=reference.docx` (thư mục tạm riêng, tối đa 30 giây, xóa khi xong). Công thức `$...$` thành Equation
   gốc của Word (OMML), sửa được trong Word.
+- **Dạng công thức (`equation`, tùy chọn, không phân biệt hoa thường):**
+  - `omml` (mặc định, không truyền cũng là `omml`): Equation gốc của Word như trên. Dùng cho máy chỉ có Word.
+  - `mathtype`: sau pandoc, module `mathtype` đổi từng Equation thành đối tượng MathType (OLE `Equation.DSMT4`), kèm
+    ảnh xem trước PNG để Word hiển thị và in. Bấm đúp sửa bằng MathType, kể cả MathType Lite. Máy không cài MathType vẫn
+    xem và in được, nhưng bấm đúp thì Word đề nghị đổi sang Office Math.
+  - Giá trị khác: 400.
+  - **Nguyên tắc (3/11): ở chế độ `mathtype`, MỌI công thức là đối tượng MathType; không giữ Equation của Word cho công
+    thức nào vì lý do bố cục** (giáo viên không có MathType trả phí thì không chạy được Convert Equations). Công thức chỉ ở
+    lại dạng Equation khi chuyển sang MTEF thất bại thật (cấu trúc hoặc ký hiệu chưa hỗ trợ, JLaTeXMath không dựng được
+    ảnh xem trước).
+  - Header `X-Equation-Kept-Omml` (chỉ có khi `equation=mathtype`, đã mở qua CORS): số công thức vẫn là Equation của Word
+    vì chuyển MTEF thất bại thật như trên, nên **chỉ > 0 khi có thất bại thật**. Không đổi được cả file (số công thức lệch,
+    lỗi bất ngờ) thì trả file Equation, header bằng tổng số công thức, ghi log WARN, không trả 500.
+  - Header `X-Equation-Scaled` (chỉ có khi `equation=mathtype`, đã mở qua CORS): số công thức dài không ngắt dòng được nên
+    đã bị thu nhỏ kích thước hiển thị cho vừa lề chữ (xem mục bố cục dưới). 0 khi không có công thức nào bị thu nhỏ.
+  - **Bố cục công thức rộng (3/11):** đối tượng OLE không tự xuống dòng, nên công thức rộng hơn lề chữ bị cắt khi in. Bề rộng
+    lề chữ = khổ giấy − lề trái − lề phải (đọc từ `sectPr` của file, vốn chép từ `reference.docx`; `reference.docx` không
+    khai báo `pgSz`/`pgMar` nên dùng mặc định của Word: Letter, lề 1 inch, chữ rộng 468pt) − thụt lề trái/phải của đoạn
+    (khai báo trực tiếp, trong cấp độ danh sách đánh số, hoặc trong kiểu đoạn). Bề rộng công thức là bề rộng ảnh xem trước
+    (cùng phép đo dựng ảnh). Công thức rộng hơn thì:
+    1. Ngắt tại dấu quan hệ CẤP NGOÀI CÙNG (`=`, `≠`, `≤`, `≥`, `<`, `>`, `⇔`, `⇒`, `≈`…), không ngắt trong ngoặc, phân số,
+       căn, chỉ số, `\left…\right`, `\begin…\end`. Mỗi đoạn là một đối tượng MathType trên một dòng riêng (đoạn văn riêng,
+       canh giữa); từ dòng thứ hai bắt đầu bằng chính dấu quan hệ.
+    2. Đoạn vẫn rộng hơn lề thì ngắt tiếp tại `+`/`−` hai ngôi cấp ngoài cùng (dấu đứng đầu, hoặc sau dấu quan hệ/toán tử
+       nhân, là dấu âm/dương, không ngắt); dòng sau bắt đầu bằng dấu đó.
+    3. Khối không ngắt được thì thu nhỏ kích thước hiển thị của riêng đối tượng đó cho vừa lề (`w:dxaOrig`/`w:dyaOrig` giữ
+       kích thước gốc; vẫn là đối tượng OLE, bấm đúp sửa được); đếm vào `X-Equation-Scaled`.
+    4. Công thức nằm giữa câu mà quá rộng: tách thành các dòng công thức như trên; chữ đứng trước giữ trong đoạn gốc, chữ đứng
+       sau sang đoạn mới (khoảng trắng ở rìa đoạn được cắt). Công thức vừa lề không đổi gì, vẫn nằm trong dòng chữ.
+    Chỗ ngắt được tìm song song trên LaTeX (để dựng ảnh từng đoạn) và trên cây Equation (để dựng MTEF từng đoạn); hai bên ra
+    số chỗ ngắt khác nhau thì không ngắt ở tầng đó mà chuyển xuống tầng sau (không đoán).
+  - **Hạn chế đã biết:** `\hat{x}` (một ký tự) dùng dấu mũ thường, `\widehat{ABC}` (nền nhiều ký tự) dùng mẫu mũ rộng của
+    MathType (`tmHAT`); `\widehat{x}` một ký tự cũng ra mũ thường vì pandoc gộp `\hat` và `\widehat` thành cùng một dấu
+    (hai trường hợp này giống nhau trên màn hình). Khi MathType mở lại và vẽ lại đối tượng đã thu nhỏ, kích thước có thể
+    trở về cỡ gốc (chưa kiểm bằng MathType thật).
+  - Cách làm: chạy thêm `pandoc -t json` trên cùng file Markdown để lấy LaTeX từng công thức đúng thứ tự (vẽ ảnh xem trước),
+    trong cùng thư mục tạm và cùng lượt giữ Semaphore của pandoc.
+  - Chi phí (đo 01/11 trên 4 bộ đề thật khoảng 40 câu): file nặng khoảng 1,5–2 MB (Equation khoảng 20 KB) do ảnh xem trước
+    600 dpi; thời gian xuất tăng khoảng 2–3 giây với đề nhiều công thức, trong thời gian đó vẫn giữ Semaphore.
+  - Frontend (trang đề): nút "Xuất file Word" có mũi tên mở menu hai mục: "Công thức Word (Equation)" (mặc định, bấm nút
+    chính cũng xuất mục này) và "Công thức MathType (thử nghiệm)" (gọi `?equation=mathtype`, tên file tải về
+    `<tên đề>-mathtype.docx`). Nút khóa khi đề đang soạn. Sau khi tải: `X-Equation-Kept-Omml > 0` hiện "N công thức không
+    chuyển được sang MathType, vẫn ở dạng công thức Word"; `X-Equation-Scaled > 0` hiện "N công thức dài đã được thu nhỏ
+    cho vừa trang". Nên ghi rõ "Chỉ chọn MathType nếu máy đã cài MathType" khi hướng dẫn giáo viên.
+- **Phòng thủ (D4):** `--sandbox` (cần pandoc từ 2.15, cùng yêu cầu với đọc docx tài liệu) để pandoc chỉ đọc các file nêu
+  trong dòng lệnh, nên nội dung câu hỏi chứa `![](/etc/passwd)` hay chỉ thị include không lấy được file của máy chủ. Ngoài công
+  thức, `ExamMarkdownBuilder` thoát mọi ký tự đặc biệt của Markdown gồm `\` và `` ` ``, nên `` ` ``, `` `{=openxml}` `` hay khối
+  ```` ```{=openxml} ```` trong nội dung không tạo code span hay raw block (ngắt trang giữa đề và đáp án là raw block do chính
+  builder chèn). Công thức trong `$...$` giữ nguyên, không thoát; có test so `document.xml` có và không `--sandbox`.
 - File mẫu `back_end/src/main/resources/export/reference.docx` (chép ra thư mục tạm mỗi lần xuất): là `reference.docx`
   mặc định của pandoc (`pandoc -o reference.docx --print-default-data-file reference.docx`), thêm vào `word/settings.xml`
   khai báo `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word"
@@ -998,6 +1133,8 @@ Set-Cookie: refresh_token=<opaque>; Path=/api/auth; Max-Age=604800; Secure; Http
 POST /api/auth/refresh        (không body; trình duyệt gửi cookie)
 200 → cùng dạng như login, kèm cookie mới
 401 → {"error": "Phiên đăng nhập không hợp lệ hoặc đã hết hạn, hãy đăng nhập lại", "code": "REFRESH_INVALID"}, xóa cookie
+401 → {"error": "Phiên vừa được làm mới ở một tab khác. Hãy chờ 1 giây rồi thử lại một lần.", "code": "REFRESH_RACE"},
+      KHÔNG xóa cookie, không thu hồi gì (D6, xem bên dưới)
 
 POST /api/auth/logout         → 204, xóa cookie (gọi lại hoặc không có cookie vẫn 204)
 GET  /api/auth/me             → {"id": 7, "name": "...", "email": "...", "role": "teacher"}
@@ -1021,6 +1158,14 @@ Lỗi xác thực từ filter: `401 {"error": "Chưa đăng nhập", "code": "UN
    gửi lại request gốc đúng một lần với token mới. Refresh lỗi → xóa store, chuyển về trang đăng nhập. Không gộp như vậy
    thì hai lần refresh song song sẽ bị coi là dùng lại token và cả phiên bị đăng xuất.
 4. **403** → báo "không có quyền", không gọi refresh. **404** với đề, ma trận → "không tìm thấy" (có thể là của người khác).
+   **Hai tab cùng làm mới phiên (D6):** single-flight chỉ gộp được trong MỘT tab. Tab 2 vẫn giữ cookie cũ nếu gửi refresh
+   trước khi nhận cookie mới do tab 1 vừa xoay vòng. Trước D6 việc này bị coi là dùng lại token và đăng xuất cả hai tab. Nay,
+   trong 30 giây kể từ lúc token bị thay bởi một lần xoay vòng hợp lệ (cấu hình `REFRESH_REUSE_GRACE`, `0` là tắt), gửi lại
+   token cũ trả **401 `REFRESH_RACE`**: không cấp token mới, không thu hồi chuỗi, **không xóa cookie** (cookie mới của tab 1
+   đã nằm trong trình duyệt dùng chung). **Khi nhận `REFRESH_RACE`: chờ 1 giây rồi gọi lại `POST /api/auth/refresh` MỘT lần**
+   (trình duyệt gửi cookie mới); không đăng xuất, không xóa store. Lần thử lại vẫn lỗi (kể cả `REFRESH_RACE` lần nữa) thì xử
+   lý như `REFRESH_INVALID`. Ngoài cửa sổ 30 giây, hoặc khi chuỗi đã bị thu hồi vì đăng xuất, đổi mật khẩu, khóa tài khoản
+   hay đã phát hiện dùng lại, gửi token cũ vẫn là `REFRESH_INVALID` và thu hồi cả chuỗi như trước.
 5. Khi tải lại trang: gọi `/api/auth/refresh` để lấy access token mới (cookie còn hạn thì vẫn đăng nhập).
 6. **Tải file Word**: không dùng `window.open`/`<a href>` (không gắn được header). Dùng
    `apiClient.get(url, {responseType: 'blob'})`, lấy tên file từ header `Content-Disposition` (đã cho phép đọc qua CORS).
@@ -1077,6 +1222,14 @@ Retry-After: 873
 - Sau nginx phải đặt `FORWARD_HEADERS_STRATEGY=native` (nginx gửi `X-Forwarded-For`), nếu không mọi người dùng chung IP
   của nginx và giới hạn thành theo email.
 - Cấu hình: `LOGIN_MAX_FAILURES` (5), `LOGIN_FAILURE_WINDOW` (`15m`), `LOGIN_LOCK_DURATION` (`15m`).
+- **Giới hạn theo IP (D3):** ngoài khóa email + IP, mỗi IP chỉ được gọi `POST /api/auth/login` tối đa **20 lần mỗi phút**
+  (cửa sổ trượt), tính cả lần đúng lẫn sai và cả email không tồn tại. Kiểm tra chạy TRƯỚC khi so mật khẩu (bcrypt) nên một IP
+  thử nhiều email khác nhau cũng không bắt máy chủ tính bcrypt không giới hạn. IPv6 gom theo tiền tố /64. Vượt thì 429, cùng
+  `code` `TOO_MANY_ATTEMPTS` kèm `Retry-After` (giây, tối đa 60):
+  `{"error": "Có quá nhiều lần đăng nhập từ địa chỉ mạng này. Thử lại sau 37 giây.", "code": "TOO_MANY_ATTEMPTS"}`. Lần bị
+  chặn không được tính thêm vào bộ đếm. Cấu hình: `LOGIN_IP_MAX_ATTEMPTS` (20), `LOGIN_IP_WINDOW` (`1m`). Nhiều giáo viên
+  dùng chung một IP (trường học, NAT) dùng chung hạn mức này: nếu 20 lần/phút không đủ cho giờ cao điểm thì tăng
+  `LOGIN_IP_MAX_ATTEMPTS`.
 - Frontend: 429 thì hiện thông báo trong `error`, không gọi refresh.
 
 **Ghi chú cho sau này (chưa làm):** nếu thêm SSE để đẩy tiến độ tạo đề, KHÔNG dùng `EventSource` vì không gửi được header
@@ -1112,7 +1265,7 @@ Content-Type: multipart/form-data   (phần "file")
 ```json
 {"id": 12, "fileName": "bai3.docx", "kind": "docx", "sizeBytes": 48211, "charCount": 5120, "pageCount": null,
  "sha256": "9f2c…", "extractMethod": "pandoc",
- "warnings": [{"code": "MATHTYPE_FORMULAS_DROPPED", "count": 12, "total": 15, "message": "Có 12/15 công thức MathType …"}],
+ "warnings": [{"code": "MATHTYPE_UNREADABLE", "count": 2, "total": 118, "message": "Đã chuyển 116/118 công thức MathType; 2 công thức không đọc được."}],
  "createdAt": "2026-10-25T21:30:00"}
 ```
 
@@ -1120,8 +1273,9 @@ Content-Type: multipart/form-data   (phần "file")
 
 | `code` | Ý nghĩa |
 |---|---|
-| `MATHTYPE_FORMULAS_DROPPED` | docx có `count` công thức MathType (đối tượng nhúng) trong tổng `total` công thức mà hệ thống chưa đọc được; chúng KHÔNG có trong văn bản trích |
-| `FORMULA_LOSS_HIGH` | như trên nhưng từ 30% công thức trở lên bị mất: câu hỏi sinh ra có thể thiếu hoặc sai công thức. Frontend nên cảnh báo rõ |
+| `MATHTYPE_UNREADABLE` | chỉ có khi `count` > 0: docx có `total` công thức MathType (đối tượng nhúng), trong đó `count` công thức không đọc được (message: "Đã chuyển N/M công thức MathType; K công thức không đọc được."). Chúng hiện là `[công thức]` trong văn bản trích; phần còn lại đã thành `$latex$`. Thay cho `MATHTYPE_FORMULAS_DROPPED` |
+| `FORMULA_LOSS_HIGH` | `count` công thức không đọc được trong tổng `total` công thức (MathType + Equation gốc) từ 30% trở lên: câu hỏi sinh ra có thể thiếu hoặc sai công thức. Frontend nên cảnh báo rõ |
+| `MATHTYPE_FORMULAS_DROPPED` | **không còn được sinh ra.** Chỉ còn trong `warnings` của tài liệu tải lên trước khi hệ thống đọc được MathType (nghĩa cũ: `count` công thức bị bỏ hẳn khỏi văn bản). Frontend vẫn phải hiển thị được mã này |
 | `FORMULA_IMAGES_NOT_READ` | docx có `count` ảnh ngoài đối tượng công thức (có thể là công thức dạng ảnh); không OCR |
 | `PDF_TEXT_QUALITY_LOW` | pdf có nhiều ký tự lỗi (thường do công thức hoặc font đặc biệt) |
 
@@ -1133,7 +1287,7 @@ Mã lỗi (body `{"error", "code"}`):
 | 409 | `MATERIAL_QUOTA_EXCEEDED` | đã lưu đủ 50 tài liệu (xóa bớt rồi tải lại; tải lại file đã có vẫn được 200) |
 | 413 | `FILE_TOO_LARGE` | quá giới hạn (mặc định 10 MB; thông báo ghi rõ "tối đa N MB", lấy từ `spring.servlet.multipart.max-file-size`) |
 | 415 | `UNSUPPORTED_FILE_TYPE` | không phải docx, pdf hay txt UTF-8 (thông báo nói rõ với `.doc`, UTF-16, sai bảng mã) |
-| 422 | `NO_EXTRACTABLE_TEXT` | không có chữ: PDF scan (không OCR), docx chỉ có ảnh hoặc công thức MathType, txt rỗng |
+| 422 | `NO_EXTRACTABLE_TEXT` | không có chữ: PDF scan (không OCR), docx chỉ có ảnh hoặc công thức MathType không đọc được, txt rỗng |
 | 422 | `INVALID_FILE`, `EXTRACTION_FAILED` | file hỏng, nghi zip bomb, XML có DTD; pandoc không đọc được |
 | 422 | `TEXT_TOO_LONG`, `TOO_MANY_PAGES` | quá 300.000 ký tự hoặc 200 trang (không cắt âm thầm) |
 | 422 | `MATERIAL_ENCRYPTED` | pdf có mật khẩu hoặc cấm sao chép nội dung |
@@ -1153,9 +1307,17 @@ Mã lỗi (body `{"error", "code"}`):
 
 ### 9.3. Văn bản trích
 
-- docx đọc bằng pandoc: công thức Equation gốc của Word (OMML) thành `$...$`. **Công thức MathType (đối tượng nhúng) bị
-  bỏ**, được đếm và báo trong `warnings`; tách từng công thức ra văn bản là việc của một bước sau (dùng bộ đọc MTEF của
-  `tools/bank-import`).
+- docx đọc bằng pandoc: công thức Equation gốc của Word (OMML) thành `$...$`.
+- **Công thức MathType (đối tượng nhúng OLE, ProgID `Equation.DSMT*`) được đổi thành LaTeX `$...$`** (`$$...$$` khi công
+  thức đứng riêng một dòng), vì pandoc bỏ qua đối tượng OLE. Backend xử lý TRƯỚC pandoc (`MathTypeInliner`): thay mỗi
+  đối tượng bằng một mã giữ chỗ duy nhất, đọc file `word/embeddings/oleObjectN.bin` (luồng "Equation Native", MTEF v5) bằng
+  gói `com.datn.mcq.mtef` (chỉ đọc; bản chép từ `tools/bank-import`, thêm thư viện Apache POI `poi` 5.4.1), rồi đổi mã
+  thành công thức sau khi pandoc trích xong. Công thức không chuyển được (MTEF lỗi hoặc chưa hỗ trợ, `Equation.3` và ProgID
+  `Equation.*` khác `DSMT`, thiếu file oleObject, file oleObject lớn hơn 1 MB, công thức thứ 2001 trở đi trong một tài
+  liệu) thành `[công thức]` và được đếm trong `warnings` (`MATHTYPE_UNREADABLE`). Lỗi của một công thức không làm hỏng
+  công thức khác hay cả tài liệu. docx không có MathType được xử lý đúng như trước. Docx chỉ gồm `[công thức]` mà không có
+  chữ nào vẫn là 422 `NO_EXTRACTABLE_TEXT`. Đối tượng MathType nằm ngoài `w:object` (ví dụ trong `w:pict`) và công thức trong
+  chân trang/chú thích vẫn chưa đọc được; loại thứ nhất được tính vào số "không đọc được".
 - pdf đọc bằng PDFBox, không OCR. Công thức trong PDF thường bị méo khi trích.
 - Văn bản chuẩn hóa Unicode NFC, bỏ ký tự điều khiển và ký tự ẩn (bidi, độ rộng bằng không).
 - **docx được làm sạch markdown ngay khi trích (W2-3 bước 5)**: `extracted_text` lưu trong DB là văn bản thường, không còn `**`,
@@ -1173,7 +1335,7 @@ Mã lỗi (body `{"error", "code"}`):
   `-XX:+ExitOnOutOfMemoryError` nên khi đó tiến trình thoát và container khởi động lại. Chỉ xử lý triệt để bằng cách trích PDF
   ngoài tiến trình (chưa làm).
 - **Bộ nhớ của pandoc:** mỗi lần đọc docx bị giới hạn heap `MATERIAL_PANDOC_HEAP_MB` (768 MB) và 30 giây. `mem_limit` của
-  `app` là 1 GB và heap JVM chiếm 55%, nên trần này là giới hạn trên, chưa đo với tài liệu lớn: nếu container bị `OOMKilled`
+  `app` là 1536m (VPS 4 GB; 1 GB trên VPS 2 GB) và heap JVM chiếm 55%, nên trần này là giới hạn trên, chưa đo với tài liệu lớn: nếu container bị `OOMKilled`
   khi tải docx lớn, hạ `MATERIAL_PANDOC_HEAP_MB` hoặc tăng `mem_limit`.
 - **qc-trace và câu riêng tư:** đã khắc phục ở W2-4a (xem mục 7.7 và 8).
 - **Tính bất biến của ngữ cảnh đề:** `exam_generation_context` chỉ được tạo lúc sinh đề, không có API nào cho phép sửa hay gỡ sau khi tạo (chỉ xóa cascade theo đề). Do đó `ExamActionService.keep` dùng ngữ cảnh tài liệu của đề để gắn `bank_item.visible_to_user_id` là hoàn toàn đúng và an toàn.
@@ -1192,3 +1354,46 @@ Mã lỗi (body `{"error", "code"}`):
   > *"Tài liệu sẽ được gửi tới dịch vụ AI bên thứ ba để sinh câu hỏi. Tôi xác nhận tài liệu không chứa thông tin cá nhân của học sinh và tôi có quyền sử dụng tài liệu này."*
 
   Nút "Tải lên" chỉ được kích hoạt (enable) khi người dùng đã tích chọn ô xác nhận này.
+
+## 10. Nhập ngân hàng câu từ Word (V26, 3/11)
+
+Chỉ giáo viên. Lô nhập thuộc người tải; lô của người khác (hoặc không có) trả 404 `IMPORT_NOT_FOUND`. Câu đã xác nhận vào
+ngân hàng **riêng tư** của chính người tải (`/api/bank-items` của người khác không thấy, tạo đề của người khác không dùng).
+Không gọi AI ở bất kỳ bước nào, không chạy Solver, không tính vào giới hạn sinh câu (mục 7.2b). Không lưu file gốc và tên
+file gốc. Cờ và lý do bỏ câu: xem `docs/contract/enums.md` mục 3 ("Nhập ngân hàng câu từ Word").
+
+### 10.1. Tải lên → bản xem trước
+
+```
+POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic)
+```
+
+- File .docx (nhận dạng theo nội dung), tối đa 10 MB và 200 câu. Định dạng: "PHẦN I/II/III", đầu câu "Câu N." hoặc nhãn mức
+  `[NB]`/`[TH]`/`[VD]`/`[VDC]`, đáp án mcq tô vàng, tf tô vàng hoặc dòng "Đáp án: Đ S S Đ", sa dòng "Đáp số: ...".
+- Khối, chủ đề lấy từ tên file mẫu "KHỐI 8 - CHƯƠNG 1 - BÀI 2 - Tên bài - GV ..." (phần "GV ..." bị bỏ); `gradeLevel`, `topic`
+  ghi đè. Môn là Toán.
+- 201 → lô: `{id, displayName, status: "preview", subjectId, gradeLevel, topic, createdAt, expiresAt (24 giờ), confirmedAt,
+  questionCount, importableCount, blockedCount, importedCount, skipped: {has_image: 3, ...}, skippedItems: [{locator, type,
+  reason}], items: [...]}`. Mỗi `items[]`: `{key ("mcq-007"), type, locator ("Phần I, câu thứ 7"), levelRaw, level, stem,
+  options [{key, text}], correctOption, statements [{key, text, label}], saAnswer, explanation, flags [...], blocking}`.
+- Bản đầu bỏ (và đếm) câu có ảnh, câu có công thức chưa chuyển được, câu có bảng dữ liệu. Không có sửa câu trong bản xem
+  trước: câu có `blocking = true` phải sửa trong file Word rồi tải lại.
+- Lỗi: 400 `EMPTY_FILE`, `MISSING_FILE`, `IMPORT_TOPIC_INVALID`; 409 `IMPORT_PENDING_LIMIT` (đã có 3 lô chờ xác nhận); 413
+  `FILE_TOO_LARGE`; 415 `UNSUPPORTED_FILE_TYPE`; 422 `INVALID_FILE`, `IMPORT_LESSON_UNKNOWN`, `IMPORT_GRADE_INVALID`,
+  `IMPORT_NO_QUESTIONS`, `IMPORT_TOO_MANY_QUESTIONS`, `IMPORT_DATA_INVALID` (dữ liệu vi phạm ràng buộc DB; thông báo chỉ nêu
+  tên ràng buộc); 429 `TOO_MANY_UPLOADS` (30 lần/giờ); 503 `EXTRACTOR_BUSY`. Trần 3 lô chờ được kiểm cùng transaction với lúc
+  lưu lô, có khóa theo người tải, nên tải đồng thời cũng không vượt trần.
+
+### 10.2. Xem lại, xác nhận, hủy
+
+- `GET /api/bank-imports/{id}` → lô như trên; lô đã xác nhận không còn `items` (nội dung đã vào ngân hàng). Quá hạn: 410
+  `IMPORT_EXPIRED` (nội dung bị xóa).
+- `POST /api/bank-imports/{id}/confirm` thân `{"keys": ["mcq-001", "tf-002"]}` → 200 `{batchId, imported, bankItemIds}`. Một
+  transaction: lỗi thì không ghi câu nào. Lỗi: 400 `IMPORT_KEYS_INVALID` (rỗng, lặp, không có trong lô); 409
+  `IMPORT_NOT_PREVIEW` (đã xác nhận), `IMPORT_CONFLICT` (trùng khóa / khóa ngoại do thao tác đồng thời); 410 `IMPORT_EXPIRED`;
+  422 `IMPORT_ITEM_BLOCKED` (thông báo nêu mã các câu còn cờ chặn), `IMPORT_DATA_INVALID` (vi phạm CHECK/NOT NULL; không ghi
+  câu nào).
+- `DELETE /api/bank-imports/{id}` → 204 (hủy lô chưa xác nhận); lô đã xác nhận: 409 `IMPORT_NOT_PREVIEW`.
+- Trong ngân hàng: `origin.type = "import"`, lọc bằng `GET /api/bank-items?origin=import`. Câu không có lời giải có
+  `explanation = null`; khi xuất đề ra Word, phần LỜI GIẢI bỏ câu đó.
+- Hạn chế: câu tf nhận chung một mức cho cả 4 ý (file chỉ ghi một mức cho câu).

@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Col, Form, Input, Row, Select } from 'antd';
 import type { FormInstance } from 'antd';
 
@@ -6,106 +5,50 @@ import './ExamMatrixBasicInfoForm.css';
 
 const { TextArea } = Input;
 
-/** Values collected by the basic-information section of an exam matrix. */
+/** Giá trị phần thông tin chung, đúng tên trường của CreateMatrixRequest (trừ notes nhập dạng nhiều dòng). */
 export interface ExamMatrixBasicInfoValues {
     name: string;
-    subjectId?: string;
-    grade?: number;
-    description?: string;
+    subjectId?: number;
+    gradeLevel?: number;
+    source?: string;
+    /** Mỗi dòng là một ghi chú; trang tách thành mảng notes khi gửi. */
+    notesText?: string;
 }
 
 export interface ExamMatrixSubjectOption {
     label: string;
-    value: string;
+    value: number;
 }
 
 export interface ExamMatrixBasicInfoFormProps {
-    /** Optional values used to populate the form when creating from a template or editing. */
-    initialValues?: Partial<ExamMatrixBasicInfoValues>;
-    /** Subject options loaded by the page or a data hook. */
+    /** Danh sách môn từ GET /api/catalog/subjects. */
     subjects?: ExamMatrixSubjectOption[];
-    /** Receives all current values whenever the user changes a field. */
-    onValuesChange?: (values: Partial<ExamMatrixBasicInfoValues>) => void;
-    /** Allows the parent page to disable all fields, for example while saving. */
+    loadingSubjects?: boolean;
+    /** Ma trận đã có đề: khóa môn và khối (docs/api mục 7.1a). */
+    lockStructure?: boolean;
     disabled?: boolean;
-    /** Exposes the Ant Design form instance when the parent needs to validate/read values on save. */
-    form?: FormInstance<ExamMatrixBasicInfoValues>;
+    form: FormInstance<ExamMatrixBasicInfoValues>;
 }
 
-const DEFAULT_SUBJECT_OPTIONS: ExamMatrixSubjectOption[] = [
-    { label: 'Toán', value: 'math' },
-    { label: 'Ngữ văn', value: 'literature' },
-    { label: 'Vật lý', value: 'physics' },
-    { label: 'Hóa học', value: 'chemistry' },
-    { label: 'Sinh học', value: 'biology' },
-    { label: 'Lịch sử', value: 'history' },
-    { label: 'Địa lý', value: 'geography' },
-    { label: 'Tiếng Anh', value: 'english' },
-];
-
-const GRADE_OPTIONS = Array.from({ length: 12 }, (_, index) => {
-    const grade = index + 1;
-    return { label: `Lớp ${grade}`, value: grade };
-});
+// Backend chỉ nhận khối 6-9
+const GRADE_OPTIONS = [6, 7, 8, 9].map((grade) => ({ label: `Khối ${grade}`, value: grade }));
 
 /**
- * Form section for the matrix name, subject, grade and optional description.
- * It can own its form instance or use the instance supplied by the parent page.
+ * Phần thông tin chung của ma trận: tên, môn, khối, nguồn, ghi chú.
  */
 export function ExamMatrixBasicInfoForm({
-    initialValues,
-    subjects = DEFAULT_SUBJECT_OPTIONS,
-    onValuesChange,
+    subjects = [],
+    loadingSubjects = false,
+    lockStructure = false,
     disabled = false,
-    form: externalForm,
+    form,
 }: ExamMatrixBasicInfoFormProps) {
-    const [internalForm] = Form.useForm<ExamMatrixBasicInfoValues>();
-    const form = externalForm ?? internalForm;
-
-    const hasInitialValues = initialValues !== undefined;
-    const initialName = initialValues?.name;
-    const initialSubjectId = initialValues?.subjectId;
-    const initialGrade = initialValues?.grade;
-    const initialDescription = initialValues?.description;
-
-    useEffect(() => {
-        if (!hasInitialValues) return;
-
-        form.setFieldsValue({
-            ...(initialName !== undefined ? { name: initialName } : {}),
-            ...(initialSubjectId !== undefined ? { subjectId: initialSubjectId } : {}),
-            ...(initialGrade !== undefined ? { grade: initialGrade } : {}),
-            ...(initialDescription !== undefined ? { description: initialDescription } : {}),
-        });
-    }, [
-        form,
-        hasInitialValues,
-        initialName,
-        initialSubjectId,
-        initialGrade,
-        initialDescription,
-    ]);
-
-    const handleValuesChange = (
-        _changedValues: Partial<ExamMatrixBasicInfoValues>,
-        allValues: Partial<ExamMatrixBasicInfoValues>,
-    ) => {
-        onValuesChange?.(allValues);
-    };
-
     return (
         <Form<ExamMatrixBasicInfoValues>
             form={form}
             layout="vertical"
             requiredMark="optional"
-            initialValues={{
-                name: '',
-                subjectId: undefined,
-                grade: undefined,
-                description: '',
-                ...initialValues,
-            }}
-            onValuesChange={handleValuesChange}
+            initialValues={{ name: '', source: '', notesText: '' }}
             disabled={disabled}
             className="exam-matrix-basic-info-form"
         >
@@ -116,12 +59,12 @@ export function ExamMatrixBasicInfoForm({
                         name="name"
                         rules={[
                             { required: true, whitespace: true, message: 'Vui lòng nhập tên ma trận.' },
-                            { max: 150, message: 'Tên ma trận không được vượt quá 150 ký tự.' },
+                            { max: 255, message: 'Tên ma trận không được vượt quá 255 ký tự.' },
                         ]}
                     >
                         <Input
                             placeholder="Ví dụ: Ma trận kiểm tra giữa học kỳ I"
-                            maxLength={150}
+                            maxLength={255}
                             showCount
                         />
                     </Form.Item>
@@ -136,9 +79,10 @@ export function ExamMatrixBasicInfoForm({
                         <Select
                             placeholder="Chọn môn học"
                             options={subjects}
+                            loading={loadingSubjects}
+                            disabled={lockStructure}
                             showSearch
                             optionFilterProp="label"
-                            allowClear
                         />
                     </Form.Item>
                 </Col>
@@ -146,28 +90,28 @@ export function ExamMatrixBasicInfoForm({
                 <Col xs={24} md={12}>
                     <Form.Item
                         label="Khối lớp"
-                        name="grade"
+                        name="gradeLevel"
                         rules={[{ required: true, message: 'Vui lòng chọn khối lớp.' }]}
                     >
                         <Select
                             placeholder="Chọn khối lớp"
                             options={GRADE_OPTIONS}
-                            allowClear
+                            disabled={lockStructure}
                         />
                     </Form.Item>
                 </Col>
 
                 <Col xs={24}>
-                    <Form.Item
-                        label="Mô tả"
-                        name="description"
-                        rules={[{ max: 500, message: 'Mô tả không được vượt quá 500 ký tự.' }]}
-                    >
+                    <Form.Item label="Nguồn" name="source">
+                        <Input placeholder="Ví dụ: Sở GD&ĐT, đề tham khảo… (không bắt buộc)" />
+                    </Form.Item>
+                </Col>
+
+                <Col xs={24}>
+                    <Form.Item label="Ghi chú" name="notesText" tooltip="Mỗi dòng là một ghi chú.">
                         <TextArea
-                            placeholder="Mô tả mục đích hoặc phạm vi sử dụng của ma trận (không bắt buộc)"
-                            autoSize={{ minRows: 3, maxRows: 5 }}
-                            maxLength={500}
-                            showCount
+                            placeholder="Ghi chú về phạm vi, cách dùng ma trận (không bắt buộc)"
+                            autoSize={{ minRows: 3, maxRows: 8 }}
                         />
                     </Form.Item>
                 </Col>

@@ -14,6 +14,9 @@ import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.llm.dto.LlmUsage;
 import com.datn.mcq.llm.prompt.PromptBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -24,51 +27,114 @@ import java.util.Map;
 @Component
 public class AnswerSolverChecker {
 
+    private static final Logger log = LoggerFactory.getLogger(AnswerSolverChecker.class);
+
     /**
-     * @param usage token và độ trễ của lượt gọi Solver; null khi kết quả đến từ phân tích thuần (không có lượt gọi)
+     * @param usage         token và độ trễ của lượt gọi Solver; null khi kết quả đến từ phân tích thuần (không có lượt gọi)
+     * @param optionCorrect (v3) kết luận Solver cho từng phương án theo thứ tự A-D; null khi phản hồi không có
+     *                      {@code options_verdict} hợp lệ (Solver cũ, hoặc thiếu/hỏng: kết luận theo judge_answer như cũ)
      */
     public record SolverCheckOutcome(
             boolean passed,
             AnswerChoice judgeAnswer,
             String judgeModel,
             String reasoning,
-            LlmUsage usage
+            LlmUsage usage,
+            List<Boolean> optionCorrect
     ) {
+        public SolverCheckOutcome {
+            optionCorrect = optionCorrect == null ? null : List.copyOf(optionCorrect);
+        }
+
         public SolverCheckOutcome(boolean passed, AnswerChoice judgeAnswer, String judgeModel, String reasoning) {
-            this(passed, judgeAnswer, judgeModel, reasoning, null);
+            this(passed, judgeAnswer, judgeModel, reasoning, null, null);
+        }
+
+        public SolverCheckOutcome(boolean passed, AnswerChoice judgeAnswer, String judgeModel, String reasoning,
+                                  LlmUsage usage) {
+            this(passed, judgeAnswer, judgeModel, reasoning, usage, null);
+        }
+
+        /** Số phương án Solver cho là đúng; null khi không có kết quả từng phương án. */
+        public Integer correctCount() {
+            return optionCorrect == null ? null : (int) optionCorrect.stream().filter(Boolean::booleanValue).count();
         }
 
         SolverCheckOutcome withUsage(LlmUsage newUsage) {
-            return new SolverCheckOutcome(passed, judgeAnswer, judgeModel, reasoning, newUsage);
+            return new SolverCheckOutcome(passed, judgeAnswer, judgeModel, reasoning, newUsage, optionCorrect);
         }
     }
 
-    /**
-     * Phiên bản prompt Solver (W2-4a mục 5): bọc đề bài trong khối ranh giới và trung hòa các ký tự/nhãn ranh giới.
-     */
+    /** Phiên bản prompt Solver mcq mặc định (thẩm định 31/10: xét từng phương án). */
     public static final String SOLVER_PROMPT_VERSION = PromptBuilder.SOLVER_PROMPT_VERSION;
 
-    /** Cấu trúc JSON bắt buộc cho phản hồi của Solver (Gemini responseSchema). */
+    /**
+     * Dòng đầu của ghi chú Solver ({@code solver_reasoning}, V14) khi Solver đã xét từng phương án. QcSummaryService dựa
+     * vào dòng này để tách lý do {@code solver_multiple_correct}/{@code solver_no_correct} khỏi {@code solver_inconsistent}.
+     */
+    public static final String OPTIONS_VERDICT_PREFIX = "[Xét từng phương án]";
+
+    /** Cấu trúc JSON bắt buộc cho phản hồi Solver mcq v3 (Gemini responseSchema). Giữ đủ các trường của v2. */
     public static final String SOLVER_RESPONSE_SCHEMA_JSON = """
+            {"type":"OBJECT","properties":{
+              "reasoning":{"type":"STRING"},
+              "options_verdict":{"type":"ARRAY","items":{"type":"OBJECT","properties":{
+                "option":{"type":"STRING","enum":["A","B","C","D"]},
+                "correct":{"type":"BOOLEAN"},
+                "reason":{"type":"STRING"}
+              },"required":["option","correct","reason"],"propertyOrdering":["option","correct","reason"]}},
+              "correct_count":{"type":"INTEGER"},
+              "judge_answer":{"type":"STRING","enum":["A","B","C","D","multiple","none"]}
+            },"required":["reasoning","options_verdict","correct_count","judge_answer"],
+            "propertyOrdering":["reasoning","options_verdict","correct_count","judge_answer"]}
+            """;
+
+    /** Cấu trúc JSON cho phản hồi Solver mcq v2 ({@link PromptBuilder#SOLVER_PROMPT_VERSION_V2}). */
+    public static final String SOLVER_RESPONSE_SCHEMA_JSON_V2 = """
             {"type":"OBJECT","properties":{
               "reasoning":{"type":"STRING"},
               "judge_answer":{"type":"STRING","enum":["A","B","C","D","multiple","none"]}
             },"required":["reasoning","judge_answer"],"propertyOrdering":["reasoning","judge_answer"]}
             """;
 
+    private static final List<String> OPTION_LETTERS = List.of("A", "B", "C", "D");
+
     private final LlmClient llmClient;
     private final PromptBuilder promptBuilder;
     private final String solverModel;
+    private final String promptVersion;
 
+    public AnswerSolverChecker(LlmClient llmClient, PromptBuilder promptBuilder, String solverModel) {
+        this(llmClient, promptBuilder, solverModel, SOLVER_PROMPT_VERSION);
+    }
+
+    /**
+     * @param promptVersion phiên bản prompt Solver mcq; để trống là mặc định. Mặc định của cấu hình lấy
+     *                      {@code app.solver-probe.prompt-version} khi chạy công cụ đo, để lệnh đo chỉ cần một tham số.
+     */
+    @Autowired
     public AnswerSolverChecker(
             LlmClient llmClient,
             PromptBuilder promptBuilder,
-            @Value("${app.llm.solver-model:gemini-3.5-flash-lite}") String solverModel) {
+            @Value("${app.llm.solver-model:gemini-3.5-flash-lite}") String solverModel,
+            @Value("${app.llm.solver-prompt-version:${app.solver-probe.prompt-version:}}") String promptVersion) {
         this.llmClient = llmClient;
         this.promptBuilder = promptBuilder;
         this.solverModel = (solverModel != null && !solverModel.isBlank())
                 ? solverModel.trim()
                 : "gemini-3.5-flash-lite";
+        this.promptVersion = promptVersion == null || promptVersion.isBlank()
+                ? SOLVER_PROMPT_VERSION
+                : PromptBuilder.requireSolverPromptVersion(promptVersion);
+    }
+
+    /** Phiên bản prompt Solver mcq đang dùng. */
+    public String promptVersion() {
+        return promptVersion;
+    }
+
+    private boolean optionCheckPrompt() {
+        return !PromptBuilder.SOLVER_PROMPT_VERSION_V2.equals(promptVersion);
     }
 
     public boolean canRunOnline() {
@@ -82,9 +148,9 @@ public class AnswerSolverChecker {
             String optionC,
             String optionD,
             Option generatorCorrectOption) {
-        String prompt = promptBuilder.buildSolverPrompt(questionText, optionA, optionB, optionC, optionD);
-        LlmCallResult result = llmClient.callJsonModeWithSchema(
-                prompt, solverModel, 0.0, SOLVER_RESPONSE_SCHEMA_JSON);
+        String prompt = promptBuilder.buildSolverPrompt(promptVersion, questionText, optionA, optionB, optionC, optionD);
+        LlmCallResult result = llmClient.callJsonModeWithSchema(prompt, solverModel, 0.0,
+                optionCheckPrompt() ? SOLVER_RESPONSE_SCHEMA_JSON : SOLVER_RESPONSE_SCHEMA_JSON_V2);
         return parseAndCompare(result.rawText(), result.modelName(), generatorCorrectOption)
                 .withUsage(LlmUsage.of(result));
     }
@@ -236,6 +302,25 @@ public class AnswerSolverChecker {
                 model, reasoning);
     }
 
+    /**
+     * So kết quả Solver mcq với đáp án của câu.
+     * <ul>
+     *   <li>Có {@code options_verdict} hợp lệ (v3, đủ 4 phương án A-D, mỗi phương án một lần, {@code correct} là boolean):
+     *       đếm số phương án đúng từ chính mảng này (không tin {@code correct_count} và {@code judge_answer} khi chúng
+     *       lệch, chỉ ghi cảnh báo). Từ 2 trở lên: {@code multiple}; 0: {@code none}; đều không qua (theo đường Q-2 của
+     *       INCONSISTENT). Đúng 1: qua khi trùng đáp án, không trùng là INCONSISTENT như cũ. Ghi chú Solver bắt đầu bằng
+     *       khối {@link #OPTIONS_VERDICT_PREFIX}.</li>
+     *   <li>Thiếu hẳn {@code options_verdict}: như Solver cũ, so {@code judge_answer} với đáp án, ghi chú giữ nguyên (không
+     *       có khối xét từng phương án, nên không gắn lý do mới). Prompt v3, v4 mà thiếu thì ghi cảnh báo.</li>
+     *   <li>(F-03) Prompt xét từng phương án (v3, v4) mà {@code options_verdict} CÓ nhưng hỏng (không đủ 4 phần tử A-D hợp lệ):
+     *       đã đọc được từ 2 phương án {@code correct = true} thì vẫn là {@code multiple} (không qua); còn lại là Solver lỗi
+     *       (ném IllegalArgumentException), không so {@code judge_answer} rồi cho qua. Prompt v2 không có trường này nên giữ
+     *       cách so {@code judge_answer}.</li>
+     * </ul>
+     * Ném IllegalArgumentException (nơi gọi coi là ERROR) khi JSON hỏng, thiếu correct_option của câu, {@code options_verdict}
+     * hỏng mà không đủ căn cứ (prompt xét từng phương án), hoặc không có {@code options_verdict} mà {@code judge_answer}
+     * thiếu hay sai.
+     */
     public SolverCheckOutcome parseAndCompare(
             String rawSolverJson,
             String modelUsed,
@@ -248,22 +333,164 @@ public class AnswerSolverChecker {
         String reasoning = map.get("reasoning") != null
                 ? String.valueOf(map.get("reasoning")).trim()
                 : "";
-        // Structured output không phải bảo đảm tuyệt đối: vẫn kiểm tra kết quả sau khi parse.
-        // Thiếu judge_answer, giá trị lạ hoặc thiếu correct_option để so -> ném lỗi (không coi là kết quả hợp lệ).
-        if (judgeStr.isEmpty()) {
-            throw new IllegalArgumentException("Phản hồi Solver thiếu judge_answer");
-        }
         if (generatorCorrectOption == null) {
             throw new IllegalArgumentException("Thiếu correct_option của câu hỏi để so với Solver");
         }
+        String model = modelUsed != null && !modelUsed.isBlank() ? modelUsed : solverModel;
+
+        VerdictRead read = readOptionsVerdict(map);
+        if (read.complete() != null) {
+            return fromOptionsVerdict(read.complete(), map, judgeStr, reasoning, model, generatorCorrectOption);
+        }
+        if (read.present() && optionCheckPrompt()) {
+            // F-03: mảng options_verdict có nhưng hỏng. Đã đọc được từ 2 phương án correct=true thì đủ căn cứ kết luận nhiều
+            // đáp án đúng; không thì Solver lỗi (ném, nơi gọi coi là ERROR và xếp job answer_check), KHÔNG so judge_answer
+            // rồi cho qua (judge_answer có thể trùng đáp án trong khi chính Solver xét thêm phương án khác cũng đúng).
+            if (read.correctLetters().size() >= 2) {
+                return multipleFromPartial(read.correctLetters(), reasoning, model);
+            }
+            throw new IllegalArgumentException("options_verdict của Solver hỏng (không đủ 4 phương án A-D hợp lệ) và"
+                    + " chưa đọc được từ 2 phương án đúng: không đủ căn cứ kết luận");
+        }
+        if (optionCheckPrompt()) {
+            log.warn("Phản hồi Solver {} không có options_verdict: kết luận theo judge_answer như Solver cũ",
+                    promptVersion);
+        }
+        // Structured output không phải bảo đảm tuyệt đối: vẫn kiểm tra kết quả sau khi parse.
+        // Thiếu judge_answer hoặc giá trị lạ -> ném lỗi (không coi là kết quả hợp lệ).
+        if (judgeStr.isEmpty()) {
+            throw new IllegalArgumentException("Phản hồi Solver thiếu judge_answer");
+        }
         AnswerChoice judgeChoice = DbEnum.fromDbValue(AnswerChoice.class, judgeStr);
         boolean passed = judgeChoice.getDbValue().equals(generatorCorrectOption.getDbValue());
-        return new SolverCheckOutcome(
-                passed,
-                judgeChoice,
-                modelUsed != null && !modelUsed.isBlank() ? modelUsed : solverModel,
-                reasoning
-        );
+        return new SolverCheckOutcome(passed, judgeChoice, model, reasoning);
+    }
+
+    /** Kết luận của Solver cho một phương án (v3). */
+    private record OptionVerdict(String option, boolean correct, String reason) {}
+
+    private SolverCheckOutcome fromOptionsVerdict(List<OptionVerdict> verdicts, Map<String, Object> map,
+                                                  String judgeStr, String reasoning, String model,
+                                                  Option generatorCorrectOption) {
+        List<Boolean> correct = verdicts.stream().map(OptionVerdict::correct).toList();
+        List<String> correctLetters = verdicts.stream().filter(OptionVerdict::correct).map(OptionVerdict::option).toList();
+        int count = correctLetters.size();
+        AnswerChoice judge = count == 0 ? AnswerChoice.NONE
+                : count >= 2 ? AnswerChoice.MULTIPLE
+                : DbEnum.fromDbValue(AnswerChoice.class, correctLetters.get(0));
+
+        Object declaredCount = map.get("correct_count");
+        if (!(declaredCount instanceof Number n) || n.doubleValue() != count) {
+            log.warn("Solver ghi correct_count = {} nhưng options_verdict có {} phương án đúng: dùng options_verdict",
+                    declaredCount, count);
+        }
+        if (!judge.getDbValue().equalsIgnoreCase(judgeStr)) {
+            log.warn("Solver ghi judge_answer = '{}' nhưng options_verdict cho '{}': dùng options_verdict",
+                    judgeStr, judge.getDbValue());
+        }
+
+        StringBuilder notes = new StringBuilder(OPTIONS_VERDICT_PREFIX).append(' ')
+                .append(count).append("/4 phương án đúng");
+        for (OptionVerdict v : verdicts) {
+            notes.append('\n').append(v.option()).append(v.correct() ? ": đúng" : ": sai");
+            if (!v.reason().isEmpty()) {
+                notes.append(" – ").append(v.reason());
+            }
+        }
+        if (!reasoning.isEmpty()) {
+            notes.append("\n\n").append(reasoning);
+        }
+        boolean passed = judge.getDbValue().equals(generatorCorrectOption.getDbValue());
+        return new SolverCheckOutcome(passed, judge, model, notes.toString(), null, correct);
+    }
+
+    /**
+     * Kết quả đọc {@code options_verdict}.
+     *
+     * @param present        trường có trong phản hồi (khác null)
+     * @param complete       mảng đủ 4 phương án A-D, mỗi phương án một lần, {@code correct} là true/false (theo thứ tự A-D);
+     *                       null khi mảng hỏng hoặc thiếu
+     * @param correctLetters các chữ cái có {@code correct = true} đọc được từ những phần tử hợp lệ, mỗi chữ một lần (chữ
+     *                       xuất hiện nhiều lần với giá trị mâu thuẫn bị loại)
+     */
+    private record VerdictRead(boolean present, List<OptionVerdict> complete, List<String> correctLetters) {}
+
+    /**
+     * Đọc {@code options_verdict}. Hỏng (không phải mảng đúng 4 phần tử A-D, trùng chữ cái, {@code correct} không phải
+     * true/false) thì {@code complete} = null nhưng vẫn gom các phương án {@code correct = true} đọc được ở những phần tử
+     * hợp lệ để nơi gọi quyết định có đủ căn cứ hay không (F-03).
+     */
+    private static VerdictRead readOptionsVerdict(Map<String, Object> map) {
+        Object raw = map.get("options_verdict");
+        if (raw == null) {
+            return new VerdictRead(false, null, List.of());
+        }
+        if (!(raw instanceof List<?> list)) {
+            log.warn("options_verdict của Solver không phải mảng: hỏng");
+            return new VerdictRead(true, null, List.of());
+        }
+        OptionVerdict[] byLetter = new OptionVerdict[OPTION_LETTERS.size()];
+        Boolean[] seen = new Boolean[OPTION_LETTERS.size()];
+        boolean[] conflict = new boolean[OPTION_LETTERS.size()];
+        boolean sound = list.size() == OPTION_LETTERS.size();
+        for (Object element : list) {
+            if (!(element instanceof Map<?, ?> item)) {
+                sound = false;
+                continue;
+            }
+            String option = item.get("option") != null ? String.valueOf(item.get("option")).trim().toUpperCase() : "";
+            int idx = OPTION_LETTERS.indexOf(option);
+            Boolean correct = toBoolean(item.get("correct"));
+            if (idx < 0 || correct == null) {
+                sound = false;
+                continue;
+            }
+            if (byLetter[idx] != null) {
+                sound = false;
+                if (!correct.equals(seen[idx])) {
+                    conflict[idx] = true;
+                }
+                continue;
+            }
+            String reason = item.get("reason") != null ? String.valueOf(item.get("reason")).replaceAll("\\s+", " ").trim()
+                    : "";
+            byLetter[idx] = new OptionVerdict(option, correct, reason);
+            seen[idx] = correct;
+        }
+        List<String> correctLetters = new ArrayList<>();
+        for (int i = 0; i < byLetter.length; i++) {
+            if (byLetter[i] != null && !conflict[i] && byLetter[i].correct()) {
+                correctLetters.add(byLetter[i].option());
+            }
+        }
+        boolean complete = sound && java.util.Arrays.stream(byLetter).allMatch(java.util.Objects::nonNull);
+        if (!complete) {
+            log.warn("options_verdict của Solver hỏng (thiếu, trùng phương án, correct không phải true/false hoặc không đúng 4"
+                    + " phần tử): đọc được {} phương án đúng", correctLetters.size());
+        }
+        return new VerdictRead(true, complete ? List.of(byLetter) : null, correctLetters);
+    }
+
+    /** Mảng hỏng nhưng đã đọc được từ 2 phương án đúng: nhiều đáp án đúng, không qua; ghi chú gắn khối xét từng phương án. */
+    private static SolverCheckOutcome multipleFromPartial(List<String> correctLetters, String reasoning, String model) {
+        StringBuilder notes = new StringBuilder(OPTIONS_VERDICT_PREFIX).append(' ').append("từ ")
+                .append(correctLetters.size()).append(" phương án đúng (")
+                .append(String.join(", ", correctLetters))
+                .append("); mảng options_verdict của Solver không đủ 4 phương án hợp lệ nên không có kết quả từng phương án");
+        if (!reasoning.isEmpty()) {
+            notes.append("\n\n").append(reasoning);
+        }
+        return new SolverCheckOutcome(false, AnswerChoice.MULTIPLE, model, notes.toString());
+    }
+
+    private static Boolean toBoolean(Object value) {
+        if (value instanceof Boolean b) {
+            return b;
+        }
+        if (value instanceof String s && (s.trim().equalsIgnoreCase("true") || s.trim().equalsIgnoreCase("false"))) {
+            return Boolean.parseBoolean(s.trim());
+        }
+        return null;
     }
 }
 
