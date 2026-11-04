@@ -439,7 +439,7 @@ export default function ExamDetailPage() {
                                         menu={{
                                             items: [
                                                 { key: "omml", label: "Công thức Word (Equation)" },
-                                                { key: "mathtype", label: "Công thức MathType (thử nghiệm)" },
+                                                { key: "mathtype", label: "Công thức MathType" },
                                             ],
                                             selectedKeys: ["omml"],
                                             onClick: ({ key }) => handleExportWord(key === "mathtype" ? "mathtype" : "omml"),
