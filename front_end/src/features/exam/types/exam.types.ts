@@ -83,7 +83,20 @@ export interface ChangeQuestionRequest {
     instruction: string;
     /** Nguồn đổi: 'generate' (mặc định) sinh mới qua AI, hoặc 'bank' lấy từ ngân hàng */
     source?: "generate" | "bank";
+    /** Lý do giáo viên chọn khi Đổi (tùy chọn); không chọn thì không gửi. */
+    reason?: ReplaceReason;
 }
+
+/** Lý do Đổi câu, khớp CHECK chk_esa_replace_reason (V25) và docs/contract/enums.md. */
+export type ReplaceReason =
+    | "wrong_answer"
+    | "ambiguous_options"
+    | "off_matrix"
+    | "duplicate_pattern"
+    | "latex_format"
+    | "too_hard"
+    | "too_easy"
+    | "other";
 
 export interface ExamListItem {
     examId: number;
@@ -228,6 +241,7 @@ export interface BuildResultDto {
 export interface ReplaceQuestionParams {
     source?: "generate" | "bank";
     instruction?: string;
+    reason?: ReplaceReason;
 }
 
 export interface CellContextInput {

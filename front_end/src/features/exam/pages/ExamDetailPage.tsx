@@ -124,6 +124,8 @@ export default function ExamDetailPage() {
 
     const [qcModalVisible, setQcModalVisible] = useState(false);
     const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+    // Số câu trên thẻ câu (thứ tự trong Phần) để hộp kết quả tự kiểm tra ghi cùng số
+    const [selectedQuestionNo, setSelectedQuestionNo] = useState<number | undefined>(undefined);
 
     const [subjectName, setSubjectName] = useState<string | undefined>(undefined);
 
@@ -294,8 +296,9 @@ export default function ExamDetailPage() {
     };
 
     // Hàm mở Modal Xem vết QC cho slot
-    const openQcTrace = (targetSlotId: string | number) => {
+    const openQcTrace = (targetSlotId: string | number, questionNo: number) => {
         setSelectedSlotId(String(targetSlotId));
+        setSelectedQuestionNo(questionNo);
         setQcModalVisible(true);
     };
 
@@ -324,6 +327,7 @@ export default function ExamDetailPage() {
             await replaceQuestion(examId, request.question.slotId, {
                 source,
                 ...(source === "generate" && request.instruction ? { instruction: request.instruction } : {}),
+                ...(request.reason ? { reason: request.reason } : {}),
             });
             message.success(
                 source === "bank"
@@ -501,8 +505,8 @@ export default function ExamDetailPage() {
                                 }}
                                 onKeep={handleKeep}
                                 onEdit={(question) => setEditingQuestion(question)}
-                                onViewQcTrace={(question) => {
-                                    if (question.slotId !== undefined) openQcTrace(question.slotId);
+                                onViewQcTrace={(question, index) => {
+                                    if (question.slotId !== undefined) openQcTrace(question.slotId, index + 1);
                                 }}
                             />
                         </div>
@@ -529,6 +533,7 @@ export default function ExamDetailPage() {
                         <QcTraceModal
                             examId={examId!}
                             slotId={selectedSlotId}
+                            questionNo={selectedQuestionNo}
                             visible={qcModalVisible}
                             onClose={() => setQcModalVisible(false)}
                         />

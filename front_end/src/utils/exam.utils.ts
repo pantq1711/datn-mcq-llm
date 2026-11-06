@@ -1,4 +1,4 @@
-import type { ExamKind, ExamQuestionDifficulty, ExamQuestionItem, ExamQuestionType, ExamStatus } from "../features/exam/types/exam.types";
+import type { ExamKind, ExamQuestionDifficulty, ExamQuestionItem, ExamQuestionType, ExamStatus, ReplaceReason } from "../features/exam/types/exam.types";
 
 export const difficultyConfig: Record<
     ExamQuestionDifficulty,
@@ -55,6 +55,29 @@ const reviewReasonLabels: Record<string, string> = {
     grounding_pending: "Đang đối chiếu câu với tài liệu đính kèm…",
     grounding_failed: "Chưa đối chiếu được câu với tài liệu, thầy/cô tự kiểm tra.",
 };
+
+/** Lý do Đổi câu theo thứ tự hiển thị; nhãn theo docs/contract/enums.md (exam_slot_action.replace_reason). */
+export const REPLACE_REASON_OPTIONS: { value: ReplaceReason; label: string }[] = [
+    { value: "wrong_answer", label: "Đáp án sai" },
+    { value: "ambiguous_options", label: "Phương án mơ hồ / nhiều đáp án" },
+    { value: "off_matrix", label: "Lệch ma trận" },
+    { value: "duplicate_pattern", label: "Trùng khuôn với câu khác" },
+    { value: "latex_format", label: "Lỗi công thức / định dạng" },
+    { value: "too_hard", label: "Quá khó" },
+    { value: "too_easy", label: "Quá dễ" },
+    { value: "other", label: "Lý do khác" },
+];
+
+// Kết luận đặc biệt của bước tự giải (judge_answer): docs/contract/enums.md, bảng "Số phương án đúng"
+const judgeAnswerLabels: Record<string, string> = {
+    multiple: "Nhiều đáp án đúng",
+    none: "Không có đáp án đúng",
+};
+
+/** Đáp án hệ thống tự giải ra, nói bằng chữ của giáo viên; chữ cái A-D giữ nguyên. */
+export function describeJudgeAnswerValue(value: string): string {
+    return judgeAnswerLabels[value.trim().toLowerCase()] ?? value;
+}
 
 const GENERIC_REVIEW_REASON = "Hệ thống đề nghị thầy/cô xem kỹ câu này";
 

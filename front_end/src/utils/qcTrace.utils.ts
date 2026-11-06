@@ -1,4 +1,5 @@
 import type { QcAnswerCheck } from "../features/exam/types/qcTrace.types";
+import { describeJudgeAnswerValue } from "./exam.utils";
 
 export type QcTone = "success" | "error" | "warning" | "default";
 
@@ -76,10 +77,18 @@ export function describeAnswerCheck(check: QcAnswerCheck): Label {
     }
 }
 
+// Loại đáp số Solver trả (judge_sa_kind, docs/contract/enums.md); "number" là số bình thường nên không ghi chú thêm
+const saKindLabels: Record<string, string> = {
+    ambiguous: "đề có thể hiểu theo nhiều cách",
+    unparseable: "không đọc được thành số",
+};
+
 /** Đáp án Solver đưa ra khi lệch, theo dạng câu. */
 export function describeJudgeAnswer(check: QcAnswerCheck): string | null {
-    if (check.judgeAnswer) return check.judgeAnswer;
-    if (check.judgeSaAnswer) return check.judgeSaKind ? `${check.judgeSaAnswer} (${check.judgeSaKind})` : check.judgeSaAnswer;
+    if (check.judgeAnswer) return describeJudgeAnswerValue(check.judgeAnswer);
+    const kind = check.judgeSaKind ? saKindLabels[check.judgeSaKind] : undefined;
+    if (check.judgeSaAnswer) return kind ? `${check.judgeSaAnswer} (${kind})` : check.judgeSaAnswer;
+    if (kind) return kind;
     if (check.judgeLabels) return formatLabels(check.judgeLabels);
     return null;
 }
