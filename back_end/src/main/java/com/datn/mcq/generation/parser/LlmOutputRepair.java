@@ -1,6 +1,7 @@
 package com.datn.mcq.generation.parser;
 
 import com.datn.mcq.common.util.LatexValidationRules;
+import com.datn.mcq.common.util.LiteralNewlines;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -851,6 +852,15 @@ public final class LlmOutputRepair {
         }
         String s = String.valueOf(val);
         if (repair) {
+            // "\n" chữ lọt vào công thức ("$ .\n$") làm pandoc bỏ công thức khi xuất Word: sửa TRƯỚC các bước đếm/ghép $ bên dưới.
+            if (newlines) {
+                LiteralNewlines.Result ln = LiteralNewlines.repair(s);
+                String lnWarning = LiteralNewlines.warning(field, ln);
+                if (lnWarning != null) {
+                    warnings.add(lnWarning);
+                }
+                s = ln.text();
+            }
             TextRepair t = stripTextOutsideMath(s);
             if (t.removed() > 0) {
                 warnings.add(textWarning(field, t.removed()));
