@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Alert, Button, Form, Input, Modal, Radio, Space, Tag, Tooltip, Typography } from "antd";
 import { InfoCircleOutlined, SwapOutlined, BulbOutlined, DatabaseOutlined, RobotOutlined } from "@ant-design/icons";
 
-import type { ExamQuestionItem, ChangeQuestionRequest, ExamQuestionType } from "../types/exam.types";
-import { describeLevel, resolveQuestionType } from "../../../utils/exam.utils";
+import type { ExamQuestionItem, ChangeQuestionRequest, ExamQuestionType, ReplaceReason } from "../types/exam.types";
+import { REPLACE_REASON_OPTIONS, describeLevel, resolveQuestionType } from "../../../utils/exam.utils";
 import QuestionContent from "../components/QuestionContent";
 
 import "./ChangeQuestionModal.css";
@@ -41,6 +41,8 @@ export default function ChangeQuestionModal({
     const [submitting, setSubmitting] = useState(false);
     // Ngân hàng đã hết câu phù hợp cho chỗ này trong lần mở modal hiện tại
     const [bankExhausted, setBankExhausted] = useState(false);
+    // Lý do đổi (tùy chọn); undefined = không chọn, không gửi lên backend
+    const [reason, setReason] = useState<ReplaceReason | undefined>(undefined);
 
     const watchedSource = Form.useWatch("source", form) ?? "generate";
     const isBusy = loading || submitting;
@@ -78,6 +80,7 @@ export default function ChangeQuestionModal({
             form.setFieldsValue({ source: "generate", instruction: "" });
             setSubmitting(false);
             setBankExhausted(false);
+            setReason(undefined);
         }
     }, [open, question?.id, form]);
 
@@ -97,7 +100,7 @@ export default function ChangeQuestionModal({
 
         setSubmitting(true);
         try {
-            const result = await onGenerate({ question, instruction, source });
+            const result = await onGenerate({ question, instruction, source, ...(reason ? { reason } : {}) });
             if (result === "bank_exhausted") {
                 // Không tự soạn: chỉ chuyển sang "Soạn câu mới" để giáo viên tự bấm (mỗi lần soạn tốn lượt gọi AI)
                 setBankExhausted(true);
@@ -270,6 +273,28 @@ export default function ChangeQuestionModal({
                                 />
                             )}
                         </Form>
+                    </section>
+
+                    {/* Lý do đổi: tùy chọn, chọn 1; bấm lại chip đang chọn để bỏ chọn */}
+                    <section className="change-question-reason-section">
+                        <Text strong>Lý do đổi câu (tùy chọn)</Text>
+                        <div className="change-question-reason-chips" role="group" aria-label="Lý do đổi câu">
+                            {REPLACE_REASON_OPTIONS.map((option) => (
+                                <Tag.CheckableTag
+                                    key={option.value}
+                                    className="change-question-reason-chip"
+                                    checked={reason === option.value}
+                                    onChange={(checked) => {
+                                        if (!isBusy) setReason(checked ? option.value : undefined);
+                                    }}
+                                >
+                                    {option.label}
+                                </Tag.CheckableTag>
+                            ))}
+                        </div>
+                        <Text type="secondary" className="change-question-reason-hint">
+                            Giúp hệ thống biết câu cũ chưa tốt ở đâu. Không chọn cũng được.
+                        </Text>
                     </section>
                 </div>
             )}

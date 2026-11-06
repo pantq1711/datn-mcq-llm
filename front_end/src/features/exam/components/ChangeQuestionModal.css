@@ -132,6 +132,40 @@
     margin-top: 3px;
 }
 
+.change-question-reason-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+.change-question-reason-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.change-question-reason-chips .change-question-reason-chip {
+    margin-inline-end: 0;
+    padding: 5px 14px;
+    border: 1px solid #d9d9d9;
+    border-radius: 16px;
+    background: #fff;
+    font-size: 15px;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+.change-question-reason-chips .change-question-reason-chip.ant-tag-checkable-checked {
+    border-color: #1677ff;
+    background: #1677ff;
+    color: #fff;
+}
+
+.change-question-reason-hint {
+    font-size: 13px;
+}
+
 .change-question-modal-footer {
     display: flex;
     justify-content: flex-end;
