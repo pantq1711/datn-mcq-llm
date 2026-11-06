@@ -22,7 +22,8 @@ ARG PANDOC_VERSION=3.12.1
 ARG PANDOC_SHA256=b4217ac7c54067c442f9d4cd38bcd0c184a43f3e7053431a12263a6f92a33ba2
 
 # curl: healthcheck. tzdata: múi giờ Asia/Bangkok. fontconfig + libfreetype6 + font: AWT headless cho JLaTeXMath
-# (task sau), font có tiếng Việt: DejaVu và Liberation (tương đương metric Times New Roman).
+# (xuất MathType) và OptionLayout (đo phương án bằng Liberation Serif, tương đương metric Times New Roman); font có
+# tiếng Việt: DejaVu và Liberation.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl ca-certificates tzdata fontconfig libfreetype6 fonts-dejavu-core fonts-liberation2 \
@@ -43,7 +44,8 @@ COPY --from=build --chown=app:app /app.jar /app/app.jar
 USER app
 
 # Heap = 55% bộ nhớ container; phần còn lại cho metaspace, luồng, pandoc (tiến trình con cùng cgroup) và AWT.
-# Giá trị chưa đo: chỉnh sau khi đo `docker stats` khi xuất đề (docs/deploy/README.md).
+# Đo 04/11/2026 với mem_limit 1536m: MaxHeapSize 846 MiB; xuất MathType đề 40 câu ~3 giây, heap sau GC ~13 MiB, không OOM
+# (docs/deploy/README.md). Chỉnh tiếp sau khi đo `docker stats` trên máy chủ thật.
 ENV TZ=Asia/Bangkok \
     JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=55 -XX:+ExitOnOutOfMemoryError -Djava.awt.headless=true -Duser.timezone=Asia/Bangkok -Dfile.encoding=UTF-8"
 
