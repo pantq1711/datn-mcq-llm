@@ -816,6 +816,98 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
 - Hạn chế / chưa làm: lệch chữ đáp án chưa sinh lại (chỉ cảnh báo); chưa có thống kê tuân thủ chữ trên nhiều đề.
 - Trạng thái: Đã sửa (đã đo 1 đề).
 
+### L-70 Góp ý giáo viên 4/11: ký hiệu thay chữ, dấu "?", lời giải từng dòng (bổ sung 4/11)
+- Nhóm: LLM & parse
+- Triệu chứng (giáo viên Toán xem đề 15): (1) phương án viết quan hệ bằng chữ giữa các đối tượng đã đặt tên ("$AD$ vuông
+  góc với $BC$", "$AD$ song song với $BC$", "$AD$ lớn hơn $BC$") thay vì ký hiệu; (2) câu dẫn dạng hỏi ("Khẳng định nào…",
+  "phát biểu nào…") thiếu dấu "?"; (3) lời giải dồn nhiều phép biến đổi vào một dòng/một công thức.
+- Nguyên nhân gốc: prompt ma trận (mcq v6, sa v8, tf v8) không nói gì về ký hiệu quan hệ, dấu cuối câu dẫn dạng hỏi, hay cách
+  trình bày từng bước của lời giải.
+- Cách sửa (không migration, không đổi hợp đồng JSON; mcq v7, sa v9, tf v9):
+  - `MatrixPromptDraftV0.WORDING_RULES` (cả 3 dạng, ngay sau `STYLE_RULES`): quan hệ viết bằng ký hiệu (`\perp`, `\parallel`, `=`,
+    `>`, `\ge`, `\in`…), ngoại lệ câu mức Biết hỏi chính thuật ngữ/định nghĩa; lời giải mỗi bước biến đổi một dòng. Lần đầu
+    prompt còn có quy tắc câu dẫn dạng hỏi kết thúc "?"; đo đề 16 cho thấy model không tuân thủ nên ở lần sửa 2 đã bỏ khỏi
+    prompt (xem "Sửa lần 2").
+  - Kiểm sau khi sinh (`QuestionWordingCheck.symbolSuggestedPhrases`, gọi từ `FormatChecker`, chỉ phương án mcq của đầu ra LLM):
+    cụm `vuông góc với`/`song song với`/`lớn hơn`/`nhỏ hơn` giữa hai tên đối tượng in hoa → cảnh báo
+    `option_x: wording_symbol_suggested (dùng chữ "…" thay vì ký hiệu)`. KHÔNG bật cờ (`QcSummaryService.reviewReasons` loại
+    trừ), chỉ để đo.
+- Chống tái phát: `MatrixPromptDraftV0Test` (quy tắc có trong prompt cả 3 dạng, không lọt vào Solver/prompt sinh lẻ, phiên bản
+  v7/v9/v9), `QuestionWordingCheckTest` (nhận diện cụm giữa hai tên, không bắt khi dùng ký hiệu hoặc không giữa hai tên, chỉ
+  phương án mcq của đầu ra LLM, không bật cờ), `ExamBuildTest` (phiên bản run).
+- Đo thật (4/11, app `datn_mcq_e2e`, worker bật, GV1, ma trận 4; đề 15 trước, đề 16 sau; cả hai có 3 câu ngân hàng viết bằng
+  prompt cũ, còn lại do model sinh; script đo ở thư mục tạm, không đưa vào repo):
+  | | Đề 15 (trước) | Đề 16 (sau) |
+  |---|---|---|
+  | Phương án mcq dùng chữ giữa hai tên đối tượng (mẫu của cảnh báo) | 3/48 (cùng một câu: $AD$ ⟂/∥/> $BC$) | 0/48 |
+  | Cảnh báo `wording_symbol_suggested` trong QC của đề | (chưa có kiểm) | 0 |
+  | Câu dẫn dạng hỏi / thiếu "?" (cả câu ngân hàng) | 4 / 2 | 5 / 4 |
+  | Câu dẫn dạng hỏi do model sinh có "?" | 1/3 | 0/4 |
+  | Câu dẫn kết thúc "là" | 7/18 | 6/17 |
+  | Lời giải có xuống dòng giữa các bước (câu model sinh) | 0/15 | 10/14 (mcq 8/11, sa 2/2; tf 1/1 là mỗi ý một dòng) |
+  | Lời giải có công thức dài từ 3 dấu "=" trong một `$…$` | 6 | 4 (đều là câu ngân hàng) |
+  | Xuất MathType: công thức → đối tượng OLE | 203 → 209 | 191 → 197 |
+  | `X-Equation-Scaled` / `X-Equation-Kept-Omml` | 0 / 0 | 0 / 0 |
+  | Phân bố đáp án Phần I (12 câu) | A=3 B=3 C=3 D=3 | A=3 B=3 C=3 D=3 |
+  | Câu bật cờ | 4 | 2 (`solver_inconsistent`, `similar_in_exam: I.6`) |
+  | Chỗ không có câu | 0 | 1 (Phần III sa, `qc_exhausted`) |
+  Công thức MathType bị ngắt dòng (số đối tượng OLE trừ số công thức) đều là 6 ở cả hai đề, nên phần ngắt không đến từ quy tắc mới;
+  chưa gắn được vào câu cụ thể (khả năng cao là lời giải dài của câu ngân hàng). Không có công thức bị thu nhỏ.
+- Lỗi thấy khi đo đề 16 (đã xử lý ở "Sửa lần 2", trừ lỗi 4):
+  1. Quy tắc dấu "?" không được tuân thủ: 0/4 câu dẫn dạng hỏi do model sinh có "?" (đề 15: 1/3).
+  2. "Mỗi bước một dòng" làm model bỏ `$…$` ở dòng công thức: đề 16 Phần I cell 37 có 2 dòng `P = -5x^2(x - 3)` và
+     `P = -5x^3 + 15x^2.` không có `$`, và một dòng có `$` giữa biểu thức (`P $= (-5x^2) \cdot x + … \cdot$ (-3)`).
+  3. Câu tf mới sinh mất dấu chấm cuối đề dẫn và cả 4 ý (đề 15: có). Mới 1 câu tf.
+  4. Ô sa "tính nhanh giá trị" (cell 44) 3 lần sinh đều ra đáp số 5 ký tự (10000, 10609, 10000) nên `qc_exhausted`; liên quan
+     quy tắc đáp số 4 ký tự, không liên quan quy tắc 4/11 (chưa sửa).
+- Hạn chế: chỉ đo 1 đề (17 câu có nội dung, 14 câu do model sinh), mỗi con số là một lượt sinh; không kết luận thống kê.
+
+#### Sửa lần 2 (4/11, theo quyết định của chủ dự án sau đo đề 16)
+- Cách sửa (cùng phiên bản prompt mcq v7, sa v9, tf v9 vì chưa commit; không migration, không đổi hợp đồng JSON):
+  1. Prompt: bỏ quy tắc "?" khỏi `WORDING_RULES`; thêm "mỗi dòng biến đổi vẫn là công thức đầy đủ trong cặp `$…$`, kể cả dòng bắt
+     đầu bằng dấu `=` (ví dụ `$= 4(x - 2)(x + 2)$`)".
+  2. `LlmOutputRepair.wrapFormulaLines` (chỉ `explanation`, chế độ production, chạy TRƯỚC `wrapLatexOutsideMath`): dòng (tách theo
+     `\n`) không có `$`, không có chữ tiếng Việt/từ ASCII dài, có ký hiệu `= + ^ _ < >` hoặc lệnh LaTeX, ngoặc cân, không phải
+     mục liệt kê → bọc NGUYÊN dòng bằng `$…$`, dấu câu cuối ở ngoài. Không bọc dòng nằm giữa một cặp `$` mở qua dòng; văn bản
+     có `$$` hoặc số `$` lẻ cả đoạn giữ nguyên. Cảnh báo `explanation: đã tự bọc $ quanh N dòng công thức nằm ngoài $` (không bật cờ).
+  3. `LlmOutputRepair.hasBrokenFormulaLine` + `FormatChecker.validateExplanationLatex`: dòng công thức bị chia bởi `$` giữa biểu
+     thức (`P $= … \cdot$ (-3)`) hoặc dòng công thức có số `$` lẻ (công thức `$…$` trải qua nhiều dòng, Word tách theo dòng nên
+     hiện chữ "$"; thấy ở đề 17 ô I-1) → LỖI `Có dòng công thức bị chia bởi dấu $ giữa biểu thức (thiếu hoặc thừa $)` cho đầu ra
+     LLM: câu `format_failed`, được sinh lại. Không tự sửa vì không biết chỗ đóng đúng. Chữ giáo viên viết/sửa không bị chặn.
+  4. `StemPunctuation` (mới, gọi từ `McqJsonParser`/`SaJsonParser`/`TfJsonParser`, chỉ chế độ production): câu dẫn `là:` → `là`
+     (trước đây chỉ làm ở bản xuất Word, nay làm ở parser nên web và Word như nhau); câu dẫn mcq/sa có từ hỏi (`nào`, `bao nhiêu`,
+     `gì`, `mấy`) ở câu cuối mà không có dấu câu cuối và không kết thúc bằng "là" → thêm `?`; câu dẫn tf KHÔNG BAO GIỜ thêm `?`
+     (chỉ thêm `.` khi thiếu dấu câu; kết thúc bằng `:` giữ nguyên); mỗi ý tf thiếu `. ? ! …` → thêm `.`. (Sửa tiếp 4/11, theo
+     quyết định của chủ dự án: bản đầu có thêm `đúng hay sai`, `có phải` và thêm `?` cho cả tf; "Xét tính đúng hay sai của các
+     khẳng định sau" là câu mệnh lệnh nên bị thêm `?` sai.) Cảnh báo
+     `json: đã sửa dấu câu cuối <trường> (thêm ? | thêm . | bỏ : sau là)`, cùng tiền tố `json: đã sửa` nên không bật cờ.
+- Test: `FormulaLineWrapTest` (14 test, gồm đúng hai dòng của đề 16 ô 37 và ca ô I-1 của đề 17), `StemPunctuationTest` (12 test),
+  `MatrixPromptDraftV0Test` (quy tắc `$` mỗi dòng có; quy tắc "?" không còn; vẫn giữ "không dấu hai chấm sau là"). Phải sửa 4 test cũ
+  vì fixture câu dẫn "là:" nay được parser chuẩn hóa (hành vi mới đúng ý định): `ExamQcTraceTest` (autoRepairs có thêm cảnh báo bỏ
+  dấu `:`), `ExamInExamDedupTest` (văn bản câu so trùng viết dạng "là"), `McqApiSnapshotTest` (fixture "là"), `exam-view-batch/golden.json`
+  (6 chỗ "là:" thành "là"), cộng `LlmOutputRepairTest` (một fixture "là." thay "là:").
+- Đo lại (đề 17, app `datn_mcq_e2e`, worker bật, GV1, ma trận 4, cổng 8087; 18/18 chỗ có câu, 3 câu ngân hàng, 15 câu do model
+  sinh). Số liệu chỉ tính câu do model sinh trừ khi ghi khác:
+  | | Đề 16 (lần 1) | Đề 17 (lần 2) |
+  |---|---|---|
+  | Dòng công thức thiếu `$` (không `$`, không chữ, có ký hiệu toán) | 2 | 0 (parser bọc 4 dòng ở 2 lời giải) |
+  | Dòng công thức bị chia bởi `$` giữa biểu thức | 1 (ô 37) | 0 |
+  | Dòng công thức có `$` lẻ (công thức trải 2 dòng) | 0 | 1 (ô I-1; kiểm này thêm SAU khi sinh đề 17 nên đề 17 chưa bị chặn) |
+  | Câu dẫn dạng hỏi có "?" | 0/4 | 3/4 (2 lần thêm `?` bởi parser; câu còn lại kết thúc bằng "." nên giữ nguyên) |
+  | Lời giải xuống dòng giữa các bước (mcq + sa) | 10/13 | 13/14 |
+  | Câu dẫn tf và 4 ý có dấu chấm cuối | không | có (do model viết, không có lần sửa nào của parser; chỉ 1 câu tf) |
+  | Phân bố đáp án Phần I | A=3 B=3 C=3 D=3 | A=3 B=3 C=3 D=3 |
+  | Câu bật cờ | 2 | 4 (`warning: explanation: số dấu $ bị lẻ` ô I-1; `solver_multiple_correct` ô I-2; `similar_in_exam` ×2) |
+  | Chỗ không có câu | 1 (Phần III, qc_exhausted) | 0 |
+  | Xuất MathType: công thức → đối tượng OLE | 191 → 197 | 211 → 217 (cùng 6 chênh lệch) |
+  | `X-Equation-Scaled` / `X-Equation-Kept-Omml` | 0 / 0 | 0 / 0 |
+- Còn thấy ở đề 17 (chưa sửa, chờ quyết): (a) một câu mcq dạng hỏi kết thúc bằng "." ("…cách viết nào biểu diễn đúng… đặt nhân tử
+  chung.") giữ nguyên vì quy tắc chỉ thêm `?` khi không có dấu câu; (b) 4/44 phương án mcq do model sinh không có dấu chấm cuối (đề 16:
+  0/44; Word vẫn thêm); (c) câu sa thiếu dấu chấm cuối ở 1/3 câu và một câu sa dạng lệnh kết thúc bằng "là" ("Tính nhanh giá trị … là"),
+  vì quy tắc "kết thúc bằng là" đang được model hiểu rộng; (d) lỗi 4 ở trên (đáp số 5 ký tự).
+- Hạn chế: một đề, mỗi số là một lượt sinh; nhánh thêm `.` cho tf chưa được chạy thật trong đo (model tự viết dấu chấm), chỉ có test đơn vị.
+- Trạng thái: Đã sửa lỗi 1, 2, 3; lỗi 4 và các mục (a)–(d) còn mở.
+
 ## QC
 
 ### L-28 Câu được `qc_passed` dù Solver lệch hoặc lỗi (bổ sung từ repo)

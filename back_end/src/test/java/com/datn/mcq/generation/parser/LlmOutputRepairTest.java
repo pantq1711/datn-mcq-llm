@@ -360,7 +360,9 @@ class LlmOutputRepairTest {
      */
     @Test
     void tuDongDongDollarChiKhongBatCoKhiChuoiGocCoDungMotDauDollar() {
-        List<String> single = warningsOfMcq("Bậc của đơn thức là:", "$5");
+        // 4/11: câu dẫn kết thúc bằng "là:" nay được parser bỏ dấu hai chấm (thêm cảnh báo riêng); dùng câu dẫn có dấu chấm để
+        // bài kiểm này chỉ còn xét cảnh báo "$".
+        List<String> single = warningsOfMcq("Bậc của đơn thức là.", "$5");
         assertEquals(List.of("option_a: đã tự đóng $"), single);
         assertTrue(QcSummaryService.isAutoFixedWarning(single.get(0)));
         assertEquals(List.of(), new QcSummaryService.QcSummary(true, true, null, false, single).reviewReasons());

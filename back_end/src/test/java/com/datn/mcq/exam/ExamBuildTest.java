@@ -401,7 +401,7 @@ class ExamBuildTest {
                 + " AND bank_item_id IS NOT NULL", Integer.class, examId));
         List<Map<String, Object>> runs = jdbc.queryForList("SELECT * FROM experiment_run WHERE prompt_version LIKE"
                 + " 'matrix-%' ORDER BY id");
-        assertEquals(List.of("matrix-mcq-v6-draft", "matrix-tf-v8-draft", "matrix-sa-v8-draft"),
+        assertEquals(List.of("matrix-mcq-v7-draft", "matrix-tf-v9-draft", "matrix-sa-v9-draft"),
                 runs.stream().map(r -> r.get("prompt_version")).toList());
         for (Map<String, Object> run : runs) {
             assertEquals("production", run.get("purpose"));

@@ -107,9 +107,9 @@ class MatrixPromptDraftV0Test {
 
     @Test
     void phienBanVaThongSoOLuuDuoc() {
-        assertEquals("matrix-mcq-v6-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
-        assertEquals("matrix-tf-v8-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
-        assertEquals("matrix-sa-v8-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
+        assertEquals("matrix-mcq-v7-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
+        assertEquals("matrix-tf-v9-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-sa-v9-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion("sa-v1-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion(null));
@@ -194,6 +194,61 @@ class MatrixPromptDraftV0Test {
                     "\"cạnh bên\" của hình thang, không viết \"cạnh biên\"",
                     "Câu dẫn dạng câu nối kết thúc bằng \"là\" thì KHÔNG đặt dấu hai chấm")) {
                 assertTrue(p.contains(part), type + " thiếu: " + part);
+            }
+        }
+    }
+
+    /**
+     * Góp ý giáo viên 4/11 (prompt mcq v7, sa v9, tf v9), cả 3 dạng: quan hệ giữa các đối tượng đã đặt tên viết bằng KÝ HIỆU trong
+     * công thức (không viết "AD vuông góc với BC"), ngoại lệ câu Nhận biết hỏi chính thuật ngữ; câu dẫn dạng hỏi kết thúc bằng "?",
+     * dạng câu nối kết thúc bằng "là"; lời giải mỗi bước biến đổi một dòng.
+     */
+    @Test
+    void quyTacKyHieuDauHoiVaLoiGiaiTungDongCoTrongPromptMaTranCaBaDang() {
+        for (QuestionType type : QuestionType.values()) {
+            String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Tứ giác", null));
+            for (String part : List.of(
+                    "Quan hệ toán học giữa các đối tượng đã đặt tên (vuông góc, song song, bằng, lớn hơn, nhỏ hơn, lớn hơn hoặc "
+                            + "bằng, nhỏ hơn hoặc bằng, thuộc, không thuộc...) viết bằng KÝ HIỆU trong công thức",
+                    "$AD \\perp BC$", "$AD \\parallel BC$", "$AD = BC$", "$AD > BC$", "$x \\ge 3$", "$A \\in d$",
+                    "không viết bằng chữ (\"AD vuông góc với BC\")",
+                    "Ngoại lệ: câu mức Biết hỏi chính thuật ngữ hoặc định nghĩa thì giữ chữ",
+                    "Lời giải viết mỗi bước biến đổi một dòng (xuống dòng giữa các bước)",
+                    "không dồn nhiều phép biến đổi dài vào một công thức",
+                    "Mỗi dòng biến đổi vẫn là công thức đầy đủ trong cặp $...$, kể cả dòng bắt đầu bằng dấu = "
+                            + "(ví dụ: $= 4(x - 2)(x + 2)$)")) {
+                assertTrue(p.contains(part), type + " thiếu: " + part);
+            }
+        }
+    }
+
+    /**
+     * Dấu "?" cuối câu dẫn dạng hỏi do bước giải mã thêm (StemPunctuation), không dựa vào prompt: đo đề 16 cho thấy model
+     * không tuân thủ (0/4), nên quy tắc đã bỏ khỏi cả 3 prompt ma trận.
+     */
+    @Test
+    void quyTacDauHoiKhongConNamTrongPromptMaTran() {
+        for (QuestionType type : QuestionType.values()) {
+            String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Tứ giác", null));
+            assertFalse(p.contains("kết thúc bằng dấu \"?\""), type + " còn quy tắc dấu hỏi");
+            assertFalse(p.contains("Câu dẫn dạng câu hỏi"), type + " còn quy tắc dấu hỏi");
+            assertTrue(p.contains("không đặt dấu hai chấm sau \"là\"") || p.contains("KHÔNG đặt dấu hai chấm sau \"là\""),
+                    type + " vẫn phải giữ quy tắc không dấu hai chấm sau \"là\"");
+        }
+    }
+
+    /** Quy tắc 4/11 là hằng riêng của prompt ma trận: prompt Solver và prompt sinh lẻ không chứa. */
+    @Test
+    void quyTacKyHieuKhongNamTrongSolverVaPromptSinhLe() {
+        List<String> prompts = List.of(
+                new PromptBuilder().buildSolverPrompt("Tính $1 + 1$.", "$1$", "$2$", "$3$", "$4$"),
+                SaPromptDraftV0.buildSolverPrompt("Tính $1 + 1$."),
+                TfPromptDraftV0.buildSolverPrompt("Cho $x = 1$.", List.of("a", "b", "c", "d")),
+                SaPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, "Giải $2x - 6 = 0$.", Difficulty.EASY));
+        for (String prompt : prompts) {
+            for (String marker : List.of("KÝ HIỆU trong công thức", "\\perp", "mỗi bước biến đổi một dòng",
+                    "kết thúc bằng dấu \"?\"")) {
+                assertFalse(prompt.contains(marker), marker + " lọt vào: " + prompt);
             }
         }
     }

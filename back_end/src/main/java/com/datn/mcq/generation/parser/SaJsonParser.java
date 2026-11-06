@@ -37,7 +37,8 @@ public final class SaJsonParser {
             return new ParsedSaDto(false, null, null, null, false, ex.getMessage());
         }
         Object answer = obj.get("answer");
-        String questionText = LlmOutputRepair.textField("question_text", obj.get("question_text"), repair, true,
+        String questionText = StemPunctuation.stem("question_text",
+                LlmOutputRepair.textField("question_text", obj.get("question_text"), repair, true, warnings), false, repair,
                 warnings);
         String explanation = LlmOutputRepair.textField("explanation", obj.get("explanation"), repair, true, warnings);
         // answer: chỉ trim, không đổi \n; chế độ sửa vẫn tự đóng "$" (ví dụ "$3\sqrt{2}").

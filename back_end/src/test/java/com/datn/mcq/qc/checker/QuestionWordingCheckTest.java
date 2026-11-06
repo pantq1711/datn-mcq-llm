@@ -110,6 +110,77 @@ class QuestionWordingCheckTest {
         assertEquals(List.of(), checker.check(mcq).warnings());
     }
 
+    /**
+     * Góp ý giáo viên 4/11: phương án mcq viết quan hệ bằng chữ giữa hai tên đối tượng in hoa ("AD vuông góc với BC") thì gợi ý
+     * dùng ký hiệu. Chỉ để đo, KHÔNG bật cờ.
+     */
+    @Test
+    void nhanDienPhuongAnVietQuanHeBangChuGiuaHaiTenDoiTuong() {
+        for (String text : List.of("$AD$ vuông góc với $BC$.", "AD vuông góc với BC.", "AB song song với CD", "Đoạn $MN$ lớn hơn $PQ$.",
+                "$AH$ NHỎ HƠN $BC$.", "Đường thẳng AB  song\nsong với CD.", "A vuông góc với B", "$A'B'$ song song với $CD$.")) {
+            assertEquals(1, QuestionWordingCheck.symbolSuggestedPhrases(text).size(), text);
+        }
+        assertEquals(List.of("vuông góc với"), QuestionWordingCheck.symbolSuggestedPhrases("$AD$ vuông góc với $BC$."));
+        assertEquals(List.of("song song với"), QuestionWordingCheck.symbolSuggestedPhrases("AB song song với CD"));
+        assertEquals(List.of("lớn hơn"), QuestionWordingCheck.symbolSuggestedPhrases("MN lớn hơn PQ"));
+        assertEquals(List.of("nhỏ hơn"), QuestionWordingCheck.symbolSuggestedPhrases("MN nhỏ hơn PQ"));
+    }
+
+    @Test
+    void phuongAnDungKyHieuHoacKhongGiuaHaiTenDoiTuongKhongBiBat() {
+        for (String text : List.of("$AD \\perp BC$.", "$AD \\parallel BC$.", "$x > 3$.", "Hai đường thẳng $AB$ và $CD$ song song với nhau.",
+                "Hai đường thẳng vuông góc với nhau.", "Số $a$ lớn hơn 3.", "Cạnh đáy lớn hơn cạnh bên.", "vuông góc với BC",
+                "AD vuông góc với", "ADBC vuông góc với BCDE", "", "  ")) {
+            assertEquals(List.of(), QuestionWordingCheck.symbolSuggestedPhrases(text), text);
+        }
+        assertEquals(List.of(), QuestionWordingCheck.symbolSuggestedPhrases(null));
+    }
+
+    @Test
+    void mcqLlmPhuongAnVietBangChuBiGanCanhBaoSymbolSuggestedNhungVanQuaFormat() {
+        QuestionQcInput mcq = new QuestionQcInput(1, true, "Cho hình thang $ABCD$. Khẳng định nào đúng?", "$AD$ vuông góc với $BC$.",
+                "$AB \\parallel CD$.", "$AB$ song song với $CD$.", "$AB = CD$.", Option.B, "Lời giải.", true, false, null)
+                .withLlmOutput(true);
+        FormatChecker.FormatCheckOutcome out = checker.check(mcq);
+        assertTrue(out.passed(), out.errors().toString());
+        assertEquals(List.of(
+                "option_a: wording_symbol_suggested (dùng chữ \"vuông góc với\" thay vì ký hiệu)",
+                "option_c: wording_symbol_suggested (dùng chữ \"song song với\" thay vì ký hiệu)"), out.warnings());
+    }
+
+    @Test
+    void canhBaoSymbolSuggestedChiChoPhuongAnMcqCuaDauRaLlm() {
+        String text = "$AD$ vuông góc với $BC$.";
+        // đề dẫn, lời giải của mcq: không kiểm
+        QuestionQcInput mcq = new QuestionQcInput(1, true, text, "$1$.", "$2$.", "$3$.", "$4$.", Option.B, text, true, false, null)
+                .withLlmOutput(true);
+        assertEquals(List.of(), checker.check(mcq).warnings());
+        // chữ giáo viên viết: không kiểm
+        QuestionQcInput teacher = new QuestionQcInput(1, true, "Đề.", text, "$2$.", "$3$.", "$4$.", Option.B, "Lời giải.", true, false,
+                null);
+        assertEquals(List.of(), checker.check(teacher).warnings());
+        // sa và tf: không kiểm (chỉ phương án mcq)
+        QuestionQcInput sa = QuestionQcInput.shortAnswer(1, true, text, text, "5", true, true, false, null).withLlmOutput(true);
+        assertEquals(List.of(), checker.check(sa).warnings());
+        QuestionQcInput tf = QuestionQcInput.trueFalse(1, true, "Cho hình thang cân $ABCD$.", List.of(text, text, text, text),
+                List.of("T", "T", "T", "F"), "Lời giải.", true, false, null).withLlmOutput(true);
+        assertEquals(List.of(), checker.check(tf).warnings());
+    }
+
+    /** Cảnh báo chỉ để đo: KHÔNG bật cờ "cần xem kỹ", khác các cảnh báo văn phong khác (bật cờ). */
+    @Test
+    void canhBaoSymbolSuggestedKhongBatCoCanXemKy() {
+        String w = QuestionWordingCheck.symbolSuggestedWarning("option_a", "vuông góc với");
+        assertEquals("option_a: wording_symbol_suggested (dùng chữ \"vuông góc với\" thay vì ký hiệu)", w);
+        assertTrue(QuestionWordingCheck.isSymbolSuggestedWarning(w));
+        assertFalse(QuestionWordingCheck.isSymbolSuggestedWarning("question_text: dùng sai thuật ngữ \"cạnh biên\" (SGK: \"cạnh bên\")"));
+        assertFalse(QuestionWordingCheck.isSymbolSuggestedWarning(null));
+        assertEquals(List.of(), new QcSummary(true, true, null, false, List.of(w)).reviewReasons());
+        assertEquals(List.of("warning: question_text: có hướng dẫn nhập đáp án trong câu dẫn"),
+                new QcSummary(true, true, null, false, List.of(w, "question_text: có hướng dẫn nhập đáp án trong câu dẫn"))
+                        .reviewReasons());
+    }
+
     @Test
     void canhBaoNayBatCoCanXemKy() {
         assertEquals(List.of("warning: question_text: dùng sai thuật ngữ \"cạnh biên\" (SGK: \"cạnh bên\")"),
