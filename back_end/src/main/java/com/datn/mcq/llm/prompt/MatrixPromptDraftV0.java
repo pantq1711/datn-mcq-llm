@@ -8,6 +8,7 @@ import com.datn.mcq.enums.QuestionType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * BẢN NHÁP v0 – CHỜ THÀNH VIÊN PHỤ TRÁCH PROMPT DUYỆT – KHÔNG DÙNG CHO THỰC NGHIỆM C1/C2/C3.
@@ -85,14 +86,16 @@ public final class MatrixPromptDraftV0 {
      * chấm sau "là") cho cả 3 dạng, {@link #MCQ_OPTION_PUNCTUATION_RULE} cho mcq, {@link #SA_ANSWER_INPUT_RULE} cho sa; chữ
      * đáp án đúng của mcq do hệ thống giao trước qua ghi chú của job ({@link McqAnswerPlan}). mcq v7, sa v9, tf v9 (ngày 4/11,
      * góp ý giáo viên 4/11): {@link #WORDING_RULES} cho cả 3 dạng (quan hệ giữa các đối tượng đã đặt tên viết bằng ký hiệu,
-     * lời giải mỗi bước biến đổi một dòng và mỗi dòng vẫn nằm trong cặp $...$; dấu "?" cuối câu dẫn do bước giải mã thêm). Run cũ là v0 (tf: v0, v1, v2,
-     * v3, v4, v5, v6, v7, v8; mcq: v1, v2, v3, v4, v5, v6; sa: v1, v2, v3, v4, v5, v6, v7, v8).
+     * lời giải mỗi bước biến đổi một dòng và mỗi dòng vẫn nằm trong cặp $...$; dấu "?" cuối câu dẫn do bước giải mã thêm).
+     * mcq v8, sa v10, tf v10 (ngày 8/11, giáo viên chỉ ra ý Toán 8 phải giải bất phương trình bậc hai và còn vô nghĩa): khối
+     * "PHẠM VI KIẾN THỨC" ({@link #gradeScopeBlock}) cho cả 3 dạng, thêm dòng cấm riêng của Toán 8 hoặc Toán 9. Run cũ là v0
+     * (tf: v0, v1, v2, v3, v4, v5, v6, v7, v8, v9; mcq: v1, v2, v3, v4, v5, v6, v7; sa: v1, v2, v3, v4, v5, v6, v7, v8, v9).
      */
     public static String promptVersion(QuestionType type) {
         String version = switch (type) {
-            case TF -> "-v9-draft";
-            case SA -> "-v9-draft";
-            case MCQ -> "-v7-draft";
+            case TF -> "-v10-draft";
+            case SA -> "-v10-draft";
+            case MCQ -> "-v8-draft";
         };
         return VERSION_PREFIX + type.getDbValue() + version;
     }
@@ -202,6 +205,47 @@ public final class MatrixPromptDraftV0 {
      */
     static final String EXPLANATION_RULE = "- Lời giải chỉ trình bày bản cuối cùng, mạch lạc; không ghi quá trình nháp, "
             + "không xin lỗi, không \"tính lại\", không đổi dữ kiện của đề.";
+
+    /**
+     * Phạm vi kiến thức theo lớp của cả 3 dạng (8/11, giáo viên chỉ ra ý Đúng/Sai Toán 8 "giá trị nguyên lớn nhất của x để
+     * M = −2x² + 2x + 10 nhận giá trị âm" phải giải bất phương trình bậc hai, học sinh lớp 8 chưa học, và ý còn vô nghĩa vì
+     * không có giá trị nguyên lớn nhất). Đặt cạnh mức độ và yêu cầu cần đạt. {@code {lớp}} được thay bằng
+     * {@link MatrixCellSpec#gradeLevel()}; khối chỉ được thêm khi ô có lớp. Hằng riêng của prompt ma trận: prompt Solver và
+     * prompt sinh lẻ không chứa.
+     */
+    static final String GRADE_SCOPE_HEADER = "PHẠM VI KIẾN THỨC:";
+
+    static final String GRADE_SCOPE_RULES = """
+            - Chỉ dùng kiến thức của lớp {lớp} đã học đến hết bài trong ô ma trận này (Chương trình GDPT 2018). Không dùng \
+            kiến thức của lớp trên hoặc của bài học sau.
+            - Ở mức Vận dụng, tăng độ khó bằng cách phối hợp nhiều bước của chính bài này, không đưa thêm kiến thức mới.
+            - Câu hoặc ý hỏi giá trị lớn nhất, nhỏ nhất, giá trị nguyên chỉ được ra khi giá trị đó tồn tại và tìm được bằng \
+            kiến thức trong phạm vi trên.
+            """;
+
+    /** Dòng cấm riêng của môn Toán theo lớp; chỉ chèn khi môn Toán và đúng lớp (không nhét mọi lớp vào mọi prompt). */
+    static final Map<Integer, String> MATH_GRADE_SCOPE_BANS = Map.of(
+            8, "- Toán 8: KHÔNG dùng bất đẳng thức, bất phương trình, phương trình bậc hai, căn bậc hai/căn thức, hệ phương "
+                    + "trình, tỉ số lượng giác.\n",
+            9, "- Toán 9: KHÔNG dùng hàm số y = ax² + bx + c tổng quát, bất phương trình bậc hai, vectơ, định lí sin/côsin.\n");
+
+    /** Khối phạm vi kiến thức (kết thúc bằng xuống dòng); null khi ô chưa có lớp. */
+    static String gradeScopeBlock(String subject, Integer gradeLevel) {
+        if (gradeLevel == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder(GRADE_SCOPE_HEADER).append("\n")
+                .append(GRADE_SCOPE_RULES.replace("{lớp}", String.valueOf(gradeLevel)));
+        String nfc = java.text.Normalizer.normalize(subject == null ? "" : subject, java.text.Normalizer.Form.NFC)
+                .toLowerCase(Locale.ROOT);
+        if (nfc.contains("toán")) {
+            String ban = MATH_GRADE_SCOPE_BANS.get(gradeLevel);
+            if (ban != null) {
+                sb.append(ban);
+            }
+        }
+        return sb.toString();
+    }
 
     /** Dòng của {@link TfPromptDraftV0#STATEMENT_RULES} bị bỏ khi ghi chú của job có mẫu nhãn mục tiêu. */
     static final String TF_FREE_COUNT_LINE = "- Không bắt buộc số ý Đúng hay số ý Sai.";
@@ -472,6 +516,10 @@ public final class MatrixPromptDraftV0 {
         } else {
             sb.append("Mức độ nhận thức mục tiêu: ").append(TfPromptDraftV0.levelName(spec.difficulty()))
                     .append(". Câu hỏi bám đúng yêu cầu cần đạt của mức này.\n");
+        }
+        String scope = gradeScopeBlock(subject, spec.gradeLevel());
+        if (scope != null) {
+            sb.append(scope);
         }
         sb.append(NEW_PROBLEM_RULE).append("\n");
         if (isGeometry(spec)) {
