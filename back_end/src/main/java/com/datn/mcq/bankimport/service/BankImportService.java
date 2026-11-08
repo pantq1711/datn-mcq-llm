@@ -62,6 +62,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -110,6 +111,7 @@ public class BankImportService {
     private final TeacherReviewStatementRepository reviewStatements;
     private final BankService bankService;
     private final ImportBatchWriter batchWriter;
+    private final Clock clock;
     private final Map<Integer, Deque<Long>> uploadTimes = new ConcurrentHashMap<>();
 
     @Autowired
@@ -118,7 +120,8 @@ public class BankImportService {
                              GenerationService generationService, GeneratedQuestionRepository questions,
                              GeneratedQuestionStatementRepository questionStatements, TeacherReviewRepository reviews,
                              TeacherReviewStatementRepository reviewStatements, BankService bankService,
-                             ImportBatchWriter batchWriter) {
+                             ImportBatchWriter batchWriter,
+                             @Autowired(required = false) Clock clock) {
         this.batchWriter = batchWriter;
         this.props = props;
         this.inputGuard = inputGuard;
@@ -132,6 +135,17 @@ public class BankImportService {
         this.reviews = reviews;
         this.reviewStatements = reviewStatements;
         this.bankService = bankService;
+        this.clock = clock != null ? clock : Clock.systemDefaultZone();
+    }
+
+    public BankImportService(BankImportProperties props, DocxInputGuard inputGuard, PandocLimiter limiter,
+                             ImportBatchRepository batches, ImportDedupRepository dedup, CatalogService catalogService,
+                             GenerationService generationService, GeneratedQuestionRepository questions,
+                             GeneratedQuestionStatementRepository questionStatements, TeacherReviewRepository reviews,
+                             TeacherReviewStatementRepository reviewStatements, BankService bankService,
+                             ImportBatchWriter batchWriter) {
+        this(props, inputGuard, limiter, batches, dedup, catalogService, generationService, questions,
+                questionStatements, reviews, reviewStatements, bankService, batchWriter, Clock.systemDefaultZone());
     }
 
     // ---------- tải lên → bản xem trước ----------
@@ -145,7 +159,7 @@ public class BankImportService {
      */
     public BatchDto upload(Integer ownerId, String fileName, byte[] content, String topic, Integer gradeLevel) {
         checkRate(ownerId);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         // Kiểm sớm để khỏi phân tích file vô ích; kiểm chính thức (có khóa theo người tải) ở ImportBatchWriter.savePreview.
         if (batches.countByOwnerIdAndStatusAndExpiresAtAfter(ownerId, ImportBatch.STATUS_PREVIEW, now)
                 >= props.getMaxPendingBatches()) {
@@ -190,7 +204,7 @@ public class BankImportService {
             b.setQuestionCount(doc.questions().size());
             b.setSkippedCounts(JSON.writeValueAsString(skippedCounts(preview.skipped())));
             b.setPreview(JSON.writeValueAsString(preview));
-            LocalDateTime createdAt = LocalDateTime.now();
+            LocalDateTime createdAt = LocalDateTime.now(clock);
             b.setCreatedAt(createdAt);
             b.setExpiresAt(createdAt.plus(props.getPreviewTtl()));
             ImportBatch saved = batchWriter.savePreview(b);
@@ -333,7 +347,7 @@ public class BankImportService {
         }
         counts.forEach((type, n) -> runs.put(type, generationService.createImportRun(b.getSubjectId(), type, n)));
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         List<Integer> bankItemIds = new ArrayList<>();
         for (ImportItem i : chosen) {
             bankItemIds.add(writeItem(i, b, tpl.getId(), runs.get(type(i)).getId(), ownerId, now));
@@ -495,16 +509,16 @@ public class BankImportService {
     @Scheduled(initialDelayString = "${app.bank-import.purge-initial-delay-ms:60000}",
             fixedDelayString = "${app.bank-import.purge-interval-ms:3600000}")
     public int purgeExpired() {
-        int n = batches.expirePreviews(LocalDateTime.now());
+        int n = batches.expirePreviews(LocalDateTime.now(clock));
         if (n > 0) {
             LOG.info("Nhập từ Word: {} lô xem trước quá hạn đã bị xóa nội dung", n);
         }
         return n;
     }
 
-    private static boolean isExpired(ImportBatch b) {
+    private boolean isExpired(ImportBatch b) {
         return ImportBatch.STATUS_EXPIRED.equals(b.getStatus())
-                || (ImportBatch.STATUS_PREVIEW.equals(b.getStatus()) && !b.getExpiresAt().isAfter(LocalDateTime.now()));
+                || (ImportBatch.STATUS_PREVIEW.equals(b.getStatus()) && !b.getExpiresAt().isAfter(LocalDateTime.now(clock)));
     }
 
     // ---------- tiện ích ----------
@@ -529,7 +543,7 @@ public class BankImportService {
 
     /** Tính mọi lần thử trong một giờ gần nhất (kể cả lần lỗi); quá hạn thì 429. Trong bộ nhớ, theo từng giáo viên. */
     private void checkRate(Integer ownerId) {
-        long now = System.currentTimeMillis();
+        long now = clock.millis();
         Deque<Long> times = uploadTimes.computeIfAbsent(ownerId, k -> new ArrayDeque<>());
         synchronized (times) {
             while (!times.isEmpty() && now - times.peekFirst() >= HOUR_MS) {
