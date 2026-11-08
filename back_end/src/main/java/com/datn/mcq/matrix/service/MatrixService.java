@@ -414,6 +414,19 @@ public class MatrixService {
         return out;
     }
 
+    /** F-07: các ô theo id bằng một truy vấn (xem đề và danh sách đề nạp ô của nhiều chỗ cùng lúc); id không có thì bỏ qua. */
+    @Transactional(readOnly = true)
+    public Map<Integer, ExamMatrixCell> cellsByIds(java.util.Collection<Integer> cellIds) {
+        Map<Integer, ExamMatrixCell> out = new LinkedHashMap<>();
+        if (cellIds.isEmpty()) {
+            return out;
+        }
+        for (ExamMatrixCell c : cellRepository.findAllById(cellIds)) {
+            out.put(c.getId(), c);
+        }
+        return out;
+    }
+
     /** Các ô của một ma trận theo thứ tự (dùng cho module exam). */
     @Transactional(readOnly = true)
     public List<ExamMatrixCell> cells(Integer matrixId) {

@@ -12,9 +12,11 @@ Mục tiêu: một VPS Linux có tên miền và HTTPS để giáo viên dùng t
 > | Luồng tạo ma trận → tạo đề → Giữ / Sửa / Đổi → xuất Word, bằng Gemini giả qua `LLM_BASE_URL` | Đã chạy, đạt |
 > | Đo bộ nhớ khi worker chạy và khi xuất Word đồng thời (mục 2) | Đã chạy |
 > | Sao lưu, khôi phục vào DB tạm (so số bản ghi), khôi phục đè (`restore.sh --yes`) | Đã chạy, đạt |
-> | **Image `web` (frontend thật)** | **Chưa build được:** `npm run build` (`tsc -b`) báo 3 lỗi TypeScript có sẵn trong mã frontend (`Header.tsx`, `Sidebar.tsx`, `ReviewQuestionForm.tsx`). Chờ người làm frontend sửa. |
-> | **CI trên GitHub (D7)** | **Chưa chạy.** Job `frontend` sẽ đỏ vì lỗi TypeScript trên; chờ frontend sửa rồi mở PR để kích hoạt. |
+> | Image `web` (frontend thật), 04/11/2026, Docker Desktop trên Windows | Đã chạy, đạt: `docker build -f deploy/web/Dockerfile .` thành công (97,6 MB), `caddy validate` Caddyfile hợp lệ. (Ghi chú 25/10 về 3 lỗi TypeScript của `npm run build` không còn đúng với mã hiện tại.) |
+> | **CI trên GitHub (D7)** | Chưa xác minh lại sau khi lỗi TypeScript được sửa (không kiểm trong lượt này). |
+> | Xuất Word `?equation=mathtype` trong container Linux (04/11/2026, `mem_limit` 1536m, 2 CPU) | Đã chạy qua `PandocRunner` thật: đề 40 câu × 6 công thức, 256 đối tượng MathType, ~3 giây mỗi lần sau lần đầu (lần đầu ~4,5 giây), heap sau GC ~13 MiB, không OOM, 3 yêu cầu đồng thời xếp hàng qua Semaphore 1 (tổng ~9 giây). Chưa thử trên máy chủ thật và chưa mở file bằng Word/MathType. |
 > | Gemini **thật** trong container (`LLM_API_KEY` đặt qua `deploy/.env`): đề 3 câu (1 mcq, 1 tf, 1 sa) | Đã chạy, đạt: 3/3 câu `ready` sau ~2 phút, xuất Word 200. Câu tf có cờ "cần xem kỹ" (`solver_inconsistent`): Solver thật lệch nhãn, đúng thiết kế, không phải lỗi triển khai |
+> | Giám sát (08/11, Docker Desktop, mục 6b): Prometheus scrape `app` (target `up`), dashboard nạp qua provisioning, Grafana `127.0.0.1:3000`, `/actuator/prometheus` và `/actuator/health` từ ngoài qua Caddy trả 404 | Đã chạy, đạt. Chưa chạy trên VPS thật |
 > | `update.sh`, kéo image từ GHCR, Let's Encrypt trên tên miền thật | Chưa chạy (cần image đã đẩy lên GHCR, máy chủ thật, tên miền) |
 >
 > Lần kiểm chứng dùng một trang tĩnh giả thay cho frontend (Caddyfile là bản thật của repo).
@@ -72,8 +74,10 @@ nhà cung cấp, cho mở cổng 80 và 443 (Let's Encrypt cần cả hai), tên
 
 ## 3. Chuẩn bị trước
 
-1. **Tên miền** và bản ghi DNS `A` (và `AAAA` nếu có IPv6) trỏ về IP máy chủ. Caddy chỉ xin được chứng chỉ khi DNS đã đúng
-   và cổng 80/443 thông từ Internet.
+1. **Tên miền** và bản ghi DNS `A` trỏ về IP máy chủ. **Không tạo bản ghi `AAAA`**: kết nối IPv6 qua `docker-proxy` có thể
+   bị gom thành một IP, khi đó giới hạn đăng nhập theo IP (mục 5, D3) khóa nhầm cả nhóm người dùng. Caddy chỉ xin được
+   chứng chỉ khi DNS đã đúng và cổng 80/443 thông từ Internet; hãy kiểm DNS trước khi `docker compose up`. Tên miền
+   đuôi `.app` nằm trong danh sách HSTS preload của trình duyệt: chỉ vào được bằng HTTPS, nên không thể thử qua http.
 2. **Mọi thay đổi đã nằm trên `main`** và workflow CI của lần push đó đã xanh (đã đẩy image `sha-…` và `latest`).
 3. **Khóa Gemini riêng cho môi trường thật**, nên đặt hạn mức chi tiêu/cảnh báo ngân sách ở phía Google.
 4. **Giá trị `VITE_API_BASE_URL`**: image `web` do CI build với mặc định `/api`. Giá trị này được ghi cứng vào bản build
@@ -91,8 +95,11 @@ nhà cung cấp, cho mở cổng 80 và 443 (Let's Encrypt cần cả hai), tên
 ```bash
 # 4.1 Tài khoản và SSH (làm một lần). Chỉ đăng nhập bằng key; tắt đăng nhập root và mật khẩu.
 adduser deploy && usermod -aG sudo deploy
-#   chép public key vào /home/deploy/.ssh/authorized_keys; trong /etc/ssh/sshd_config đặt:
-#   PasswordAuthentication no   và   PermitRootLogin no     rồi: systemctl restart ssh
+#   chép public key vào /home/deploy/.ssh/authorized_keys, thử đăng nhập bằng key ở phiên MỚI, rồi mới khóa.
+#   Ubuntu 24.04 đọc /etc/ssh/sshd_config.d/*.conf trước file chính và giá trị đầu tiên thắng; file cloud-init
+#   (50-cloud-init.conf) có thể đặt PasswordAuthentication yes, nên tạo /etc/ssh/sshd_config.d/00-hardening.conf:
+#   PasswordAuthentication no / KbdInteractiveAuthentication no / PermitRootLogin no
+#   kiểm bằng: sshd -T | grep -Ei 'passwordauthentication|permitrootlogin'   rồi: sshd -t && systemctl restart ssh
 
 # 4.2 Cập nhật, tường lửa, tự cập nhật bản vá
 apt update && apt -y upgrade
@@ -138,12 +145,16 @@ Máy chủ kéo được mà không cần đăng nhập. Image không chứa bí
 
 ### 4.8 Khởi động lần đầu
 
+> Build ngay trên máy chủ (không dùng GHCR): đặt trong `deploy/.env` `COMPOSE_FILE=compose.prod.yaml:compose.build.yaml` và
+> `APP_TAG=local`, bỏ `docker compose pull` và chạy `docker compose up -d --build` (lần đầu 10–20 phút; nên chạy trong `tmux`).
+> Cần swap (mục 4.3). Cách này chưa chạy thử trên máy chủ thật; chi tiết ở mục 8.
+
 ```bash
 cd /opt/datn/deploy
 docker compose pull
 docker compose up -d
 docker compose ps                         # db, app, web đều "healthy"/"running" (app mất ~1–2 phút)
-docker compose logs -f --tail=100 app     # Flyway migrate lên V16; dòng "Đã tạo tài khoản admin đầu tiên: <email>"
+docker compose logs -f --tail=100 app     # Flyway migrate lên migration mới nhất (V26 ở 04/11/2026); dòng "Đã tạo tài khoản admin đầu tiên: <email>"
 ```
 
 Kiểm tra: mở `https://<tên miền>` (chứng chỉ do Caddy tự xin lần đầu, có thể mất vài chục giây); `curl -i
@@ -186,7 +197,16 @@ Biến đặt trong `deploy/.env` (mẫu: `deploy/.env.example`). Compose **đè
 - **Múi giờ `Asia/Bangkok`:** code dùng `LocalDateTime.now()` và cột `TIMESTAMP` không múi giờ nên giờ phụ thuộc múi giờ
   JVM. Image đặt `-Duser.timezone=Asia/Bangkok` và `TZ`; PostgreSQL cũng đặt `timezone=Asia/Bangkok`. Đừng đổi giữa chừng
   trên dữ liệu đã có.
-- **JVM:** heap = 55% bộ nhớ container (`mem_limit` của `app` mặc định 1536m, mục 2 "Cấu hình 4 GB"; máy 2 GB đặt `APP_MEM_LIMIT=1g`). Để chỉnh, đặt `JAVA_TOOL_OPTIONS` trong
+- **Gemini, hạn mức (không có trong `.env.example`):** `LLM_MIN_SPACING_MS` (mặc định `4200` = 15 yêu cầu/phút) và
+  `LLM_DAILY_QUOTA` (mặc định `480`, tức ~96% của 500 lượt/ngày) là bộ điều tiết dùng chung cho cả hệ thống, đặt theo hạn mức
+  thật của khóa: `LLM_MIN_SPACING_MS` ≈ `60000 / RPM` làm tròn lên cộng ~200 ms, `LLM_DAILY_QUOTA` ≈ 96% số lượt/ngày.
+  `LLM_RATE_LIMIT_COOLDOWN_MS` (`60000`) là thời gian nghỉ khi Gemini trả 429. Không đặt `EXPERIMENT_ENABLED`,
+  `EMBEDDING_MODEL`, `JAVA_TOOL_OPTIONS` ở môi trường thật.
+- **Nhập ngân hàng từ Word:** `BANK_IMPORT_MAX_FILE_BYTES` (10 MB), `BANK_IMPORT_MAX_QUESTIONS` (200 câu/tệp),
+  `BANK_IMPORT_MAX_PENDING` (3 lô chờ xác nhận mỗi giáo viên), `BANK_IMPORT_MAX_UPLOADS_PER_HOUR` (30),
+  `BANK_IMPORT_PREVIEW_TTL` (24h). Không gọi Gemini nên không tính vào hạn mức sinh câu.
+- **JVM:** heap = 55% bộ nhớ container (`mem_limit` của `app` mặc định 1536m, mục 2 "Cấu hình 4 GB"; máy 2 GB đặt `APP_MEM_LIMIT=1g`).
+  Đo trong container ngày 04/11/2026: với giới hạn 1536m, `MaxHeapSize` = 846 MiB và JVM chọn Serial GC (dưới 1792 MiB bộ nhớ). Để chỉnh, đặt `JAVA_TOOL_OPTIONS` trong
   `deploy/.env` (thay **toàn bộ** cờ trong image, nhớ giữ `-Djava.awt.headless=true` và `-Duser.timezone=Asia/Bangkok`).
 - **Upload:** hiện chưa có endpoint upload; giới hạn 10 MB/tệp, 12 MB/yêu cầu (backend) và 12 MB thân `/api/*` (Caddy)
   chỉ là chuẩn bị. Muốn đổi thì sửa cả `application-prod.yaml` và `deploy/web/Caddyfile`.
@@ -238,6 +258,11 @@ Log lưu bằng `json-file`, xoay vòng 5 file × 10 MB mỗi container.
 
 ### Cập nhật phiên bản
 
+> `scripts/update.sh` chỉ dành cho image kéo từ GHCR (nó chạy `docker compose pull`). Khi build tại chỗ (`APP_TAG=local`),
+> cập nhật bằng: `bash scripts/backup.sh` → `git pull --ff-only` → `docker compose up -d --build` → chờ `app` healthy.
+> Quay lại bản cũ khi giữa hai bản có migration mới thì phải khôi phục DB từ bản sao lưu *trước khi* chạy app cũ; không dùng
+> `restore.sh --yes` cho trường hợp này vì script khởi động lại container `app` đang mang image mới (migrate tiến lại).
+
 ```bash
 bash scripts/update.sh                # kéo lại tag hiện tại trong .env (ví dụ latest)
 bash scripts/update.sh sha-1a2b3c4    # hoặc chỉ định tag (lấy ở trang Packages hoặc tab Actions)
@@ -281,6 +306,62 @@ bash scripts/restore.sh /var/backups/datn/datn-20261101-020000.dump --yes
 Admin quên mật khẩu: một admin khác đặt lại qua `POST /api/admin/users/{id}/reset-password`. Nếu không còn admin nào, đặt
 `ADMIN_EMAIL`/`ADMIN_PASSWORD` mới (email chưa thuộc tài khoản nào) và `docker compose up -d`.
 
+## 6b. Giám sát (Prometheus + Grafana, tùy chọn)
+
+Dành cho VPS **4 GB**. File `deploy/compose.monitoring.yaml` thêm hai container; không đổi `compose.prod.yaml`.
+
+```bash
+# trong deploy/.env: thêm file vào COMPOSE_FILE và đặt mật khẩu Grafana (chữ-số)
+COMPOSE_FILE=compose.prod.yaml:compose.monitoring.yaml
+GRAFANA_ADMIN_PASSWORD=<openssl rand -hex 16>
+docker compose up -d
+```
+
+- **Số liệu:** `app` xuất `/actuator/prometheus` (Micrometer). Danh sách metric `datn_*` và ý nghĩa: `docs/thong-ke/README.md`
+  mục "Số liệu vận hành thời gian thực". Dashboard "DATN – Vận hành" được nạp sẵn (provisioning), gồm bốn nhóm: Gemini, hàng đợi,
+  QC, xuất Word và hệ thống.
+- **Các biểu đồ trên dashboard** (bốn nhóm; tên metric ở `docs/thong-ke/README.md`):
+  - **Gemini:** mức dùng hạn mức ngày (đồng hồ %, cam từ 70%, đỏ từ 90%) và số lượt đã dùng/tối đa; lượt gọi theo kết quả mỗi
+    phút (`ok`, `http_429`, `http_error`, `network_error`); số 429 trong 1 giờ; thời gian chờ ở bộ điều tiết; thời gian một lượt
+    gọi; token mỗi giờ. Nhiều 429 hoặc đồng hồ gần đầy nghĩa là đang gọi dồn dập hoặc sắp hết hạn mức.
+  - **Hàng đợi:** số job theo trạng thái (`pending` tăng mãi là worker tắc hoặc chưa bật `WORKER_ENABLED`); thời gian xử lý
+    job theo loại (`generate`, `answer_check`, `grounding`); số job stale reset trong 24 giờ (khác 0 là có job bị kẹt, thường do
+    `app` khởi động lại giữa chừng); số job theo kết quả mỗi giờ.
+  - **QC:** câu bị loại hoặc bị cờ theo bước trong 24 giờ (`format`, `dedup`, `solver`, `solver_error`, `grounding`), là biểu
+    đồ cho thấy từng bước QC bắt được bao nhiêu lỗi; kết quả pipeline QC theo trạng thái; kết luận bám tài liệu.
+  - **Xuất Word và hệ thống:** thời gian trung bình và số lượt xuất Word (`omml`, `mathtype`) tính từ lúc `app` khởi động; số lần
+    bị từ chối vì bận (503 `EXPORT_BUSY`, khác 0 là máy chủ quá tải); heap JVM; yêu cầu HTTP theo mã trạng thái.
+  - Panel trống ("No data") thường là chưa có hoạt động tương ứng: nhóm Gemini/hàng đợi/QC chỉ có số khi worker bật và có đề
+    được tạo. Panel dạng tốc độ (`rate()`) trống khi không có hoạt động trong cửa sổ 5 phút.
+- **Bảo mật:** `GET /actuator/prometheus` **không cần JWT** (`SecurityConfig`), nên chỉ an toàn khi chỉ đi được từ mạng nội
+  bộ: `app` không publish cổng, Prometheus ở mạng `internal` (không ra Internet), Caddy trả 404 cho `/actuator/*` từ ngoài.
+  **Không** thêm `ports:` cho `app` và không bỏ khối `@internal` trong `Caddyfile`. Mọi đường actuator khác vẫn chỉ ADMIN.
+- **Xem Grafana:** chỉ nghe `127.0.0.1:3000` của máy chủ. Từ máy cá nhân:
+  `ssh -L 3000:127.0.0.1:3000 deploy@<máy chủ>` rồi mở `http://localhost:3000` (tài khoản `admin`, mật khẩu
+  `GRAFANA_ADMIN_PASSWORD`). Không đặt Grafana sau Caddy.
+- **RAM:** `prometheus` và `grafana` mỗi cái `mem_limit` 256m. Đo local (stack rảnh): Prometheus ~22 MiB, Grafana ~103 MiB. Tổng
+  giới hạn cả năm container ~2,9 GB: **không bật trên máy 2 GB**. Prometheus giữ dữ liệu 15 ngày hoặc 1 GB (cái nào tới trước).
+- **Kiểm sau khi bật** (thay `<tên miền>`):
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' https://<tên miền>/actuator/prometheus    # phải 404
+  docker compose exec -T prometheus wget -qO- http://localhost:9090/api/v1/targets | grep -o '"health":"[a-z]*"'   # up, up
+  ```
+- **Giới hạn đã biết:** `datn_gemini_daily_used` nạp lại từ DB khi `app` khởi động nên có thể thấp hơn thực tế sau khi khởi
+  động lại giữa ngày; Prometheus không có histogram nên dashboard hiển thị thời gian **trung bình**, không có p95 (p50/p95 theo
+  ngày nằm ở `docs/thong-ke/07-van-hanh.sql`).
+- **Chạy khi phát triển local** (backend chạy trên máy, không qua Docker): dùng `deploy/compose.monitoring-dev.yaml`, chỉ có
+  Prometheus + Grafana, scrape `host.docker.internal:8080`, không cần `deploy/.env`:
+  ```bash
+  docker compose -f deploy/compose.monitoring-dev.yaml up -d      # từ gốc repo
+  back_end/run-dev.sh                                             # hoặc ./mvnw spring-boot:run; backend phải nghe cổng 8080
+  # Grafana http://localhost:3000 (admin/admin), Prometheus http://localhost:9090 (Status > Targets)
+  docker compose -f deploy/compose.monitoring-dev.yaml down      # tắt (thêm -v để xóa dữ liệu)
+  ```
+  Số liệu hàng đợi/QC/xuất Word chỉ có khi có hoạt động: bật `WORKER_ENABLED=true` và tạo đề mới thấy `datn_job_*`, `datn_qc_*`;
+  `datn_gemini_*` cần gọi Gemini thật hoặc giả (`LLM_BASE_URL`).
+- **Tắt:** bỏ `compose.monitoring.yaml` khỏi `COMPOSE_FILE` rồi `docker compose up -d --remove-orphans`. Volume `prom_data`,
+  `grafana_data` giữ lại cho tới khi xóa tay.
+
 ## 7. CI/CD
 
 Workflow `.github/workflows/ci.yml`:
@@ -307,7 +388,10 @@ docker compose build                                  # app (back_end/Dockerfile
 docker compose build --build-arg VITE_API_BASE_URL=/api web
 ```
 
-Build backend cần khoảng 1–2 GB RAM trống cho Maven; không build trên VPS 2 GB.
+Build backend cần khoảng 1–2 GB RAM trống cho Maven; không build trên VPS 2 GB. Trên VPS 4 GB kèm swap 2 GB dự kiến build được
+(chưa chạy thử trên máy chủ thật); nên build lúc ít người dùng vì build chạy cạnh `app` đang phục vụ. Image build cũ trở thành
+image treo sau mỗi lần build lại: dọn bằng `docker image prune -f` và `docker builder prune -f --filter until=168h`
+(không dùng `docker volume prune`, sẽ xóa `pgdata` và chứng chỉ).
 
 Trên Windows dấu phân cách trong `COMPOSE_FILE` là `;` (`compose.prod.yaml;compose.build.yaml`), trên Linux/macOS là `:`.
 Có thể thay bằng `docker compose -f compose.prod.yaml -f compose.build.yaml ...`.
@@ -365,14 +449,15 @@ nhận cookie Secure qua http).
 
 - **Môn học "Giáo dục công dân":** V17 chỉ thêm tên môn. Các prompt sinh câu hiện viết cho giáo viên Toán THCS (một số
   prompt còn ghi cứng "Toán" khi không có tên môn), nên chất lượng sinh câu cho môn khác chưa được kiểm.
-- **Image `web` và CI (D7):** chờ người làm frontend sửa 3 lỗi TypeScript (xem "Trạng thái kiểm chứng").
+- **CI (D7):** chưa xác minh lại sau khi lỗi TypeScript của frontend được sửa (image `web` đã build được local, xem "Trạng thái kiểm chứng").
 - **Trích PDF của tài liệu bài học (W2-3):** PDFBox không có trần bộ nhớ cho luồng nén; một PDF độc có thể làm `app` hết heap và thoát (`ExitOnOutOfMemoryError`). Chi tiết và cách đã giảm rủi ro: `docs/api/README.md` mục 9.4.
 - **Kích thước image backend ~742 MB** (chưa tối ưu): chưa rõ phần nào chiếm nhiều (lớp Ubuntu, font, pandoc, JRE).
   Layered jar (Spring Boot `jarmode=tools`) có thể giảm lượng phải kéo mỗi lần cập nhật — chưa kiểm với Boot 4.1.1.
 - Xuất Word dạng MathType (`?equation=mathtype`) dùng Apache POI 5.4.1 (Apache-2.0) và JLaTeXMath 1.0.7 (GPL-2.0 kèm
   Classpath Exception: được liên kết vào ứng dụng mà không buộc ứng dụng theo GPL; phải ghi rõ trong tài liệu đồ án).
-  Image đã có font và `java.awt.headless=true`. **Chưa chạy thử trong container Linux**: mới kiểm trên Windows. Sau khi
-  deploy cần xuất một đề với `?equation=mathtype` và mở bằng Word.
+  Image đã có font (Liberation Serif thay Times New Roman khi đo phương án; JLaTeXMath dùng font đi kèm thư viện) và
+  `java.awt.headless=true`. Đã chạy thử trong container Linux ngày 04/11/2026 (xem "Trạng thái kiểm chứng"); **chưa** thử trên
+  máy chủ thật. Sau khi deploy cần xuất một đề với `?equation=mathtype` và mở bằng Word.
 - File MathType nặng khoảng 2 MB mỗi đề (Equation khoảng 20 KB) và xuất chậm hơn khoảng 2–3 giây, trong lúc đó vẫn giữ
   Semaphore của pandoc. Máy chủ 2 GB RAM: theo dõi bộ nhớ khi nhiều người xuất cùng lúc.
 - `update.sh` và kéo image từ GHCR: chưa chạy được vì chưa có image trên GHCR.

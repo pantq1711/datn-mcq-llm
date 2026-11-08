@@ -32,7 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ExamInExamDedupTest extends ExamFlowTestBase {
 
     /** Đầu ra của FakeGenerator khi sameMcq = true (k = 1). */
-    private static final String SAME_TEXT = "Bậc của đơn thức $2x^1$ là:";
+    /** Dạng đã chuẩn hóa của câu LLM giả sinh ra ("là:" thành "là" ở parser, 4/11), để đúng bằng văn bản câu sinh mới. */
+    private static final String SAME_TEXT = "Bậc của đơn thức $2x^1$ là";
     private static final String[] SAME_OPTIONS = {"$2$", "$1$", "$0$", "$3$"};
 
     private int matrixId;

@@ -34,6 +34,8 @@ const { Text, Paragraph } = Typography;
 interface Props {
     examId: string;
     slotId: string;
+    /** Số câu như thẻ câu ở trang đề (thứ tự trong Phần); thiếu thì dùng số thứ tự trong ô ma trận của backend. */
+    questionNo?: number;
     visible: boolean;
     onClose: () => void;
 }
@@ -73,6 +75,7 @@ function lineageHeader(lineage: QcLineage, index: number) {
 export const QcTraceModal: FC<Props> = ({
     examId,
     slotId,
+    questionNo,
     visible,
     onClose,
 }) => {
@@ -193,7 +196,7 @@ export const QcTraceModal: FC<Props> = ({
                         <div className="qc-trace-modal__context-item">
                             <span className="qc-trace-modal__context-label">Câu</span>
                             <Text strong>
-                                Câu {trace.slotNo} · Phần {trace.part}
+                                Câu {questionNo ?? trace.slotNo} · Phần {trace.part}
                                 {trace.topic ? ` · ${trace.topic}` : ""}
                             </Text>
                         </div>

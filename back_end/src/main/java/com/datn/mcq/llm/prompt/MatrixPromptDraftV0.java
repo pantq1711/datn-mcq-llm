@@ -83,14 +83,16 @@ public final class MatrixPromptDraftV0 {
      * kết quả, không làm tròn để rút gọn" trong {@link #SA_ANSWER_RULES}. mcq v6, sa v8, tf v8 (ngày 3/11, góp ý giáo viên
      * Toán thật trên đề 14): {@link #STYLE_RULES} (câu lệnh ngắn gọn, không dữ kiện thừa, đúng thuật ngữ SGK, không dấu hai
      * chấm sau "là") cho cả 3 dạng, {@link #MCQ_OPTION_PUNCTUATION_RULE} cho mcq, {@link #SA_ANSWER_INPUT_RULE} cho sa; chữ
-     * đáp án đúng của mcq do hệ thống giao trước qua ghi chú của job ({@link McqAnswerPlan}). Run cũ là v0 (tf: v0, v1, v2, v3,
-     * v4, v5, v6, v7; mcq: v1, v2, v3, v4, v5; sa: v1, v2, v3, v4, v5, v6, v7).
+     * đáp án đúng của mcq do hệ thống giao trước qua ghi chú của job ({@link McqAnswerPlan}). mcq v7, sa v9, tf v9 (ngày 4/11,
+     * góp ý giáo viên 4/11): {@link #WORDING_RULES} cho cả 3 dạng (quan hệ giữa các đối tượng đã đặt tên viết bằng ký hiệu,
+     * lời giải mỗi bước biến đổi một dòng và mỗi dòng vẫn nằm trong cặp $...$; dấu "?" cuối câu dẫn do bước giải mã thêm). Run cũ là v0 (tf: v0, v1, v2,
+     * v3, v4, v5, v6, v7, v8; mcq: v1, v2, v3, v4, v5, v6; sa: v1, v2, v3, v4, v5, v6, v7, v8).
      */
     public static String promptVersion(QuestionType type) {
         String version = switch (type) {
-            case TF -> "-v8-draft";
-            case SA -> "-v8-draft";
-            case MCQ -> "-v6-draft";
+            case TF -> "-v9-draft";
+            case SA -> "-v9-draft";
+            case MCQ -> "-v7-draft";
         };
         return VERSION_PREFIX + type.getDbValue() + version;
     }
@@ -147,6 +149,22 @@ public final class MatrixPromptDraftV0 {
             dấu hiệu nhận biết chung của hình thang cân).
             - Dùng đúng thuật ngữ trong sách giáo khoa Toán (ví dụ "cạnh bên" của hình thang, không viết "cạnh biên").
             - Câu dẫn dạng câu nối kết thúc bằng "là" thì KHÔNG đặt dấu hai chấm sau "là".
+            """;
+
+    /**
+     * Ký hiệu và cách trình bày lời giải của cả 3 dạng (4/11, góp ý giáo viên: "AD vuông góc với BC" viết bằng chữ thay vì
+     * $AD \perp BC$; lời giải dồn nhiều phép biến đổi vào một công thức; đo đề 16: dòng biến đổi viết không có $). Mỗi dòng là
+     * một gạch đầu dòng. Hằng riêng của prompt ma trận: prompt Solver và prompt sinh lẻ không chứa. Dấu "?" cuối câu dẫn dạng
+     * hỏi KHÔNG nằm trong prompt (đo đề 16: 0/4 câu tuân thủ): do bước giải mã thêm ({@code StemPunctuation}).
+     */
+    static final String WORDING_RULES = """
+            - Quan hệ toán học giữa các đối tượng đã đặt tên (vuông góc, song song, bằng, lớn hơn, nhỏ hơn, lớn hơn hoặc \
+            bằng, nhỏ hơn hoặc bằng, thuộc, không thuộc...) viết bằng KÝ HIỆU trong công thức: $AD \\perp BC$, \
+            $AD \\parallel BC$, $AD = BC$, $AD > BC$, $x \\ge 3$, $A \\in d$; không viết bằng chữ ("AD vuông góc với BC"). \
+            Ngoại lệ: câu mức Biết hỏi chính thuật ngữ hoặc định nghĩa thì giữ chữ.
+            - Lời giải viết mỗi bước biến đổi một dòng (xuống dòng giữa các bước), không dồn nhiều phép biến đổi dài vào một \
+            công thức. Mỗi dòng biến đổi vẫn là công thức đầy đủ trong cặp $...$, kể cả dòng bắt đầu bằng dấu = (ví dụ: \
+            $= 4(x - 2)(x + 2)$).
             """;
 
     /** Chỉ cho mcq (3/11): dấu chấm cuối mỗi phương án, đặt sau dấu $ đóng công thức. */
@@ -477,7 +495,7 @@ public final class MatrixPromptDraftV0 {
                         - Viết lời giải ngắn trong "explanation" và kiểm tra "correct_option" khớp với lời giải.
                         """);
                 sb.append(MCQ_DISTRACTOR_RULE).append("\n");
-                sb.append(MCQ_OPTION_RULES).append("\n").append(CONTENT_RULES).append(STYLE_RULES)
+                sb.append(MCQ_OPTION_RULES).append("\n").append(CONTENT_RULES).append(STYLE_RULES).append(WORDING_RULES)
                         .append(MCQ_OPTION_PUNCTUATION_RULE).append("\n").append(EXPLANATION_RULE).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append("""
@@ -496,14 +514,14 @@ public final class MatrixPromptDraftV0 {
                 if (levels != null && levels.size() == 4 && levels.get(3) == Difficulty.HARD) {
                     sb.append(TF_D_RULE).append("\n");
                 }
-                sb.append(CONTENT_RULES).append(STYLE_RULES).append(EXPLANATION_RULE).append("\n")
+                sb.append(CONTENT_RULES).append(STYLE_RULES).append(WORDING_RULES).append(EXPLANATION_RULE).append("\n")
                         .append(FACTORING_CELL_RULE_TF).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(TfPromptDraftV0.OUTPUT_INSTRUCTION);
             }
             case SA -> {
                 sb.append(SA_ANSWER_RULES);
-                sb.append("\nQuy tắc nội dung:\n").append(CONTENT_RULES).append(STYLE_RULES)
+                sb.append("\nQuy tắc nội dung:\n").append(CONTENT_RULES).append(STYLE_RULES).append(WORDING_RULES)
                         .append(SA_ANSWER_INPUT_RULE).append("\n").append(EXPLANATION_RULE).append("\n")
                         .append(FACTORING_CELL_RULE).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");

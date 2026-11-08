@@ -218,12 +218,42 @@ public class BankService {
     /** Một câu ngân hàng kèm ý (tf); dùng cho xem đề ở chế độ giáo viên (V7). */
     @Transactional(readOnly = true)
     public BankItemDto getItem(Integer id) {
-        BankItem item = bankItemRepository.findById(id)
-                .orElseThrow(() -> new java.util.NoSuchElementException("Không tìm thấy câu ngân hàng id=" + id));
-        List<BankItemStatement> statements = item.getQuestionType() == QuestionType.TF
-                ? bankItemStatementRepository.findByBankItemIdInOrderByBankItemIdAscPositionAsc(List.of(id))
-                : List.of();
-        return BankItemDto.fromEntity(item, statements);
+        return getItems(List.of(id)).get(id);
+    }
+
+    /**
+     * F-07: nhiều câu ngân hàng kèm ý (tf) bằng số truy vấn cố định: một cho {@code bank_item}, một cho ý của các câu tf
+     * (bỏ qua nếu không có câu tf). Id không có thì NoSuchElementException như {@link #getItem}.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<Integer, BankItemDto> getItems(java.util.Collection<Integer> ids) {
+        java.util.Set<Integer> distinct = new java.util.LinkedHashSet<>(ids);
+        java.util.Map<Integer, BankItemDto> out = new java.util.LinkedHashMap<>();
+        if (distinct.isEmpty()) {
+            return out;
+        }
+        java.util.Map<Integer, BankItem> items = new java.util.HashMap<>();
+        for (BankItem item : bankItemRepository.findAllById(distinct)) {
+            items.put(item.getId(), item);
+        }
+        for (Integer id : distinct) {
+            if (!items.containsKey(id)) {
+                throw new java.util.NoSuchElementException("Không tìm thấy câu ngân hàng id=" + id);
+            }
+        }
+        List<Integer> tfIds = items.values().stream().filter(i -> i.getQuestionType() == QuestionType.TF)
+                .map(BankItem::getId).toList();
+        java.util.Map<Integer, List<BankItemStatement>> statements = new java.util.HashMap<>();
+        if (!tfIds.isEmpty()) {
+            for (BankItemStatement s : bankItemStatementRepository
+                    .findByBankItemIdInOrderByBankItemIdAscPositionAsc(tfIds)) {
+                statements.computeIfAbsent(s.getBankItemId(), k -> new java.util.ArrayList<>()).add(s);
+            }
+        }
+        for (Integer id : distinct) {
+            out.put(id, BankItemDto.fromEntity(items.get(id), statements.getOrDefault(id, List.of())));
+        }
+        return out;
     }
 
     @Transactional

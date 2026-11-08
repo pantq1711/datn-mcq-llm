@@ -1,0 +1,14 @@
+# Cấu hình Prometheus cho compose.monitoring.yaml. Scrape mỗi 30 giây là đủ cho tải của hệ thống này.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: datn-app
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["app:8080"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -401,7 +401,7 @@ class ExamBuildTest {
                 + " AND bank_item_id IS NOT NULL", Integer.class, examId));
         List<Map<String, Object>> runs = jdbc.queryForList("SELECT * FROM experiment_run WHERE prompt_version LIKE"
                 + " 'matrix-%' ORDER BY id");
-        assertEquals(List.of("matrix-mcq-v6-draft", "matrix-tf-v8-draft", "matrix-sa-v8-draft"),
+        assertEquals(List.of("matrix-mcq-v7-draft", "matrix-tf-v9-draft", "matrix-sa-v9-draft"),
                 runs.stream().map(r -> r.get("prompt_version")).toList());
         for (Map<String, Object> run : runs) {
             assertEquals("production", run.get("purpose"));
@@ -1100,8 +1100,10 @@ class ExamBuildTest {
         // Hai câu mcq cùng ô của FakeGenerator cùng khuôn nên bị gắn similar_in_exam (ExamSimilarInExamTest): chỉ xét phần II.
         assertEquals(0, view.get("parts").get(1).get("items").findValues("needsReview").stream()
                 .filter(JsonNode::asBoolean).count());
-        assertEquals(0, json(perform(get("/api/exams")).andExpect(status().isOk())).get("items").get(0)
-                .get("needsReviewSlots").asInt(), "danh sách đề cũng không đếm");
+        // F-07 (3/11): danh sách đếm bằng đúng hàm của trang chi tiết nên cũng tính cờ similar_in_exam của hai câu mcq, khớp
+        // needsReviewCount; riêng câu tf lệch mẫu vẫn không được đếm (phần II ở trên không có câu nào bật cờ).
+        assertEquals(view.get("needsReviewCount").asInt(), json(perform(get("/api/exams")).andExpect(status().isOk()))
+                .get("items").get(0).get("needsReviewSlots").asInt(), "danh sách đề khớp trang chi tiết");
         assertEquals("qc_passed", jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?",
                 String.class, tf.get("questionId").asInt()));
 

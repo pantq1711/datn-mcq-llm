@@ -71,6 +71,8 @@ Hệ thống hỗ trợ giáo viên THCS (môn Toán) tạo đề kiểm tra the
    npm run dev
    ```
 
+5. **(Tùy chọn) Xem giám sát vận hành:** từ gốc repo chạy `docker compose -f deploy/compose.monitoring-dev.yaml up -d`, rồi mở Grafana tại `http://localhost:3000/d/datn-van-hanh` (tài khoản `admin` / `admin`). Prometheus (`http://localhost:9090`) tự lấy số liệu từ backend đang chạy trên máy ở cổng `8080`. Chi tiết và ý nghĩa từng biểu đồ: [`docs/deploy/README.md`](docs/deploy/README.md) mục 6b.
+
 ## 6. Chạy kiểm thử (test)
 
 - **Lệnh chạy test backend duy nhất trên Windows PowerShell:**
@@ -83,7 +85,8 @@ Hệ thống hỗ trợ giáo viên THCS (môn Toán) tạo đề kiểm tra the
 
 ## 7. Triển khai máy chủ
 
-Hướng dẫn chi tiết về kiến trúc container (`web` Caddy HTTPS + `app` Spring Boot + `db` PostgreSQL), cấu hình `deploy/.env`, giới hạn tài nguyên Pandoc/PDFBox, sao lưu – khôi phục và quy trình CI/CD nằm tại [`docs/deploy/README.md`](docs/deploy/README.md).
+Hướng dẫn chi tiết về kiến trúc container (`web` Caddy HTTPS + `app` Spring Boot + `db` PostgreSQL), cấu hình `deploy/.env`, giới hạn tài nguyên Pandoc/PDFBox, sao lưu – khôi phục và quy trình CI/CD nằm tại [`docs/deploy/README.md`](docs/deploy/README.md). Giám sát vận hành bằng Micrometer + Prometheus + Grafana (tùy chọn, dành cho VPS 4 GB, bật qua `deploy/compose.monitoring.yaml`) nằm ở mục 6b của tài liệu đó.
+
 ## 8. Bản đồ tài liệu (`docs/`)
 
 - [`docs/ai-development-rules.md`](docs/ai-development-rules.md): Quy tắc phát triển có AI hỗ trợ (v2), thứ tự ưu tiên nguồn chuẩn, các bất biến nghiệp vụ và lịch sử quyết định.
@@ -102,6 +105,7 @@ Hướng dẫn chi tiết về kiến trúc container (`web` Caddy HTTPS + `app`
 - [`docs/thong-ke/04-solver-lech-giao-vien-xu-ly.sql`](docs/thong-ke/04-solver-lech-giao-vien-xu-ly.sql): Truy vấn thống kê cách giáo viên xử lý (Giữ nguyên, Sửa hay Đổi) đối với các câu bị Solver báo lệch đáp án.
 - [`docs/thong-ke/05-grounding.sql`](docs/thong-ke/05-grounding.sql): Truy vấn thống kê kết quả kiểm tra độ bám tài liệu (`supported`, `not_supported`, `unknown`) và tỉ lệ xác minh trích dẫn.
 - [`docs/thong-ke/06-chi-phi.sql`](docs/thong-ke/06-chi-phi.sql): Truy vấn thống kê chi phí trung bình (số token và thời gian gọi LLM của bước sinh câu, Solver và grounding) theo dạng câu.
+- [`docs/thong-ke/07-van-hanh.sql`](docs/thong-ke/07-van-hanh.sql): Truy vấn thống kê vận hành hàng đợi theo ngày và loại job (số job đã kết thúc, tỉ lệ thất bại, thời gian chờ và xử lý p50/p95, job bị stale reset). Bảng metric Prometheus `datn_*` nằm trong [`docs/thong-ke/README.md`](docs/thong-ke/README.md).
 
 ## 9. Quy ước làm việc
 
@@ -119,4 +123,5 @@ Hướng dẫn chi tiết về kiến trúc container (`web` Caddy HTTPS + `app`
 
 - **Backend & CSDL:** Đã hoàn thành 23 bản migration Flyway (`V1`–`V23`), hoạt động đầy đủ các luồng xác thực JWT, quản lý ma trận, trích xuất tài liệu bài học (`.docx`/`.pdf`/`.txt`), tạo đề theo ma trận và theo bài học, chuỗi QC 4 bước (`format` → `dedup` 3-gram → `Solver` → `grounding`), hàng đợi `generation_job` có hàng rào `claim_seq` cùng bộ điều tiết `GeminiRateLimiter`, và xuất đề ra Word qua Pandoc.
 - **Đo kiểm thực tế:** Theo nhật ký kiểm chứng (`docs/dev-log/loi-va-cach-xu-ly.md`, `docs/deploy/README.md`), thời gian sinh mới hoàn toàn một đề 18 câu trên Gemini thật đạt khoảng 3 phút; image Docker của backend, cấu hình Caddy và kịch bản sao lưu/khôi phục CSDL đã được kiểm chứng trên môi trường container.
+- **Giám sát (08/11/2026):** Backend xuất 14 metric `datn_*` (Gemini, hàng đợi, QC, xuất Word) ở `/actuator/prometheus`; có Prometheus + Grafana với dashboard "DATN – Vận hành" nạp sẵn (`deploy/compose.monitoring.yaml` cho máy chủ, `deploy/compose.monitoring-dev.yaml` cho máy phát triển). Đã kiểm chứng trên Docker Desktop; chưa chạy trên VPS thật.
 - **Frontend & CI/CD:** Đã có giao diện cho các luồng đăng nhập, quản lý tài khoản, ma trận, tạo/xem đề và ngân hàng câu hỏi; tuy nhiên lệnh build production (`npm run build` / `tsc -b`) hiện còn 3 lỗi TypeScript (`Header.tsx`, `Sidebar.tsx`, `ReviewQuestionForm.tsx`) nên image Docker `web` và workflow CI trên GitHub đang chờ sửa để thông suốt.

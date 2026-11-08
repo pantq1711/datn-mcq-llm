@@ -85,7 +85,8 @@ class McqApiSnapshotTest {
 
     @Test
     void apiMcqChiThemQuestionType() throws Exception {
-        String generated = "{\"question_text\": \"Kết quả của $\\\\sqrt{(-5)^2}$ là:\", \"option_a\": \"$-5$\","
+        // Câu dẫn không kết thúc bằng "là:" (parser bỏ dấu hai chấm và thêm cảnh báo, 4/11): bài kiểm này chỉ xét tập trường API.
+        String generated = "{\"question_text\": \"Kết quả của $\\\\sqrt{(-5)^2}$ là\", \"option_a\": \"$-5$\","
                 + " \"option_b\": \"$5$\", \"option_c\": \"$25$\", \"option_d\": \"$\\\\pm 5$\","
                 + " \"correct_option\": \"B\", \"explanation\": \"$\\\\sqrt{a^2} = |a|$.\"}";
         JsonNode resp = call(post("/api/generation/generate-sync").contentType(MediaType.APPLICATION_JSON)

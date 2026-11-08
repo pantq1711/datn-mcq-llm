@@ -12,6 +12,9 @@ public interface AnswerCheckStatementRepository
         extends JpaRepository<AnswerCheckStatement, AnswerCheckStatement.Key> {
     List<AnswerCheckStatement> findByQcResultIdOrderByPositionAsc(Integer qcResultId);
 
+    /** F-07: nhãn Solver từng ý của nhiều dòng answer_check (câu Đúng/Sai) bằng một truy vấn. */
+    List<AnswerCheckStatement> findByQcResultIdIn(java.util.Collection<Integer> qcResultIds);
+
     /** Xóa nhãn Solver từng ý của một dòng answer_check (trong transaction của nơi gọi). */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM AnswerCheckStatement s WHERE s.qcResultId = :qcResultId")

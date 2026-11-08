@@ -124,6 +124,8 @@ export default function ExamDetailPage() {
 
     const [qcModalVisible, setQcModalVisible] = useState(false);
     const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+    // Số câu trên thẻ câu (thứ tự trong Phần) để hộp kết quả tự kiểm tra ghi cùng số
+    const [selectedQuestionNo, setSelectedQuestionNo] = useState<number | undefined>(undefined);
 
     const [subjectName, setSubjectName] = useState<string | undefined>(undefined);
 
@@ -258,9 +260,12 @@ export default function ExamDetailPage() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            // Ưu tiên tên backend đặt (mã đề); không có thì dựa vào tên đề / mã đề
-            a.download = filename
-                ?? `${toFileName(detail?.title, detail?.examCode ?? `exam-${examId}`)}${equation === 'mathtype' ? '-mathtype' : ''}.docx`;
+            // Luôn đặt tên theo tiêu đề đề thi; chỉ khi không có tiêu đề mới dùng tên backend gửi (Content-Disposition)
+            const titleName = toFileName(detail?.title, "");
+            a.download = titleName
+                ? `${titleName}${equation === 'mathtype' ? '-mathtype' : ''}.docx`
+                : filename
+                    ?? `${toFileName(undefined, detail?.examCode ?? `exam-${examId}`)}${equation === 'mathtype' ? '-mathtype' : ''}.docx`;
             a.click();
             window.URL.revokeObjectURL(url);
             message.success(equation === 'mathtype'
@@ -291,8 +296,9 @@ export default function ExamDetailPage() {
     };
 
     // Hàm mở Modal Xem vết QC cho slot
-    const openQcTrace = (targetSlotId: string | number) => {
+    const openQcTrace = (targetSlotId: string | number, questionNo: number) => {
         setSelectedSlotId(String(targetSlotId));
+        setSelectedQuestionNo(questionNo);
         setQcModalVisible(true);
     };
 
@@ -321,6 +327,7 @@ export default function ExamDetailPage() {
             await replaceQuestion(examId, request.question.slotId, {
                 source,
                 ...(source === "generate" && request.instruction ? { instruction: request.instruction } : {}),
+                ...(request.reason ? { reason: request.reason } : {}),
             });
             message.success(
                 source === "bank"
@@ -439,7 +446,7 @@ export default function ExamDetailPage() {
                                         menu={{
                                             items: [
                                                 { key: "omml", label: "Công thức Word (Equation)" },
-                                                { key: "mathtype", label: "Công thức MathType" },
+                                                { key: "mathtype", label: "Công thức MathType (thử nghiệm)" },
                                             ],
                                             selectedKeys: ["omml"],
                                             onClick: ({ key }) => handleExportWord(key === "mathtype" ? "mathtype" : "omml"),
@@ -498,8 +505,8 @@ export default function ExamDetailPage() {
                                 }}
                                 onKeep={handleKeep}
                                 onEdit={(question) => setEditingQuestion(question)}
-                                onViewQcTrace={(question) => {
-                                    if (question.slotId !== undefined) openQcTrace(question.slotId);
+                                onViewQcTrace={(question, index) => {
+                                    if (question.slotId !== undefined) openQcTrace(question.slotId, index + 1);
                                 }}
                             />
                         </div>
@@ -526,6 +533,7 @@ export default function ExamDetailPage() {
                         <QcTraceModal
                             examId={examId!}
                             slotId={selectedSlotId}
+                            questionNo={selectedQuestionNo}
                             visible={qcModalVisible}
                             onClose={() => setQcModalVisible(false)}
                         />

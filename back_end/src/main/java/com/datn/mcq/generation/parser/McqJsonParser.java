@@ -44,7 +44,9 @@ public final class McqJsonParser {
         }
 
         // raw_llm_output được lưu nguyên bản ở nơi gọi; chỉ các trường văn bản đã giải mã được chuẩn hóa.
-        String questionText = LlmOutputRepair.textField("question_text", obj.get("question_text"), repair, true, warnings);
+        String questionText = StemPunctuation.stem("question_text",
+                LlmOutputRepair.textField("question_text", obj.get("question_text"), repair, true, warnings), false, repair,
+                warnings);
         String optionA = LlmOutputRepair.textField("option_a", obj.get("option_a"), repair, true, warnings);
         String optionB = LlmOutputRepair.textField("option_b", obj.get("option_b"), repair, true, warnings);
         String optionC = LlmOutputRepair.textField("option_c", obj.get("option_c"), repair, true, warnings);

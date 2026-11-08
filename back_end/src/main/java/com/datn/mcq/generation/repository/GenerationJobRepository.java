@@ -14,6 +14,17 @@ public interface GenerationJobRepository extends JpaRepository<GenerationJob, In
 
     List<GenerationJob> findAllByOrderByIdDesc();
 
+    /** Dòng kết quả của {@link #countByStatus()}. */
+    interface StatusCount {
+        String getStatus();
+
+        long getTotal();
+    }
+
+    /** Giám sát (08/11): số job theo trạng thái cho gauge {@code datn_jobs}. Chỉ đọc, một truy vấn GROUP BY. */
+    @Query(value = "SELECT status AS status, COUNT(*) AS total FROM generation_job GROUP BY status", nativeQuery = true)
+    List<StatusCount> countByStatus();
+
     /** V7: job mới nhất của một chỗ trong đề. */
     Optional<GenerationJob> findFirstByExamSlotIdOrderByIdDesc(Integer examSlotId);
 
@@ -46,6 +57,19 @@ public interface GenerationJobRepository extends JpaRepository<GenerationJob, In
             FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
     Optional<GenerationJob> lockNextDuePendingGenerateJob(@Param("now") LocalDateTime now);
+
+    /**
+     * F-07: job answer_check và grounding_check MỚI NHẤT của từng câu trong tập, bằng một truy vấn (cùng nghĩa với
+     * {@link #findFirstByQuestionIdAndJobTypeOrderByIdDesc} cho từng cặp câu và loại). Dùng chỉ mục
+     * {@code idx_gj_question_type (question_id, job_type)} (V13).
+     */
+    @Query(value = """
+            SELECT DISTINCT ON (question_id, job_type) *
+            FROM generation_job
+            WHERE question_id IN (:questionIds) AND job_type IN ('answer_check', 'grounding_check')
+            ORDER BY question_id, job_type, id DESC
+            """, nativeQuery = true)
+    List<GenerationJob> findLatestCheckJobs(@Param("questionIds") java.util.Collection<Integer> questionIds);
 
     /** V13 (W1-2): job mới nhất của một câu theo loại (job Solver của bản giáo viên sửa). */
     Optional<GenerationJob> findFirstByQuestionIdAndJobTypeOrderByIdDesc(Integer questionId, String jobType);
