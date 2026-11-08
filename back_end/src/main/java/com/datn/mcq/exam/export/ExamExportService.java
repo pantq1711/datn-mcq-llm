@@ -41,6 +41,7 @@ public class ExamExportService {
     private final MatrixService matrixService;
     private final CatalogService catalogService;
     private final ExamScoringProperties scoring;
+    private ExportMetrics exportMetrics;
 
     public ExamExportService(ExamViewService viewService, PandocRunner pandocRunner, ExamRepository examRepository,
                              MatrixService matrixService, CatalogService catalogService,
@@ -51,6 +52,12 @@ public class ExamExportService {
         this.matrixService = matrixService;
         this.catalogService = catalogService;
         this.scoring = scoring;
+    }
+
+    /** Giám sát (08/11): nạp bằng setter để chữ ký constructor không đổi; có thể null. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setExportMetrics(ExportMetrics exportMetrics) {
+        this.exportMetrics = exportMetrics;
     }
 
     /** Chỉ chủ đề xuất được (W1-1): đề của người khác 404 như khi xem đề. Thời gian làm bài để trống. */
@@ -64,8 +71,11 @@ public class ExamExportService {
      */
     public DocxFile docx(Integer examId, Integer actorId, EquationFormat format, Integer durationMinutes) {
         ExamViewDto view = viewService.view(examId, actorId);
-        PandocRunner.Docx docx = pandocRunner.markdownToDocx(
-                ExamMarkdownBuilder.build(view, header(view, durationMinutes), scoring), format);
+        String markdown = ExamMarkdownBuilder.build(view, header(view, durationMinutes), scoring);
+        PandocRunner.Docx docx = exportMetrics == null
+                ? pandocRunner.markdownToDocx(markdown, format)
+                : exportMetrics.measure(format == null ? "omml" : format.name().toLowerCase(java.util.Locale.ROOT),
+                        () -> pandocRunner.markdownToDocx(markdown, format));
         return new DocxFile(fileName(view), docx.content(), docx.equationsKeptOmml(),
                 docx.equationsScaled());
     }

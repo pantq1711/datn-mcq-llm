@@ -47,7 +47,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus   # prometheus: chỉ mạng nội bộ (Caddy chặn /actuator/* từ ngoài)
   endpoint:
     health:
       show-details: when-authorized   # W1-1: chỉ người đã đăng nhập thấy chi tiết (DB, ổ đĩa)

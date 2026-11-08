@@ -1,0 +1,161 @@
+{
+  "uid": "datn-van-hanh",
+  "title": "DATN – Vận hành",
+  "tags": ["datn"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "annotations": { "list": [] },
+  "templating": { "list": [] },
+  "panels": [
+    { "id": 1, "type": "row", "title": "Gemini", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
+    {
+      "id": 2, "type": "gauge", "title": "Mức dùng hạn mức ngày (so với trần cấu hình)",
+      "description": "datn_gemini_daily_used / datn_gemini_daily_quota. Bộ đếm nằm trong bộ nhớ, nạp lại từ DB khi khởi động nên sau restart có thể thấp hơn thực tế.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 1 },
+      "targets": [ { "refId": "A", "expr": "datn_gemini_daily_used / datn_gemini_daily_quota * 100" } ],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100,
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 70 }, { "color": "red", "value": 90 } ] } }, "overrides": [] }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Lượt gọi hôm nay / hạn mức",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 4, "x": 6, "y": 1 },
+      "targets": [
+        { "refId": "A", "expr": "datn_gemini_daily_used", "legendFormat": "đã dùng" },
+        { "refId": "B", "expr": "datn_gemini_daily_quota", "legendFormat": "hạn mức" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 4, "type": "timeseries", "title": "Lượt gọi Gemini theo kết quả (mỗi phút)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 7, "x": 10, "y": 1 },
+      "targets": [ { "refId": "A", "expr": "sum by (result) (rate(datn_gemini_calls_total[5m])) * 60", "legendFormat": "{{result}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Số 429 trong 1 giờ",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 7, "x": 17, "y": 1 },
+      "targets": [ { "refId": "A", "expr": "sum(increase(datn_gemini_calls_total{result=\"http_429\"}[1h]))", "legendFormat": "429" } ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Thời gian chờ ở bộ điều tiết (trung bình)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 8 },
+      "targets": [ { "refId": "A", "expr": "rate(datn_gemini_limiter_wait_seconds_sum[5m]) / rate(datn_gemini_limiter_wait_seconds_count[5m])", "legendFormat": "chờ" } ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Thời gian một lượt gọi Gemini (trung bình)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 8 },
+      "targets": [ { "refId": "A", "expr": "sum by (result) (rate(datn_gemini_call_seconds_sum[5m])) / sum by (result) (rate(datn_gemini_call_seconds_count[5m]))", "legendFormat": "{{result}}" } ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Token Gemini (mỗi giờ)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 8 },
+      "targets": [ { "refId": "A", "expr": "increase(datn_gemini_tokens_total[1h])", "legendFormat": "token" } ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+
+    { "id": 9, "type": "row", "title": "Hàng đợi job sinh câu", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }, "panels": [] },
+    {
+      "id": 10, "type": "timeseries", "title": "Số job theo trạng thái",
+      "description": "Đọc từ DB với cache 15 giây.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 16 },
+      "targets": [ { "refId": "A", "expr": "datn_jobs", "legendFormat": "{{status}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 11, "type": "timeseries", "title": "Thời gian xử lý job (trung bình, theo loại)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 16 },
+      "targets": [ { "refId": "A", "expr": "sum by (type) (rate(datn_job_seconds_sum[5m])) / sum by (type) (rate(datn_job_seconds_count[5m]))", "legendFormat": "{{type}}" } ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 12, "type": "stat", "title": "Job stale reset trong 24 giờ",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 4, "x": 16, "y": 16 },
+      "targets": [ { "refId": "A", "expr": "sum(increase(datn_job_stale_reset_total[24h]))" } ],
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 } ] } }, "overrides": [] }
+    },
+    {
+      "id": 13, "type": "timeseries", "title": "Job theo kết quả (mỗi giờ)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 4, "x": 20, "y": 16 },
+      "targets": [ { "refId": "A", "expr": "sum by (outcome) (increase(datn_job_seconds_count[1h]))", "legendFormat": "{{outcome}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+
+    { "id": 14, "type": "row", "title": "Kiểm định chất lượng (QC)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 }, "panels": [] },
+    {
+      "id": 15, "type": "bargauge", "title": "Câu bị loại hoặc bị cờ theo bước (24 giờ)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 24 },
+      "targets": [ { "refId": "A", "expr": "sum by (step) (increase(datn_qc_rejected_total[24h]))", "legendFormat": "{{step}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "gradient" }
+    },
+    {
+      "id": 16, "type": "timeseries", "title": "Kết quả pipeline QC theo trạng thái (mỗi giờ)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 24 },
+      "targets": [ { "refId": "A", "expr": "sum by (status) (increase(datn_qc_pipeline_total[1h]))", "legendFormat": "{{status}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 17, "type": "timeseries", "title": "Kết luận bám tài liệu (mỗi giờ)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 24 },
+      "targets": [ { "refId": "A", "expr": "sum by (verdict) (increase(datn_qc_grounding_total[1h]))", "legendFormat": "{{verdict}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+
+    { "id": 18, "type": "row", "title": "Xuất Word và hệ thống", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 }, "panels": [] },
+    {
+      "id": 19, "type": "stat", "title": "Xuất Word: thời gian trung bình và số lượt (từ lúc khởi động app)",
+      "description": "Trung bình = tổng thời gian / số lượt thành công kể từ lần khởi động app gần nhất. Dùng giá trị tích lũy vì xuất Word thưa, rate() trong cửa sổ ngắn sẽ ra trống.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 32 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (format) (datn_exam_export_seconds_sum{outcome=\"ok\"}) / sum by (format) (datn_exam_export_seconds_count{outcome=\"ok\"})", "legendFormat": "{{format}} trung bình" },
+        { "refId": "B", "expr": "sum by (format) (datn_exam_export_seconds_count{outcome=\"ok\"})", "legendFormat": "{{format}} số lượt" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 2 },
+        "overrides": [ { "matcher": { "id": "byFrameRefID", "options": "A" }, "properties": [ { "id": "unit", "value": "s" } ] } ] }
+    },
+    {
+      "id": 20, "type": "stat", "title": "Xuất Word bị từ chối vì bận (24 giờ)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 4, "x": 8, "y": 32 },
+      "targets": [ { "refId": "A", "expr": "sum(increase(datn_exam_export_busy_total[24h]))" } ],
+      "fieldConfig": { "defaults": { "unit": "short",
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 } ] } }, "overrides": [] }
+    },
+    {
+      "id": 21, "type": "timeseries", "title": "Heap JVM đang dùng",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 32 },
+      "targets": [ { "refId": "A", "expr": "sum(jvm_memory_used_bytes{area=\"heap\"})", "legendFormat": "heap" } ],
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
+    },
+    {
+      "id": 22, "type": "timeseries", "title": "Yêu cầu HTTP theo mã trạng thái (mỗi phút)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 32 },
+      "targets": [ { "refId": "A", "expr": "sum by (status) (rate(http_server_requests_seconds_count[5m])) * 60", "legendFormat": "{{status}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    }
+  ]
+}

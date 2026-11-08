@@ -3,7 +3,7 @@
 Chỉ là **truy vấn đọc** (PostgreSQL) cho chương thử nghiệm trong báo cáo; chưa có trang thống kê. Mỗi file `.sql` là một
 câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên database của hệ thống đã triển khai. Test
 `StatisticsSqlTest` chạy bốn file đầu trên `datn_mcq_test` với dữ liệu mẫu để bảo đảm cú pháp và số đếm đúng; file 05 và 06 (W2-3) được
-`GroundingPipelineTest` kiểm số đếm, và `StatisticsSqlTest` kiểm cả sáu file chỉ là một câu lệnh đọc.
+`GroundingPipelineTest` kiểm số đếm, file 07 (giám sát, 08/11) được `StatisticsSqlTest` kiểm số đếm job, và `StatisticsSqlTest` kiểm cả bảy file chỉ là một câu lệnh đọc.
 
 | File | Trả lời câu hỏi |
 |---|---|
@@ -13,6 +13,27 @@ câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên databa
 | [`04-solver-lech-giao-vien-xu-ly.sql`](04-solver-lech-giao-vien-xu-ly.sql) | Với câu Solver báo lệch, giáo viên Giữ nguyên, sửa hay Đổi |
 | [`05-grounding.sql`](05-grounding.sql) | Câu sinh có tài liệu bài học: tỉ lệ SUPPORTED / NOT_SUPPORTED / UNKNOWN, chưa chấm, lỗi; trích dẫn kiểm chứng được; câu bị hạ vì trích dẫn không có thật (theo dạng câu, có/không tài liệu) |
 | [`06-chi-phi.sql`](06-chi-phi.sql) | Chi phí trung bình mỗi câu LLM (token và thời gian gọi LLM) = sinh + Solver + grounding, theo dạng câu và có/không tài liệu; số câu thiếu số đo (V21) |
+| [`07-van-hanh.sql`](07-van-hanh.sql) | Vận hành hàng đợi theo ngày và loại job: số job đã kết thúc, tỉ lệ thất bại, thời gian chờ và xử lý (p50, p95), job bị stale reset |
+
+## Số liệu vận hành thời gian thực (Prometheus)
+
+Các truy vấn `.sql` ở trên đo **chất lượng** và vận hành theo ngày từ DB. Số liệu vận hành thời gian thực nằm ở
+`/actuator/prometheus` (xem [`docs/deploy/README.md`](../deploy/README.md) mục 6b), tiền tố `datn_`:
+
+| Nhóm | Metric Prometheus | Ý nghĩa |
+|---|---|---|
+| Gemini | `datn_gemini_calls_total{result}` | số lượt gọi theo kết quả `ok`, `http_429`, `http_error`, `network_error` |
+| Gemini | `datn_gemini_call_seconds`, `datn_gemini_limiter_wait_seconds` | thời gian một lượt gọi; thời gian chờ ở `GeminiRateLimiter` |
+| Gemini | `datn_gemini_daily_used`, `datn_gemini_daily_quota`, `datn_gemini_tokens_total` | mức dùng hạn mức ngày so với trần (480); tổng token |
+| Hàng đợi | `datn_jobs{status}` | số job theo trạng thái (cache 15 giây) |
+| Hàng đợi | `datn_job_seconds{type,outcome}`, `datn_job_stale_reset_total` | thời gian xử lý job; số job stale reset |
+| QC | `datn_qc_rejected_total{step}` | số câu bị loại hoặc bị cờ ở `format`, `dedup`, `solver`, `solver_error`, `grounding` |
+| QC | `datn_qc_pipeline_total{status}`, `datn_qc_grounding_total{verdict}` | kết quả pipeline QC; kết luận bám tài liệu |
+| Xuất Word | `datn_exam_export_seconds{format,outcome}`, `datn_exam_export_busy_total` | thời gian xuất `omml`/`mathtype`; số lần bị từ chối vì bận (503) |
+
+Giới hạn: bộ đếm của Prometheus bắt đầu lại khi `app` khởi động lại; `datn_gemini_daily_used` nạp lại từ DB nên có thể thấp
+hơn thực tế sau khi khởi động lại giữa ngày (xem Javadoc `GeminiRateLimiter`). `datn_qc_rejected_total` đếm theo **lần chạy QC**,
+một câu sinh lại nhiều lần được đếm nhiều lần, khác với file 02 đếm theo câu LLM gốc.
 
 ## Bộ lọc chung (đã cài trong từng file)
 

@@ -1,0 +1,15 @@
+# Cấu hình Prometheus cho compose.monitoring-dev.yaml: scrape backend chạy trên máy (không phải trong Docker).
+# Scrape 15 giây để thấy số liệu nhanh khi thử. Nếu backend chạy cổng khác, sửa target dưới đây.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: datn-app
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -132,6 +132,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh", "/api/auth/logout")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
+                        // Prometheus scrape không có JWT. An toàn nhờ Caddy chặn /actuator/* từ Internet và app không
+                        // publish cổng; mọi đường actuator khác vẫn chỉ ADMIN (dòng bên dưới).
+                        .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
                         .permitAll()
                         // Quản trị; sinh câu trực tiếp (gọi Gemini tính phí) và seed demo chỉ admin (H6, H5).

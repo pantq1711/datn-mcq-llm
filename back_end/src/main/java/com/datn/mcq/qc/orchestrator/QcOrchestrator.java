@@ -59,6 +59,10 @@ public class QcOrchestrator {
     @Autowired(required = false)
     private GroundingChecker groundingChecker;
 
+    /** Giám sát (08/11): nạp bằng field như {@link #groundingChecker}; thiếu thì không ghi số liệu. */
+    @Autowired(required = false)
+    private QcMetrics qcMetrics;
+
     /**
      * Chữ ký trước GĐ3, giữ lại cho các test dựng tay QcOrchestrator với câu MCQ. Không dùng trong mã chính:
      * Spring dùng constructor 5 tham số.
@@ -105,6 +109,14 @@ public class QcOrchestrator {
      * W2-4b (A): nạp chồng cho phép chạy móc kiểm tra claim trước lượt gọi Solver inline ngoài transaction.
      */
     public QcPipelineReport evaluateAndSave(QuestionQcInput input, DedupScope scope, Runnable beforeSolver) {
+        QcPipelineReport report = evaluate(input, scope, beforeSolver);
+        if (qcMetrics != null) {
+            qcMetrics.recordPipeline(report);
+        }
+        return report;
+    }
+
+    private QcPipelineReport evaluate(QuestionQcInput input, DedupScope scope, Runnable beforeSolver) {
         FormatChecker.FormatCheckOutcome formatOutcome = formatChecker.check(input);
         QualityCheckResult formatRow = upsertCheckResult(
                 input.questionId(),
@@ -249,7 +261,11 @@ public class QcOrchestrator {
         if (!groundingAvailable()) {
             throw new IllegalStateException(GroundingChecker.NOT_CONFIGURED);
         }
-        return groundingChecker.check(input, context);
+        GroundingResult result = groundingChecker.check(input, context);
+        if (qcMetrics != null) {
+            qcMetrics.recordGrounding(result);
+        }
+        return result;
     }
 
     /** Solver gọi được (đã cấu hình API key). */

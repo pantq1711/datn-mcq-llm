@@ -14,6 +14,17 @@ public interface GenerationJobRepository extends JpaRepository<GenerationJob, In
 
     List<GenerationJob> findAllByOrderByIdDesc();
 
+    /** Dòng kết quả của {@link #countByStatus()}. */
+    interface StatusCount {
+        String getStatus();
+
+        long getTotal();
+    }
+
+    /** Giám sát (08/11): số job theo trạng thái cho gauge {@code datn_jobs}. Chỉ đọc, một truy vấn GROUP BY. */
+    @Query(value = "SELECT status AS status, COUNT(*) AS total FROM generation_job GROUP BY status", nativeQuery = true)
+    List<StatusCount> countByStatus();
+
     /** V7: job mới nhất của một chỗ trong đề. */
     Optional<GenerationJob> findFirstByExamSlotIdOrderByIdDesc(Integer examSlotId);
 

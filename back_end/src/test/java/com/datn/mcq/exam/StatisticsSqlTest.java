@@ -119,6 +119,21 @@ class StatisticsSqlTest extends ExamFlowTestBase {
     }
 
     @Test
+    void vanHanhChayDuocVaDemJobKetThucTheoNgayVaLoai() throws Exception {
+        sampleData();
+
+        // 07 (giám sát 08/11): job đã kết thúc theo ngày và loại; dữ liệu mẫu có job sinh câu done và Solver.
+        List<Map<String, Object>> ops = run("07-van-hanh.sql");
+        assertTrue(ops.stream().anyMatch(r -> "generate".equals(r.get("job_type"))), ops.toString());
+        int total = ops.stream().mapToInt(r -> count(r, "so_job_ket_thuc")).sum();
+        assertEquals(count("SELECT count(*) FROM generation_job WHERE status IN ('done', 'failed')"
+                + " AND started_at IS NOT NULL"), total, "mọi job đã kết thúc và đã được nhận đều được đếm: " + ops);
+        for (Map<String, Object> r : ops) {
+            assertTrue(count(r, "so_that_bai") <= count(r, "so_job_ket_thuc"), r.toString());
+        }
+    }
+
+    @Test
     void loaiDeCuaTaiKhoanNhomPhatTrienBangDanhSachEmail() throws Exception {
         sampleData();
         String sql = Files.readString(DIR.resolve("01-ket-cuc-cau-llm.sql"), StandardCharsets.UTF_8);
@@ -132,7 +147,7 @@ class StatisticsSqlTest extends ExamFlowTestBase {
     void coMotCauLenhSelectDocLapMoiFile() throws IOException {
         try (var files = Files.list(DIR)) {
             List<Path> sqlFiles = files.filter(p -> p.toString().endsWith(".sql")).sorted().toList();
-            assertEquals(6, sqlFiles.size());
+            assertEquals(7, sqlFiles.size());
             for (Path p : sqlFiles) {
                 // bỏ phần chú thích (-- ...) trước khi kiểm
                 String sql = Files.readString(p, StandardCharsets.UTF_8).lines()
