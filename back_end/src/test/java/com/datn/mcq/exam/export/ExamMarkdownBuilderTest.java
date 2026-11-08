@@ -124,7 +124,7 @@ class ExamMarkdownBuilderTest {
                 :::
 
                 ::: {custom-style="ExamQuestion"}
-                **Câu 1.** Tứ giác $ABCD$ có ba góc $80^\\circ$, $90^\\circ$, $100^\\circ$. Góc còn lại bằng bao nhiêu độ?
+                **Câu 1.** Tứ giác $ABCD$ có ba góc $80°$, $90°$, $100°$. Góc còn lại bằng bao nhiêu độ?
                 :::
 
                 ::: {custom-style="ExamNote"}
@@ -163,7 +163,7 @@ class ExamMarkdownBuilderTest {
 
                 **Câu 1. Đáp án: 90.**
 
-                Tổng bốn góc là $360^\\circ$.""".formatted(t(283), t(2764), t(5244), t(7725));
+                Tổng bốn góc là $360°$.""".formatted(t(283), t(2764), t(5244), t(7725));
         assertEquals(expected, markdownOnly(ExamMarkdownBuilder.build(exam(), HEADER, SCORING, TODAY)));
     }
 
