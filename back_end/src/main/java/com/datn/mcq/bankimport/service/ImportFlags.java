@@ -30,6 +30,7 @@ public final class ImportFlags {
 
     // ---------- cờ thông tin ----------
     public static final String NO_SOLUTION = "no_solution";
+    public static final String STEM_EXTRA_TEXT = "stem_extra_text";
     public static final String DUPLICATE_IN_BANK = "duplicate_in_bank";
     public static final String DUPLICATE_IN_BATCH = "duplicate_in_batch";
     public static final String LATEX_WARNING = "latex_warning";
