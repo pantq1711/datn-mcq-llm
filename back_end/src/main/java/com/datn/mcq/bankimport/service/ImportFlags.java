@@ -33,6 +33,7 @@ public final class ImportFlags {
     public static final String STEM_EXTRA_TEXT = "stem_extra_text";
     public static final String FIGURE_FROM_PREVIOUS_QUESTION = "figure_from_previous_question";
     public static final String MENTIONS_FIGURE_NO_IMAGE = "mentions_figure_no_image";
+    public static final String SHARED_CONTEXT = "shared_context";
     public static final String DUPLICATE_IN_BANK = "duplicate_in_bank";
     public static final String DUPLICATE_IN_BATCH = "duplicate_in_batch";
     public static final String LATEX_WARNING = "latex_warning";
