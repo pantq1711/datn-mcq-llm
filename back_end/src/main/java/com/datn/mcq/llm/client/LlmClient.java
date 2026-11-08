@@ -37,13 +37,19 @@ public class LlmClient {
     private final String defaultModel;
     private final String baseUrl;
     private final GeminiRateLimiter rateLimiter;
+    /** Giám sát (08/11): có thể null (test dựng tay), khi đó không ghi số liệu. */
+    private final GeminiMetrics metrics;
 
     public LlmClient(String defaultApiKey, String defaultModel) {
-        this(defaultApiKey, defaultModel, null, null);
+        this(defaultApiKey, defaultModel, null, null, null);
     }
 
     public LlmClient(String defaultApiKey, String defaultModel, String baseUrl) {
-        this(defaultApiKey, defaultModel, baseUrl, null);
+        this(defaultApiKey, defaultModel, baseUrl, null, null);
+    }
+
+    public LlmClient(String defaultApiKey, String defaultModel, String baseUrl, GeminiRateLimiter rateLimiter) {
+        this(defaultApiKey, defaultModel, baseUrl, rateLimiter, null);
     }
 
     @Autowired
@@ -51,7 +57,8 @@ public class LlmClient {
             @Value("${app.llm.api-key:}") String defaultApiKey,
             @Value("${app.llm.model:gemini-3.5-flash-lite}") String defaultModel,
             @Value("${app.llm.base-url:}") String baseUrl,
-            @Autowired(required = false) GeminiRateLimiter rateLimiter) {
+            @Autowired(required = false) GeminiRateLimiter rateLimiter,
+            @Autowired(required = false) GeminiMetrics metrics) {
         this.baseUrl = normalizeBaseUrl(baseUrl);
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(20))
@@ -61,6 +68,7 @@ public class LlmClient {
                 ? defaultModel.trim()
                 : "gemini-3.5-flash-lite";
         this.rateLimiter = rateLimiter;
+        this.metrics = metrics;
     }
 
     /** Trống thì dùng địa chỉ Gemini thật; luôn kết thúc bằng "/" để ghép tên model. */
@@ -129,7 +137,14 @@ public class LlmClient {
                 .build();
 
         if (rateLimiter != null) {
-            rateLimiter.acquire();
+            long waitStart = System.nanoTime();
+            try {
+                rateLimiter.acquire();
+            } finally {
+                if (metrics != null) {
+                    metrics.recordLimiterWait(System.nanoTime() - waitStart);
+                }
+            }
         }
 
         long startNanos = System.nanoTime();
@@ -140,11 +155,19 @@ public class LlmClient {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
+            if (metrics != null) {
+                metrics.recordCall(GeminiMetrics.NETWORK_ERROR, System.nanoTime() - startNanos);
+            }
             throw new RuntimeException("Lỗi kết nối Gemini API: " + e.getMessage(), e);
         }
-        double latencyMs = (System.nanoTime() - startNanos) / 1_000_000.0;
+        long elapsedNanos = System.nanoTime() - startNanos;
+        double latencyMs = elapsedNanos / 1_000_000.0;
 
         int status = response.statusCode();
+        if (metrics != null) {
+            metrics.recordCall(status >= 200 && status < 300 ? GeminiMetrics.OK
+                    : status == 429 ? GeminiMetrics.HTTP_429 : GeminiMetrics.HTTP_ERROR, elapsedNanos);
+        }
         if (status < 200 || status >= 300) {
             if (status == 429 && rateLimiter != null) {
                 rateLimiter.onRateLimited(parseRetryDelay(response.body()).orElse(null));
@@ -176,6 +199,9 @@ public class LlmClient {
             if (tok instanceof Number num) {
                 totalTokens = num.intValue();
             }
+        }
+        if (metrics != null && totalTokens != null) {
+            metrics.recordTokens(totalTokens);
         }
         return new LlmCallResult(text, totalTokens, latencyMs, 0.0, model);
     }

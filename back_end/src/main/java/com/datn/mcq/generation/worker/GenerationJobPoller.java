@@ -67,6 +67,7 @@ public class GenerationJobPoller {
     private final DedupScopeResolver dedupScopeResolver;
     private final int maxAttempts;
     private final GeminiRateLimiter rateLimiter;
+    private QueueMetrics queueMetrics;
     /** F-09: true từ lúc {@link GenerationJobWorkerLifecycle#stop} bắt đầu tới khi start lại. */
     private volatile boolean shuttingDown;
 
@@ -109,11 +110,25 @@ public class GenerationJobPoller {
         GenerationJobProcessor.ClaimedJobContext ctx = claimedOpt.get();
         // F-27: mọi dòng log trong lúc xử lý job mang jobId/slotId/examId (MDC), dọn ngay khi xong.
         putMdc(ctx);
+        long startNanos = System.nanoTime();
+        String outcome = "exception";
         try {
-            return processClaimed(ctx, runAnswerCheck);
+            ProcessedJobSummary summary = processClaimed(ctx, runAnswerCheck);
+            outcome = summary.jobStatus();
+            return summary;
         } finally {
             clearMdc();
+            if (queueMetrics != null) {
+                queueMetrics.recordJob(ctx.answerCheck() ? "answer_check" : ctx.grounding() ? "grounding" : "generate",
+                        outcome, System.nanoTime() - startNanos);
+            }
         }
+    }
+
+    /** Giám sát (08/11): nạp bằng setter để các test dựng tay poller không phải đổi; có thể null. */
+    @Autowired(required = false)
+    public void setQueueMetrics(QueueMetrics queueMetrics) {
+        this.queueMetrics = queueMetrics;
     }
 
     private ProcessedJobSummary processClaimed(GenerationJobProcessor.ClaimedJobContext ctx, boolean runAnswerCheck) {
