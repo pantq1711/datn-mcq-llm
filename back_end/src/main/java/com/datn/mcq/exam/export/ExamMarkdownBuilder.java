@@ -1,5 +1,6 @@
 package com.datn.mcq.exam.export;
 
+import com.datn.mcq.common.util.DegreeSymbols;
 import com.datn.mcq.common.util.LiteralNewlines;
 import com.datn.mcq.config.ExamScoringProperties;
 import com.datn.mcq.enums.StatementKey;
@@ -100,7 +101,8 @@ public final class ExamMarkdownBuilder {
 
     /** @param today ngày xuất; cho phép cố định ngày khi kiểm thử */
     public static String build(ExamViewDto examView, ExamHeader header, ExamScoringProperties scoring, LocalDate today) {
-        // Câu đã lưu từ trước có thể còn "\n" chữ trong công thức: sửa trong file xuất (không sửa DB), cho cả Equation và MathType.
+        // Câu đã lưu từ trước có thể còn "\n" chữ trong công thức, và độ viết ^{\circ} thành chỉ số trên cỡ nhỏ: sửa trong file
+        // xuất (không sửa DB), cho cả Equation và MathType.
         ExamViewDto exam = withoutLiteralNewlines(examView);
         List<String> blocks = new ArrayList<>();
         blocks.add(headerBlock(header, today));
@@ -136,7 +138,10 @@ public final class ExamMarkdownBuilder {
         return String.join("\n\n", blocks) + "\n";
     }
 
-    /** Bản sao của đề với "\n" chữ đã chuẩn hóa ({@link LiteralNewlines}) ở câu dẫn, phương án, ý đúng/sai và lời giải. */
+    /**
+     * Bản sao của đề với "\n" chữ đã chuẩn hóa ({@link LiteralNewlines}) rồi ký hiệu độ trong công thức về "°"
+     * ({@link DegreeSymbols}) ở câu dẫn, phương án, ý đúng/sai và lời giải.
+     */
     static ExamViewDto withoutLiteralNewlines(ExamViewDto exam) {
         List<PartDto> parts = exam.parts().stream()
                 .map(p -> new PartDto(p.part(), p.required(), p.ready(),
@@ -148,14 +153,19 @@ public final class ExamMarkdownBuilder {
 
     private static ExamItemDto withoutLiteralNewlines(ExamItemDto i) {
         List<ItemStatementDto> statements = i.statements() == null ? null : i.statements().stream()
-                .map(s -> new ItemStatementDto(s.key(), LiteralNewlines.repair(s.text()).text(), s.label(), s.difficulty()))
+                .map(s -> new ItemStatementDto(s.key(), cleanText(s.text()), s.label(), s.difficulty()))
                 .toList();
         return new ExamItemDto(i.slotId(), i.cellId(), i.slotNo(), i.part(), i.topic(), i.questionType(), i.state(),
-                i.source(), i.bankItemId(), i.questionId(), LiteralNewlines.repair(i.questionText()).text(),
-                LiteralNewlines.repair(i.optionA()).text(), LiteralNewlines.repair(i.optionB()).text(),
-                LiteralNewlines.repair(i.optionC()).text(), LiteralNewlines.repair(i.optionD()).text(), i.correctOption(),
-                i.saAnswer(), statements, LiteralNewlines.repair(i.explanation()).text(), i.difficulty(),
+                i.source(), i.bankItemId(), i.questionId(), cleanText(i.questionText()),
+                cleanText(i.optionA()), cleanText(i.optionB()),
+                cleanText(i.optionC()), cleanText(i.optionD()), i.correctOption(),
+                i.saAnswer(), statements, cleanText(i.explanation()), i.difficulty(),
                 i.needsReview(), i.reviewReasons(), i.qcState(), i.edited(), i.originalQuestionId(), i.failureReason());
+    }
+
+    /** "\n" chữ trước (có thể làm lộ công thức), rồi ký hiệu độ; không có gì để đổi thì trả đúng đối tượng ban đầu. */
+    private static String cleanText(String text) {
+        return DegreeSymbols.normalize(LiteralNewlines.repair(text).text());
     }
 
     // ---------------------------------------------------------------- dòng hướng dẫn, câu hỏi

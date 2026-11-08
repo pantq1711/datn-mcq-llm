@@ -52,7 +52,7 @@ class ExamLiteralNewlinesExportTest {
         assertFalse(md.contains("\\n"), "còn \\n chữ trong file xuất");
         assertFalse(md.contains("\\\\n"), "còn \\n chữ (đã thoát) trong file xuất");
         assertTrue(md.contains("$x +1 = 2$"), md);
-        assertTrue(md.contains("\\widehat{H} = \\frac{170^{\\circ}}{3}"), md);
+        assertTrue(md.contains("\\widehat{H} = \\frac{170°}{3}"), md);
     }
 
     @Test
