@@ -1,0 +1,45 @@
+# Giám sát khi phát triển LOCAL: chỉ Prometheus + Grafana trong Docker, scrape backend đang chạy TRÊN MÁY (cổng 8080,
+# ./mvnw spring-boot:run hoặc back_end/run-dev.sh). Không đụng stack triển khai (compose.prod.yaml) và không cần deploy/.env.
+#   docker compose -f deploy/compose.monitoring-dev.yaml up -d
+#   Grafana:    http://localhost:3000   (admin / admin, đổi được sau khi đăng nhập)
+#   Prometheus: http://localhost:9090   (Status > Targets: datn-app phải UP khi backend đang chạy)
+#   Tắt:        docker compose -f deploy/compose.monitoring-dev.yaml down      (thêm -v để xóa luôn dữ liệu)
+# Chỉ bind 127.0.0.1. Cấu hình scrape: deploy/monitoring/prometheus-dev.yml (host.docker.internal:8080).
+name: datn-monitoring-dev
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3d
+    volumes:
+      - ./monitoring/prometheus-dev.yml:/etc/prometheus/prometheus.yml:ro
+      - prom_dev_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Docker Desktop đã có sẵn; dòng này giúp cả Docker Engine trên Linux
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/datn.json
+    volumes:
+      - grafana_dev_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  prom_dev_data:
+  grafana_dev_data:

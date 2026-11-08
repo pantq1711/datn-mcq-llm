@@ -1,0 +1,72 @@
+# Giám sát (tùy chọn): Prometheus + Grafana. Dùng CHUNG với compose.prod.yaml; mạng và volume của file đó được tái sử dụng.
+# Bật bằng cách thêm vào COMPOSE_FILE trong deploy/.env (Linux dấu ":", Windows dấu ";"):
+#   COMPOSE_FILE=compose.prod.yaml:compose.monitoring.yaml
+# Rồi: docker compose up -d. Tắt: bỏ khỏi COMPOSE_FILE và `docker compose up -d --remove-orphans`.
+#
+# - Prometheus chỉ ở mạng "internal" (không ra Internet, không publish cổng): scrape app:8080/actuator/prometheus.
+#   Endpoint này không cần JWT nên PHẢI chỉ đi được từ mạng nội bộ; Caddy chặn /actuator/* từ ngoài (xem Caddyfile).
+# - Grafana chỉ bind 127.0.0.1 của máy chủ. Xem bằng SSH tunnel: ssh -L 3000:127.0.0.1:3000 deploy@<máy chủ>
+#   rồi mở http://localhost:3000. Không đặt sau Caddy.
+# - RAM: mem_limit 256m mỗi dịch vụ. Cộng với app (1536m) + db (768m) + web (128m) là ~2,9 GB giới hạn: dành cho VPS 4 GB.
+#   Máy 2 GB không bật file này.
+# Hướng dẫn đầy đủ: docs/deploy/README.md mục "Giám sát".
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=1GB
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom_data:/prometheus
+    depends_on:
+      app:
+        condition: service_healthy
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks: [internal]
+    logging: *logging
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Cần đặt GRAFANA_ADMIN_PASSWORD trong deploy/.env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
+      TZ: Asia/Bangkok
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    # internal: tới Prometheus; edge: cần để cổng 127.0.0.1 publish được (mạng "internal" không publish cổng).
+    networks: [internal, edge]
+    logging: *logging
+
+volumes:
+  prom_data:
+  grafana_data:
