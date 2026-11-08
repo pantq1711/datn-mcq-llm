@@ -3,7 +3,7 @@
 - **Nhóm thực hiện:**
   - Phan Hồng An — backend, CSDL, hàng đợi, QC
   - Vũ Hồng Quân — frontend
-  - [TÊN THÀNH VIÊN 3] — công cụ nhập ngân hàng câu hỏi, xuất Word MathType
+  - Bùi Xuân Đang — công cụ nhập ngân hàng câu hỏi, xuất Word MathType
 - **Giảng viên hướng dẫn:** ThS. Nguyễn Mạnh Sơn
 
 ## 1. Giới thiệu
@@ -84,7 +84,6 @@ Hệ thống hỗ trợ giáo viên THCS (môn Toán) tạo đề kiểm tra the
 ## 7. Triển khai máy chủ
 
 Hướng dẫn chi tiết về kiến trúc container (`web` Caddy HTTPS + `app` Spring Boot + `db` PostgreSQL), cấu hình `deploy/.env`, giới hạn tài nguyên Pandoc/PDFBox, sao lưu – khôi phục và quy trình CI/CD nằm tại [`docs/deploy/README.md`](docs/deploy/README.md).
-
 ## 8. Bản đồ tài liệu (`docs/`)
 
 - [`docs/ai-development-rules.md`](docs/ai-development-rules.md): Quy tắc phát triển có AI hỗ trợ (v2), thứ tự ưu tiên nguồn chuẩn, các bất biến nghiệp vụ và lịch sử quyết định.
