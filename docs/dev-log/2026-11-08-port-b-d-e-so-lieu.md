@@ -22,8 +22,8 @@
 | Mã tài liệu | Tổng số câu | Trắc nghiệm (MCQ) | Đúng/Sai (TF) | Trả lời ngắn (SA) | Xem trước (Preview) | Bỏ qua (Skipped) |
 |---|---|---|---|---|---|---|
 | `k8c3b1` | 40 | 20 | 10 | 10 | 26 | 14 (`has_image`) |
-| `k8c3b2` | 40 | 20 | 10 | 10 | 20 | 20 (`has_image`: 18, `has_table`: 2) |
-| `k8c4b1` | 40 | 20 | 10 | 10 | 13 | 27 (`has_image`: 17, `has_table`: 10) |
+| `k8c3b2` | 40 | 20 | 10 | 10 | 20 | 20 (`has_image`: 20) |
+| `k8c4b1` | 40 | 20 | 10 | 10 | 13 | 27 (`has_image`: 15, `has_table`: 12) |
 | `k8c5b2` | 41 | 21 | 10 | 10 | 22 | 19 (`has_image`) |
 | **Tổng cộng** | **161** | **81** | **40** | **40** | **81** | **80** |
 
