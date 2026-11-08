@@ -17,7 +17,7 @@ Mục tiêu: một VPS Linux có tên miền và HTTPS để giáo viên dùng t
 > | Xuất Word `?equation=mathtype` trong container Linux (04/11/2026, `mem_limit` 1536m, 2 CPU) | Đã chạy qua `PandocRunner` thật: đề 40 câu × 6 công thức, 256 đối tượng MathType, ~3 giây mỗi lần sau lần đầu (lần đầu ~4,5 giây), heap sau GC ~13 MiB, không OOM, 3 yêu cầu đồng thời xếp hàng qua Semaphore 1 (tổng ~9 giây). Chưa thử trên máy chủ thật và chưa mở file bằng Word/MathType. |
 > | Gemini **thật** trong container (`LLM_API_KEY` đặt qua `deploy/.env`): đề 3 câu (1 mcq, 1 tf, 1 sa) | Đã chạy, đạt: 3/3 câu `ready` sau ~2 phút, xuất Word 200. Câu tf có cờ "cần xem kỹ" (`solver_inconsistent`): Solver thật lệch nhãn, đúng thiết kế, không phải lỗi triển khai |
 > | Giám sát (08/11, Docker Desktop, mục 6b): Prometheus scrape `app` (target `up`), dashboard nạp qua provisioning, Grafana `127.0.0.1:3000`, `/actuator/prometheus` và `/actuator/health` từ ngoài qua Caddy trả 404 | Đã chạy, đạt. Chưa chạy trên VPS thật |
-| `update.sh`, kéo image từ GHCR, Let's Encrypt trên tên miền thật | Chưa chạy (cần image đã đẩy lên GHCR, máy chủ thật, tên miền) |
+> | `update.sh`, kéo image từ GHCR, Let's Encrypt trên tên miền thật | Chưa chạy (cần image đã đẩy lên GHCR, máy chủ thật, tên miền) |
 >
 > Lần kiểm chứng dùng một trang tĩnh giả thay cho frontend (Caddyfile là bản thật của repo).
 

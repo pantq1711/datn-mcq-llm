@@ -10,7 +10,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
 
 /**
- * Giám sát (08/11): QC loại câu ở bước nào. {@code datn_qc_rejected_total{step}} nhận bốn bước cố định:
+ * Giám sát (08/11): QC loại câu ở bước nào. {@code datn_qc_rejected_total{step}} nhận năm bước cố định:
  * {@code format}, {@code dedup}, {@code solver} (Solver lệch nhãn), {@code solver_error} (Solver không kết luận được) và
  * {@code grounding} (không có căn cứ trong tài liệu). Chỉ ghi số đếm, không đổi kết quả QC.
  */
