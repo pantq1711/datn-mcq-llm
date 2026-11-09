@@ -257,6 +257,20 @@ class MatrixPromptDraftV0Test {
                 .contains("phương án nhiễu"));
     }
 
+    /**
+     * 10/11 (đề 22 ô "Thu gọn đa thức": 3/3 câu bị loại vì 4 phương án trùng nhau, đáp án đúng viết hai lần): prompt mcq dặn
+     * bốn phương án khác nhau đôi một và kết quả đúng chỉ ở đúng phương án được chỉ định. Chỉ mcq có dòng này.
+     */
+    @Test
+    void mcqBonPhuongAnKhacNhauDoiMotVaKetQuaDungChiO1PhuongAn() {
+        String rule = "Bốn phương án phải khác nhau đôi một; kết quả đúng chỉ xuất hiện ở đúng phương án được chỉ định, các"
+                + " phương án còn lại là kết quả sai có lý do (sai dấu, sai hệ số, quên hạng tử…).";
+        assertTrue(MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.MCQ, "Đa thức", "Các phép tính đa thức"))
+                .contains(rule));
+        assertFalse(MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.SA, "Tứ giác", null)).contains(rule));
+        assertFalse(MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.TF, "Tứ giác", null)).contains(rule));
+    }
+
     /** Quy tắc nội dung chung của cả 3 dạng (31/10, thẩm định nội dung: dạng kết quả, "luôn", số bước, kiến thức, câu chữ). */
     @Test
     void quyTacNoiDungChungCoTrongPromptMaTranCaBaDang() {

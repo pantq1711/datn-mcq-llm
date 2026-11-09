@@ -122,7 +122,9 @@ public final class MatrixPromptDraftV0 {
             + "cách viết tương đương đúng của đáp án hoặc của biểu thức đề cho; kiểm bằng cách khai triển hoặc rút gọn "
             + "từng phương án trước khi chọn.\n"
             + "- Không dùng phương án độn như \"giá trị khác\", \"tất cả đều sai\", \"không xác định\" (trừ khi đó là "
-            + "đáp án đúng và có lý do toán học).";
+            + "đáp án đúng và có lý do toán học).\n"
+            + "- Bốn phương án phải khác nhau đôi một; kết quả đúng chỉ xuất hiện ở đúng phương án được chỉ định, các "
+            + "phương án còn lại là kết quả sai có lý do (sai dấu, sai hệ số, quên hạng tử…).";
 
     /**
      * Quy tắc nội dung chung của cả 3 dạng (31/10, thẩm định nội dung: câu 15 và 61 thiếu "luôn", câu 42 "Biết" đòi 2 bước,
