@@ -1,4 +1,4 @@
-# Quy tắc phát triển có AI hỗ trợ – v2
+# Quy tắc phát triển có AI hỗ trợ – v3
 
 Phạm vi: toàn bộ repository `datn-mcq-llm` (backend Java 21/Spring Boot, PostgreSQL/Flyway, Gemini).
 Áp dụng cho mọi agent/AI client và cho người dùng khi giao việc cho AI.
@@ -14,7 +14,7 @@ Ký hiệu:
 - **Q-x** – **câu hỏi chờ chủ dự án quyết định**. AI không được tự chọn đáp án hay viết code giả định đáp án.
 - **F-x** – phát hiện từ audit (mục 11), kèm mức độ chắc chắn.
 
-Cách tham chiếu trong prompt: `Tuân thủ docs/ai-development-rules.md v2. Lượt này chỉ làm bước <...>.`
+Cách tham chiếu trong prompt: `Tuân thủ docs/ai-development-rules.md v3. Lượt này chỉ làm bước <...>.`
 
 ---
 
@@ -283,6 +283,8 @@ Xác nhận: không chạy lệnh thuộc M-27 / không gọi API tính phí / k
   thêm Q-4b, F-6, F-13, F-14, F-20; gỡ entity `LabelAssignment` (bảng `label_assignment` giữ nguyên).
 - 2026-11-03: thêm "Quyết định ngày 3/11/2026 – nhập ngân hàng câu từ Word"; M-9 thêm đường thứ hai (xác nhận câu nhập),
   M-10 thêm ngoại lệ câu nhập ở `in_bank`. Không đổi số phiên bản tài liệu.
+- v3 (2026-11-10): quyết định 22/10 mục 4 thêm một dòng: câu có cờ "cần xem kỹ" khi Giữ vẫn được nhưng chỉ vào ngân hàng
+  riêng của người Giữ (`visible_to_user_id`); câu không cờ giữ nguyên (dùng chung, trừ đề có tài liệu).
 ## Quyết định ngày 21/10/2026 (thay thế các comment xung đột trong V1__init_schema.sql)
 
 Không sửa file V1 (đã chạy, sửa sẽ lệch checksum Flyway). Khi comment trong V1 mâu thuẫn với mục này, mục này thắng.
@@ -306,7 +308,7 @@ Theo ưu tiên của giảng viên hướng dẫn (trải nghiệm giáo viên t
 1. Đề tạo theo ma trận (`exam.mode = 'teacher'`, API `/api/exams/**`, V7) là chế độ giáo viên, production, **không chấm mù**: API xem đề trả đáp án (`correctOption`), đáp số `sa`, nhãn và mức từng ý `tf`, lời giải và cờ "cần xem kỹ" (`needsReview`, `reviewReasons`: Solver lệch, không kết luận được hoặc chưa chạy; dedup chưa chạy; cảnh báo bước format).
 2. Không đổi: form chấm mù `/api/reviews/**` của cả production và experiment (M-6, M-7, quyết định 21/10 mục 2); thực nghiệm C1/C2/C3; experiment không dùng chế độ giáo viên.
 3. Giữ/Sửa ở chế độ giáo viên tạo `teacher_review` production với `review_mode = 'assisted'` và `bank_item` trong cùng transaction (M-9 vẫn giữ). Đánh giá `assisted` bị loại khỏi mọi chỉ số chấm mù (`answer_correct`, tỉ lệ duyệt không sửa); thống kê giữ/sửa/đổi lấy riêng từ `exam_slot_action`.
-4. Câu vẫn lệch Solver sau 1 lần sinh lại được đưa vào đề kèm cờ "cần xem kỹ". Giáo viên được Giữ câu này vào ngân hàng sau khi đã thấy cờ; đây là ngoại lệ có chủ đích so với form chấm mù (duyệt production ở đó chỉ nhận câu `qc_passed`/`in_bank`).
+4. Câu vẫn lệch Solver sau 1 lần sinh lại được đưa vào đề kèm cờ "cần xem kỹ". Giáo viên được Giữ câu này vào ngân hàng sau khi đã thấy cờ; đây là ngoại lệ có chủ đích so với form chấm mù (duyệt production ở đó chỉ nhận câu `qc_passed`/`in_bank`). (10/11) câu có cờ khi Giữ chỉ vào ngân hàng riêng của người Giữ (`bank_item.visible_to_user_id` = người Giữ, không dùng chung).
 
 ## Quyết định ngày 23/10/2026 – bỏ thí nghiệm C1/C2/C3, chương thử nghiệm mới
 
