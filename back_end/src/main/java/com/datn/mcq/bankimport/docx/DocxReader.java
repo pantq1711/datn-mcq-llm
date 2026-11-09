@@ -317,7 +317,8 @@ public final class DocxReader {
             h = intAttr(extent, "cy", 0) / 360000.0;
         }
         // hình vẽ không có ảnh nhúng (shape, text box) vẫn là hình: đánh dấu để câu bị bỏ, không âm thầm mất hình
-        b.obj(new Obj(false, ref != null ? ref : "drawing", null, null, ref != null ? ext(ref) : "", w, h), yellow, cyan);
+        b.obj(new Obj(false, ref != null ? ref : "drawing", null, null, ref != null ? ext(ref) : "", w, h,
+                firstDesc(d, WP, "anchor") != null), yellow, cyan);
     }
 
     private void pict(Element pict, RichText.Builder b, boolean yellow, boolean cyan) {

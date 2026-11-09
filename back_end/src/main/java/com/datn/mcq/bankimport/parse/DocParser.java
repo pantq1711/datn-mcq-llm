@@ -6,6 +6,7 @@ import com.datn.mcq.bankimport.docx.Block.Para;
 import com.datn.mcq.bankimport.docx.Block.Tbl;
 import com.datn.mcq.bankimport.docx.DocxReader;
 import com.datn.mcq.bankimport.docx.RichText;
+import com.datn.mcq.bankimport.docx.RichText.Obj;
 import com.datn.mcq.bankimport.model.Question;
 import com.datn.mcq.bankimport.model.Question.Answer;
 import com.datn.mcq.bankimport.model.Question.Option;
@@ -18,6 +19,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -48,6 +50,15 @@ public final class DocParser {
     private static final Pattern STATEMENT_LABEL = Pattern.compile("^[\\s\\uE001]*[a-dA-D]\\s*[).]\\s*");
     private static final Pattern OPTION_LABEL = Pattern.compile("(?<![^\\s\\u00A0\\uE001\\uFFFC])([ABCD])\\s*[.)]");
     private static final Pattern NUMERIC = Pattern.compile("^-?\\d+(?:[.,]\\d+)?$");
+    /** Chữ giữ chỗ của mẫu còn sót sau nhãn mức ("[NB] Câu hỏi…"). */
+    private static final Pattern PLACEHOLDER = Pattern.compile("^\\s*Câu\\s+hỏi\\s*(?:…|\\.{3,})\\s*$",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    /** Câu phụ tự luận "a/ ..." còn sót ở cuối đề dẫn câu Đúng/Sai (khác nhãn ý "a)"). */
+    private static final Pattern SUB_QUESTION = Pattern.compile("^[\\s\\uE001]*[a-dA-D]\\s*/");
+
+    /** Đề nhắc tới một hình cụ thể (không gồm tên hình học như "hình vuông", "hình thang"). */
+    private static final Pattern FIGURE_MENTION = Pattern.compile(
+            "hình\\s+(?:vẽ|bên|dưới|sau|\\d)|như\\s+hình", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     private static final String LEVEL = "VDC|VẬN\\s*DỤNG\\s*CAO|VD|VẬN\\s*DỤNG|THÔNG\\s*HIỂU|TH|NHẬN\\s*BIẾT|NB";
     private static final Pattern LEVEL_ANY = Pattern.compile("(" + LEVEL + ")", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
@@ -110,6 +121,8 @@ public final class DocParser {
     private final DocxReader.Result pkg;
     private final FormulaService formulas;
     private final List<Problem> problems = new ArrayList<>();
+    /** Hình nổi (figure) neo trong vùng phương án của câu mcq: ứng viên chuyển sang câu sau. */
+    private final Map<Question, List<Obj>> floatingInOptions = new IdentityHashMap<>();
 
     private DocParser(LessonName.Parsed ln, DocxReader.Result pkg) {
         this.ln = ln;
@@ -138,22 +151,21 @@ public final class DocParser {
                 regions.get(cur).add(b);
             }
         }
-        List<Question> out = new ArrayList<>();
+        List<Question> out = new ArrayList<>(mcqWithFloatingFigures(splitByStem(regions.get("I"))));
         int n = 0;
-        for (List<Block> qb : splitByStem(regions.get("I"))) {
-            out.add(mcq(qb, ++n));
-        }
-        n = 0;
         for (Group g : tfGroups(regions.get("II"))) {
             out.add(tf(g, ++n));
         }
         n = 0;
-        for (List<Block> qb : splitByStem(regions.get("III"))) {
-            out.add(sa(qb, ++n));
+        for (SaPart sp : saParts(regions.get("III"))) {
+            out.add(sa(sp.blocks(), ++n, sp.context()));
         }
         for (Question q : out) {
             attachMissingImageTags(q);
             q.hasImage = !q.images.isEmpty();
+            if (q.stem != null && FIGURE_MENTION.matcher(q.stem).find() && !hasStemImage(q)) {
+                q.addFlag("mentions_figure_no_image");
+            }
             q.contentHash = hash(q);
             for (String f : q.flags) {
                 if (isStructural(f)) {
@@ -392,9 +404,48 @@ public final class DocParser {
         return new Whole(RichText.join(parts), start, end, fps);
     }
 
-    private Question mcq(List<Block> qb, int ordinal) {
+    /**
+     * Tạo các câu mcq; hình nổi neo trong vùng phương án của câu k được chuyển sang câu k+1 khi đề câu k+1 nhắc hình và chưa
+     * có ảnh ở đề, còn đề câu k không nhắc hình (Word hiển thị hình cạnh câu sau dù neo ở đoạn của câu trước). Lượt 1 tạo
+     * bình thường để có đề đã kết xuất; lượt 2 tạo lại đúng các câu có hình chuyển đi/đến.
+     */
+    private List<Question> mcqWithFloatingFigures(List<List<Block>> blocks) {
+        List<Question> qs = new ArrayList<>();
+        for (int i = 0; i < blocks.size(); i++) {
+            qs.add(mcq(blocks.get(i), i + 1, List.of(), List.of()));
+        }
+        List<List<Obj>> moveOut = new ArrayList<>();
+        List<List<Obj>> moveIn = new ArrayList<>();
+        for (int i = 0; i < qs.size(); i++) {
+            moveOut.add(new ArrayList<>());
+            moveIn.add(new ArrayList<>());
+        }
+        for (int i = 0; i + 1 < qs.size(); i++) {
+            List<Obj> figs = floatingInOptions.getOrDefault(qs.get(i), List.of());
+            Question next = qs.get(i + 1);
+            if (!figs.isEmpty() && !FIGURE_MENTION.matcher(qs.get(i).stem).find()
+                    && FIGURE_MENTION.matcher(next.stem).find() && !hasStemImage(next)) {
+                moveOut.get(i).addAll(figs);
+                moveIn.get(i + 1).addAll(figs);
+            }
+        }
+        for (int i = 0; i < qs.size(); i++) {
+            if (!moveOut.get(i).isEmpty() || !moveIn.get(i).isEmpty()) {
+                qs.set(i, mcq(blocks.get(i), i + 1, moveOut.get(i), moveIn.get(i)));
+            }
+        }
+        return qs;
+    }
+
+    private static boolean hasStemImage(Question q) {
+        return q.images.stream().anyMatch(im -> "stem".equals(im.role));
+    }
+
+    /** moveOut: hình nổi bỏ khỏi câu này; moveIn: hình nổi của câu trước được gán làm hình của đề câu này. */
+    private Question mcq(List<Block> qb, int ordinal, List<Obj> moveOut, List<Obj> moveIn) {
         Question q = newQuestion("mcq", "I", ordinal);
         QCtx c = new QCtx(q, formulas);
+        moveOut.forEach(c::skip);
         List<Tbl> tables = new ArrayList<>();
         List<FP> fps = flatten(qb, tables);
         Head head = head(fps.get(0).para().text());
@@ -478,6 +529,23 @@ public final class DocParser {
                     c.registerImage(w.rt().objs.get(w.rt().objIdx[i]), "stem");
                 }
             }
+            // hình nổi trong vùng phương án (từ đầu đoạn chứa nhãn A): ứng viên thuộc câu sau
+            int optionsStart = lab[0][0];
+            for (int i = 0; i < w.fps().size(); i++) {
+                if (lab[0][0] >= w.start()[i] && lab[0][0] <= w.end()[i]) {
+                    optionsStart = w.start()[i];
+                }
+            }
+            List<Obj> floating = new ArrayList<>();
+            for (int i = optionsStart; i < w.rt().length(); i++) {
+                if (w.rt().objIdx[i] >= 0) {
+                    Obj o = w.rt().objs.get(w.rt().objIdx[i]);
+                    if (o.floating() && !o.equation() && QCtx.classify(o).equals("figure")) {
+                        floating.add(o);
+                    }
+                }
+            }
+            floatingInOptions.put(q, floating);
             q.answer = answer(hit.size() == 1 ? hit.get(0) : null, hit.isEmpty() ? "none" : "highlight_yellow");
             if (hit.isEmpty()) {
                 q.addFlag("answer_missing");
@@ -485,6 +553,10 @@ public final class DocParser {
                 q.addFlag("answer_ambiguous");
                 q.answer.evidence = "highlight_yellow_multiple";
             }
+        }
+        for (Obj o : moveIn) {
+            c.registerImage(o, "stem");
+            q.addFlag("figure_from_previous_question");
         }
         // ảnh trong ô của bảng bố cục ngoài phạm vi đã duyệt (ví dụ ô ảnh không có nhãn) cũng là ảnh của đề
         for (int t : layoutTables) {
@@ -581,25 +653,40 @@ public final class DocParser {
     private Question tf(Group g, int ordinal) {
         Question q = newQuestion("tf", "II", ordinal);
         QCtx c = new QCtx(q, formulas);
-        List<Para> stem = g.stem.stream().filter(p -> !p.text().isBlank() || !p.text().objs.isEmpty()).toList();
+        List<Para> stem = new ArrayList<>(g.stem.stream().filter(p -> !p.text().isBlank() || !p.text().objs.isEmpty()).toList());
         Head head = stem.isEmpty() ? null : head(stem.get(0).text());
         setLevel(q, head);
+        boolean extra = false;
+        // câu phụ "a/ b/" liền nhau ở cuối đề dẫn: sót lại từ bản tự luận, các ý a-d đã thay chúng
+        while (stem.size() > 1 && SUB_QUESTION.matcher(stem.get(stem.size() - 1).text().s).find()) {
+            stem.remove(stem.size() - 1);
+            extra = true;
+        }
         List<String> lines = new ArrayList<>();
         for (int i = 0; i < stem.size(); i++) {
             RichText rt = stem.get(i).text();
             String s = i == 0 && head != null ? c.render(rt, "stem", head.omitFrom(), head.omitTo()) : c.render(rt, "stem");
+            if (i == 0 && PLACEHOLDER.matcher(s).matches()) {
+                extra = true;
+                continue;
+            }
             if (!s.isEmpty()) {
                 lines.add(s);
             }
         }
+        if (extra) {
+            q.addFlag("stem_extra_text");
+        }
+        q.stem = String.join("\n", lines);
+        // hàng "Gợi ý" sau các ý thuộc lời giải, đứng trước lời giải ở đoạn sau bảng
+        List<String> hint = new ArrayList<>();
         for (Para p : g.hint) {
-            String s = c.render(p.text(), "stem");
+            String s = c.render(p.text(), "solution");
             if (!s.isEmpty()) {
-                lines.add(s);
+                hint.add(s);
                 q.addFlag("hint_after_statements");
             }
         }
-        q.stem = String.join("\n", lines);
 
         q.statements = new ArrayList<>();
         boolean anyYellow = false;
@@ -654,19 +741,115 @@ public final class DocParser {
         } else {
             q.addFlag("answer_missing");
         }
-        q.solution = solution(rest, c);
+        String sol = solution(rest, c);
+        if (!hint.isEmpty()) {
+            if (sol != null) {
+                hint.add(sol);
+            }
+            sol = String.join("\n", hint);
+        }
+        q.solution = sol;
         return q;
     }
 
     // ---------- phần III: trả lời ngắn ----------
 
-    private Question sa(List<Block> qb, int ordinal) {
+    /** Khối của một câu và ngữ cảnh dùng chung (đoạn giới thiệu, hình, bảng) mà câu đó nhận; context rỗng nếu không có. */
+    private record SaPart(List<Block> blocks, List<Block> context) {}
+
+    /**
+     * Tách Phần III theo đầu câu và gán ngữ cảnh dùng chung: khối đứng trước câu đầu tiên, hoặc khối sau "Đáp số" của một
+     * câu có bảng (một đoạn giới thiệu ngay trước bảng + bảng + phần sau). Ngữ cảnh áp cho các câu sau tới khi có ngữ cảnh
+     * mới hoặc gặp câu có bảng riêng trong thân câu.
+     */
+    private static List<SaPart> saParts(List<Block> region) {
+        List<Block> preamble = new ArrayList<>();
+        List<List<Block>> qbs = new ArrayList<>();
+        List<Block> cur = null;
+        for (Block b : region) {
+            if (b instanceof Para p && head(p.text()) != null) {
+                cur = new ArrayList<>();
+                qbs.add(cur);
+            }
+            (cur == null ? preamble : cur).add(b);
+        }
+        List<Block> ctx = preamble.stream().anyMatch(DocParser::hasContent) ? preamble : List.of();
+        List<SaPart> out = new ArrayList<>();
+        for (List<Block> qb : qbs) {
+            int ans = answerIndex(qb);
+            if (qb.subList(0, ans < 0 ? qb.size() : ans).stream().anyMatch(b -> b instanceof Tbl)) {
+                ctx = List.of();                              // câu có bảng riêng: ngữ cảnh cũ dừng
+            }
+            List<Block> trailing = trailingContext(qb, ans);
+            out.add(new SaPart(qb.subList(0, qb.size() - trailing.size()), ctx));
+            if (!trailing.isEmpty()) {
+                ctx = trailing;
+            }
+        }
+        return out;
+    }
+
+    private static int answerIndex(List<Block> qb) {
+        for (int i = 0; i < qb.size(); i++) {
+            if (qb.get(i) instanceof Para p && ANSWER_SA.matcher(p.text().s).find()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Ngữ cảnh của các câu sau nằm ở đuôi câu này: từ đoạn giới thiệu ngay trước bảng đầu tiên sau "Đáp số" tới hết. */
+    private static List<Block> trailingContext(List<Block> qb, int ans) {
+        if (ans < 0) {
+            return List.of();
+        }
+        int tbl = -1;
+        for (int i = ans + 1; i < qb.size() && tbl < 0; i++) {
+            if (qb.get(i) instanceof Tbl) {
+                tbl = i;
+            }
+        }
+        if (tbl < 0) {
+            return List.of();
+        }
+        int start = tbl;
+        for (int i = tbl - 1; i > ans; i--) {
+            if (hasContent(qb.get(i))) {
+                start = i;
+                break;
+            }
+        }
+        return qb.subList(start, qb.size());
+    }
+
+    private static boolean hasContent(Block b) {
+        return b instanceof Tbl || b instanceof Para p && (!p.text().isBlank() || !p.text().objs.isEmpty());
+    }
+
+    private Question sa(List<Block> qb, int ordinal, List<Block> context) {
         Question q = newQuestion("sa", "III", ordinal);
         QCtx c = new QCtx(q, formulas);
         List<Tbl> tables = new ArrayList<>();
         List<FP> fps = flatten(qb, tables);
         Head head = head(fps.get(0).para().text());
         setLevel(q, head);
+
+        // ngữ cảnh dùng chung đứng trước đề riêng: đoạn (kể cả hình) vào đầu stem, bảng vào đầu tables
+        List<String> lines = new ArrayList<>();
+        List<List<List<String>>> contextTables = new ArrayList<>();
+        for (Block b : context) {
+            if (b instanceof Para p) {
+                String s = c.render(p.text(), "stem");
+                if (!s.isEmpty()) {
+                    lines.add(s);
+                }
+            } else if (b instanceof Tbl t) {
+                contextTables.add(renderTable(t, c, "stem"));
+            }
+        }
+        if (!context.isEmpty()) {
+            q.addFlag("shared_context");
+        }
 
         int ansIdx = -1;
         int replyIdx = -1;
@@ -689,7 +872,6 @@ public final class DocParser {
             }
         }
         // đề: đoạn thân trước "Trả lời"/"Đáp số"; bảng dữ liệu nằm riêng
-        List<String> lines = new ArrayList<>();
         for (int i = 0; i < stemEnd; i++) {
             if (fps.get(i).tbl() >= 0) {
                 continue;
@@ -701,7 +883,7 @@ public final class DocParser {
             }
         }
         q.stem = String.join("\n", lines);
-        q.tables = new ArrayList<>();
+        q.tables = new ArrayList<>(contextTables);
         for (Tbl t : tables) {
             q.tables.add(renderTable(t, c, "stem"));
         }

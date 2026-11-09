@@ -768,6 +768,12 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
   `luuLoDongThoiKhongVuotTranLoCho` (6 luồng cùng lúc → đúng 3 lô).
 - Hạn chế: chặn log Hibernate chỉ có hiệu lực trong thân phương thức (bước xác nhận flush ngay cuối để mọi lỗi nổ ra trước
   commit). Câu tf nhận chung một mức cho 4 ý.
+- Bổ sung 08/11 (port các nhóm cải tiến B, D, E và Clock):
+  - Nhóm E (commit `bc6a326`): dọn placeholder "Câu hỏi..." và câu phụ thừa cuối stem câu Đúng/Sai, chuyển gợi ý sang đầu solution, cờ `stem_extra_text` (`k8c4b1-tf-001`, `tf-007`, `tf-010`).
+  - Nhóm B (commit `3f32d04`): chuyển hình nổi `wp:anchor` neo ở phương án câu trước sang câu sau khi câu sau nhắc hình (`k8c3b1-mcq-012`, `k8c5b2-mcq-013`), giữ ảnh dòng "Trả lời:" ở sa (`k8c5b2-sa-007`), cờ `figure_from_previous_question`, `mentions_figure_no_image`.
+  - Nhóm D (commit `541551e`): trích xuất ngữ cảnh dùng chung Phần III (đoạn dẫn, ảnh, bảng) trước câu 1 hoặc sau đáp số có bảng, nhân bản vào các câu tiếp theo (`k8c4b1-sa-001`..`008`), dừng tại câu có bảng riêng (`sa-009`), cờ `shared_context`.
+  - Clock tái lập (commit `3dab3ea`): inject `Clock` vào `BankImportService`.
+  - Báo cáo số liệu chi tiết trước/sau: xem [`docs/dev-log/2026-11-08-port-b-d-e-so-lieu.md`](2026-11-08-port-b-d-e-so-lieu.md).
 - Trạng thái: Đã sửa.
 
 ### L-68 Góp ý giáo viên Toán trên đề 14: vị trí đáp án mcq, văn phong câu hỏi (bổ sung 3/11)

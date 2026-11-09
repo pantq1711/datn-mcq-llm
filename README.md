@@ -3,7 +3,7 @@
 - **Nhóm thực hiện:**
   - Phan Hồng An — backend, CSDL, hàng đợi, QC
   - Vũ Hồng Quân — frontend
-  - [TÊN THÀNH VIÊN 3] — công cụ nhập ngân hàng câu hỏi, xuất Word MathType
+  - Bùi Xuân Đang — cải tiến bộ nhập ngân hàng câu hỏi, giám sát vận hành (Prometheus/Grafana)
 - **Giảng viên hướng dẫn:** ThS. Nguyễn Mạnh Sơn
 
 ## 1. Giới thiệu
