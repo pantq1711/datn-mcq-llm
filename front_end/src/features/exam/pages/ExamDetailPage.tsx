@@ -357,49 +357,53 @@ export default function ExamDetailPage() {
         }
     };
 
-    const handleKeep = async (question: ExamQuestionItem) => {
-        if (!examId || question.slotId === undefined) return;
+    const doKeep = async (question: ExamQuestionItem, flagged: boolean) => {
         try {
-            await keepQuestion(Number(examId), question.slotId);
-            message.success('Đã lưu câu vào ngân hàng');
+            await keepQuestion(Number(examId), question.slotId!);
+            message.success(flagged ? "Đã lưu vào ngân hàng riêng của thầy/cô." : "Đã lưu câu vào ngân hàng");
             await loadDetail();
         } catch (e: any) {
             const code = e?.response?.data?.code;
-            if (code === "QUESTION_FLAGGED") {
-                // Câu còn cờ "cần xem kỹ": không lưu, nói rõ lý do và cách xử lý
-                const reasons = question.reviewReasons ?? [];
-                Modal.warning({
-                    title: "Chưa lưu được vào ngân hàng",
-                    content: (
-                        <div>
-                            <p>{getApiErrorMessage(e, "Câu này còn điểm cần xem kỹ. Thầy/cô sửa hoặc đổi câu rồi lưu lại.")}</p>
-                            {reasons.length > 0 && (
-                                <ul style={{ paddingLeft: 20, margin: 0 }}>
-                                    {reasons.map((r) => (
-                                        <li key={r}>{describeReviewReason(r)}</li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                    ),
-                    okText: "Đóng",
-                });
-                await loadDetail(); // đồng bộ cờ mới nhất
-                return;
-            }
             if (code === "QC_CHECKING") {
                 message.info("Hệ thống đang tự kiểm tra bản sửa. Thầy/cô thử lưu lại sau ít phút.");
                 await loadDetail();
                 return;
             }
             if (e?.response?.status === 409) {
-                // Ví dụ "Câu hỏi này đã được giữ." hoặc chỗ chưa có câu
                 message.warning(`${getApiErrorMessage(e, "Không lưu được câu.")} Đã tải lại đề.`);
                 await loadDetail();
                 return;
             }
             showApiError(e, "Gặp lỗi khi lưu câu vào ngân hàng");
         }
+    };
+
+    const handleKeep = async (question: ExamQuestionItem) => {
+        if (!examId || question.slotId === undefined) return;
+        if (!question.needsReview) {
+            await doKeep(question, false);
+            return;
+        }
+        // Câu có cờ vẫn Giữ được nhưng vào ngân hàng riêng (docs/api mục 7.5, 10/11)
+        const reasons = question.reviewReasons ?? [];
+        Modal.confirm({
+            title: "Lưu câu đang có cảnh báo?",
+            content: (
+                <div>
+                    <p>Câu này đang có cảnh báo:</p>
+                    {reasons.length > 0 && (
+                        <ul style={{ paddingLeft: 20, margin: 0 }}>
+                            {reasons.map((r) => <li key={r}>{describeReviewReason(r)}</li>)}
+                        </ul>
+                    )}
+                    <p style={{ marginTop: 8 }}>Nếu vẫn giữ, câu chỉ được lưu vào ngân hàng riêng của thầy/cô.</p>
+                </div>
+            ),
+            okText: "Vẫn giữ",
+            cancelText: "Xem lại",
+            // onOk trả về Promise từ doKeep giúp nút "Vẫn giữ" tự động hiển thị hiệu ứng loading
+            onOk: () => doKeep(question, true),
+        });
     };
 
     const handleSaveEditedQuestion = async () => {

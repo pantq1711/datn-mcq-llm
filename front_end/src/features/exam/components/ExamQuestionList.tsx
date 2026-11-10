@@ -165,9 +165,9 @@ export default function ExamQuestionList({
                                         {canKeep && (
                                             <Tooltip
                                                 title={
-                                                    // Chưa khóa nút: chưa chốt backend chặn mọi cờ hay chỉ một số lý do (409 QUESTION_FLAGGED)
+                                                    // Câu có cờ vẫn Giữ được nhưng vào ngân hàng riêng (docs/api mục 7.5, 10/11)
                                                     question.needsReview
-                                                        ? "Câu đang có điểm cần xem kỹ; thầy/cô nên sửa hoặc đổi câu trước khi lưu."
+                                                        ? "Câu có cảnh báo sẽ chỉ được lưu vào ngân hàng riêng của thầy/cô."
                                                         : "Câu này sẽ được lưu vào ngân hàng chung để dùng cho các đề sau."
                                                 }
                                             >

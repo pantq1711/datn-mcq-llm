@@ -16,6 +16,11 @@
     margin: 0 0 4px !important;
 }
 
+.question-bank-page-note.ant-typography {
+    max-width: 720px;
+    margin-bottom: 0;
+}
+
 .question-bank-page-filters {
     width: 100%;
     margin-bottom: 16px;
