@@ -55,6 +55,33 @@ class ExamLiteralNewlinesExportTest {
         assertTrue(md.contains("\\widehat{H} = \\frac{170°}{3}"), md);
     }
 
+    /** L1 (9/11, đề 22 câu 458): "70^circ" thiếu "\" thành "70^\circ" rồi "70°" trong file xuất (cả câu đã lưu từ trước). */
+    @Test
+    void missingBackslashBeforeCircBecomesADegreeSignInTheExport() {
+        String md = ExamMarkdownBuilder.build(view("Cho $\\widehat{A} = 70^circ$ và $AB perp CD$.", "$x times y$",
+                "Ta có $\\frac{1}{2}$ và $frac{1}{2}$, $90^circ$."), HEADER, SCORING, TODAY);
+
+        assertFalse(md.contains("circ"), md);
+        assertTrue(md.contains("$\\widehat{A} = 70°$"), md);
+        assertTrue(md.contains("$AB \\perp CD$"), md);
+        assertTrue(md.contains("$x \\times y$"), md);
+        assertFalse(md.contains("$frac{"), md);
+        assertTrue(md.contains("$90°$"), md);
+    }
+
+    /** L2 (9/11, đề 22 câu 479): "\\" giữa các công thức thành xuống dòng; trong công thức giữ nguyên. */
+    @Test
+    void doubleBackslashOutsideFormulasBecomesANewlineInTheExport() {
+        String cases = "$\\begin{cases} x = 1 \\\\ y = 2 \\end{cases}$";
+        String md = ExamMarkdownBuilder.build(view("Cho " + cases + ".", "$1$",
+                "$x = 1$\\\\ $y = 2$\\\\ $z = 3$"), HEADER, SCORING, TODAY);
+
+        // mỗi dòng lời giải là một đoạn riêng (cách nhau dòng trống), như "\n" chữ đã có từ trước
+        assertTrue(md.contains("$x = 1$\n\n$y = 2$\n\n$z = 3$"), md);
+        assertTrue(md.contains(cases), md);
+        assertFalse(md.contains("$\\\\ $"), md);
+    }
+
     @Test
     void commandsStartingWithNSurviveExport() {
         String md = ExamMarkdownBuilder.build(view("Cho $x \\neq 0$ và $y \\notin A$.", "$\\nabla f$", "Vì $x \\neq 0$."),

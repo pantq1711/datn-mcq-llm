@@ -87,7 +87,8 @@ public class ExamActionService {
 
     /**
      * Giữ câu: câu lấy từ ngân hàng thì chỉ đánh dấu; câu hệ thống sinh thì ghi teacher_review 'assisted' và bank_item
-     * (AssistedKeepService#keepAssisted) trong cùng transaction.
+     * (AssistedKeepService#keepAssisted) trong cùng transaction. Câu đang có cờ "cần xem kỹ" (hoặc sinh từ tài liệu của giáo
+     * viên) vào ngân hàng riêng của người Giữ (visible_to_user_id), không dùng chung.
      */
     @Transactional
     public ExamItemDto keep(Integer examId, Integer slotId, Integer actorId) {
@@ -112,10 +113,13 @@ public class ExamActionService {
                 throw ApiErrorException.conflict(QC_CHECKING, GROUNDING_CHECKING_MESSAGE);
             }
             edited = generationService.getQuestionById(slot.getGeneratedQuestionId()).getEditedFromQuestionId() != null;
+            // L5 (10/11): cờ "cần xem kỹ" tính TRƯỚC khi Giữ (sau Giữ chỗ hiện bản ngân hàng, không còn cờ), cùng tiêu chí
+            // needsReview của API xem đề. Giữ vẫn được; chỉ khác là câu có cờ vào ngân hàng riêng của người Giữ.
+            boolean flagged = viewService.item(slot, matrixService.getCell(slot.getCellId())).needsReview();
             Integer bankItemId = assistedKeepService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
             slot.setBankItemId(bankItemId);
             // W2-3 (quyết định E): câu sinh từ tài liệu của giáo viên vào ngân hàng nhưng chỉ chính họ thấy và dùng lại.
-            if (!contextService.materialsFor(examId, slot.getCellId()).isEmpty()) {
+            if (flagged || !contextService.materialsFor(examId, slot.getCellId()).isEmpty()) {
                 bankService.restrictToUser(bankItemId, actorId);
             }
         }
