@@ -8,7 +8,7 @@ import "./QuestionBankPage.css";
 import type { SubjectOption, BankItemDetail, BankSort, QuestionTableItem, QuestionFilterValues } from "../types/questionBank.types";
 import { getCatalogSubjects, getBankItems, getBankItemDetail } from "../services/questionBankApi";
 
-const { Title } = Typography;
+const { Title, Paragraph } = Typography;
 
 const initialFilters: QuestionFilterValues = {
     keyword: "",
@@ -137,9 +137,16 @@ export default function QuestionBankPage() {
     return (
         <div className="question-bank-page">
             <div className="question-bank-page-header">
-                <Title level={2} className="question-bank-page-title">
-                    Ngân hàng câu hỏi
-                </Title>
+                <div>
+                    <Title level={2} className="question-bank-page-title">
+                        Ngân hàng câu hỏi
+                    </Title>
+                    {/* API không trả cờ riêng/chung từng câu (docs/api "Câu riêng tư"), nên chỉ giải thích chung */}
+                    <Paragraph type="secondary" className="question-bank-page-note">
+                        Danh sách gồm câu dùng chung và câu riêng của thầy/cô (câu soạn từ tài liệu bài học hoặc câu
+                        lưu khi đang có cảnh báo). Câu riêng chỉ thầy/cô thấy.
+                    </Paragraph>
+                </div>
                 <Tooltip title="Chưa hỗ trợ: cần API nhập câu vào ngân hàng ở backend.">
                     <Button icon={<FileWordOutlined />} disabled>
                         Nhập từ Word
