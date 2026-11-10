@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Empty, List, Skeleton, Space, Tag, Tooltip, Typography } from "antd";
-import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, WarningOutlined } from "@ant-design/icons";
+import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, WarningOutlined, ReloadOutlined } from "@ant-design/icons";
 
 import "./ExamQuestionList.css";
 import type { ExamQuestionItem } from "../types/exam.types";
@@ -113,6 +113,7 @@ export default function ExamQuestionList({
                 renderItem={(question, index) => {
                     const state = question.state ?? "ready";
                     const hasContent = state === "ready" || state === "kept" || state === "edited";
+                    const isFailed = state === "failed";
                     // Câu đúng/sai có mức ở từng ý; chỗ chưa có câu thì chưa có mức. Câu còn lại thiếu mức hoặc mức lạ: "Chưa phân loại"
                     const difficulty =
                         hasContent && resolveQuestionType(question) !== "tf"
@@ -175,14 +176,14 @@ export default function ExamQuestionList({
                                         )}
 
                                         {canChange && (
-                                            <Tooltip title="Đổi sang câu hỏi khác cùng mức độ">
+                                            <Tooltip title={isFailed ? "Soạn lại câu này" : "Đổi sang câu hỏi khác cùng mức độ"}>
                                                 <Button
                                                     type="text"
-                                                    icon={<SwapOutlined />}
+                                                    icon={isFailed ? <ReloadOutlined /> : <SwapOutlined />}
                                                     className="exam-action-btn-change"
                                                     onClick={() => onChangeQuestion?.(question, index)}
                                                 >
-                                                    Đổi câu khác
+                                                    {isFailed ? "Soạn lại" : "Đổi câu khác"}
                                                 </Button>
                                             </Tooltip>
                                         )}

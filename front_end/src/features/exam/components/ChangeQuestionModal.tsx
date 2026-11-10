@@ -3,7 +3,7 @@ import { Alert, Button, Form, Input, Modal, Radio, Space, Tag, Tooltip, Typograp
 import { InfoCircleOutlined, SwapOutlined, BulbOutlined, DatabaseOutlined, RobotOutlined } from "@ant-design/icons";
 
 import type { ExamQuestionItem, ChangeQuestionRequest, ExamQuestionType, ReplaceReason } from "../types/exam.types";
-import { REPLACE_REASON_OPTIONS, describeLevel, resolveQuestionType } from "../../../utils/exam.utils";
+import { REPLACE_REASON_OPTIONS, describeLevel, resolveQuestionType, describeFailureReason } from "../../../utils/exam.utils";
 import QuestionContent from "../components/QuestionContent";
 
 import "./ChangeQuestionModal.css";
@@ -46,6 +46,7 @@ export default function ChangeQuestionModal({
 
     const watchedSource = Form.useWatch("source", form) ?? "generate";
     const isBusy = loading || submitting;
+    const isFailed = question?.state === "failed";
 
     // Xác định loại câu hỏi
     const qType: ExamQuestionType = question ? resolveQuestionType(question) : "mcq";
@@ -59,7 +60,7 @@ export default function ChangeQuestionModal({
         }
     };
 
-    // Lấy thông tin hiển thị mức độ (hỗ trợ riêng cho tf hiện mẫu mức 4 ý)
+    // Mức độ của câu đang có (tf hiện mức 4 ý); câu chưa soạn được thì không có mức nên không gọi
     const renderDifficultyTags = (item: ExamQuestionItem) => {
         const type = resolveQuestionType(item);
 
@@ -97,10 +98,16 @@ export default function ChangeQuestionModal({
         const source = values.source || "generate";
         // Chỉ gửi instruction khi nguồn là sinh mới (generate)
         const instruction = source === "generate" ? (values.instruction || "").trim() : "";
+        const finalReason = isFailed ? undefined : reason;
 
         setSubmitting(true);
         try {
-            const result = await onGenerate({ question, instruction, source, ...(reason ? { reason } : {}) });
+            const result = await onGenerate({
+                question,
+                instruction,
+                source,
+                ...(finalReason ? { reason: finalReason } : {}),
+            });
             if (result === "bank_exhausted") {
                 // Không tự soạn: chỉ chuyển sang "Soạn câu mới" để giáo viên tự bấm (mỗi lần soạn tốn lượt gọi AI)
                 setBankExhausted(true);
@@ -123,7 +130,7 @@ export default function ChangeQuestionModal({
             title={
                 <Space size={10}>
                     <SwapOutlined className="change-question-modal-title-icon" />
-                    <span>Đổi câu hỏi</span>
+                    <span>{isFailed ? "Soạn lại câu" : "Đổi câu hỏi"}</span>
                 </Space>
             }
             width={720}
@@ -141,7 +148,11 @@ export default function ChangeQuestionModal({
                     className="change-question-modal-footer"
                     style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}
                 >
-                    <Text type="danger">Câu hiện tại sẽ bị thay. Không hoàn tác được.</Text>
+                    {isFailed ? (
+                        <Text type="secondary">Hệ thống sẽ soạn lại từ đầu (tính lại 3 lần thử)</Text>
+                    ) : (
+                        <Text type="danger">Câu hiện tại sẽ bị thay. Không hoàn tác được.</Text>
+                    )}
                     <Space size={8}>
                         <Button onClick={handleCancel} disabled={isBusy}>
                             Hủy
@@ -153,7 +164,9 @@ export default function ChangeQuestionModal({
                             disabled={!question}
                             onClick={handleSubmit}
                         >
-                            {watchedSource === "bank" ? "Đổi câu từ ngân hàng" : "Soạn câu mới"}
+                            {watchedSource === "bank"
+                                ? "Lấy câu từ ngân hàng"
+                                : isFailed ? "Soạn lại" : "Soạn câu mới"}
                         </Button>
                     </Space>
                 </div>
@@ -175,13 +188,23 @@ export default function ChangeQuestionModal({
                             </div>
                             <Space size={6} wrap>
                                 <Tag>{getQuestionTypeLabel(qType)}</Tag>
-                                {renderDifficultyTags(question)}
+                                {question.topic && <Tag color="cyan">{question.topic}</Tag>}
+                                {!isFailed && renderDifficultyTags(question)}
                             </Space>
                         </div>
 
-                        {/* Thay khối options cứng bằng QuestionContent dùng chung (không hiện lời giải) */}
+                        {/* Hiển thị Alert lỗi hoặc QuestionContent tùy theo trạng thái isFailed */}
                         <div className="change-question-current-question-content">
-                            <QuestionContent question={question} showExplanation={false} />
+                            {isFailed ? (
+                                <Alert
+                                    type="error"
+                                    showIcon
+                                    message="Hệ thống chưa soạn được câu này"
+                                    description={describeFailureReason(question.failureReason)}
+                                />
+                            ) : (
+                                <QuestionContent question={question} showExplanation={false} />
+                            )}
                         </div>
                     </section>
 
@@ -275,27 +298,29 @@ export default function ChangeQuestionModal({
                         </Form>
                     </section>
 
-                    {/* Lý do đổi: tùy chọn, chọn 1; bấm lại chip đang chọn để bỏ chọn */}
-                    <section className="change-question-reason-section">
-                        <Text strong>Lý do đổi câu (tùy chọn)</Text>
-                        <div className="change-question-reason-chips" role="group" aria-label="Lý do đổi câu">
-                            {REPLACE_REASON_OPTIONS.map((option) => (
-                                <Tag.CheckableTag
-                                    key={option.value}
-                                    className="change-question-reason-chip"
-                                    checked={reason === option.value}
-                                    onChange={(checked) => {
-                                        if (!isBusy) setReason(checked ? option.value : undefined);
-                                    }}
-                                >
-                                    {option.label}
-                                </Tag.CheckableTag>
-                            ))}
-                        </div>
-                        <Text type="secondary" className="change-question-reason-hint">
-                            Giúp hệ thống biết câu cũ chưa tốt ở đâu. Không chọn cũng được.
-                        </Text>
-                    </section>
+                    {/* Lý do đổi: ẩn hoàn toàn khi lỗi (isFailed) */}
+                    {!isFailed && (
+                        <section className="change-question-reason-section">
+                            <Text strong>Lý do đổi câu (tùy chọn)</Text>
+                            <div className="change-question-reason-chips" role="group" aria-label="Lý do đổi câu">
+                                {REPLACE_REASON_OPTIONS.map((option) => (
+                                    <Tag.CheckableTag
+                                        key={option.value}
+                                        className="change-question-reason-chip"
+                                        checked={reason === option.value}
+                                        onChange={(checked) => {
+                                            if (!isBusy) setReason(checked ? option.value : undefined);
+                                        }}
+                                    >
+                                        {option.label}
+                                    </Tag.CheckableTag>
+                                ))}
+                            </div>
+                            <Text type="secondary" className="change-question-reason-hint">
+                                Giúp hệ thống biết câu cũ chưa tốt ở đâu. Không chọn cũng được.
+                            </Text>
+                        </section>
+                    )}
                 </div>
             )}
         </Modal>

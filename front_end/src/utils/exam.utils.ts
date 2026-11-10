@@ -85,11 +85,11 @@ const GENERIC_REVIEW_REASON = "Hệ thống đề nghị thầy/cô xem kỹ câ
 export function describeFailureReason(reason?: string | null): string {
     switch (reason) {
         case "llm_error":
-            return "Lỗi kết nối AI. Bấm Đổi câu để thử lại.";
+            return "Lỗi kết nối AI. Bấm 'Soạn lại' để thử lại.";
         case "qc_exhausted":
-            return "Không soạn được câu đạt yêu cầu sau 3 lần. Bấm Đổi câu (có thể ghi thêm yêu cầu).";
+            return "Không soạn được câu đạt yêu cầu sau 3 lần. Bấm 'Soạn lại' (có thể ghi thêm yêu cầu).";
         default:
-            return "Chưa soạn được câu này. Bấm Đổi câu để thử lại.";
+            return "Chưa soạn được câu này. Bấm 'Soạn lại' để thử lại.";
     }
 }
 
