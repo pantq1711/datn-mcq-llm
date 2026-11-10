@@ -241,6 +241,17 @@ class LessonBuildTest extends ExamFlowTestBase {
                 400, "gradeLevel");
     }
 
+    /** Khối lớp bắt buộc khi sinh theo bài: bỏ trường hoặc gửi null đều 400 với thông báo tiếng Việt, không tạo gì. */
+    @Test
+    void thieuGradeLevelTra400VaKhongTaoGi() throws Exception {
+        String valid = lessonBody(LESSON, null, mcq("easy", 1));
+        String missing = valid.replace("\"gradeLevel\": 8, ", "");
+        assertTrue(!missing.contains("gradeLevel"), "body thử phải thật sự thiếu gradeLevel");
+        assertRejected(missing, 400, "Phải chọn khối lớp (gradeLevel từ 6 đến 9)");
+        assertRejected(valid.replace("\"gradeLevel\": 8", "\"gradeLevel\": null"), 400,
+                "Phải chọn khối lớp (gradeLevel từ 6 đến 9)");
+    }
+
     @Test
     void monKhongTonTaiTra404VaKhongTaoGi() throws Exception {
         assertRejected(lessonBody(LESSON, null, mcq("easy", 1)).replace("\"subjectId\": " + subject,
