@@ -163,7 +163,14 @@ export default function ExamQuestionList({
                                     {/* Nhóm các nút hành động */}
                                     <Space size={4} align="center">
                                         {canKeep && (
-                                            <Tooltip title="Câu này sẽ được lưu vào ngân hàng chung để dùng cho các đề sau.">
+                                            <Tooltip
+                                                title={
+                                                    // Chưa khóa nút: chưa chốt backend chặn mọi cờ hay chỉ một số lý do (409 QUESTION_FLAGGED)
+                                                    question.needsReview
+                                                        ? "Câu đang có điểm cần xem kỹ; thầy/cô nên sửa hoặc đổi câu trước khi lưu."
+                                                        : "Câu này sẽ được lưu vào ngân hàng chung để dùng cho các đề sau."
+                                                }
+                                            >
                                                 <Button
                                                     type="text"
                                                     icon={<CheckCircleOutlined />}

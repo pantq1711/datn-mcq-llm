@@ -1,11 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Alert, Button, Card, Dropdown, Progress, Spin, Space, Tag, Tooltip, Typography, message } from "antd";
+import { Alert, Button, Card, Dropdown, Progress, Spin, Space, Tag, Tooltip, Typography, message, Modal } from "antd";
 import { ArrowLeftOutlined, DownOutlined, FileWordOutlined, SyncOutlined, WarningOutlined } from "@ant-design/icons";
 
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
 import type { ExamPreviewData, ExamProgress, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
-import { examKindConfig, examStatusConfig } from "../../../utils/exam.utils";
+import { examKindConfig, examStatusConfig, describeReviewReason } from "../../../utils/exam.utils";
 import { keepQuestion, replaceQuestion, getExamDetail, getExamProgress, getExamExportDocx, getCatalogSubjects, type ExportEquationFormat } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
 import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
@@ -364,8 +364,41 @@ export default function ExamDetailPage() {
             message.success('Đã lưu câu vào ngân hàng');
             await loadDetail();
         } catch (e: any) {
-            console.error(e);
-            message.error(e?.response?.data?.error || e?.message || 'Gặp lỗi khi lưu câu vào ngân hàng');
+            const code = e?.response?.data?.code;
+            if (code === "QUESTION_FLAGGED") {
+                // Câu còn cờ "cần xem kỹ": không lưu, nói rõ lý do và cách xử lý
+                const reasons = question.reviewReasons ?? [];
+                Modal.warning({
+                    title: "Chưa lưu được vào ngân hàng",
+                    content: (
+                        <div>
+                            <p>{getApiErrorMessage(e, "Câu này còn điểm cần xem kỹ. Thầy/cô sửa hoặc đổi câu rồi lưu lại.")}</p>
+                            {reasons.length > 0 && (
+                                <ul style={{ paddingLeft: 20, margin: 0 }}>
+                                    {reasons.map((r) => (
+                                        <li key={r}>{describeReviewReason(r)}</li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    ),
+                    okText: "Đóng",
+                });
+                await loadDetail(); // đồng bộ cờ mới nhất
+                return;
+            }
+            if (code === "QC_CHECKING") {
+                message.info("Hệ thống đang tự kiểm tra bản sửa. Thầy/cô thử lưu lại sau ít phút.");
+                await loadDetail();
+                return;
+            }
+            if (e?.response?.status === 409) {
+                // Ví dụ "Câu hỏi này đã được giữ." hoặc chỗ chưa có câu
+                message.warning(`${getApiErrorMessage(e, "Không lưu được câu.")} Đã tải lại đề.`);
+                await loadDetail();
+                return;
+            }
+            showApiError(e, "Gặp lỗi khi lưu câu vào ngân hàng");
         }
     };
 
