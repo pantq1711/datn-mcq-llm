@@ -765,6 +765,10 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
   - câu hệ thống sinh được chép vào ngân hàng: ghi `teacher_review` production với `review_mode = 'assisted'` (duyệt
     nguyên trạng theo đáp án/nhãn của LLM) và `bank_item` trong cùng transaction; câu chuyển `in_bank`;
   - câu lệch Solver cũng Giữ được, vì giáo viên đã thấy cờ;
+  - (10/11) câu đang có cờ "cần xem kỹ" lúc Giữ (`needsReview = true`, cùng tiêu chí mục 7.4) vẫn Giữ được (200, không có
+    409 hay tham số xác nhận), nhưng `bank_item.visible_to_user_id` = người Giữ: câu vào ngân hàng **riêng** của người đó,
+    không vào đề của giáo viên khác (giống câu sinh từ tài liệu). Phản hồi không có trường riêng cho việc này; giao diện
+    dựa vào `needsReview` của câu trước khi bấm để báo "lưu vào ngân hàng riêng";
   - câu lấy từ ngân hàng thì chỉ đánh dấu `kept`, không tạo đánh giá mới;
   - Giữ lần hai trả 409 `Câu hỏi này đã được giữ.`; chỗ chưa có câu trả 409;
   - W1-2: câu giáo viên đã sửa được chép đúng bản sửa vào ngân hàng và chỗ thành `edited` (thay vì `kept`); khi Solver

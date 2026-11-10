@@ -2,6 +2,7 @@ package com.datn.mcq.exam.export;
 
 import com.datn.mcq.common.util.DegreeSymbols;
 import com.datn.mcq.common.util.LiteralNewlines;
+import com.datn.mcq.common.util.MissingLatexBackslash;
 import com.datn.mcq.config.ExamScoringProperties;
 import com.datn.mcq.enums.StatementKey;
 import com.datn.mcq.enums.TruthValue;
@@ -163,9 +164,12 @@ public final class ExamMarkdownBuilder {
                 i.needsReview(), i.reviewReasons(), i.qcState(), i.edited(), i.originalQuestionId(), i.failureReason());
     }
 
-    /** "\n" chữ trước (có thể làm lộ công thức), rồi ký hiệu độ; không có gì để đổi thì trả đúng đối tượng ban đầu. */
+    /**
+     * "\n" và "\\" chữ trước (có thể làm lộ công thức), rồi lệnh LaTeX mất "\" ({@link MissingLatexBackslash}: "70^circ" thành
+     * "70^\circ"), cuối cùng ký hiệu độ ("70°"); không có gì để đổi thì trả đúng đối tượng ban đầu.
+     */
     private static String cleanText(String text) {
-        return DegreeSymbols.normalize(LiteralNewlines.repair(text).text());
+        return DegreeSymbols.normalize(MissingLatexBackslash.repair(LiteralNewlines.repair(text).text()).text());
     }
 
     // ---------------------------------------------------------------- dòng hướng dẫn, câu hỏi

@@ -87,7 +87,39 @@ class LiteralNewlinesTest {
     @Test
     void escapedDollarAndDoubleBackslashAreLeftAlone() {
         assertEquals("Giá \\$5\nhết", text("Giá \\$5\\nhết"));
-        assertEquals("a\\\\nb", text("a\\\\nb"));
+        // "\\" TRONG công thức giữ nguyên khối ("\\" ngoài công thức là xuống dòng từ 9/11, xem các test bên dưới)
+        assertEquals("$a\\\\nb$", text("$a\\\\nb$"));
+    }
+
+    // ---------- L2 (9/11): "\\" giữa các công thức của lời giải (đề 22, câu 479) ----------
+
+    @Test
+    void doubleBackslashOutsideMathBecomesARealNewline() {
+        Result r = LiteralNewlines.repair("$x = 1$\\\\ $y = 2$");
+        assertEquals("$x = 1$\n$y = 2$", r.text());
+        assertEquals(1, r.outsideMath());
+        assertFalse(r.notable(), "\\\\ ngoài công thức là xuống dòng bình thường, không báo");
+        assertEquals("Bước 1\nBước 2", text("Bước 1\\\\Bước 2"));
+        assertEquals("a\nb", text("a\\\\\tb"));
+    }
+
+    @Test
+    void doubleBackslashInsideMathIsKept() {
+        String cases = "$\\begin{cases} x = 1 \\\\ y = 2 \\end{cases}$";
+        assertSame(cases, LiteralNewlines.repair(cases).text());
+        String aligned = "$$\\begin{aligned} a &= 1 \\\\ b &= 2 \\end{aligned}$$";
+        assertSame(aligned, LiteralNewlines.repair(aligned).text());
+    }
+
+    @Test
+    void doubleBackslashOutsideAndInsideMathInTheSameText() {
+        assertEquals("$x = 1$\n$\\begin{cases} a \\\\ b \\end{cases}$\nHết",
+                text("$x = 1$\\\\ $\\begin{cases} a \\\\ b \\end{cases}$\\\\ Hết"));
+    }
+
+    @Test
+    void doubleBackslashAndLiteralNewlineTogether() {
+        assertEquals("a\nb\nc $x\\\\y$", text("a\\\\ b\\nc $x\\\\y$"));
     }
 
     @Test

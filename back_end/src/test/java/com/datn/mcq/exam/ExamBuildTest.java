@@ -662,6 +662,76 @@ class ExamBuildTest {
         assertEquals(4, jdbc.queryForObject("SELECT count(*) FROM teacher_review_statement", Integer.class));
     }
 
+    private JsonNode itemOf(int examId, String type) throws Exception {
+        JsonNode view = json(perform(get("/api/exams/" + examId)).andExpect(status().isOk()));
+        for (JsonNode part : view.get("parts")) {
+            for (JsonNode item : part.get("items")) {
+                if (type.equals(item.get("questionType").asText())) {
+                    return item;
+                }
+            }
+        }
+        throw new AssertionError("không có câu " + type);
+    }
+
+    private Object visibleTo(JsonNode kept) {
+        return jdbc.queryForObject("SELECT visible_to_user_id FROM bank_item WHERE id = ?", Object.class,
+                kept.get("bankItemId").asInt());
+    }
+
+    /**
+     * L5 (10/11): Giữ câu có cờ "cần xem kỹ" VẪN được (200, slot kept, có nhật ký keep để đo), nhưng bank_item riêng tư của
+     * người Giữ; câu không cờ vào ngân hàng dùng chung như cũ.
+     */
+    @Test
+    void giuCauCoCoVanDuocNhungNganHangRiengTuConCauKhongCoThiDungChung() throws Exception {
+        int examId = readyExam(); // sa lệch Solver (7 so với 5) nên có cờ; mcq sạch cờ
+        assertTrue(itemOf(examId, "sa").get("needsReview").asBoolean());
+        assertFalse(itemOf(examId, "mcq").get("needsReview").asBoolean());
+
+        int saSlot = slotId(examId, "sa", 1);
+        JsonNode sa = json(action(examId, saSlot, "keep").andExpect(status().isOk()));
+        assertEquals("kept", sa.get("state").asText());
+        assertEquals(teacher, visibleTo(sa), "câu có cờ vào ngân hàng riêng của người Giữ");
+        Map<String, Object> log = jdbc.queryForMap("SELECT * FROM exam_slot_action WHERE slot_id = ?", saSlot);
+        assertEquals("keep", log.get("action"));
+        assertEquals(sa.get("bankItemId").asInt(), log.get("bank_item_id"));
+
+        JsonNode mcq = json(action(examId, slotId(examId, "mcq", 1), "keep").andExpect(status().isOk()));
+        assertNull(visibleTo(mcq), "câu không cờ vào ngân hàng dùng chung");
+    }
+
+    @Test
+    void cauRiengTuCuaGv1KhongVaoDeCuaGv2NhungVaoDeCuaChinhGv1() throws Exception {
+        int examId = readyExam();
+        JsonNode mcq = json(action(examId, slotId(examId, "mcq", 1), "keep").andExpect(status().isOk()));
+        JsonNode sa = json(action(examId, slotId(examId, "sa", 1), "keep").andExpect(status().isOk())); // có cờ: riêng tư
+        assertNull(visibleTo(mcq));
+        assertEquals(teacher, visibleTo(sa));
+
+        int other = insert("INSERT INTO users (name, email, role) VALUES ('GV2', 'gv2.keep@test', 'teacher')");
+        String body = "{\"name\": \"Ma trận GV2\", \"subjectId\": " + subject + ", \"gradeLevel\": 8, \"cells\": ["
+                + "{\"part\": \"I\", \"questionType\": \"mcq\", \"difficulty\": \"easy\", \"questionCount\": 1,"
+                + " \"topic\": \"Đa thức\", \"content\": \"Đơn thức, đa thức\","
+                + " \"learningOutcomes\": {\"easy\": \"Nhận biết được đơn thức, đa thức.\"}},"
+                + "{\"part\": \"III\", \"questionType\": \"sa\", \"difficulty\": \"medium\", \"questionCount\": 1,"
+                + " \"topic\": \"Tứ giác\", \"content\": \"Tứ giác, hình thang cân\","
+                + " \"learningOutcomes\": {\"medium\": \"Tính được góc trong tứ giác.\"}}]}";
+        int otherMatrix = json(mockMvc.perform(post("/api/exam-matrices").contentType(MediaType.APPLICATION_JSON)
+                .content(body).with(AuthTestSupport.teacher(other))).andExpect(status().isOk())).get("id").asInt();
+        int otherExam = json(mockMvc.perform(post("/api/exams/build").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"matrixId\": " + otherMatrix + "}").with(AuthTestSupport.teacher(other)))
+                .andExpect(status().isOk())).get("examId").asInt();
+        assertEquals(mcq.get("bankItemId").asInt(), jdbc.queryForObject("SELECT bank_item_id FROM exam_slot"
+                + " WHERE exam_id = ? AND question_type = 'mcq'", Integer.class, otherExam), "câu dùng chung: GV2 lấy được");
+        assertNull(jdbc.queryForObject("SELECT bank_item_id FROM exam_slot WHERE exam_id = ? AND question_type = 'sa'",
+                Integer.class, otherExam), "câu riêng tư của GV1: GV2 không lấy được (phải sinh mới)");
+
+        int mine = build("{\"matrixId\": " + matrixId + "}").get("examId").asInt();
+        assertEquals(sa.get("bankItemId").asInt(), jdbc.queryForObject("SELECT bank_item_id FROM exam_slot"
+                + " WHERE exam_id = ? AND question_type = 'sa'", Integer.class, mine), "chính GV1 dùng lại được");
+    }
+
     @Test
     void giuCauLayTuNganHangKhongTaoReviewMoi() throws Exception {
         int bank = bankMcq("Đa thức", "easy", "Đơn thức nào có bậc 2?");

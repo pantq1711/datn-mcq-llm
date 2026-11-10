@@ -16,7 +16,11 @@ import java.util.Set;
  *   <li>Đoạn $...$ vừa có "\n" bị thay mà rỗng hoặc chỉ còn dấu câu/khoảng trắng ("$ .$", "$ $") thì bỏ dấu $ thừa, giữ dấu
  *       câu. Chỉ xét đúng đoạn đó (đếm mở/đóng $ từng ký tự, "\$" bỏ qua), không đụng tới đoạn $...$ khác của chuỗi.</li>
  * </ul>
- * Chuỗi không có "\n" chữ cần sửa được trả về đúng đối tượng ban đầu. "\$" và "\\" được giữ nguyên khối.
+ * Chuỗi không có "\n" chữ cần sửa được trả về đúng đối tượng ban đầu. "\$" được giữ nguyên khối.
+ *
+ * <p>"\\" (hai dấu gạch, 9/11, đề 22 câu 479: "$…$\\ $…$" giữa các công thức của lời giải): NGOÀI công thức là xuống dòng lọt
+ * ra, đổi thành xuống dòng thật (khoảng trắng liền sau bỏ đi); TRONG công thức giữ nguyên vì là ngắt dòng của
+ * {@code \begin{cases}}, {@code aligned}.
  */
 public final class LiteralNewlines {
 
@@ -55,7 +59,7 @@ public final class LiteralNewlines {
     }
 
     public static Result repair(String text) {
-        if (text == null || !text.contains("\\n")) {
+        if (text == null || (!text.contains("\\n") && !text.contains("\\\\"))) {
             return new Result(text, 0, 0, 0);
         }
         StringBuilder sb = new StringBuilder(text.length());
@@ -93,6 +97,16 @@ public final class LiteralNewlines {
                     i += 2;
                     continue;
                 }
+                if (next == '\\' && !inMath) {
+                    // "\\" ngoài công thức (đề 22 câu 479: "$…$\\ $…$") là xuống dòng bị lọt; khoảng trắng liền sau bỏ đi.
+                    sb.append('\n');
+                    outside++;
+                    i += 2;
+                    while (i < n && (text.charAt(i) == ' ' || text.charAt(i) == '\t')) {
+                        i++;
+                    }
+                    continue;
+                }
                 sb.append(c).append(next);
                 i += 2;
                 continue;
@@ -128,7 +142,7 @@ public final class LiteralNewlines {
             i++;
         }
         if (inside == 0 && outside == 0) {
-            return new Result(text, 0, 0, 0); // chỉ có lệnh \neq, \nabla...: giữ nguyên chuỗi gốc
+            return new Result(text, 0, 0, 0); // chỉ có lệnh \neq, \nabla... hoặc "\\" trong công thức: giữ nguyên chuỗi gốc
         }
         return new Result(sb.toString(), inside, outside, pairs);
     }

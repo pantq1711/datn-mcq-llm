@@ -2,6 +2,7 @@ package com.datn.mcq.generation.parser;
 
 import com.datn.mcq.common.util.LatexValidationRules;
 import com.datn.mcq.common.util.LiteralNewlines;
+import com.datn.mcq.common.util.MissingLatexBackslash;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -19,6 +20,8 @@ import java.util.regex.Pattern;
  *   <li>{@link #stripTextOutsideMath} (27/10): vỏ {@code \text{...}} của đơn vị đo viết ngoài $ ("$40$ \text{km/h}").</li>
  *   <li>{@link #fixDegreeSymbol} (31/10): ký hiệu độ viết {@code ^\bullet}/{@code ^\triangle} thay cho {@code ^{\circ}}.</li>
  *   <li>{@link #wrapLatexOutsideMath} (2/11): biểu thức LaTeX liền mạch nằm ngoài $...$ (không áp cho trường {@code answer}).</li>
+ *   <li>{@link MissingLatexBackslash} (9/11): lệnh LaTeX mất "\" trong công thức ("$70^circ$"); {@link LiteralNewlines} cũng đổi
+ *       "\\" ngoài công thức thành xuống dòng.</li>
  *   <li>{@link #wrapFormulaLines} (4/11): dòng công thức của lời giải viết ngoài $ được bọc NGUYÊN dòng; dòng bị chia bởi $
  *       giữa biểu thức ({@link #hasBrokenFormulaLine}) không tự sửa mà bị FormatChecker báo lỗi (câu được sinh lại).</li>
  * </ol>
@@ -870,6 +873,13 @@ public final class LlmOutputRepair {
             if (d.closed()) {
                 warnings.add(dollarWarning(field, s));
                 s = d.text();
+            }
+            // 9/11: lệnh LaTeX mất "\" trong công thức ("$70^circ$", "$frac{1}{2}$"), TRƯỚC bước đổi ký hiệu độ bên dưới.
+            MissingLatexBackslash.Result b = MissingLatexBackslash.repair(s);
+            String bWarning = MissingLatexBackslash.warning(field, b);
+            if (bWarning != null) {
+                warnings.add(bWarning);
+                s = b.text();
             }
             DegreeRepair g = fixDegreeSymbol(s);
             if (g.fixed() > 0) {
