@@ -265,7 +265,7 @@ export default function ExamDetailPage() {
             a.download = titleName
                 ? `${titleName}${equation === 'mathtype' ? '-mathtype' : ''}.docx`
                 : filename
-                    ?? `${toFileName(undefined, detail?.examCode ?? `exam-${examId}`)}${equation === 'mathtype' ? '-mathtype' : ''}.docx`;
+                ?? `${toFileName(undefined, detail?.examCode ?? `exam-${examId}`)}${equation === 'mathtype' ? '-mathtype' : ''}.docx`;
             a.click();
             window.URL.revokeObjectURL(url);
             message.success(equation === 'mathtype'
@@ -332,7 +332,9 @@ export default function ExamDetailPage() {
             message.success(
                 source === "bank"
                     ? "Đã đổi câu hỏi từ ngân hàng thành công!"
-                    : "Đã yêu cầu soạn câu thay thế!"
+                    : request.question.state === "failed"
+                        ? "Đã yêu cầu soạn lại câu."
+                        : "Đã yêu cầu soạn câu thay thế!"
             );
             setChangeQuestion(null);
             await loadDetail();
