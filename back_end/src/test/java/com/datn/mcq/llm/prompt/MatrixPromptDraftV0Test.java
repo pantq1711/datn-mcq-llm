@@ -107,15 +107,113 @@ class MatrixPromptDraftV0Test {
 
     @Test
     void phienBanVaThongSoOLuuDuoc() {
-        assertEquals("matrix-mcq-v7-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
-        assertEquals("matrix-tf-v9-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
-        assertEquals("matrix-sa-v9-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
+        assertEquals("matrix-mcq-v8-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
+        assertEquals("matrix-tf-v10-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-sa-v10-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion("sa-v1-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion(null));
         for (QuestionType type : QuestionType.values()) {
             MatrixCellSpec s = spec(type, "Tứ giác \"có ngoặc\"", "Nội dung\ncó xuống dòng");
             assertEquals(s, MatrixCellSpec.fromJson(s.toJson()), type.name());
+        }
+    }
+
+    // ---------- phạm vi kiến thức theo lớp (8/11, prompt mcq v8, sa v10, tf v10) ----------
+
+    private static final String SCOPE_HEADER = "PHẠM VI KIẾN THỨC:";
+    private static final String TOAN_8_LINE = "- Toán 8: KHÔNG dùng bất đẳng thức, bất phương trình, phương trình bậc hai, "
+            + "căn bậc hai/căn thức, hệ phương trình, tỉ số lượng giác.";
+    private static final String TOAN_9_LINE = "- Toán 9: KHÔNG dùng hàm số y = ax² + bx + c tổng quát, bất phương trình bậc "
+            + "hai, vectơ, định lí sin/côsin.";
+
+    private static MatrixCellSpec specOf(String subject, Integer grade, QuestionType type) {
+        return switch (type) {
+            case MCQ -> new MatrixCellSpec(subject, grade, "Biểu thức", null, Map.of(Difficulty.HARD, "Vận dụng được."),
+                    QuestionType.MCQ, Difficulty.HARD, null);
+            case SA -> new MatrixCellSpec(subject, grade, "Biểu thức", null, Map.of(Difficulty.HARD, "Vận dụng được."),
+                    QuestionType.SA, Difficulty.HARD, null);
+            case TF -> new MatrixCellSpec(subject, grade, "Biểu thức", null, Map.of(Difficulty.HARD, "Vận dụng được."),
+                    QuestionType.TF, null, List.of(Difficulty.EASY, Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD));
+        };
+    }
+
+    private static final List<String> SCOPE_COMMON = List.of(
+            "- Chỉ dùng kiến thức của lớp %d đã học đến hết bài trong ô ma trận này (Chương trình GDPT 2018). Không dùng "
+                    + "kiến thức của lớp trên hoặc của bài học sau.",
+            "- Ở mức Vận dụng, tăng độ khó bằng cách phối hợp nhiều bước của chính bài này, không đưa thêm kiến thức mới.",
+            "- Câu hoặc ý hỏi giá trị lớn nhất, nhỏ nhất, giá trị nguyên chỉ được ra khi giá trị đó tồn tại và tìm được "
+                    + "bằng kiến thức trong phạm vi trên.");
+
+    @Test
+    void phamViKienThucLop8CoKhoiChungVaDongToan8CaBaDang() {
+        for (QuestionType type : QuestionType.values()) {
+            String p = MatrixPromptDraftV0.buildGenerationPrompt(specOf("Toán", 8, type));
+            assertTrue(p.contains(SCOPE_HEADER + "\n"), type + ": " + p);
+            for (String line : SCOPE_COMMON) {
+                assertTrue(p.contains(line.formatted(8)), type + " thiếu: " + line);
+            }
+            assertTrue(p.contains(TOAN_8_LINE), type + " thiếu dòng Toán 8: " + p);
+            assertFalse(p.contains("- Toán 9:"), type + ": lớp 8 không có dòng Toán 9");
+            // cạnh phần mức độ / yêu cầu cần đạt: sau dòng mức độ mục tiêu, trước quy tắc "bài toán mới"
+            int level = p.indexOf(type == QuestionType.TF ? "Mức độ mục tiêu:" : "Mức độ nhận thức mục tiêu:");
+            assertTrue(level >= 0 && level < p.indexOf(SCOPE_HEADER), type + ": khối phải sau mức độ");
+            assertTrue(p.indexOf(SCOPE_HEADER) < p.indexOf(MatrixPromptDraftV0.NEW_PROBLEM_RULE), type + ": khối trước quy tắc bài toán mới");
+            assertTrue(p.indexOf(SCOPE_HEADER) < p.indexOf(TOAN_8_LINE));
+        }
+    }
+
+    @Test
+    void phamViKienThucLop9CoDongToan9KhongCoDongToan8() {
+        for (QuestionType type : QuestionType.values()) {
+            String p = MatrixPromptDraftV0.buildGenerationPrompt(specOf("Toán", 9, type));
+            assertTrue(p.contains(SCOPE_HEADER), type.name());
+            for (String line : SCOPE_COMMON) {
+                assertTrue(p.contains(line.formatted(9)), type + " thiếu: " + line);
+            }
+            assertTrue(p.contains(TOAN_9_LINE), type + " thiếu dòng Toán 9: " + p);
+            assertFalse(p.contains("- Toán 8:"), type + ": lớp 9 không có dòng Toán 8");
+            assertFalse(p.contains("KHÔNG dùng bất đẳng thức"), type + ": lớp 9 không mượn cấm của lớp 8");
+        }
+    }
+
+    @Test
+    void phamViKienThucLop7ChiCoKhoiChungKhongCoDongLop8Hay9() {
+        for (QuestionType type : QuestionType.values()) {
+            String p = MatrixPromptDraftV0.buildGenerationPrompt(specOf("Toán", 7, type));
+            assertTrue(p.contains(SCOPE_HEADER), type.name());
+            assertTrue(p.contains(SCOPE_COMMON.get(0).formatted(7)), type.name());
+            for (String absent : List.of("- Toán 8:", "- Toán 9:", "KHÔNG dùng bất đẳng thức", "tỉ số lượng giác",
+                    "KHÔNG dùng hàm số y = ax²", "vectơ", "định lí sin/côsin")) {
+                assertFalse(p.contains(absent), type + ": lớp 7 lọt dòng của lớp khác: " + absent);
+            }
+        }
+    }
+
+    @Test
+    void phamViKienThucMonKhacToanKhongCoDongToanVaKhongCoLopThi() {
+        for (QuestionType type : QuestionType.values()) {
+            String gdcd = MatrixPromptDraftV0.buildGenerationPrompt(specOf("Giáo dục công dân", 8, type));
+            assertTrue(gdcd.contains(SCOPE_HEADER), "khối chung vẫn có");
+            assertFalse(gdcd.contains("- Toán 8:") || gdcd.contains("- Toán 9:"), type + ": môn khác không có dòng Toán");
+            // ô chưa biết lớp: không có lớp để điền vào câu đầu nên bỏ cả khối (không viết "lớp null")
+            String noGrade = MatrixPromptDraftV0.buildGenerationPrompt(specOf("Toán", null, type));
+            assertFalse(noGrade.contains(SCOPE_HEADER) || noGrade.contains("lớp null"), type + ": " + noGrade);
+        }
+        // tên môn trống mặc định là Toán như phần mở đầu prompt
+        assertTrue(MatrixPromptDraftV0.buildGenerationPrompt(specOf(null, 8, QuestionType.MCQ)).contains(TOAN_8_LINE));
+    }
+
+    /** Khối phạm vi là hằng riêng của prompt ma trận: prompt Solver và prompt sinh lẻ không chứa. */
+    @Test
+    void phamViKienThucKhongNamTrongSolverVaPromptSinhLe() {
+        List<String> prompts = List.of(
+                new PromptBuilder().buildSolverPrompt("Tính $1 + 1$.", "$1$", "$2$", "$3$", "$4$"),
+                SaPromptDraftV0.buildSolverPrompt("Tính $1 + 1$."),
+                TfPromptDraftV0.buildSolverPrompt("Cho $x = 1$.", List.of("a", "b", "c", "d")),
+                SaPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, "Giải $2x - 6 = 0$.", Difficulty.EASY));
+        for (String prompt : prompts) {
+            assertFalse(prompt.contains(SCOPE_HEADER) || prompt.contains("- Toán 8:"), prompt);
         }
     }
 
@@ -157,6 +255,20 @@ class MatrixPromptDraftV0Test {
         assertTrue(p.contains("$3(x^2 - 4x)$ khi đáp án là $3x(x - 4)$"), p);
         assertFalse(MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.SA, "Tứ giác", null))
                 .contains("phương án nhiễu"));
+    }
+
+    /**
+     * 10/11 (đề 22 ô "Thu gọn đa thức": 3/3 câu bị loại vì 4 phương án trùng nhau, đáp án đúng viết hai lần): prompt mcq dặn
+     * bốn phương án khác nhau đôi một và kết quả đúng chỉ ở đúng phương án được chỉ định. Chỉ mcq có dòng này.
+     */
+    @Test
+    void mcqBonPhuongAnKhacNhauDoiMotVaKetQuaDungChiO1PhuongAn() {
+        String rule = "Bốn phương án phải khác nhau đôi một; kết quả đúng chỉ xuất hiện ở đúng phương án được chỉ định, các"
+                + " phương án còn lại là kết quả sai có lý do (sai dấu, sai hệ số, quên hạng tử…).";
+        assertTrue(MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.MCQ, "Đa thức", "Các phép tính đa thức"))
+                .contains(rule));
+        assertFalse(MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.SA, "Tứ giác", null)).contains(rule));
+        assertFalse(MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.TF, "Tứ giác", null)).contains(rule));
     }
 
     /** Quy tắc nội dung chung của cả 3 dạng (31/10, thẩm định nội dung: dạng kết quả, "luôn", số bước, kiến thức, câu chữ). */
