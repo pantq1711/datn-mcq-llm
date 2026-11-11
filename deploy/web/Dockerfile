@@ -8,9 +8,10 @@ WORKDIR /web
 COPY front_end/package.json front_end/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY front_end/ ./
-# Địa chỉ API được ghi cứng vào bản build (import.meta.env.VITE_API_BASE_URL). Mặc định "/api" vì frontend và API
-# cùng domain qua Caddy; phải thống nhất với cách frontend viết đường dẫn gọi API.
-ARG VITE_API_BASE_URL=/api
+# Địa chỉ API được ghi cứng vào bản build (import.meta.env.VITE_API_BASE_URL). Mặc định "/" vì frontend và API
+# cùng domain qua Caddy và mọi lệnh gọi trong frontend đã tự ghi tiền tố "/api/..." (vd authApi.ts); đặt "/api" sẽ
+# thành "/api/api/...".
+ARG VITE_API_BASE_URL=/
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN npm run build
 

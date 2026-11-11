@@ -167,7 +167,7 @@ jobs:
           context: .
           file: deploy/web/Dockerfile
           build-args: |
-            VITE_API_BASE_URL=/api
+            VITE_API_BASE_URL=/
           push: ${{ env.PUSH == 'true' }}
           tags: ${{ steps.meta-web.outputs.tags }}
           labels: ${{ steps.meta-web.outputs.labels }}
