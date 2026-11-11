@@ -59,6 +59,34 @@ public interface GenerationJobRepository extends JpaRepository<GenerationJob, In
     Optional<GenerationJob> lockNextDuePendingGenerateJob(@Param("now") LocalDateTime now);
 
     /**
+     * C-01: hết hạn mức ngày của Gemini thì hoãn mọi job pending đã đến hạn tới mốc đặt lại, kèm {@code last_error} có tiền
+     * tố "quota:" (cùng dấu hiệu với {@code GenerationJobProcessor#deferJobOnQuotaExhausted}). Không đổi {@code attempt}. Job
+     * còn đang backoff ({@code next_run_at} ở tương lai) không bị đụng tới. {@code now} là giờ JVM như {@link #lockNextDuePendingJob}.
+     */
+    @Modifying
+    @Query(value = """
+            UPDATE generation_job
+            SET next_run_at = :resetAt, last_error = :reason, updated_at = :now
+            WHERE status = 'pending' AND (next_run_at IS NULL OR next_run_at <= :now)
+            """, nativeQuery = true)
+    int deferDuePending(@Param("resetAt") LocalDateTime resetAt, @Param("reason") String reason,
+                        @Param("now") LocalDateTime now);
+
+    /**
+     * C-01: mốc chạy tiếp sớm nhất của các job pending thuộc {@code slotIds} đang hoãn vì hạn mức ngày (đúng định nghĩa của
+     * {@code QuotaDeferral#isDeferred}: next_run_at ở tương lai và có tiền tố "quota:" hoặc xa hơn {@code far}); null khi
+     * không có job nào.
+     */
+    @Query(value = """
+            SELECT MIN(next_run_at) FROM generation_job
+            WHERE exam_slot_id IN (:slotIds) AND status = 'pending' AND next_run_at > :now
+              AND (last_error LIKE :prefix OR next_run_at > :far)
+            """, nativeQuery = true)
+    LocalDateTime earliestQuotaResume(@Param("slotIds") java.util.Collection<Integer> slotIds,
+                                      @Param("now") LocalDateTime now, @Param("far") LocalDateTime far,
+                                      @Param("prefix") String prefix);
+
+    /**
      * F-07: job answer_check và grounding_check MỚI NHẤT của từng câu trong tập, bằng một truy vấn (cùng nghĩa với
      * {@link #findFirstByQuestionIdAndJobTypeOrderByIdDesc} cho từng cặp câu và loại). Dùng chỉ mục
      * {@code idx_gj_question_type (question_id, job_type)} (V13).

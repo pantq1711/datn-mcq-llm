@@ -372,6 +372,8 @@ class ExamQuestionEditTest {
         Map<String, Object> original = question(base);
         int originalQc = count("SELECT count(*) FROM quality_check_result WHERE question_id = ?", base);
         String newText = "Đơn thức $2x^1$ có bậc là:";
+        // C-07: bản sửa đi qua cùng chuỗi chuẩn hóa như lúc lưu câu sinh: câu dẫn kết thúc "là:" thành "là"
+        String storedText = "Đơn thức $2x^1$ có bậc là";
         int calls = SOLVER.calls;
 
         JsonNode item = json(putQuestion(examId, slot, mcqBody(base).put("questionText", newText))
@@ -380,7 +382,7 @@ class ExamQuestionEditTest {
         int version = item.get("questionId").asInt();
         assertNotEquals(base, version);
         assertEquals("ready", item.get("state").asText());
-        assertEquals(newText, item.get("questionText").asText());
+        assertEquals(storedText, item.get("questionText").asText());
         assertTrue(item.get("edited").asBoolean());
         assertEquals(base, item.get("originalQuestionId").asInt());
         assertEquals("checking", item.get("qcState").asText());
@@ -578,6 +580,174 @@ class ExamQuestionEditTest {
         assertEquals("kept", jdbc.queryForObject("SELECT state FROM exam_slot WHERE id = ?", String.class, slot));
     }
 
+    // ---------- C-01: hết lượt Gemini giữa ngày ----------
+
+    private static final String QUOTA_ERROR = "quota: Đã chạm hạn mức gọi Gemini trong ngày (480 lượt)";
+    private static final String QUOTA_NOTICE = "Hết lượt AI hôm nay, hệ thống chạy tiếp lúc ";
+
+    /** Đúng dấu hiệu của deferJobOnQuotaExhausted: last_error tiền tố "quota:" và next_run_at = mốc đặt lại (xa). */
+    private void deferByQuota(String where, Object... args) {
+        jdbc.update("UPDATE generation_job SET last_error = '" + QUOTA_ERROR + "', next_run_at = now() + interval '5 hours'"
+                + " WHERE " + where, args);
+    }
+
+    /** Giờ chạy tiếp (HH:mm giờ Việt Nam) mà thông báo phải nêu cho job {@code jobId} đang hoãn. */
+    private String resumeNotice(int jobId) {
+        java.time.LocalDateTime resumeAt = jdbc.queryForObject("SELECT next_run_at FROM generation_job WHERE id = ?",
+                java.sql.Timestamp.class, jobId).toLocalDateTime();
+        return com.datn.mcq.llm.client.QuotaExhaustedException.resumeMessage(resumeAt, java.time.ZoneId.systemDefault());
+    }
+
+    @Test
+    void giuDuocKhiJobAnswerCheckDangHoanViHetHanMucNgayVaVaoNganHangRieng() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int version = json(putQuestion(examId, slot, mcqBody(questionOf(slot))
+                .put("questionText", "Đơn thức $2x^1$ có bậc là")).andExpect(status().isOk())).get("questionId").asInt();
+        assertEquals("QC_CHECKING", json(keep(examId, slot).andExpect(status().isConflict())).get("code").asText(),
+                "job pending thường (chưa hoãn) vẫn chặn Giữ");
+
+        deferByQuota("question_id = ? AND job_type = 'answer_check'", version);
+
+        JsonNode before = viewItem(examId, slot);
+        assertTrue(texts(before.get("reviewReasons")).contains("solver_pending"), before.toString());
+        JsonNode kept = json(keep(examId, slot).andExpect(status().isOk()));
+        assertEquals("edited", kept.get("state").asText());
+        assertEquals("in_bank", statusOf(version));
+        int bank = count("SELECT bank_item_id FROM exam_slot WHERE id = ?", slot);
+        assertEquals(teacher, count("SELECT visible_to_user_id FROM bank_item WHERE id = ?", bank),
+                "câu mang cờ solver_pending vào ngân hàng RIÊNG của người Giữ");
+    }
+
+    @Test
+    void giuDuocKhiChiCoNextRunAtXaMaKhongCoTienToQuota() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int version = json(putQuestion(examId, slot, mcqBody(questionOf(slot))
+                .put("questionText", "Đơn thức $2x^1$ có bậc là")).andExpect(status().isOk())).get("questionId").asInt();
+        jdbc.update("UPDATE generation_job SET next_run_at = now() + interval '5 hours'"
+                + " WHERE question_id = ? AND job_type = 'answer_check'", version);
+
+        keep(examId, slot).andExpect(status().isOk());
+
+        assertEquals("edited", jdbc.queryForObject("SELECT state FROM exam_slot WHERE id = ?", String.class, slot));
+        int bank = count("SELECT bank_item_id FROM exam_slot WHERE id = ?", slot);
+        assertEquals(teacher, count("SELECT visible_to_user_id FROM bank_item WHERE id = ?", bank));
+    }
+
+    @Test
+    void giuVanBiChanKhiJobPendingChiBackoffNganHoacDaToiHan() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int version = json(putQuestion(examId, slot, mcqBody(questionOf(slot))
+                .put("questionText", "Đơn thức $2x^1$ có bậc là")).andExpect(status().isOk())).get("questionId").asInt();
+
+        // backoff 30 giây sau lỗi mạng: không phải hoãn vì hạn mức
+        jdbc.update("UPDATE generation_job SET last_error = 'Lỗi kết nối Gemini API: x',"
+                + " next_run_at = now() + interval '30 seconds' WHERE question_id = ? AND job_type = 'answer_check'", version);
+        assertEquals("QC_CHECKING", json(keep(examId, slot).andExpect(status().isConflict())).get("code").asText());
+
+        // tiền tố "quota:" còn đó nhưng mốc đặt lại đã qua: worker sẽ nhận ngay, chưa phải hoãn
+        jdbc.update("UPDATE generation_job SET last_error = '" + QUOTA_ERROR + "',"
+                + " next_run_at = now() - interval '1 minute' WHERE question_id = ? AND job_type = 'answer_check'", version);
+        assertEquals("QC_CHECKING", json(keep(examId, slot).andExpect(status().isConflict())).get("code").asText());
+        assertEquals("ready", jdbc.queryForObject("SELECT state FROM exam_slot WHERE id = ?", String.class, slot));
+    }
+
+    @Test
+    void giuBiChan409KhiGroundingHoanViHetHanMucThiThongBaoGioChayTiep() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int question = questionOf(slot);
+        int grounding = insert("INSERT INTO generation_job (job_type, run_id, template_id, question_type, question_id,"
+                + " material_context, material_refs, status, attempt, next_run_at, created_at, updated_at)"
+                + " SELECT 'grounding_check', run_id, template_id, question_type, ?, 'ngữ cảnh', '[]'::jsonb, 'pending',"
+                + " 0, now(), now(), now()"
+                + " FROM generation_job WHERE exam_slot_id = ? AND job_type = 'generate'", question, slot);
+
+        JsonNode normal = json(keep(examId, slot).andExpect(status().isConflict()));
+        assertEquals("QC_CHECKING", normal.get("code").asText());
+        assertFalse(normal.get("error").asText().contains("Hết lượt AI"), normal.toString());
+
+        deferByQuota("id = ?", grounding);
+        JsonNode deferred = json(keep(examId, slot).andExpect(status().isConflict()));
+        assertEquals("QC_CHECKING", deferred.get("code").asText());
+        assertTrue(deferred.get("error").asText().contains(resumeNotice(grounding)), deferred.toString());
+        assertTrue(deferred.get("error").asText().contains(QUOTA_NOTICE), deferred.toString());
+    }
+
+    /** Dựng chỗ: câu đã sinh (generated, Solver hết lượt) và job answer_check pending; chỗ đang generating. */
+    private int generatedQuestionWaitingForSolver(int examId) {
+        int slot = slotId(examId, "mcq", 1);
+        int question = questionOf(slot);
+        jdbc.update("DELETE FROM quality_check_result WHERE question_id = ? AND check_type = 'answer_check'", question);
+        jdbc.update("UPDATE generated_question SET status = 'generated', solver_error = 'hết hạn mức' WHERE id = ?",
+                question);
+        insert("INSERT INTO generation_job (job_type, run_id, template_id, question_type, question_id, status, attempt,"
+                + " next_run_at, created_at, updated_at)"
+                + " SELECT 'answer_check', run_id, template_id, question_type, ?, 'pending', 0, now(), now(), now()"
+                + " FROM generation_job WHERE exam_slot_id = ? AND job_type = 'generate'", question, slot);
+        jdbc.update("UPDATE exam_slot SET state = 'generating' WHERE id = ?", slot);
+        return slot;
+    }
+
+    @Test
+    void doiSoatDungCauDaSinhKemCoSolverPendingKhiAnswerCheckHoanViHetHanMuc() throws Exception {
+        int examId = readyExam();
+        int slot = generatedQuestionWaitingForSolver(examId);
+        int question = questionOf(slot);
+        deferByQuota("question_id = ? AND job_type = 'answer_check'", question);
+
+        perform(get("/api/exams/" + examId + "/progress")).andExpect(status().isOk());
+
+        assertEquals("ready", jdbc.queryForObject("SELECT state FROM exam_slot WHERE id = ?", String.class, slot),
+                "không kẹt generating chờ Solver tới mốc đặt lại");
+        assertEquals(question, questionOf(slot));
+        assertEquals(0, count("SELECT count(*) FROM generation_job WHERE exam_slot_id = ? AND job_type = 'generate'"
+                + " AND status = 'pending'", slot), "không xếp job sinh lại khi hết lượt");
+        JsonNode item = viewItem(examId, slot);
+        assertTrue(texts(item.get("reviewReasons")).contains("solver_pending"), item.toString());
+        assertEquals("ready", item.get("state").asText());
+    }
+
+    @Test
+    void doiSoatVanChoSolverKhiAnswerCheckPendingThuong() throws Exception {
+        int examId = readyExam();
+        int slot = generatedQuestionWaitingForSolver(examId);
+
+        perform(get("/api/exams/" + examId + "/progress")).andExpect(status().isOk());
+
+        assertEquals("generating", jdbc.queryForObject("SELECT state FROM exam_slot WHERE id = ?", String.class, slot),
+                "job pending thường: chỗ vẫn chờ Solver như cũ");
+    }
+
+    @Test
+    void tienDoNoiRoHetLuotAiVaGioChayTiepKhiJobSinhCauBiHoan() throws Exception {
+        int examId = json(perform(post("/api/exams/build").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"matrixId\": " + matrixId + "}")).andExpect(status().isOk())).get("examId").asInt();
+        JsonNode normal = json(perform(get("/api/exams/" + examId + "/progress")).andExpect(status().isOk()));
+        assertFalse(normal.hasNonNull("notice"), normal.toString());
+
+        deferByQuota("job_type = 'generate'");
+        JsonNode deferred = json(perform(get("/api/exams/" + examId + "/progress")).andExpect(status().isOk()));
+
+        assertEquals("generating", deferred.get("status").asText());
+        assertTrue(deferred.get("notice").asText().startsWith(QUOTA_NOTICE), deferred.toString());
+        assertTrue(deferred.get("notice").asText().matches(QUOTA_NOTICE + "\\d{2}:\\d{2}"), deferred.toString());
+    }
+
+    @Test
+    void giuKhiChoDangSinhVaJobSinhCauBiHoanThiThongBaoGioChayTiep() throws Exception {
+        int examId = json(perform(post("/api/exams/build").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"matrixId\": " + matrixId + "}")).andExpect(status().isOk())).get("examId").asInt();
+        int slot = slotId(examId, "mcq", 1);
+        deferByQuota("job_type = 'generate'");
+
+        JsonNode body = json(keep(examId, slot).andExpect(status().isConflict()));
+
+        assertTrue(body.get("error").asText().contains(QUOTA_NOTICE), body.toString());
+    }
+
     /**
      * F-12 phần 2: giáo viên gõ \frac{1}{2} quên $ thì được tự bọc như parser sinh câu (trước đây 400 FORMAT_INVALID vì LaTeX
      * nằm ngoài $); cảnh báo "đã tự bọc $" được lưu ở bước format.
@@ -761,6 +931,28 @@ class ExamQuestionEditTest {
         assertTrue(item.get("needsReview").asBoolean());
         assertEquals("edited", json(keep(examId, slot).andExpect(status().isOk())).get("state").asText(),
                 "giáo viên vẫn Giữ được sau khi thấy cờ");
+    }
+
+    /** C-07 qua HTTP thật: bản sửa lưu ra đúng như câu sinh (lệnh thiếu "\", "\\" giữa công thức, "&", "<br>", "->"). */
+    @Test
+    void banSuaDuocChuanHoaNhuCauSinhKhiLuu() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        JsonNode item = json(putQuestion(examId, slot, mcqBody(questionOf(slot))
+                .put("optionA", "$70^circ$")
+                .put("optionB", "$x = 2$\\\\$y = 3$")
+                .put("optionC", "$&= 5x$")
+                .put("explanation", "Bước 1<br>Bước 2, $a -> b$."))
+                .andExpect(status().isOk()));
+        int version = item.get("questionId").asInt();
+
+        assertEquals("$70^\\circ$", question(version).get("option_a"));
+        assertEquals("$x = 2$\n$y = 3$", question(version).get("option_b"));
+        assertEquals("$= 5x$", question(version).get("option_c"));
+        assertEquals("Bước 1\nBước 2, $a \\Rightarrow b$.", question(version).get("explanation"));
+        String warnings = jdbc.queryForObject("SELECT warnings::text FROM quality_check_result WHERE question_id = ?"
+                + " AND check_type = 'format'", String.class, version);
+        assertTrue(warnings.contains("json: đã sửa"), warnings);
     }
 
     @Test
@@ -978,7 +1170,8 @@ class ExamQuestionEditTest {
         int bankId = kept.get("bankItemId").asInt();
         Map<String, Object> item = jdbc.queryForMap("SELECT * FROM bank_item WHERE id = ?", bankId);
         assertEquals(version, item.get("source_question_id"));
-        assertEquals(newText, item.get("question_text"));
+        // C-07: câu dẫn của bản sửa qua cùng chuỗi chuẩn hóa như câu sinh ("là:" thành "là")
+        assertEquals("Đơn thức $2x^1$ có bậc là", item.get("question_text"));
         assertEquals("Lời giải đã sửa.", item.get("explanation"));
         assertEquals(base, question(version).get("edited_from_question_id"), "truy ngược được bản gốc LLM");
         assertEquals("qc_passed", statusOf(base), "bản gốc LLM giữ trạng thái và kết quả QC");

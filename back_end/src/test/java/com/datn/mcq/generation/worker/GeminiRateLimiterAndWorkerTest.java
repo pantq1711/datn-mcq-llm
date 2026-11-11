@@ -380,6 +380,43 @@ class GeminiRateLimiterAndWorkerTest {
         assertTrue(String.valueOf(row2.get("last_error")).startsWith("quota:"), String.valueOf(row2.get("last_error")));
     }
 
+    /**
+     * C-01: hết hạn mức ngày thì worker không nhận job, và các job đã đến hạn được ĐÁNH DẤU hoãn đúng dấu hiệu của
+     * deferJobOnQuotaExhausted (last_error "quota:", next_run_at = mốc đặt lại) để Giữ/đối soát/tiến độ nói được lý do và giờ
+     * chạy tiếp. Job chưa đến hạn (backoff) không bị đụng; attempt giữ nguyên.
+     */
+    @Test
+    void hetHanMucNgayDanhDauJobDenHanLaHoanTheoMocDatLai() {
+        ZoneId vnZone = ZoneId.systemDefault();
+        ZonedDateTime pacificNow = ZonedDateTime.of(2026, 10, 27, 22, 0, 0, 0, GeminiRateLimiter.PACIFIC_ZONE);
+        LocalDateTime expectedResetLocal = LocalDateTime.ofInstant(
+                pacificNow.toLocalDate().plusDays(1).atStartOfDay(GeminiRateLimiter.PACIFIC_ZONE).toInstant(), vnZone);
+        MutableClock clock = new MutableClock(pacificNow.toInstant(), vnZone);
+        GeminiRateLimiter exhausted = new GeminiRateLimiter(4200L, 2, 60_000L, clock, clock::advance, s -> 2);
+        LlmClient client = new LlmClient("fake-key", "gemini-3.5-flash-lite", fakeBaseUrl(), exhausted);
+        QcOrchestrator qc = new QcOrchestrator(formatChecker,
+                new AnswerSolverChecker(client, promptBuilder, "gemini-3.5-flash-lite"),
+                qualityCheckResultRepository, dedupService, answerCheckRecorder);
+        GenerationJobPoller poller = new GenerationJobPoller(jobProcessor, client, qc, dedupScopeResolver, 3, exhausted);
+
+        int due = insert("INSERT INTO generation_job (run_id, template_id, target_difficulty, status, attempt, next_run_at)"
+                + " VALUES (?, ?, 'easy', 'pending', 0, now() - interval '1 minute')", run, template);
+        int backoff = insert("INSERT INTO generation_job (run_id, template_id, target_difficulty, status, attempt,"
+                + " next_run_at, last_error) VALUES (?, ?, 'easy', 'pending', 1, now() + interval '30 seconds', 'Lỗi mạng')",
+                run, template);
+
+        assertFalse(poller.processNextJob(true).processed());
+
+        Map<String, Object> dueRow = jdbc.queryForMap("SELECT * FROM generation_job WHERE id = ?", due);
+        assertEquals("pending", dueRow.get("status"));
+        assertEquals(0, dueRow.get("attempt"));
+        assertEquals(expectedResetLocal, ((Timestamp) dueRow.get("next_run_at")).toLocalDateTime());
+        assertTrue(String.valueOf(dueRow.get("last_error")).startsWith("quota:"), String.valueOf(dueRow.get("last_error")));
+        Map<String, Object> backoffRow = jdbc.queryForMap("SELECT * FROM generation_job WHERE id = ?", backoff);
+        assertEquals("Lỗi mạng", backoffRow.get("last_error"), "job đang backoff không bị đụng tới");
+        assertEquals(1, backoffRow.get("attempt"));
+    }
+
     @Test
     void boJobSpacingVaWorkerLienTucXuLyNhieuJobDungSachKhiTat() throws Exception {
         // 1) GenerationJobPoller không còn dùng @Scheduled.

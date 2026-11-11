@@ -20,6 +20,8 @@ import com.datn.mcq.generation.parser.McqJsonParser;
 import com.datn.mcq.generation.service.DedupScopeResolver;
 import com.datn.mcq.llm.client.GeminiRateLimiter;
 import com.datn.mcq.llm.client.LlmClient;
+import com.datn.mcq.llm.client.LlmNotConfiguredException;
+import com.datn.mcq.llm.client.NonRetryableLlmException;
 import com.datn.mcq.llm.client.QuotaExhaustedException;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.qc.checker.GroundingChecker;
@@ -36,6 +38,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
@@ -101,6 +104,7 @@ public class GenerationJobPoller {
      */
     public ProcessedJobSummary processNextJob(boolean runAnswerCheck) {
         if (rateLimiter != null && !rateLimiter.hasDailyQuota()) {
+            markDueJobsDeferredByQuota();
             return new ProcessedJobSummary(false, null, null, "quota_exhausted", null, null);
         }
         Optional<GenerationJobProcessor.ClaimedJobContext> claimedOpt = processor.claimNextPendingJob(runAnswerCheck);
@@ -122,6 +126,26 @@ public class GenerationJobPoller {
                 queueMetrics.recordJob(ctx.answerCheck() ? "answer_check" : ctx.grounding() ? "grounding" : "generate",
                         outcome, System.nanoTime() - startNanos);
             }
+        }
+    }
+
+    /**
+     * C-01: hết hạn mức ngày thì worker không nhận job, nên job đã đến hạn nằm {@code pending} với {@code next_run_at} là
+     * quá khứ và không có dấu hiệu gì cho Giữ, đối soát và tiến độ biết là đang chờ hạn mức. Đánh dấu chúng hoãn tới mốc đặt
+     * lại đúng như {@code deferJobOnQuotaExhausted} (tiền tố "quota:" và next_run_at = mốc đặt lại); không tính vào lượt thử.
+     * Lỗi ghi DB ở đây chỉ được log: không được làm chết vòng lặp worker.
+     */
+    private void markDueJobsDeferredByQuota() {
+        try {
+            LocalDateTime resetAt = rateLimiter.nextResetAt();
+            int marked = processor.deferDuePendingOnQuota(resetAt,
+                    "Đã chạm hạn mức gọi Gemini trong ngày (" + rateLimiter.getDailyQuota() + " lượt); đặt lại lúc "
+                            + resetAt);
+            if (marked > 0) {
+                LOG.info("Hết hạn mức ngày của Gemini: hoãn {} job tới {}", marked, resetAt);
+            }
+        } catch (RuntimeException ex) {
+            LOG.warn("Không đánh dấu được các job hoãn vì hết hạn mức ngày: {}", ex.getMessage());
         }
     }
 
@@ -170,6 +194,24 @@ public class GenerationJobPoller {
                     ctx.jobId(),
                     null,
                     deferredJob.getStatus().getDbValue(),
+                    null,
+                    ex.getMessage()
+            );
+        } catch (LlmNotConfiguredException | NonRetryableLlmException ex) {
+            // C-04 (M-22): thiếu API key (LlmNotConfiguredException, là IllegalStateException) và HTTP 4xx khác 429, phản hồi bị chặn an toàn (SAFETY,
+            // RECITATION): gọi lại cùng yêu cầu chắc chắn lỗi như cũ, chỉ tốn thêm lượt hạn mức ngày. Hỏng ngay như đường
+            // answer_check (failJobNow), không thử lại. 429, 503, 5xx và lỗi mạng đi nhánh dưới (thử lại có backoff).
+            if (interruptedByShutdown(ex)) {
+                return releaseForShutdown(ctx, ex);
+            }
+            LOG.warn("Job {} ({}): lỗi không thể thử lại, hỏng ngay ở lượt {}: {}", ctx.jobId(), GenerationJob.TYPE_GENERATE,
+                    ctx.attempt(), ex.getMessage());
+            var failedJob = processor.failJobNow(ctx, ex.getMessage());
+            return new ProcessedJobSummary(
+                    true,
+                    ctx.jobId(),
+                    null,
+                    failedJob.getStatus().getDbValue(),
                     null,
                     ex.getMessage()
             );

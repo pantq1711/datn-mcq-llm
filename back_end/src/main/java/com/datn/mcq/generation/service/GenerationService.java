@@ -626,6 +626,20 @@ public class GenerationService {
         return generationJobRepository.findFirstByExamSlotIdOrderByIdDesc(examSlotId);
     }
 
+    /**
+     * C-01: mốc chạy tiếp sớm nhất của các job đang hoãn vì hạn mức ngày thuộc các chỗ {@code examSlotIds}
+     * (xem {@link QuotaDeferral}); rỗng khi không có. Một truy vấn, không phụ thuộc số chỗ.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<java.time.LocalDateTime> earliestQuotaResume(java.util.Collection<Integer> examSlotIds) {
+        if (examSlotIds.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        return java.util.Optional.ofNullable(generationJobRepository.earliestQuotaResume(examSlotIds, now,
+                now.plus(QuotaDeferral.FAR), QuotaDeferral.PREFIX + "%"));
+    }
+
     /** W1-2: job answer_check (chạy lại Solver) mới nhất của một bản giáo viên sửa; rỗng với câu LLM. */
     @Transactional(readOnly = true)
     public java.util.Optional<GenerationJob> latestAnswerCheckJob(Integer questionId) {

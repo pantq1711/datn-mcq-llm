@@ -74,6 +74,20 @@ class DailyQuotaGuardTest extends ExamFlowTestBase {
         assertEquals(0, count("SELECT count(*) FROM generation_job"), "không xếp job");
     }
 
+    /** C-01: thông báo cho giáo viên nêu giờ chạy tiếp (giờ Việt Nam, từ mốc đặt lại), không nhắc tên nhà cung cấp. */
+    @Test
+    void hetHanMucNgayThongBaoGioChayTiepTheoGioVietNam() throws Exception {
+        setGeminiUsed(5);
+
+        MvcResult result = postJson("/api/exams/build", "{\"matrixId\": " + matrixId + "}")
+                .andExpect(status().isTooManyRequests()).andReturn();
+
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+        assertTrue(body.get("error").asText().matches("Hết lượt AI hôm nay, hệ thống chạy tiếp lúc \\d{2}:\\d{2}"),
+                body.toString());
+        assertEquals("LLM_DAILY_QUOTA_EXHAUSTED", body.get("code").asText());
+    }
+
     @Test
     void deDuCauTuNganHangVanTaoDuocKhiHetHanMucNgay() throws Exception {
         bankMcq("Đa thức", "easy", "Câu ngân hàng một");

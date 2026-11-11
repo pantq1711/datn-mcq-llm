@@ -15,9 +15,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -119,7 +121,7 @@ public class LlmClient {
     private LlmCallResult callGemini(String prompt, String requestedModel, String generationConfigFragment) {
         String apiKey = resolveApiKey();
         if (apiKey.isBlank()) {
-            throw new IllegalStateException("Chưa cấu hình LLM_API_KEY (hoặc GEMINI_API_KEY) cho LlmClient");
+            throw new LlmNotConfiguredException("Chưa cấu hình LLM_API_KEY (hoặc GEMINI_API_KEY) cho LlmClient");
         }
         String model = (requestedModel != null && !requestedModel.isBlank())
                 ? requestedModel.trim()
@@ -181,13 +183,13 @@ public class LlmClient {
         Map<String, Object> root = SimpleJson.parseObject(response.body());
         List<Object> candidates = (List<Object>) root.get("candidates");
         if (candidates == null || candidates.isEmpty()) {
-            throw new RuntimeException("Phản hồi Gemini không có candidates");
+            throw errorForEmptyResponse("Phản hồi Gemini không có candidates", root, null);
         }
         Map<String, Object> firstCandidate = (Map<String, Object>) candidates.get(0);
         Map<String, Object> content = (Map<String, Object>) firstCandidate.get("content");
         List<Object> parts = content != null ? (List<Object>) content.get("parts") : null;
         if (parts == null || parts.isEmpty()) {
-            throw new RuntimeException("Phản hồi Gemini không có content.parts");
+            throw errorForEmptyResponse("Phản hồi Gemini không có content.parts", root, firstCandidate);
         }
         Map<String, Object> firstPart = (Map<String, Object>) parts.get(0);
         String text = firstPart.get("text") != null ? String.valueOf(firstPart.get("text")) : "";
@@ -204,6 +206,41 @@ public class LlmClient {
             metrics.recordTokens(totalTokens);
         }
         return new LlmCallResult(text, totalTokens, latencyMs, 0.0, model);
+    }
+
+    /** {@code finishReason} làm phản hồi rỗng mà gọi lại cùng yêu cầu vẫn bị chặn như cũ (C-10): không thử lại. */
+    private static final Set<String> NON_RETRYABLE_FINISH_REASONS = Set.of("SAFETY", "RECITATION");
+    /** {@code promptFeedback.blockReason} tương tự: yêu cầu bị chặn vì an toàn. */
+    private static final Set<String> NON_RETRYABLE_BLOCK_REASONS = Set.of("SAFETY");
+
+    /**
+     * C-10: phản hồi 200 nhưng không có nội dung ({@code candidates} rỗng, hoặc {@code content.parts} rỗng). Đọc
+     * {@code candidates[0].finishReason} và {@code promptFeedback.blockReason} đưa vào thông điệp lỗi để vết QC phân biệt
+     * "bị chặn an toàn" / "hết token" với lỗi mạng. SAFETY, RECITATION (và blockReason SAFETY) là
+     * {@link NonRetryableLlmException}: gọi lại cùng yêu cầu vẫn bị chặn, chỉ tốn thêm lượt hạn mức; còn lại (MAX_TOKENS,
+     * OTHER, không có lý do) là lỗi tạm thời, thử lại như cũ.
+     *
+     * @param firstCandidate {@code candidates[0]}, null khi không có candidate
+     */
+    static RuntimeException errorForEmptyResponse(String what, Map<String, Object> root,
+                                                  Map<String, Object> firstCandidate) {
+        String finishReason = firstCandidate != null && firstCandidate.get("finishReason") != null
+                ? String.valueOf(firstCandidate.get("finishReason")) : null;
+        String blockReason = null;
+        if (root.get("promptFeedback") instanceof Map<?, ?> feedback && feedback.get("blockReason") != null) {
+            blockReason = String.valueOf(feedback.get("blockReason"));
+        }
+        List<String> details = new ArrayList<>();
+        if (finishReason != null) {
+            details.add("finishReason=" + finishReason);
+        }
+        if (blockReason != null) {
+            details.add("promptFeedback.blockReason=" + blockReason);
+        }
+        String message = details.isEmpty() ? what : what + " (" + String.join(", ", details) + ")";
+        boolean blocked = (finishReason != null && NON_RETRYABLE_FINISH_REASONS.contains(finishReason))
+                || (blockReason != null && NON_RETRYABLE_BLOCK_REASONS.contains(blockReason));
+        return blocked ? new NonRetryableLlmException(message) : new RuntimeException(message);
     }
 
     /**
@@ -287,7 +324,8 @@ public class LlmClient {
     /**
      * Lỗi cho mã HTTP không thành công từ Gemini (không gọi mạng).
      * 429 và 503 thành {@link UpstreamServiceException} với thông báo ngắn; body thô chỉ ghi vào log máy chủ.
-     * Mã khác giữ nguyên thông báo cũ.
+     * C-04: HTTP 4xx khác 429 (sai tên model, schema bị từ chối, key sai) là {@link NonRetryableLlmException} với thông báo
+     * cũ ("HTTP 400 từ Gemini API: ..."): gọi lại cùng yêu cầu chắc chắn lỗi như cũ. 5xx khác 503 giữ nguyên (lỗi tạm thời).
      */
     static RuntimeException errorForStatus(int status, String body) {
         if (status == 429) {
@@ -300,7 +338,8 @@ public class LlmClient {
             return new UpstreamServiceException(503,
                     "Gemini tạm thời quá tải hoặc bảo trì (HTTP 503). Hãy thử lại sau ít phút.");
         }
-        return new RuntimeException("HTTP " + status + " từ Gemini API: " + body);
+        String message = "HTTP " + status + " từ Gemini API: " + body;
+        return status >= 400 && status < 500 ? new NonRetryableLlmException(message) : new RuntimeException(message);
     }
 
     private static String abbreviate(String body) {

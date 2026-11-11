@@ -56,9 +56,12 @@ public final class ExamBuildDtos {
 
     /**
      * @param status "generating" (còn chỗ đang sinh), "ready" (đủ câu) hoặc "partial" (hết việc nhưng có chỗ hỏng)
+     * @param notice C-01: có khi các chỗ đang chờ sinh bị hoãn vì AI hết lượt trong ngày: "Hết lượt AI hôm nay, hệ thống chạy
+     *               tiếp lúc HH:mm" (giờ Việt Nam); vắng mặt khi không có
      */
     public record ProgressDto(Integer examId, String examCode, String title, String status, int total, int ready,
-                              int generating, int failed, int fromBank, List<CellProgressDto> cells) {}
+                              int generating, int failed, int fromBank, List<CellProgressDto> cells,
+                              @JsonInclude(JsonInclude.Include.NON_NULL) String notice) {}
 
     /** Một chỗ trong đề (tóm tắt, không kèm nội dung câu). */
     public record SlotDto(

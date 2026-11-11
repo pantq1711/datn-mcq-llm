@@ -3,6 +3,7 @@ package com.datn.mcq.exam.export;
 import com.datn.mcq.common.util.AlignmentAmpersand;
 import com.datn.mcq.common.util.DegreeSymbols;
 import com.datn.mcq.common.util.DisplayMathDollars;
+import com.datn.mcq.common.util.InlineArtifacts;
 import com.datn.mcq.common.util.LiteralNewlines;
 import com.datn.mcq.common.util.MissingLatexBackslash;
 import com.datn.mcq.config.ExamScoringProperties;
@@ -168,14 +169,17 @@ public final class ExamMarkdownBuilder {
     }
 
     /**
-     * "$$...$$" thành "$...$" ({@link DisplayMathDollars}, C-02: {@link #pieces} chỉ hiểu "$"), rồi "\n" và "\\" chữ (có thể
-     * làm lộ công thức), lệnh LaTeX mất "\" ({@link MissingLatexBackslash}: "70^circ" thành "70^\circ"), dấu căn lề "&" ngoài
-     * môi trường \begin ({@link AlignmentAmpersand}: "$&= 5x$" thành "$= 5x$"), cuối cùng ký hiệu độ ("70°"); không có gì để
-     * đổi thì trả đúng đối tượng ban đầu.
+     * "$$...$$" thành "$...$" đầu tiên ({@link DisplayMathDollars}, C-02: {@link #pieces} chỉ hiểu "$"), rồi
+     * "\n" và "\\" chữ (có thể làm lộ công thức), rồi {@link InlineArtifacts} ("&lt;br&gt;" thành xuống dòng, "-&gt;" / "=&gt;"
+     * thành "⇒", "\\" trong công thức không có \begin thành các công thức riêng), lệnh LaTeX mất "\" ({@link MissingLatexBackslash}:
+     * "70^circ" thành "70^\circ"), dấu căn lề "&" ngoài môi trường \begin ({@link AlignmentAmpersand}: "$&= 5x$" thành
+     * "$= 5x$"), cuối cùng ký hiệu độ ("70°"); không có gì để đổi thì trả đúng đối tượng ban đầu. Cùng các quy tắc với lúc
+     * lưu và lúc sửa câu ({@code LlmOutputRepair.normalizeField}) nên câu đã lưu từ trước cũng được sửa khi xuất.
      */
     private static String cleanText(String text) {
         String s = DisplayMathDollars.repair(text).text();
-        s = MissingLatexBackslash.repair(LiteralNewlines.repair(s).text()).text();
+        s = InlineArtifacts.normalize(LiteralNewlines.repair(s).text());
+        s = MissingLatexBackslash.repair(s).text();
         return DegreeSymbols.normalize(AlignmentAmpersand.repair(s).text());
     }
 

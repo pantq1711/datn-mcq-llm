@@ -2,6 +2,7 @@ package com.datn.mcq.generation.parser;
 
 import com.datn.mcq.common.util.AlignmentAmpersand;
 import com.datn.mcq.common.util.DisplayMathDollars;
+import com.datn.mcq.common.util.InlineArtifacts;
 import com.datn.mcq.common.util.LatexValidationRules;
 import com.datn.mcq.common.util.LiteralNewlines;
 import com.datn.mcq.common.util.MissingLatexBackslash;
@@ -26,9 +27,12 @@ import java.util.regex.Pattern;
  *       "\\" ngoài công thức thành xuống dòng.</li>
  *   <li>{@link #wrapFormulaLines} (4/11): dòng công thức của lời giải viết ngoài $ được bọc NGUYÊN dòng; dòng bị chia bởi $
  *       giữa biểu thức ({@link #hasBrokenFormulaLine}) không tự sửa mà bị FormatChecker báo lỗi (câu được sinh lại).</li>
+ *   <li>{@link InlineArtifacts} (11/11): "&lt;br&gt;" ngoài công thức thành xuống dòng, "-&gt;" / "=&gt;" thành "⇒" ({@code \Rightarrow}
+ *       trong công thức), "\\" trong công thức không có {@code \begin} thành các công thức riêng.</li>
  *   <li>{@link AlignmentAmpersand} (11/11): dấu căn lề "&" trong công thức không có môi trường {@code \begin}
  *       ("$&= 5x(x - 2y)$"), chạy sau cùng.</li>
  * </ol>
+ * Toàn bộ chuỗi này cũng chạy cho bản giáo viên sửa qua {@link #normalizeField} (C-07).
  */
 public final class LlmOutputRepair {
 
@@ -858,70 +862,132 @@ public final class LlmOutputRepair {
             return null;
         }
         String s = String.valueOf(val);
-        if (repair) {
-            // C-02 (11/11): "$$...$$" thành "$...$" ĐẦU TIÊN, vì các bước dưới đếm/ghép "$" và xuất Word không hiểu "$$".
-            DisplayMathDollars.Result dm = DisplayMathDollars.repair(s);
-            String dmWarning = DisplayMathDollars.warning(field, dm);
-            if (dmWarning != null) {
-                warnings.add(dmWarning);
-                s = dm.text();
+        if (!repair) {
+            return (newlines ? McqJsonParser.normalizeLiteralNewlines(s) : s).trim();
+        }
+        return repairText(field, s, "explanation".equals(field), newlines, warnings);
+    }
+
+    /**
+     * MỘT chuỗi chuẩn hóa cho một trường văn bản của câu, dùng chung cho lúc lưu câu sinh (parser, qua {@code textField} rồi
+     * {@code StemPunctuation}) và lúc giáo viên sửa câu ({@code QuestionEditService.Content.text}), để cùng một văn bản ra
+     * cùng một kết quả ở cả hai đường (C-07). Gồm {@link LiteralNewlines}, thẻ br, gỡ vỏ \text ngoài $, tự đóng $,
+     * {@link MissingLatexBackslash}, ký hiệu độ, bọc dòng công thức (chỉ lời giải), bọc LaTeX ngoài $, mũi tên, tách "\\"
+     * trong công thức không có \begin, {@link AlignmentAmpersand}, rồi {@link StemPunctuation} (câu dẫn {@code question_text}
+     * và ý Đúng/Sai {@code statement_x}). Mỗi lần sửa ghi một cảnh báo vào {@code warnings}; mọi cảnh báo của chuỗi này mang
+     * tiền tố {@link #ESCAPE_WARNING_PREFIX} hoặc thuộc nhóm tự sửa chắc chắn nên không bật cờ "cần xem kỹ".
+     *
+     * @param field       tên trường: {@code question_text}, {@code option_a..d}, {@code statement_a..d}, {@code explanation},
+     *                    {@code answer} (đáp số câu trả lời ngắn: số viết trần, không đổi xuống dòng, không bọc, không đổi ký
+     *                    hiệu)
+     * @param explanation true với lời giải: các dòng công thức viết ngoài $ được bọc nguyên dòng
+     * @param tf          true với câu Đúng/Sai: câu dẫn thiếu dấu kết câu chỉ thêm "." (không bao giờ thêm "?")
+     * @return văn bản đã chuẩn hóa và trim; null khi {@code text} null
+     */
+    public static String normalizeField(String field, String text, boolean explanation, boolean tf,
+                                        List<String> warnings) {
+        if (text == null) {
+            return null;
+        }
+        String s = repairText(field, text, explanation, !"answer".equals(field), warnings);
+        if ("question_text".equals(field)) {
+            return StemPunctuation.stem(field, s, tf, true, warnings);
+        }
+        if (field != null && field.startsWith("statement_")) {
+            return StemPunctuation.statement(field, s, true, warnings);
+        }
+        return s;
+    }
+
+    /** Chuỗi chuẩn hóa chế độ sửa của một trường (xem {@link #normalizeField}), chưa gồm dấu câu của câu dẫn/ý. */
+    private static String repairText(String field, String text, boolean explanation, boolean newlines,
+                                     List<String> warnings) {
+        String s = text;
+        // C-02 (11/11): "$$...$$" thành "$...$" ĐẦU TIÊN, vì các bước dưới đếm/ghép "$" và xuất Word không hiểu "$$".
+        DisplayMathDollars.Result dm = DisplayMathDollars.repair(s);
+        String dmWarning = DisplayMathDollars.warning(field, dm);
+        if (dmWarning != null) {
+            warnings.add(dmWarning);
+            s = dm.text();
+        }
+        // "\n" chữ lọt vào công thức ("$ .\n$") làm pandoc bỏ công thức khi xuất Word: sửa TRƯỚC các bước đếm/ghép $ bên dưới.
+        if (newlines) {
+            LiteralNewlines.Result ln = LiteralNewlines.repair(s);
+            String lnWarning = LiteralNewlines.warning(field, ln);
+            if (lnWarning != null) {
+                warnings.add(lnWarning);
             }
-            // "\n" chữ lọt vào công thức ("$ .\n$") làm pandoc bỏ công thức khi xuất Word: sửa TRƯỚC các bước đếm/ghép $ bên dưới.
-            if (newlines) {
-                LiteralNewlines.Result ln = LiteralNewlines.repair(s);
-                String lnWarning = LiteralNewlines.warning(field, ln);
-                if (lnWarning != null) {
-                    warnings.add(lnWarning);
-                }
-                s = ln.text();
+            s = ln.text();
+            // 11/11: "<br>" ngoài công thức thành xuống dòng thật, cùng chỗ với "\n" chữ (trước mọi bước xét dòng/đếm $).
+            InlineArtifacts.Result br = InlineArtifacts.htmlBreaks(s);
+            String brWarning = InlineArtifacts.htmlBreaksWarning(field, br);
+            if (brWarning != null) {
+                warnings.add(brWarning);
+                s = br.text();
             }
-            TextRepair t = stripTextOutsideMath(s);
-            if (t.removed() > 0) {
-                warnings.add(textWarning(field, t.removed()));
-                s = t.text();
+        }
+        TextRepair t = stripTextOutsideMath(s);
+        if (t.removed() > 0) {
+            warnings.add(textWarning(field, t.removed()));
+            s = t.text();
+        }
+        DollarRepair d = closeTrailingDollar(s);
+        if (d.closed()) {
+            warnings.add(dollarWarning(field, s));
+            s = d.text();
+        }
+        // 9/11: lệnh LaTeX mất "\" trong công thức ("$70^circ$", "$frac{1}{2}$"), TRƯỚC bước đổi ký hiệu độ bên dưới.
+        MissingLatexBackslash.Result b = MissingLatexBackslash.repair(s);
+        String bWarning = MissingLatexBackslash.warning(field, b);
+        if (bWarning != null) {
+            warnings.add(bWarning);
+            s = b.text();
+        }
+        DegreeRepair g = fixDegreeSymbol(s);
+        if (g.fixed() > 0) {
+            warnings.add(degreeWarning(field, g.fixed()));
+            s = g.text();
+        }
+        // 4/11: dòng công thức của lời giải viết ngoài $ ("mỗi bước một dòng") được bọc nguyên dòng, TRƯỚC bước bọc theo
+        // đoạn liền mạch (bước đó đi qua cả ký tự xuống dòng và có thể ghép hai dòng, hoặc bọc dở một dòng).
+        if (explanation) {
+            FormulaLineRepair f = wrapFormulaLines(McqJsonParser.normalizeLiteralNewlines(s));
+            if (f.wrapped() > 0) {
+                warnings.add(formulaLineWarning(field, f.wrapped()));
             }
-            DollarRepair d = closeTrailingDollar(s);
-            if (d.closed()) {
-                warnings.add(dollarWarning(field, s));
-                s = d.text();
+            s = f.text();
+        }
+        // Đáp án câu trả lời ngắn là số viết trần: LaTeX ở đó để bước kiểm định dạng báo đúng lỗi dạng đáp án.
+        if (!"answer".equals(field)) {
+            WrapRepair w = wrapLatexOutsideMath(s);
+            if (w.wrapped() > 0) {
+                warnings.add(wrapWarning(field, w.wrapped()));
+                s = w.text();
             }
-            // 9/11: lệnh LaTeX mất "\" trong công thức ("$70^circ$", "$frac{1}{2}$"), TRƯỚC bước đổi ký hiệu độ bên dưới.
-            MissingLatexBackslash.Result b = MissingLatexBackslash.repair(s);
-            String bWarning = MissingLatexBackslash.warning(field, b);
-            if (bWarning != null) {
-                warnings.add(bWarning);
-                s = b.text();
+        }
+        if (newlines) {
+            // 11/11: "->" / "=>" thành "⇒" (trong công thức "\Rightarrow") và "\\" trong công thức không có \begin thành các
+            // công thức riêng; SAU các bước bọc ở trên để cả dòng vừa được bọc thành công thức cũng được xử lý.
+            InlineArtifacts.Result ar = InlineArtifacts.arrows(s);
+            String arWarning = InlineArtifacts.arrowsWarning(field, ar);
+            if (arWarning != null) {
+                warnings.add(arWarning);
+                s = ar.text();
             }
-            DegreeRepair g = fixDegreeSymbol(s);
-            if (g.fixed() > 0) {
-                warnings.add(degreeWarning(field, g.fixed()));
-                s = g.text();
+            InlineArtifacts.Result sp = InlineArtifacts.splitMathLines(s);
+            String spWarning = InlineArtifacts.splitMathLinesWarning(field, sp);
+            if (spWarning != null) {
+                warnings.add(spWarning);
+                s = sp.text();
             }
-            // 4/11: dòng công thức của lời giải viết ngoài $ ("mỗi bước một dòng") được bọc nguyên dòng, TRƯỚC bước bọc theo
-            // đoạn liền mạch (bước đó đi qua cả ký tự xuống dòng và có thể ghép hai dòng, hoặc bọc dở một dòng).
-            if ("explanation".equals(field)) {
-                FormulaLineRepair f = wrapFormulaLines(McqJsonParser.normalizeLiteralNewlines(s));
-                if (f.wrapped() > 0) {
-                    warnings.add(formulaLineWarning(field, f.wrapped()));
-                }
-                s = f.text();
-            }
-            // Đáp án câu trả lời ngắn là số viết trần: LaTeX ở đó để bước kiểm định dạng báo đúng lỗi dạng đáp án.
-            if (!"answer".equals(field)) {
-                WrapRepair w = wrapLatexOutsideMath(s);
-                if (w.wrapped() > 0) {
-                    warnings.add(wrapWarning(field, w.wrapped()));
-                    s = w.text();
-                }
-            }
-            // 11/11: "&" căn lề ngoài môi trường \begin ("$&= 5x(x - 2y)$"), SAU hai bước bọc ở trên vì chính bước bọc dòng
-            // công thức biến dòng "&= ..." thành "$&= ...$"; texmath không đọc được nên xuất MathType hỏng.
-            AlignmentAmpersand.Result a = AlignmentAmpersand.repair(s);
-            String aWarning = AlignmentAmpersand.warning(field, a);
-            if (aWarning != null) {
-                warnings.add(aWarning);
-                s = a.text();
-            }
+        }
+        // 11/11: "&" căn lề ngoài môi trường \begin ("$&= 5x(x - 2y)$"), SAU hai bước bọc ở trên vì chính bước bọc dòng
+        // công thức biến dòng "&= ..." thành "$&= ...$"; texmath không đọc được nên xuất MathType hỏng.
+        AlignmentAmpersand.Result a = AlignmentAmpersand.repair(s);
+        String aWarning = AlignmentAmpersand.warning(field, a);
+        if (aWarning != null) {
+            warnings.add(aWarning);
+            s = a.text();
         }
         return (newlines ? McqJsonParser.normalizeLiteralNewlines(s) : s).trim();
     }

@@ -7,7 +7,9 @@ import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.exam.dto.ExamEditDtos.EditQuestionRequest;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamItemDto;
 import com.datn.mcq.generation.dto.QuestionEditInput;
+import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.generation.service.QuotaDeferral;
 import com.datn.mcq.generation.service.QuestionEditService;
 import com.datn.mcq.exam.entity.ExamSlot;
 import com.datn.mcq.exam.entity.ExamSlotAction;
@@ -20,8 +22,10 @@ import com.datn.mcq.review.service.AssistedKeepService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 /**
  * Thao tác trên từng câu của đề ở chế độ giáo viên (V7, phần C mục 4): Giữ (vào ngân hàng) và Đổi câu khác (sinh lại
@@ -99,18 +103,26 @@ public class ExamActionService {
             throw new IllegalStateException(ALREADY_KEPT_MESSAGE);
         }
         if (!ExamSlot.READY.equals(slot.getState())) {
-            throw new IllegalStateException(NO_QUESTION_MESSAGE);
+            throw new IllegalStateException(waitingMessage(slot, NO_QUESTION_MESSAGE));
         }
         boolean edited = false;
         if (slot.getGeneratedQuestionId() != null) {
+            LocalDateTime now = LocalDateTime.now();
             // W1-2 (D4): bản sửa còn đang chờ Solver kiểm lại thì chưa cho Giữ; job thất bại thì Giữ được (kèm cờ).
-            if (questionEditService.hasActiveAnswerCheck(slot.getGeneratedQuestionId())) {
+            // C-01: job đang HOÃN vì AI hết lượt trong ngày (có thể nhiều giờ) cũng cho Giữ, câu mang cờ solver_pending nên vào
+            // ngân hàng riêng của người Giữ (bên dưới); job pending thường vẫn chặn như cũ.
+            Optional<GenerationJob> answerCheck = generationService.latestAnswerCheckJob(slot.getGeneratedQuestionId());
+            if (answerCheck.map(ExamActionService::isActive).orElse(false)
+                    && !QuotaDeferral.isDeferred(answerCheck.get(), now)) {
                 throw ApiErrorException.conflict(QC_CHECKING, QC_CHECKING_MESSAGE);
             }
             // F-04: câu sinh từ tài liệu còn đang chờ chấm "bám tài liệu" thì cũng chưa Giữ (chưa biết có bám tài liệu không).
-            if (generationService.latestGroundingJob(slot.getGeneratedQuestionId())
-                    .map(j -> j.getStatus() == JobStatus.PENDING || j.getStatus() == JobStatus.RUNNING).orElse(false)) {
-                throw ApiErrorException.conflict(QC_CHECKING, GROUNDING_CHECKING_MESSAGE);
+            // C-01: job đó đang hoãn vì hết lượt AI thì vẫn chặn (cờ này có ý nghĩa) nhưng nói rõ lý do và giờ chạy tiếp.
+            Optional<GenerationJob> grounding = generationService.latestGroundingJob(slot.getGeneratedQuestionId());
+            if (grounding.map(ExamActionService::isActive).orElse(false)) {
+                throw ApiErrorException.conflict(QC_CHECKING, QuotaDeferral.resumeAt(grounding.get(), now)
+                        .map(at -> QuotaDeferral.message(at) + ". " + GROUNDING_CHECKING_MESSAGE)
+                        .orElse(GROUNDING_CHECKING_MESSAGE));
             }
             edited = generationService.getQuestionById(slot.getGeneratedQuestionId()).getEditedFromQuestionId() != null;
             // L5 (10/11): cờ "cần xem kỹ" tính TRƯỚC khi Giữ (sau Giữ chỗ hiện bản ngân hàng, không còn cờ), cùng tiêu chí
@@ -168,7 +180,7 @@ public class ExamActionService {
         buildService.reconcile(examId);
         ExamSlot slot = loadSlot(examId, slotId);
         if (ExamSlot.GENERATING.equals(slot.getState()) || ExamSlot.PENDING.equals(slot.getState())) {
-            throw new IllegalStateException(GENERATING_MESSAGE);
+            throw new IllegalStateException(waitingMessage(slot, GENERATING_MESSAGE));
         }
         // D1: Đổi bằng sinh mới tốn một lượt sinh nên phải qua trần theo giáo viên. Kiểm TRƯỚC mọi thay đổi chỗ (truy vấn
         // native ở đây tự ghi các thay đổi đang chờ); Đổi bằng câu ngân hàng không tính.
@@ -206,6 +218,25 @@ public class ExamActionService {
         }
         slotRepository.save(slot);
         return viewService.item(slot, matrixService.getCell(slot.getCellId()));
+    }
+
+    private static boolean isActive(GenerationJob job) {
+        return job.getStatus() == JobStatus.PENDING || job.getStatus() == JobStatus.RUNNING;
+    }
+
+    /**
+     * C-01: thông báo 409 khi chỗ chưa có câu để thao tác: nếu job sinh câu của chỗ đang hoãn vì AI hết lượt trong ngày thì nói
+     * rõ lý do và giờ chạy tiếp (giờ Việt Nam) thay vì "hãy chờ" vô thời hạn; không thì giữ {@code fallback}.
+     */
+    private String waitingMessage(ExamSlot slot, String fallback) {
+        if (!ExamSlot.GENERATING.equals(slot.getState()) && !ExamSlot.PENDING.equals(slot.getState())) {
+            return fallback;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        return generationService.latestJobForSlot(slot.getId())
+                .flatMap(job -> QuotaDeferral.resumeAt(job, now))
+                .map(at -> QuotaDeferral.message(at) + ". Chỗ này đang chờ sinh câu hỏi, hãy thao tác sau.")
+                .orElse(fallback);
     }
 
     /** B7: bỏ trống thì null; chỉ nhận các giá trị của {@link ExamSlotAction#REPLACE_REASONS} (không phân biệt hoa thường). */
