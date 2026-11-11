@@ -252,7 +252,7 @@ export default function ExamDetailPage() {
     );
 
     // === Hàm xử lý xuất file Word đã được tách riêng ===
-    const handleExportWord = async (equation: ExportEquationFormat = 'omml') => {
+    const handleExportWord = async (equation: ExportEquationFormat = 'mathtype') => {
         if (!examId) return;
         try {
             setExportLoading(true);
@@ -473,14 +473,14 @@ export default function ExamDetailPage() {
                         <Tooltip title={isGenerating ? "Đề đang được soạn, chờ xong rồi xuất Word." : undefined}>
                             {/* Nút bị khóa không nhận chuột nên bọc span để tooltip vẫn hiện */}
                             <span>
-                                {/* Bấm nút chính: xuất công thức Word (Equation) như trước; mũi tên mở menu chọn cách ghi công thức */}
+                                {/* Bấm nút chính: xuất công thức MathType (giáo viên Toán dùng MathType); mũi tên mở menu chọn cách ghi công thức */}
                                 <Space.Compact>
                                     <Button
                                         type="primary"
                                         icon={<FileWordOutlined />}
                                         loading={exportLoading}
                                         disabled={isGenerating}
-                                        onClick={() => handleExportWord('omml')}
+                                        onClick={() => handleExportWord('mathtype')}
                                     >
                                         Xuất file Word
                                     </Button>
@@ -489,10 +489,10 @@ export default function ExamDetailPage() {
                                         disabled={isGenerating || exportLoading}
                                         menu={{
                                             items: [
+                                                { key: "mathtype", label: "Công thức MathType" },
                                                 { key: "omml", label: "Công thức Word (Equation)" },
-                                                { key: "mathtype", label: "Công thức MathType (thử nghiệm)" },
                                             ],
-                                            selectedKeys: ["omml"],
+                                            selectedKeys: ["mathtype"],
                                             onClick: ({ key }) => handleExportWord(key === "mathtype" ? "mathtype" : "omml"),
                                         }}
                                     >
