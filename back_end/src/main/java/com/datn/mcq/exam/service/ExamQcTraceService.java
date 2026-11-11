@@ -58,6 +58,27 @@ import java.util.Set;
 @Service
 public class ExamQcTraceService {
 
+    /**
+     * A-07 (rà soát 11/11): thông báo chung thay cho lỗi job/Solver/bám tài liệu khi trả cho giáo viên. DB
+     * ({@code generation_job.last_error}, {@code generated_question.solver_error}) và log giữ chi tiết cho vận hành.
+     */
+    public static final String AI_ERROR_MESSAGE = "Lỗi khi gọi dịch vụ AI, hệ thống sẽ thử lại";
+
+    /**
+     * Lỗi lưu ở DB đổi thành lỗi trả cho giáo viên: null giữ null; các mã trạng thái do chính hệ thống ghi (job bị thay thế,
+     * job được đặt lại sau khi worker chết) giữ nguyên vì không phải lỗi và không chứa dữ liệu ngoài; còn lại (thân lỗi
+     * Gemini, message ngoại lệ nội bộ) thành {@link #AI_ERROR_MESSAGE}.
+     */
+    static String teacherError(String stored) {
+        if (stored == null) {
+            return null;
+        }
+        if (stored.equals("superseded") || stored.startsWith("skipped: superseded") || stored.equals("stale: reset")) {
+            return stored;
+        }
+        return AI_ERROR_MESSAGE;
+    }
+
     private final ExamBuildService buildService;
     private final ExamSlotRepository slotRepository;
     private final ExamSlotActionRepository actionRepository;
@@ -234,7 +255,8 @@ public class ExamQcTraceService {
             case DONE -> "not_run";
         };
         return new GroundingDto(state, null, null, null, null, refs(j.getMaterialRefs()), null,
-                j.getStatus() == JobStatus.PENDING || j.getStatus() == JobStatus.RUNNING ? null : j.getLastError(),
+                j.getStatus() == JobStatus.PENDING || j.getStatus() == JobStatus.RUNNING ? null
+                        : teacherError(j.getLastError()),
                 jobDto(j));
     }
 
@@ -315,11 +337,11 @@ public class ExamQcTraceService {
                 return notRun("pending", null, null, job);
             }
             if (js == JobStatus.FAILED) {
-                return notRun("error", null, check.get().getLastError(), job);
+                return notRun("error", null, teacherError(check.get().getLastError()), job);
             }
         }
         if (q.getSolverError() != null) {
-            return notRun("error", null, q.getSolverError(), job);
+            return notRun("error", null, teacherError(q.getSolverError()), job);
         }
         String reason;
         if (detail.format() == null) {
@@ -344,7 +366,8 @@ public class ExamQcTraceService {
     }
 
     private static JobDto jobDto(GenerationJob j) {
-        return new JobDto(j.getId(), j.getCreatedAt(), j.getStatus().getDbValue(), j.getAttempt(), j.getLastError());
+        return new JobDto(j.getId(), j.getCreatedAt(), j.getStatus().getDbValue(), j.getAttempt(),
+                teacherError(j.getLastError()));
     }
 
     private ActionDto actionDto(ExamSlotAction a, Context ctx) {

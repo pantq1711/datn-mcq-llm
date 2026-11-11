@@ -2,6 +2,7 @@ package com.datn.mcq.exam.export;
 
 import com.datn.mcq.common.util.AlignmentAmpersand;
 import com.datn.mcq.common.util.DegreeSymbols;
+import com.datn.mcq.common.util.DisplayMathDollars;
 import com.datn.mcq.common.util.LiteralNewlines;
 import com.datn.mcq.common.util.MissingLatexBackslash;
 import com.datn.mcq.config.ExamScoringProperties;
@@ -167,12 +168,14 @@ public final class ExamMarkdownBuilder {
     }
 
     /**
-     * "\n" và "\\" chữ trước (có thể làm lộ công thức), rồi lệnh LaTeX mất "\" ({@link MissingLatexBackslash}: "70^circ" thành
-     * "70^\circ"), dấu căn lề "&" ngoài môi trường \begin ({@link AlignmentAmpersand}: "$&= 5x$" thành "$= 5x$"), cuối cùng
-     * ký hiệu độ ("70°"); không có gì để đổi thì trả đúng đối tượng ban đầu.
+     * "$$...$$" thành "$...$" ({@link DisplayMathDollars}, C-02: {@link #pieces} chỉ hiểu "$"), rồi "\n" và "\\" chữ (có thể
+     * làm lộ công thức), lệnh LaTeX mất "\" ({@link MissingLatexBackslash}: "70^circ" thành "70^\circ"), dấu căn lề "&" ngoài
+     * môi trường \begin ({@link AlignmentAmpersand}: "$&= 5x$" thành "$= 5x$"), cuối cùng ký hiệu độ ("70°"); không có gì để
+     * đổi thì trả đúng đối tượng ban đầu.
      */
     private static String cleanText(String text) {
-        String s = MissingLatexBackslash.repair(LiteralNewlines.repair(text).text()).text();
+        String s = DisplayMathDollars.repair(text).text();
+        s = MissingLatexBackslash.repair(LiteralNewlines.repair(s).text()).text();
         return DegreeSymbols.normalize(AlignmentAmpersand.repair(s).text());
     }
 

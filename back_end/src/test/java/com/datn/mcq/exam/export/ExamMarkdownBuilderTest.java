@@ -277,6 +277,21 @@ class ExamMarkdownBuilderTest {
         assertTrue(keep.contains("Cho: $x = 1$. Khẳng định nào sau đây đúng:\n"), keep);
     }
 
+    /**
+     * C-02 (rà soát 11/11): "$$...$$" (model đôi khi viết công thức riêng dòng; câu cũ đã lưu) được đổi về "$...$" trước khi
+     * dựng Word. Trước đây mỗi "$$" thành "\$" + "$" nên Word hiện hai dấu "$" thừa quanh công thức.
+     */
+    @Test
+    void congThucHaiDauDolaDoiVeMotDauKhongConDolaThua() {
+        String md = markdownOnly(ExamMarkdownBuilder.build(viewOf(new PartDto("I", 1, 1, List.of(
+                mcq(1, "ready", "Phương trình $$x^2-4=0$$ có bao nhiêu nghiệm?", "$1$", "$$2$$", "$3$", "$4$",
+                        Option.B, "Ta có $$x^2-4=0$$ nên $x = 2$ hoặc $x = -2$.")))), HEADER, SCORING));
+        assertTrue(md.contains("Phương trình $x^2-4=0$ có bao nhiêu nghiệm?"), md);
+        assertTrue(md.contains("Ta có $x^2-4=0$ nên $x = 2$ hoặc $x = -2$."), md);
+        assertFalse(md.contains("$$"), "không còn $$: " + md);
+        assertFalse(md.contains("\\$"), "không còn dấu $ chữ (thừa) trong Word: " + md);
+    }
+
     // ---------- lời giải chi tiết ----------
 
     /** Ý đúng/sai: lời giải tách được theo từng ý a–d thì đặt dưới nhãn của ý đó. */

@@ -6,8 +6,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,10 +26,13 @@ class TrialQueriesSqlTest extends ExamFlowTestBase {
 
     private static final Path FILE = Path.of("..", "docs", "experiments", "trial", "queries.sql");
 
-    /** Các câu lệnh trong file (bỏ dòng chú thích "--", tách theo dấu chấm phẩy cuối câu). */
+    /**
+     * Các câu lệnh trong file (như psql: bỏ lệnh "\" và thay biến dev_emails bằng mặc định rỗng, N-10; bỏ dòng chú thích "--",
+     * tách theo dấu chấm phẩy cuối câu).
+     */
     private static List<String> statements() throws IOException {
         StringBuilder sb = new StringBuilder();
-        for (String line : Files.readAllLines(FILE, StandardCharsets.UTF_8)) {
+        for (String line : PsqlFile.load(FILE).lines().toList()) {
             if (!line.strip().startsWith("--")) {
                 sb.append(line).append('\n');
             }

@@ -27,6 +27,11 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+# A-04: cùng mẫu với src/main/resources/application.yaml (file này che file chính khi chạy test).
+logging:
+  pattern:
+    correlation: "[%X{jobId:-}/%X{slotId:-}/%X{examId:-}] "
+
 management:
   endpoints:
     web:

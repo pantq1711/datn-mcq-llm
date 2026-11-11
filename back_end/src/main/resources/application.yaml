@@ -42,6 +42,10 @@ server:
 logging:
   level:
     org.springframework.web.filter.CommonsRequestLoggingFilter: DEBUG
+  # A-04: in MDC jobId/slotId/examId (GenerationJobPoller đặt khi xử lý job) vào mỗi dòng log, để tìm được log của một đề
+  # hay một job ("[//]" khi không có). Thuộc tính của Spring Boot 4.1, chèn ngay trước tên logger ở cả console và file.
+  pattern:
+    correlation: "[%X{jobId:-}/%X{slotId:-}/%X{examId:-}] "
 
 management:
   endpoints:

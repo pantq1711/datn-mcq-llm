@@ -4,11 +4,20 @@
 -- Gom theo dạng câu; so_cho là số chỗ khác nhau có sửa trường đó.
 --
 -- BỘ LỌC CHUNG (xem docs/thong-ke/README.md): đề exam.mode = 'teacher'; run production 'matrix-%'; loại đề của tài khoản
--- nhóm phát triển (điền email vào ARRAY[...]). Các bản sửa là thao tác của giáo viên nên không lọc edited_from_question_id
+-- nhóm phát triển (biến psql dev_emails). Các bản sửa là thao tác của giáo viên nên không lọc edited_from_question_id
 -- (bản sửa luôn có giá trị đó); số lần sửa nối với câu trước đó qua nhật ký, không qua cột đầu ra LLM.
 -- GIỚI HẠN: số lần sửa phản ánh mức chấp nhận, không phải độ đúng; một câu sửa nhiều lần được đếm nhiều lần.
+--
+-- dev_emails: email cần loại (nhóm phát triển, tài khoản dùng thử), cách nhau bằng dấu phẩy, truyền khi chạy
+-- (KHÔNG ghi email thật vào file):
+--   psql -v dev_emails='nhom1@truong.edu.vn,gv-thu@truong.edu.vn' -f 03-truong-giao-vien-hay-sua.sql
+-- Không truyền thì rỗng (không loại ai). Xem docs/thong-ke/README.md.
+\if :{?dev_emails}
+\else
+\set dev_emails ''
+\endif
 WITH dev_users AS (
-    SELECT id FROM users WHERE lower(email) = ANY (ARRAY[]::text[])   -- ví dụ ARRAY['nhom1@truong.edu.vn']
+    SELECT id FROM users WHERE lower(email) = ANY (string_to_array(replace(lower(:'dev_emails'), ' ', ''), ','))
 )
 SELECT g.question_type,
        fld AS truong,

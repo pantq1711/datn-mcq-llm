@@ -1,6 +1,7 @@
 package com.datn.mcq.generation.parser;
 
 import com.datn.mcq.common.util.AlignmentAmpersand;
+import com.datn.mcq.common.util.DisplayMathDollars;
 import com.datn.mcq.common.util.LatexValidationRules;
 import com.datn.mcq.common.util.LiteralNewlines;
 import com.datn.mcq.common.util.MissingLatexBackslash;
@@ -858,6 +859,13 @@ public final class LlmOutputRepair {
         }
         String s = String.valueOf(val);
         if (repair) {
+            // C-02 (11/11): "$$...$$" thành "$...$" ĐẦU TIÊN, vì các bước dưới đếm/ghép "$" và xuất Word không hiểu "$$".
+            DisplayMathDollars.Result dm = DisplayMathDollars.repair(s);
+            String dmWarning = DisplayMathDollars.warning(field, dm);
+            if (dmWarning != null) {
+                warnings.add(dmWarning);
+                s = dm.text();
+            }
             // "\n" chữ lọt vào công thức ("$ .\n$") làm pandoc bỏ công thức khi xuất Word: sửa TRƯỚC các bước đếm/ghép $ bên dưới.
             if (newlines) {
                 LiteralNewlines.Result ln = LiteralNewlines.repair(s);

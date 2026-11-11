@@ -12,14 +12,23 @@
 -- thì tb_*_moi_cau thấp hơn thực tế.
 --
 -- BỘ LỌC CHUNG (xem docs/thong-ke/README.md): đề exam.mode = 'teacher'; chỉ câu LLM gốc (edited_from_question_id IS NULL,
--- run production 'matrix-%'); loại đề của tài khoản nhóm phát triển (điền email vào ARRAY[...]).
+-- run production 'matrix-%'); loại đề của tài khoản nhóm phát triển (biến psql dev_emails).
 -- GIỚI HẠN: chỉ tính các lượt gọi thành công cho ra kết quả; lượt thử lại thất bại, các lần sinh bị loại rồi sinh lại (mỗi lần là
 -- một câu LLM gốc khác) và lượt gọi của giáo viên Đổi câu không được gộp vào câu cuối của chỗ. Đây là token và thời gian gọi LLM
 -- chứ không phải thời gian chờ của người dùng (chưa gồm hàng đợi và giãn cách job). Chưa có đơn giá: LlmClient không tính
 -- cost_usd, nên nhân token với đơn giá của model ở báo cáo.
+--
+-- dev_emails: email cần loại (nhóm phát triển, tài khoản dùng thử), cách nhau bằng dấu phẩy, truyền khi chạy
+-- (KHÔNG ghi email thật vào file):
+--   psql -v dev_emails='nhom1@truong.edu.vn,gv-thu@truong.edu.vn' -f 06-chi-phi.sql
+-- Không truyền thì rỗng (không loại ai). Xem docs/thong-ke/README.md.
+\if :{?dev_emails}
+\else
+\set dev_emails ''
+\endif
 WITH RECURSIVE
 dev_users AS (
-    SELECT id FROM users WHERE lower(email) = ANY (ARRAY[]::text[])   -- ví dụ ARRAY['nhom1@truong.edu.vn']
+    SELECT id FROM users WHERE lower(email) = ANY (string_to_array(replace(lower(:'dev_emails'), ' ', ''), ','))
 ),
 roots AS (
     SELECT DISTINCT ON (j.question_id) j.question_id AS id, (j.material_context IS NOT NULL) AS co_tai_lieu

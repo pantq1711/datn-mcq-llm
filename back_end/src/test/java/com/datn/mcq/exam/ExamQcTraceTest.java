@@ -2,6 +2,7 @@ package com.datn.mcq.exam;
 
 import com.datn.mcq.config.AuthTestSupport;
 import com.datn.mcq.config.TestSafetyConfiguration;
+import com.datn.mcq.exam.service.ExamQcTraceService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.BeforeEach;
@@ -240,7 +241,9 @@ class ExamQcTraceTest extends ExamFlowTestBase {
         JsonNode version = trace(examId, slot).get("lineages").get(0).get("versions").get(0);
         JsonNode solver = version.get("qc").get("answerCheck");
         assertEquals("error", solver.get("state").asText(), "lỗi, không phải chưa chạy");
-        assertTrue(solver.get("error").asText().contains("Solver giả: hết thời gian chờ"));
+        // A-07: giáo viên chỉ thấy thông báo chung; chi tiết (DB solver_error ở trên, log) giữ cho vận hành.
+        assertEquals(ExamQcTraceService.AI_ERROR_MESSAGE, solver.get("error").asText());
+        assertFalse(solver.toString().contains("Solver giả"), solver.toString());
         assertTrue(texts(version.get("reviewReasons")).contains("solver_failed"));
         assertEquals("generated", version.get("status").asText());
         assertTrue(version.get("qc").get("dedup").get("passed").asBoolean(), "dedup đã chạy xong trước Solver");
@@ -262,7 +265,12 @@ class ExamQcTraceTest extends ExamFlowTestBase {
         JsonNode solver = versions.get(versions.size() - 1).get("qc").get("answerCheck");
         assertEquals("error", solver.get("state").asText());
         assertEquals("failed", solver.get("job").get("status").asText());
-        assertTrue(solver.get("error").asText().contains("Solver giả: hết thời gian chờ"), solver.toString());
+        assertEquals(ExamQcTraceService.AI_ERROR_MESSAGE, solver.get("error").asText(), solver.toString());
+        assertEquals(ExamQcTraceService.AI_ERROR_MESSAGE, solver.get("job").get("error").asText(), solver.toString());
+        assertFalse(solver.toString().contains("Solver giả"), "A-07: không lộ thân lỗi: " + solver);
+        assertTrue(jdbc.queryForObject("SELECT last_error FROM generation_job WHERE id = ?", String.class,
+                solver.get("job").get("jobId").asInt()).contains("Solver giả: hết thời gian chờ"),
+                "DB vẫn giữ chi tiết cho vận hành");
     }
 
     @Test

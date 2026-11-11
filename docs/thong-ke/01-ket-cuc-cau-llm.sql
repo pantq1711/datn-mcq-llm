@@ -7,11 +7,20 @@
 --   * chỉ câu LLM gốc: generated_question.edited_from_question_id IS NULL và origin = 'llm' (V26: không gồm câu nhập từ
 --     Word), run production có prompt_version 'matrix-%';
 --     các bản giáo viên sửa được gom vào câu gốc qua chuỗi edited_from_question_id;
---   * loại đề của tài khoản nhóm phát triển: điền email vào ARRAY[...] bên dưới.
+--   * loại đề của tài khoản nhóm phát triển: biến psql dev_emails bên dưới.
 -- GIỚI HẠN: tỉ lệ Giữ/Sửa/Đổi là MỨC CHẤP NHẬN, không phải độ đúng (giáo viên đã thấy đáp án và lời giải của hệ thống).
+--
+-- dev_emails: email cần loại (nhóm phát triển, tài khoản dùng thử), cách nhau bằng dấu phẩy, truyền khi chạy
+-- (KHÔNG ghi email thật vào file):
+--   psql -v dev_emails='nhom1@truong.edu.vn,gv-thu@truong.edu.vn' -f 01-ket-cuc-cau-llm.sql
+-- Không truyền thì rỗng (không loại ai). Xem docs/thong-ke/README.md.
+\if :{?dev_emails}
+\else
+\set dev_emails ''
+\endif
 WITH RECURSIVE
 dev_users AS (
-    SELECT id FROM users WHERE lower(email) = ANY (ARRAY[]::text[])   -- ví dụ ARRAY['nhom1@truong.edu.vn']
+    SELECT id FROM users WHERE lower(email) = ANY (string_to_array(replace(lower(:'dev_emails'), ' ', ''), ','))
 ),
 roots AS (
     SELECT DISTINCT j.question_id AS root, j.exam_slot_id AS slot_id

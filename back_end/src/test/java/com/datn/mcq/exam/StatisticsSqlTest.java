@@ -30,8 +30,9 @@ class StatisticsSqlTest extends ExamFlowTestBase {
 
     private static final Path DIR = Path.of("..", "docs", "thong-ke");
 
+    /** Chạy file như psql với biến mặc định của file (N-10: dev_emails rỗng, không loại ai). */
     private List<Map<String, Object>> run(String file) throws IOException {
-        return jdbc.queryForList(Files.readString(DIR.resolve(file), StandardCharsets.UTF_8));
+        return jdbc.queryForList(PsqlFile.load(DIR.resolve(file)));
     }
 
     private static Map<String, Object> row(List<Map<String, Object>> rows, String key, String value) {
@@ -118,6 +119,41 @@ class StatisticsSqlTest extends ExamFlowTestBase {
         assertEquals(1, count(row(solver, "ket_cuc", "giu_nguyen"), "so_cau_llm_solver_lech"), solver.toString());
     }
 
+    /**
+     * C-03 (rà soát 11/11): mỗi cột tự sửa của file 02 chỉ đếm đúng loại cảnh báo của nó. Trước đây tu_sua_escape_latex đếm
+     * mọi cảnh báo "json: đã sửa ..." nên câu chỉ được thêm dấu "?" cuối câu dẫn cũng bị tính là sửa escape LaTeX.
+     */
+    @Test
+    void cotTuSuaTachTheoLoaiCauChiCoCanhBaoDauCauKhongTinhLaEscapeLatex() throws Exception {
+        sampleData();
+        List<Integer> ids = jdbc.queryForList("SELECT g.id FROM generated_question g JOIN quality_check_result f"
+                + " ON f.question_id = g.id AND f.check_type = 'format' WHERE g.edited_from_question_id IS NULL"
+                + " AND g.id IN (SELECT question_id FROM generation_job WHERE job_type = 'generate'"
+                + " AND exam_slot_id IS NOT NULL) ORDER BY g.id", Integer.class);
+        assertTrue(ids.size() >= 3, ids.toString());
+        jdbc.update("UPDATE quality_check_result SET warnings = '[]'::jsonb WHERE check_type = 'format'");
+        setWarnings(ids.get(0), "[\"json: đã sửa dấu câu cuối stem (thêm ?)\"]");
+        setWarnings(ids.get(1), "[\"json: đã sửa 2 escape LaTeX (\\\\frac, \\\\circ)\","
+                + " \"json: đã sửa 1 dấu & căn lề ngoài môi trường \\\\begin ở explanation\"]");
+        setWarnings(ids.get(2), "[\"json: đã sửa 1 lệnh LaTeX thiếu \\\\ (frac) ở stem\","
+                + " \"json: đã sửa 1 ký tự \\\\n lọt vào công thức hoặc cặp $ thừa ở explanation\","
+                + " \"json: đã sửa 1 ký hiệu độ (^\\\\bullet, ^\\\\triangle thành ^{\\\\circ}) ở option_a\"]");
+
+        Map<String, Object> qc = run("02-buoc-qc-bat-loi.sql").get(0);
+        assertEquals(1, count(qc, "tu_sua_escape_latex"), "chỉ câu có cảnh báo escape LaTeX: " + qc);
+        assertEquals(1, count(qc, "tu_sua_dau_cau_cuoi"), qc.toString());
+        assertEquals(1, count(qc, "tu_sua_lenh_latex_thieu_gach"), qc.toString());
+        assertEquals(1, count(qc, "tu_sua_xuong_dong_lot"), qc.toString());
+        assertEquals(1, count(qc, "tu_sua_ky_hieu_do"), qc.toString());
+        assertEquals(1, count(qc, "tu_sua_dau_can_le"), qc.toString());
+        assertEquals(0, count(qc, "tu_dong_dau_dola"), qc.toString());
+    }
+
+    private void setWarnings(int questionId, String json) {
+        jdbc.update("UPDATE quality_check_result SET warnings = ?::jsonb WHERE question_id = ? AND check_type = 'format'",
+                json, questionId);
+    }
+
     @Test
     void vanHanhChayDuocVaDemJobKetThucTheoNgayVaLoai() throws Exception {
         sampleData();
@@ -136,11 +172,29 @@ class StatisticsSqlTest extends ExamFlowTestBase {
     @Test
     void loaiDeCuaTaiKhoanNhomPhatTrienBangDanhSachEmail() throws Exception {
         sampleData();
-        String sql = Files.readString(DIR.resolve("01-ket-cuc-cau-llm.sql"), StandardCharsets.UTF_8);
         String email = jdbc.queryForObject("SELECT email FROM users WHERE id = ?", String.class, teacher);
-        String filtered = sql.replace("ARRAY[]::text[]", "ARRAY['" + email + "']::text[]");
-        assertTrue(!filtered.equals(sql), "file phải có chỗ điền email như hướng dẫn trong README");
-        assertEquals(List.of(), jdbc.queryForList(filtered), "toàn bộ đề của tài khoản nhóm bị loại");
+        assertTrue(!run("01-ket-cuc-cau-llm.sql").isEmpty(), "mặc định (dev_emails rỗng) không loại ai");
+        // N-10: như psql -v dev_emails='khac@x.vn, <email>' (danh sách cách nhau bằng dấu phẩy, không phân biệt hoa thường)
+        String sql = PsqlFile.load(DIR.resolve("01-ket-cuc-cau-llm.sql"),
+                Map.of("dev_emails", "khac@x.vn, " + email.toUpperCase()));
+        assertEquals(List.of(), jdbc.queryForList(sql), "toàn bộ đề của tài khoản nhóm bị loại");
+    }
+
+    /** N-10: mọi file thống kê dùng cùng biến psql dev_emails (mặc định rỗng), không còn mảng email chép tay. */
+    @Test
+    void moiFileDungBienPsqlDevEmailsMacDinhRong() throws IOException {
+        List<Path> files = new java.util.ArrayList<>();
+        try (var list = Files.list(DIR)) {
+            list.filter(p -> p.toString().endsWith(".sql")).forEach(files::add);
+        }
+        files.add(Path.of("..", "docs", "experiments", "trial", "queries.sql"));
+        assertEquals(8, files.size());
+        for (Path p : files) {
+            String raw = Files.readString(p, StandardCharsets.UTF_8);
+            assertTrue(raw.contains("\\set dev_emails ''"), p + ": khai báo mặc định rỗng");
+            assertTrue(raw.contains(":'dev_emails'"), p + ": dùng biến");
+            assertTrue(!raw.contains("ARRAY[]::text[]"), p + ": không còn mảng email chép tay");
+        }
     }
 
     @Test
