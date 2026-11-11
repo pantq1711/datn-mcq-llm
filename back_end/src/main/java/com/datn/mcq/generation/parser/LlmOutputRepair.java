@@ -1,5 +1,6 @@
 package com.datn.mcq.generation.parser;
 
+import com.datn.mcq.common.util.AlignmentAmpersand;
 import com.datn.mcq.common.util.LatexValidationRules;
 import com.datn.mcq.common.util.LiteralNewlines;
 import com.datn.mcq.common.util.MissingLatexBackslash;
@@ -24,6 +25,8 @@ import java.util.regex.Pattern;
  *       "\\" ngoài công thức thành xuống dòng.</li>
  *   <li>{@link #wrapFormulaLines} (4/11): dòng công thức của lời giải viết ngoài $ được bọc NGUYÊN dòng; dòng bị chia bởi $
  *       giữa biểu thức ({@link #hasBrokenFormulaLine}) không tự sửa mà bị FormatChecker báo lỗi (câu được sinh lại).</li>
+ *   <li>{@link AlignmentAmpersand} (11/11): dấu căn lề "&" trong công thức không có môi trường {@code \begin}
+ *       ("$&= 5x(x - 2y)$"), chạy sau cùng.</li>
  * </ol>
  */
 public final class LlmOutputRepair {
@@ -902,6 +905,14 @@ public final class LlmOutputRepair {
                     warnings.add(wrapWarning(field, w.wrapped()));
                     s = w.text();
                 }
+            }
+            // 11/11: "&" căn lề ngoài môi trường \begin ("$&= 5x(x - 2y)$"), SAU hai bước bọc ở trên vì chính bước bọc dòng
+            // công thức biến dòng "&= ..." thành "$&= ...$"; texmath không đọc được nên xuất MathType hỏng.
+            AlignmentAmpersand.Result a = AlignmentAmpersand.repair(s);
+            String aWarning = AlignmentAmpersand.warning(field, a);
+            if (aWarning != null) {
+                warnings.add(aWarning);
+                s = a.text();
             }
         }
         return (newlines ? McqJsonParser.normalizeLiteralNewlines(s) : s).trim();

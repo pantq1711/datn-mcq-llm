@@ -48,6 +48,10 @@ public class ExamController {
     public static final String EQUATION_KEPT_HEADER = "X-Equation-Kept-Omml";
     /** Số công thức dài không ngắt được nên bị thu nhỏ cho vừa lề (xuất MathType); cũng mở qua CORS. */
     public static final String EQUATION_SCALED_HEADER = "X-Equation-Scaled";
+    /** Số công thức pandoc không đọc được nên nằm ở dạng chữ trong file (xuất MathType, 11/11); cũng mở qua CORS. */
+    public static final String EQUATION_FAILED_HEADER = "X-Equation-Failed";
+    /** Câu chứa các công thức đó, "I.8,III.2" (phần.số câu); chỉ có khi xác định được; cũng mở qua CORS. */
+    public static final String EQUATION_FAILED_AT_HEADER = "X-Equation-Failed-At";
 
     private final ExamBuildService examBuildService;
     private final ExamViewService examViewService;
@@ -94,7 +98,9 @@ public class ExamController {
      *
      * <p>{@code equation}: {@code omml} (mặc định, Equation gốc của Word) hoặc {@code mathtype} (đối tượng MathType,
      * bấm đúp sửa bằng MathType); giá trị khác 400. Với {@code mathtype}, header {@value #EQUATION_KEPT_HEADER} cho biết số
-     * công thức phải giữ dạng Equation (chưa hỗ trợ, hoặc cả file khi không đổi được).
+     * công thức phải giữ dạng Equation (chưa hỗ trợ, hoặc cả file khi không đổi được); {@value #EQUATION_FAILED_HEADER} số
+     * công thức pandoc không đọc được (nằm ở dạng chữ, các công thức khác vẫn là MathType) và
+     * {@value #EQUATION_FAILED_AT_HEADER} câu chứa chúng.
      *
      * <p>{@code durationMinutes} (tùy chọn): thời gian làm bài, số nguyên 5–180, in ở đầu đề; không truyền thì in "……"; giá
      * trị khác 400.
@@ -115,6 +121,12 @@ public class ExamController {
         }
         if (file.equationsScaled() != null) {
             response.header(EQUATION_SCALED_HEADER, Integer.toString(file.equationsScaled()));
+        }
+        if (file.equationsFailed() != null) {
+            response.header(EQUATION_FAILED_HEADER, Integer.toString(file.equationsFailed()));
+        }
+        if (!file.equationsFailedAt().isEmpty()) {
+            response.header(EQUATION_FAILED_AT_HEADER, String.join(",", file.equationsFailedAt()));
         }
         return response.body(file.content());
     }

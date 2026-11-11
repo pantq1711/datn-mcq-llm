@@ -103,10 +103,10 @@ public class SecurityConfig {
         cors.setAllowedOriginPatterns(properties.cors().allowedOrigins());
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT));
-        // X-Equation-Kept-Omml / X-Equation-Scaled: xuất Word dạng MathType, số công thức giữ Equation / bị thu nhỏ
-        // cho vừa lề (ExamController)
+        // X-Equation-Kept-Omml / X-Equation-Scaled / X-Equation-Failed(-At): xuất Word dạng MathType, số công thức giữ
+        // Equation / bị thu nhỏ cho vừa lề / pandoc không đọc được và câu chứa chúng (ExamController)
         cors.setExposedHeaders(List.of(HttpHeaders.CONTENT_DISPOSITION, HttpHeaders.WWW_AUTHENTICATE,
-                "X-Equation-Kept-Omml", "X-Equation-Scaled"));
+                "X-Equation-Kept-Omml", "X-Equation-Scaled", "X-Equation-Failed", "X-Equation-Failed-At"));
         cors.setAllowCredentials(true);
         cors.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

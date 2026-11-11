@@ -1318,6 +1318,7 @@ class ExamBuildTest {
             assertFalse(xml.contains("Equation.DSMT4"), "mặc định không có đối tượng MathType");
             assertNull(response.getHeader("X-Equation-Kept-Omml"), "header chỉ có khi xuất MathType");
             assertNull(response.getHeader("X-Equation-Scaled"), "header chỉ có khi xuất MathType");
+            assertNull(response.getHeader("X-Equation-Failed"), "header chỉ có khi xuất MathType");
             for (String part : List.of("PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN", "ĐÁP ÁN", "LỜI GIẢI",
                     "Chưa có câu – cần sinh lại")) {
                 assertTrue(xml.contains(part), "docx thiếu: " + part);
@@ -1380,6 +1381,8 @@ class ExamBuildTest {
             assertNotNull(response.getHeader("X-Equation-Scaled"), "header số công thức bị thu nhỏ cho vừa lề");
             assertEquals(0, Integer.parseInt(response.getHeader("X-Equation-Scaled")),
                     "đề thử toàn công thức ngắn: không công thức nào bị thu nhỏ");
+            assertEquals("0", response.getHeader("X-Equation-Failed"), "11/11: header số công thức pandoc không đọc được");
+            assertNull(response.getHeader("X-Equation-Failed-At"), "không có công thức hỏng thì không có vị trí");
             assertTrue(xml.contains("PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN") && xml.contains("ĐÁP ÁN"));
         } else {
             assertEquals(503, response.getStatus());
