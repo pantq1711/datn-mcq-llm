@@ -926,6 +926,15 @@ GET /api/exams/12/export/docx?equation=abc       → 400
     lỗi bất ngờ) thì trả file Equation, header bằng tổng số công thức, ghi log WARN, không trả 500.
   - Header `X-Equation-Scaled` (chỉ có khi `equation=mathtype`, đã mở qua CORS): số công thức dài không ngắt dòng được nên
     đã bị thu nhỏ kích thước hiển thị cho vừa lề chữ (xem mục bố cục dưới). 0 khi không có công thức nào bị thu nhỏ.
+  - Header `X-Equation-Failed` (11/11, chỉ có khi `equation=mathtype`, đã mở qua CORS): số công thức pandoc (texmath) không
+    đọc được. Các công thức này nằm ở dạng chữ `$...$` (giống file Equation), các công thức khác vẫn là MathType, không còn
+    cả file rơi về Equation như trước. Chỉ khi số Equation pandoc sinh ra ít hơn số công thức mới chạy thêm một lượt pandoc
+    phụ (mỗi công thức một đoạn có mã đánh dấu, đoạn không có `m:oMath` là công thức hỏng), rồi xuất lại docx từ AST đã thay
+    công thức hỏng bằng chữ (không sửa DB). Log WARN ghi mã câu (`questionId`/`bankItemId`/`slotId`), phần, số câu, trường
+    và thứ tự công thức, không ghi nội dung câu. Lượt kiểm lỗi bất ngờ thì vẫn trả cả file Equation, log ghi lý do.
+  - Header `X-Equation-Failed-At` (11/11, đã mở qua CORS): câu chứa các công thức đó, `phần.số câu` cách nhau bởi dấu phẩy
+    (`I.8,III.2`); chỉ có khi xác định được. Bước chuẩn hóa khi lưu câu và khi xuất bỏ dấu căn lề `&` trong công thức
+    không có `\begin` (`$&= 5x(x - 2y)$` thành `$= 5x(x - 2y)$`, nguyên nhân của đề 1 ngày 11/11).
   - **Bố cục công thức rộng (3/11):** đối tượng OLE không tự xuống dòng, nên công thức rộng hơn lề chữ bị cắt khi in. Bề rộng
     lề chữ = khổ giấy − lề trái − lề phải (đọc từ `sectPr` của file, vốn chép từ `reference.docx`; `reference.docx` không
     khai báo `pgSz`/`pgMar` nên dùng mặc định của Word: Letter, lề 1 inch, chữ rộng 468pt) − thụt lề trái/phải của đoạn
@@ -954,7 +963,8 @@ GET /api/exams/12/export/docx?equation=abc       → 400
     chính cũng xuất mục này) và "Công thức MathType (thử nghiệm)" (gọi `?equation=mathtype`, tên file tải về
     `<tên đề>-mathtype.docx`). Nút khóa khi đề đang soạn. Sau khi tải: `X-Equation-Kept-Omml > 0` hiện "N công thức không
     chuyển được sang MathType, vẫn ở dạng công thức Word"; `X-Equation-Scaled > 0` hiện "N công thức dài đã được thu nhỏ
-    cho vừa trang". Nên ghi rõ "Chỉ chọn MathType nếu máy đã cài MathType" khi hướng dẫn giáo viên.
+    cho vừa trang"; `X-Equation-Failed > 0` hiện "N công thức không chuyển được, ở câu 8 (phần I), …". Nên ghi rõ "Chỉ
+    chọn MathType nếu máy đã cài MathType" khi hướng dẫn giáo viên.
 - **Phòng thủ (D4):** `--sandbox` (cần pandoc từ 2.15, cùng yêu cầu với đọc docx tài liệu) để pandoc chỉ đọc các file nêu
   trong dòng lệnh, nên nội dung câu hỏi chứa `![](/etc/passwd)` hay chỉ thị include không lấy được file của máy chủ. Ngoài công
   thức, `ExamMarkdownBuilder` thoát mọi ký tự đặc biệt của Markdown gồm `\` và `` ` ``, nên `` ` ``, `` `{=openxml}` `` hay khối

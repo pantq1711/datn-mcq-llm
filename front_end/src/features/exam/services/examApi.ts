@@ -85,6 +85,10 @@ export interface ExportDocxResult {
     keptOmml: number;
     /** Số công thức dài không ngắt dòng được nên đã thu nhỏ cho vừa trang (chỉ khi xuất MathType). */
     scaled: number;
+    /** Số công thức backend không đọc được, nằm ở dạng chữ trong file (chỉ khi xuất MathType). */
+    failed: number;
+    /** Câu chứa các công thức đó, dạng "phần.số câu" ("I.8"); rỗng khi không có hoặc không xác định được. */
+    failedAt: string[];
     /** Tên file backend đặt trong Content-Disposition (ví dụ MT2610231200001.docx); không có thì undefined. */
     filename?: string;
 }
@@ -125,6 +129,8 @@ export const getExamExportDocx = async (
         blob: resp.data,   // Blob .docx
         keptOmml: headerCount(resp.headers['x-equation-kept-omml']),
         scaled: headerCount(resp.headers['x-equation-scaled']),
+        failed: headerCount(resp.headers['x-equation-failed']),
+        failedAt: String(resp.headers['x-equation-failed-at'] ?? '').split(',').map((s) => s.trim()).filter(Boolean),
         filename: parseDispositionFilename(resp.headers['content-disposition']),
     };
 };

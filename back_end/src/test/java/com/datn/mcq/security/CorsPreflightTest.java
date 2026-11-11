@@ -80,4 +80,15 @@ class CorsPreflightTest {
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
                         containsString("X-Equation-Scaled")));
     }
+
+    /** Xuất Word dạng MathType (11/11): frontend đọc được số công thức pandoc không đọc được và câu chứa chúng. */
+    @Test
+    void frontendDocDuocSoCongThucHongVaViTri() throws Exception {
+        mockMvc.perform(get("/actuator/health").header(HttpHeaders.ORIGIN, "http://localhost:5173"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                        containsString("X-Equation-Failed")))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                        containsString("X-Equation-Failed-At")));
+    }
 }

@@ -1,5 +1,6 @@
 package com.datn.mcq.exam.export;
 
+import com.datn.mcq.common.util.AlignmentAmpersand;
 import com.datn.mcq.common.util.DegreeSymbols;
 import com.datn.mcq.common.util.LiteralNewlines;
 import com.datn.mcq.common.util.MissingLatexBackslash;
@@ -140,8 +141,9 @@ public final class ExamMarkdownBuilder {
     }
 
     /**
-     * Bản sao của đề với "\n" chữ đã chuẩn hóa ({@link LiteralNewlines}) rồi ký hiệu độ trong công thức về "°"
-     * ({@link DegreeSymbols}) ở câu dẫn, phương án, ý đúng/sai và lời giải.
+     * Bản sao của đề với "\n" chữ đã chuẩn hóa ({@link LiteralNewlines}), lệnh LaTeX mất "\" và dấu căn lề "&" thừa đã sửa,
+     * rồi ký hiệu độ trong công thức về "°" ({@link DegreeSymbols}) ở câu dẫn, phương án, ý đúng/sai và lời giải (xem
+     * {@link #cleanText}).
      */
     static ExamViewDto withoutLiteralNewlines(ExamViewDto exam) {
         List<PartDto> parts = exam.parts().stream()
@@ -166,10 +168,12 @@ public final class ExamMarkdownBuilder {
 
     /**
      * "\n" và "\\" chữ trước (có thể làm lộ công thức), rồi lệnh LaTeX mất "\" ({@link MissingLatexBackslash}: "70^circ" thành
-     * "70^\circ"), cuối cùng ký hiệu độ ("70°"); không có gì để đổi thì trả đúng đối tượng ban đầu.
+     * "70^\circ"), dấu căn lề "&" ngoài môi trường \begin ({@link AlignmentAmpersand}: "$&= 5x$" thành "$= 5x$"), cuối cùng
+     * ký hiệu độ ("70°"); không có gì để đổi thì trả đúng đối tượng ban đầu.
      */
     private static String cleanText(String text) {
-        return DegreeSymbols.normalize(MissingLatexBackslash.repair(LiteralNewlines.repair(text).text()).text());
+        String s = MissingLatexBackslash.repair(LiteralNewlines.repair(text).text()).text();
+        return DegreeSymbols.normalize(AlignmentAmpersand.repair(s).text());
     }
 
     // ---------------------------------------------------------------- dòng hướng dẫn, câu hỏi

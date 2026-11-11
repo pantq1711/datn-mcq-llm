@@ -256,7 +256,7 @@ export default function ExamDetailPage() {
         if (!examId) return;
         try {
             setExportLoading(true);
-            const { blob, keptOmml, scaled, filename } = await getExamExportDocx(examId, equation);
+            const { blob, keptOmml, scaled, failed, failedAt, filename } = await getExamExportDocx(examId, equation);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -277,6 +277,11 @@ export default function ExamDetailPage() {
             }
             if (scaled > 0) {
                 message.info(`${scaled} công thức dài đã được thu nhỏ cho vừa trang`, 8);
+            }
+            if (failed > 0) {
+                // failedAt: "I.8" = câu 8 phần I
+                const where = failedAt.map((p) => { const [part, no] = p.split('.'); return `${no} (phần ${part})`; });
+                message.warning(`${failed} công thức không chuyển được${where.length > 0 ? `, ở câu ${where.join(', ')}` : ''}`, 8);
             }
         } catch (err: unknown) {
             // responseType 'blob': thân lỗi JSON cũng là Blob, phải đọc ra chữ mới thấy thông báo của backend
