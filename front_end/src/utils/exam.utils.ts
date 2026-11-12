@@ -253,6 +253,17 @@ export function describeFormatIssue(issue: string): string {
     return `Công thức ở ${place} có phần trình bày chưa đúng. Thầy/cô xem lại công thức.`;
 }
 
+/**
+ * Câu có cờ về nội dung thì khi Giữ chỉ vào ngân hàng riêng; lý do `similar_in_exam: …` là về đề, không tính
+ * (docs/api mục 7.5, làm rõ 11/11). Có cờ mà không kèm lý do thì coi như cờ nội dung cho an toàn.
+ */
+export function hasContentFlag(needsReview: boolean | undefined, reasons: string[] | undefined): boolean {
+    if (!needsReview) return false;
+    const list = reasons ?? [];
+    if (list.length === 0) return true;
+    return list.some((reason) => !reason.startsWith("similar_in_exam:"));
+}
+
 export function describeReviewReason(reason: string): string {
     if (reason.startsWith("warning:")) {
         return describeFormatIssue(reason.slice("warning:".length));
