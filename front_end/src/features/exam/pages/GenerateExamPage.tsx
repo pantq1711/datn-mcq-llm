@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Card, Col, Collapse, Empty, Form, Input, Modal, Row, Select, Space, Spin, Table, Tabs, Tag, Tooltip, Typography, message, } from "antd";
+import { Alert, Button, Card, Checkbox, Col, Collapse, Empty, Form, Input, Modal, Row, Select, Space, Spin, Table, Tabs, Tag, Tooltip, Typography, message, } from "antd";
 import type { TableColumnsType } from "antd";
 import { ArrowLeftOutlined, BookOutlined, BulbOutlined, CopyOutlined, EditOutlined, PaperClipOutlined, PlusOutlined, RocketOutlined, SettingOutlined, TableOutlined, } from "@ant-design/icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -7,8 +7,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import BuildByLessonForm from "../components/BuildByLessonForm";
 import MaterialManagerModal from "../../materials/components/MaterialManagerModal";
 import type { MaterialDto } from "../../materials/types/material.types";
-import type { ExamSubjectOption, BuildResultDto, CellContextInput, BuildExamRequest, ExamChallenge } from "../types/exam.types";
-import { EXAM_CHALLENGE_OPTIONS } from "../types/exam.types";
+import type { ExamSubjectOption, BuildResultDto, CellContextInput, BuildExamRequest, ExamChallenge, TeacherRequestCode } from "../types/exam.types";
+import { EXAM_CHALLENGE_OPTIONS, TEACHER_REQUEST_OPTIONS, teacherRequestOptionsFor } from "../types/exam.types";
 import type { ExamMatrix, ExamMatrixDetail, ExamMatrixCellPayload } from "../../exam-matrix/types/examMatrix.types";
 import { getCatalogSubjects, buildExamByMatrix } from "../services/examApi";
 import { describeLevel } from "../../../utils/exam.utils";
@@ -24,6 +24,8 @@ interface CellContextState {
     materialIds: number[];
     materialNames: string[];
     extraInstruction: string;
+    /** Chip yêu cầu của ô (PR B); ô có chip hoặc ghi chú thì thay hẳn yêu cầu của cả đề. */
+    requestCodes: TeacherRequestCode[];
 }
 
 // docs/api mục 7.2: tối đa 5 tài liệu KHÁC NHAU cho cả lần tạo đề (tài liệu chung và tài liệu từng ô, trùng id tính một)
@@ -48,7 +50,7 @@ const QUESTION_TYPE_TAGS: Record<ExamMatrixCellPayload["questionType"], { label:
     sa: { label: "Trả lời ngắn", color: "purple" },
 };
 
-const EMPTY_CELL_CONTEXT: CellContextState = { materialIds: [], materialNames: [], extraInstruction: "" };
+const EMPTY_CELL_CONTEXT: CellContextState = { materialIds: [], materialNames: [], extraInstruction: "", requestCodes: [] };
 
 function removeMaterialFromContext(ctx: CellContextState, removedId: number): CellContextState {
     const keep = ctx.materialIds.map((id) => id !== removedId);
@@ -83,6 +85,8 @@ export default function GenerateExamPage() {
     const [loadingMatrixDetail, setLoadingMatrixDetail] = useState<boolean>(false);
     const [matrixExamTitle, setMatrixExamTitle] = useState<string>("");
     const [matrixChallenge, setMatrixChallenge] = useState<ExamChallenge>("standard");
+    // Chip yêu cầu cho cả đề (PR B)
+    const [matrixRequestCodes, setMatrixRequestCodes] = useState<TeacherRequestCode[]>([]);
     const [buildingMatrixExam, setBuildingMatrixExam] = useState<boolean>(false);
     const [duplicating, setDuplicating] = useState<boolean>(false);
 
@@ -110,10 +114,12 @@ export default function GenerateExamPage() {
     const saveCellConfig = () => {
         if (!activeConfigCell) return;
         const key = activeConfigCell.cellKey;
-        const isEmpty = cellDraft.materialIds.length === 0 && !cellDraft.extraInstruction.trim();
+        const isEmpty = cellDraft.materialIds.length === 0 && !cellDraft.extraInstruction.trim()
+            && cellDraft.requestCodes.length === 0;
         const saved = cellContexts[key] ?? EMPTY_CELL_CONTEXT;
         const changed =
             saved.extraInstruction.trim() !== cellDraft.extraInstruction.trim() ||
+            [...saved.requestCodes].sort().join(",") !== [...cellDraft.requestCodes].sort().join(",") ||
             [...saved.materialIds].sort().join(",") !== [...cellDraft.materialIds].sort().join(",");
         if (!changed) {
             setActiveConfigCell(null);
@@ -283,11 +289,12 @@ export default function GenerateExamPage() {
 
         // Gom các cell context có cấu hình
         const cellsPayload: CellContextInput[] = Object.entries(cellContexts)
-            .filter(([_, ctx]) => ctx.materialIds.length > 0 || ctx.extraInstruction.trim())
+            .filter(([_, ctx]) => ctx.materialIds.length > 0 || ctx.extraInstruction.trim() || ctx.requestCodes.length > 0)
             .map(([cellIdStr, ctx]) => ({
                 cellId: Number(cellIdStr),
                 materialIds: ctx.materialIds.length > 0 ? ctx.materialIds : undefined,
                 extraInstruction: ctx.extraInstruction.trim() || undefined,
+                requestCodes: ctx.requestCodes.length > 0 ? ctx.requestCodes : undefined,
             }));
 
         const payload: BuildExamRequest = {
@@ -296,6 +303,7 @@ export default function GenerateExamPage() {
             materialIds: globalMaterials.length > 0 ? globalMaterials.map((m) => m.id) : undefined,
             cells: cellsPayload.length > 0 ? cellsPayload : undefined,
             challenge: matrixChallenge,
+            requestCodes: matrixRequestCodes.length > 0 ? matrixRequestCodes : undefined,
         };
 
         setBuildingMatrixExam(true);
@@ -412,7 +420,8 @@ export default function GenerateExamPage() {
             render: (_, record) => {
                 const ctx = cellContexts[record.cellKey];
                 const hasMaterials = ctx && ctx.materialIds && ctx.materialIds.length > 0;
-                const hasInstruction = ctx && ctx.extraInstruction && ctx.extraInstruction.trim().length > 0;
+                const hasInstruction = (ctx && ctx.extraInstruction && ctx.extraInstruction.trim().length > 0)
+                    || (ctx && ctx.requestCodes.length > 0);
 
                 return (
                     <Space direction="vertical" size={4} style={{ width: "100%" }}>
@@ -729,6 +738,16 @@ export default function GenerateExamPage() {
                                                         </Form.Item>
                                                     </Col>
                                                 </Row>
+                                                <Form.Item
+                                                    label="Yêu cầu cho câu soạn mới (cả đề)"
+                                                    tooltip="Hệ thống tự kiểm câu ra có đúng yêu cầu không và báo bằng thẻ thông tin trên từng câu. Ô có yêu cầu riêng thì dùng yêu cầu của ô thay cho yêu cầu này."
+                                                >
+                                                    <Checkbox.Group
+                                                        value={matrixRequestCodes}
+                                                        onChange={(vals) => setMatrixRequestCodes(vals as TeacherRequestCode[])}
+                                                        options={TEACHER_REQUEST_OPTIONS.map((o) => ({ label: o.label, value: o.value }))}
+                                                    />
+                                                </Form.Item>
 
                                                 {/* Chỉ phần "Gắn cho ô này" (tài liệu, ghi chú theo ô) nằm trong mục nâng cao, mặc định đóng */}
                                                 <Collapse
@@ -925,12 +944,23 @@ export default function GenerateExamPage() {
                             />
                         </div>
 
+                        {/* Chip yêu cầu riêng cho ô (PR B): chỉ hiện chip hợp dạng câu của ô */}
+                        <div style={{ marginTop: 12 }}>
+                            <Text strong>Yêu cầu cho câu của ô: </Text>
+                            <Checkbox.Group
+                                value={cellDraft.requestCodes}
+                                onChange={(vals) => setCellDraft((prev) => ({ ...prev, requestCodes: vals as TeacherRequestCode[] }))}
+                                options={teacherRequestOptionsFor(activeConfigCell.cell.questionType)
+                                    .map((o) => ({ label: o.label, value: o.value }))}
+                            />
+                        </div>
+
                         <Alert
                             type="warning"
                             showIcon
                             icon={<BulbOutlined />}
                             message="Lưu ý quan trọng"
-                            description="Ô có tài liệu hoặc ghi chú riêng sẽ không lấy câu từ ngân hàng, mọi câu của ô đều được soạn mới."
+                            description="Ô có tài liệu, ghi chú hoặc yêu cầu riêng sẽ không lấy câu từ ngân hàng, mọi câu của ô đều được soạn mới. Ô có ghi chú hoặc yêu cầu riêng thì dùng của ô thay cho yêu cầu của cả đề."
                             style={{ marginTop: 16 }}
                         />
                     </div>

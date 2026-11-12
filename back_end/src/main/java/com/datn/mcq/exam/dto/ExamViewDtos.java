@@ -39,6 +39,14 @@ public final class ExamViewDtos {
      *                      còn lý do cần xem kỹ), "needs_review" (có lý do); bỏ khỏi JSON với chỗ khác
      * @param edited        (W1-2) câu hiện tại của chỗ là bản giáo viên sửa (kể cả khi đã Giữ)
      * @param originalQuestionId (W1-2) bản gốc LLM của bản sửa; bỏ khỏi JSON khi câu chưa sửa
+     * @param infoReasons   (12/11, PR B) cờ THÔNG TIN, luôn có ({@code []} khi không có): {@code request_partial: <lý do>},
+     *                      {@code request_not_met: <lý do>}; về sau thêm cờ khác cùng dạng {@code <mã>} hoặc
+     *                      {@code <mã>: <chi tiết>}. Tách hẳn khỏi {@code reviewReasons}: không bật {@code needsReview},
+     *                      không tính vào số câu cần xem kỹ, không đổi {@code qcState} hay ngân hàng riêng/chung khi Giữ
+     * @param requests      (PR B) yêu cầu mà câu đang ở chỗ được sinh theo; vắng khi câu không có yêu cầu (câu ngân hàng,
+     *                      câu đã Giữ hiện bản ngân hàng, chỗ chưa có câu)
+     * @param inheritedRequests (PR B) yêu cầu thừa hưởng của chỗ (của ô, không thì của đề; mã đã lọc theo dạng câu), để hộp
+     *                      Đổi câu điền sẵn; vắng khi ô và đề không có yêu cầu áp cho chỗ này
      */
     public record ExamItemDto(
             Integer slotId,
@@ -66,11 +74,30 @@ public final class ExamViewDtos {
             @JsonInclude(JsonInclude.Include.NON_NULL) String qcState,
             boolean edited,
             @JsonInclude(JsonInclude.Include.NON_NULL) Integer originalQuestionId,
-            @JsonInclude(JsonInclude.Include.NON_NULL) String failureReason
+            @JsonInclude(JsonInclude.Include.NON_NULL) String failureReason,
+            List<String> infoReasons,
+            @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto requests,
+            @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto inheritedRequests
     ) {
         public static final String QC_CHECKING = "checking";
         public static final String QC_PASSED = "passed";
         public static final String QC_NEEDS_REVIEW = "needs_review";
+
+        public ExamItemDto {
+            infoReasons = infoReasons == null ? List.of() : List.copyOf(infoReasons);
+        }
+
+        /** Chữ ký trước PR B (không có cờ thông tin và yêu cầu). */
+        public ExamItemDto(Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
+                           QuestionType questionType, String state, String source, Integer bankItemId,
+                           Integer questionId, String questionText, String optionA, String optionB, String optionC,
+                           String optionD, Option correctOption, String saAnswer, List<ItemStatementDto> statements,
+                           String explanation, Difficulty difficulty, boolean needsReview, List<String> reviewReasons,
+                           String qcState, boolean edited, Integer originalQuestionId, String failureReason) {
+            this(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId, questionText,
+                    optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation, difficulty,
+                    needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, null, null, null);
+        }
 
         /**
          * Bản sao có thêm lý do "cần xem kỹ" {@code extra} (tính lúc xem đề, không lưu): {@code needsReview} thành true,
@@ -82,7 +109,15 @@ public final class ExamViewDtos {
             return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
                     questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
                     difficulty, true, all, QC_CHECKING.equals(qcState) ? qcState : QC_NEEDS_REVIEW, edited,
-                    originalQuestionId, failureReason);
+                    originalQuestionId, failureReason, infoReasons, requests, inheritedRequests);
+        }
+
+        /** Bản sao kèm cờ thông tin và yêu cầu (PR B). */
+        public ExamItemDto withRequests(List<String> info, RequestsDto own, RequestsDto inherited) {
+            return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
+                    questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
+                    difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, info, own,
+                    inherited);
         }
 
         /** Chữ ký trước W2-4b (chỗ đã có câu, không có failureReason). */
@@ -106,6 +141,20 @@ public final class ExamViewDtos {
             this(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId, questionText,
                     optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation, difficulty,
                     needsReview, reviewReasons, null, false, null, null);
+        }
+    }
+
+    /**
+     * Yêu cầu của giáo viên (12/11, PR B).
+     *
+     * @param codes mã chip (đã lọc theo dạng câu); {@code []} khi chỉ có văn bản
+     * @param text  văn bản tự do (nguyên văn đã lưu, chưa qua neutralize); null khi chỉ có mã
+     * @param scope mức lấy yêu cầu: "replace" (lượt Đổi câu tự đặt), "cell" hoặc "exam"; với {@code inheritedRequests} chỉ
+     *              là "cell" hoặc "exam"
+     */
+    public record RequestsDto(List<String> codes, String text, String scope) {
+        public RequestsDto {
+            codes = codes == null ? List.of() : List.copyOf(codes);
         }
     }
 

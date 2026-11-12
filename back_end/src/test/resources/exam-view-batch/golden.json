@@ -34,6 +34,7 @@
         "difficulty" : "easy",
         "needsReview" : false,
         "reviewReasons" : [ ],
+        "infoReasons" : [ ],
         "edited" : false
       }, {
         "slotId" : "slot#2",
@@ -55,6 +56,7 @@
         "difficulty" : "easy",
         "needsReview" : true,
         "reviewReasons" : [ "similar_in_exam: I.1" ],
+        "infoReasons" : [ ],
         "qcState" : "needs_review",
         "edited" : true,
         "originalQuestionId" : "question#3"
@@ -78,6 +80,7 @@
         "difficulty" : "easy",
         "needsReview" : true,
         "reviewReasons" : [ "similar_in_exam: I.1", "similar_in_exam: I.2" ],
+        "infoReasons" : [ ],
         "qcState" : "needs_review",
         "edited" : false
       }, {
@@ -90,6 +93,7 @@
         "state" : "generating",
         "needsReview" : false,
         "reviewReasons" : [ ],
+        "infoReasons" : [ ],
         "edited" : false
       }, {
         "slotId" : "slot#5",
@@ -110,6 +114,7 @@
         "difficulty" : "easy",
         "needsReview" : false,
         "reviewReasons" : [ ],
+        "infoReasons" : [ ],
         "edited" : false
       } ]
     }, {
@@ -151,6 +156,7 @@
         "explanation" : "Lời giải.",
         "needsReview" : false,
         "reviewReasons" : [ ],
+        "infoReasons" : [ ],
         "qcState" : "passed",
         "edited" : false
       }, {
@@ -189,6 +195,7 @@
         "explanation" : "Lời giải.",
         "needsReview" : false,
         "reviewReasons" : [ ],
+        "infoReasons" : [ ],
         "edited" : false
       } ]
     }, {
@@ -211,6 +218,7 @@
         "difficulty" : "medium",
         "needsReview" : false,
         "reviewReasons" : [ ],
+        "infoReasons" : [ ],
         "qcState" : "passed",
         "edited" : false
       }, {
@@ -223,6 +231,7 @@
         "state" : "failed",
         "needsReview" : false,
         "reviewReasons" : [ ],
+        "infoReasons" : [ ],
         "edited" : false,
         "failureReason" : "llm_error"
       } ]
@@ -264,6 +273,7 @@
         "difficulty" : "easy",
         "needsReview" : true,
         "reviewReasons" : [ "grounding_not_supported" ],
+        "infoReasons" : [ ],
         "qcState" : "needs_review",
         "edited" : false
       }, {
@@ -286,6 +296,7 @@
         "difficulty" : "easy",
         "needsReview" : true,
         "reviewReasons" : [ "grounding_pending", "similar_in_exam: I.1" ],
+        "infoReasons" : [ ],
         "qcState" : "needs_review",
         "edited" : false
       }, {
@@ -308,6 +319,7 @@
         "difficulty" : "easy",
         "needsReview" : true,
         "reviewReasons" : [ "grounding_failed", "similar_in_exam: I.1", "similar_in_exam: I.2" ],
+        "infoReasons" : [ ],
         "qcState" : "needs_review",
         "edited" : false
       } ]

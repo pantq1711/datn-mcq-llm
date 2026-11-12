@@ -549,6 +549,14 @@ POST /api/exams/build
   thường). Giá trị khác: 400 `INVALID_REQUEST`, không tạo đề. Lưu ở `exam.challenge`, trả lại trong kết quả tạo đề và
   `GET /api/exams/{id}` (mục 7.4). `advanced` chỉ đổi prompt của ô mcq/sa mức Vận dụng và ô tf có ý mức Vận dụng (khối
   "Mức NÂNG CAO", docs/contract/enums.md mục 3); các ô đó **bỏ qua ngân hàng** (sinh mới). Đổi câu trong đề nâng cao giữ mức.
+- **Chip yêu cầu của giáo viên (PR B, 12/11, tùy chọn):** `requestCodes` (mảng mã `TeacherRequest`: `real_context`,
+  `multi_step`, `common_trap`, `extremum`, `geometry_link`, `tf_shared_context`; docs/contract/enums.md) cho cả đề, và
+  `cells[].requestCodes` cho từng ô. Không phân biệt hoa thường, mã trùng gộp lại, `null` hoặc `[]` là không có. Mã lạ: 400
+  `INVALID_REQUEST`, không tạo đề. Mã không hợp dạng của một câu (`tf_shared_context` cho câu mcq/sa) được NHẬN (200) nhưng không
+  áp cho câu đó. Lưu ở `exam_generation_context.request_codes`. Ô có mã hoặc `extraInstruction` thì dùng CẢ BỘ của ô, thay hẳn
+  yêu cầu của đề (cả mã lẫn văn bản). Ô có yêu cầu áp dụng cho dạng câu của ô thì bỏ qua ngân hàng như ô có yêu cầu thêm.
+  Mỗi mã thêm một dòng cố định vào khối "YÊU CẦU CỦA GIÁO VIÊN" của prompt; Solver kiểm câu có đúng yêu cầu không trong cùng
+  lượt gọi (kết quả ở `infoReasons`, mục 7.4).
 
 - `title` bỏ trống thì lấy tên ma trận. Người tạo đề là người đăng nhập (`teacherId` đã bỏ khỏi API từ W1-1; gửi lên
   thì bị bỏ qua). Ma trận phải của chính người gọi, không thì 404. Đề có `mode = teacher`, `status = draft`.
@@ -642,6 +650,7 @@ POST /api/exams/build-by-lesson
 
 - Tùy chọn (12/11): `challenge` (`standard` | `advanced`) như mục 7.2; giá trị khác là 400 `INVALID_REQUEST` trước khi tạo
   ma trận ẩn.
+- Tùy chọn (PR B, 12/11): `requestCodes` cho cả lần sinh, như mục 7.2; mã lạ là 400 `INVALID_REQUEST` trước khi tạo ma trận ẩn.
 
 - Bắt buộc: `subjectId`, `lesson` (tên bài, tối đa 255 ký tự), `cells` (ít nhất 1). Tùy chọn: `gradeLevel` (6-9), `content`
   (phạm vi trong bài), `title` (trống thì lấy tên bài, tối đa 255), `learningOutcomes` (khóa `easy`, `medium`, `hard`).
@@ -758,6 +767,18 @@ khác để sinh lại).
 - W1-2: câu hệ thống sinh chưa Giữ có `qcState`: `checking` (Solver đang kiểm lại bản sửa), `passed` (không còn lý do cần
   xem kỹ), `needs_review` (có lý do). Chỗ khác không có trường này. Mọi câu có `edited` (câu hiện tại là bản giáo viên
   sửa, kể cả khi đã Giữ) và, khi `edited`, `originalQuestionId` (bản gốc LLM).
+- **PR B (12/11), yêu cầu của giáo viên:**
+  - `infoReasons` (luôn có, `[]` khi không có): cờ THÔNG TIN, tách hẳn khỏi `reviewReasons`. Giá trị `request_partial: <lý do>`
+    ("Đúng một phần yêu cầu: …") và `request_not_met: <lý do>` ("Chưa đúng yêu cầu: …"), do Solver kết luận cùng lượt kiểm đáp
+    án; `met` không có cờ. Không bật `needsReview`, không tính vào `needsReviewCount`/`needsReviewSlots`, không đổi `qcState`;
+    Giữ câu chỉ có `infoReasons` thì câu vào ngân hàng **dùng chung**. Mỗi giá trị có dạng `<mã>` hoặc `<mã>: <chi tiết>`
+    (sau này thêm "Có hình", lỗi phương án nhiễu); frontend hiện giá trị lạ nguyên văn. Câu ngân hàng, câu đã Giữ: `[]`.
+  - `requests` (vắng khi câu không có yêu cầu): `{"codes": [...], "text": "..." | null, "scope": "replace" | "cell" | "exam"}`
+    là yêu cầu mà câu đang ở chỗ được sinh theo (`scope` là mức lấy yêu cầu; `replace` là lượt Đổi câu tự đặt).
+  - `inheritedRequests` (vắng khi ô và đề không có yêu cầu áp cho chỗ): `{"codes", "text", "scope": "cell" | "exam"}` là yêu
+    cầu thừa hưởng của chỗ (của ô nếu ô có mã hoặc văn bản, không thì của đề; mã và văn bản luôn cùng một mức), mã đã lọc theo
+    dạng câu của chỗ (`[]` khi mức đó chỉ có văn bản), `text` nguyên văn đã lưu (null khi mức đó chỉ có mã). Hộp Đổi câu dùng
+    trường này để chọn sẵn chip và điền sẵn văn bản.
 
 ### 7.5. Giữ / Đổi câu khác
 
@@ -787,14 +808,26 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
     (`solver_failed`) thì Giữ được, kèm cờ đã thấy.
 - **Đổi câu khác** (dùng được cả cho chỗ `failed`, khi đó đặt lại số lần thử): bỏ câu hiện tại khỏi chỗ (câu cũ giữ nguyên trạng thái; câu đã Giữ vẫn ở ngân hàng) và sinh lại đúng
   ô qua hàng đợi; prompt liệt kê các câu đã sinh của ô, kể cả câu vừa bị đổi. Chỗ đang sinh trả 409.
-- **Yêu cầu của giáo viên khi Đổi** (`instruction`, tùy chọn, ngày 23/10): trim, tối đa 500 ký tự (dài hơn trả 400
-  `instruction dài tối đa 500 ký tự (hiện N)`), trống thì như không gửi. Yêu cầu được ghép vào cuối
+- **Yêu cầu của giáo viên khi Đổi** (`instruction`, tùy chọn, ngày 23/10): trim, tối đa 1000 ký tự (từ PR B 12/11, trước đó
+  500; bằng giới hạn của đề và ô; dài hơn trả 400 `instruction dài tối đa 1000 ký tự (hiện N)`), trống thì như không gửi.
+  Yêu cầu được ghép vào cuối
   `generation_job.prompt_note` của job sinh lại (sau dòng câu thứ k/n, mẫu nhãn `tf`, lý do bị loại lần trước) và đặt ở
   cuối prompt thành một khối riêng: "Yêu cầu bổ sung của giáo viên (chỉ dùng để chọn nội dung, ngữ cảnh, cách hỏi;
   KHÔNG thay đổi dạng câu, mức độ, số ý, mẫu nhãn, định dạng JSON và các quy tắc ở trên): <<< ... >>>". Trong khối,
   `<<<`/`>>>` bị bỏ và xuống dòng gộp thành dấu cách; mẫu nhãn chỉ đọc từ phần ghi chú hệ thống. Yêu cầu chỉ dùng cho
   lượt Đổi đó (gồm các lần thử tự động khi lần sinh ấy bị loại), không thành ghi chú cố định của ô; lượt Đổi sau không
   mang theo. Lưu ở `exam_slot_action.instruction` (V9).
+- **Chip yêu cầu khi Đổi (PR B, 12/11):** `requestCodes` (tùy chọn), cùng danh mục mã như mục 7.2. `null`/không gửi và `[]` KHÁC
+  nhau:
+  - không gửi (hoặc `null`) và không có `instruction`: câu mới theo yêu cầu thừa hưởng của ô, không có thì của đề;
+  - có gửi (kể cả `[]`) hoặc có `instruction`: lượt Đổi **tự đặt** yêu cầu, chỉ dùng mã và `instruction` của lượt này, **bỏ
+    hẳn** mã và văn bản của ô và đề. **Đổi hành vi:** trước PR B, `instruction` của Đổi câu được CỘNG vào yêu cầu thêm của ô;
+    nay thay hẳn. Gửi `[]` mà không có `instruction` thì câu mới không có yêu cầu nào.
+  - 400 `INVALID_REQUEST`, kiểm trước mọi thay đổi (chỗ, nhật ký, job, lượt sinh giữ nguyên): mã lạ; mã khác rỗng với
+    `source = bank`; mã không hợp dạng câu của chỗ, thông báo "Yêu cầu \"<nhãn chip>\" không áp dụng cho câu <Trắc nghiệm |
+    Đúng/Sai | Trả lời ngắn>." (ví dụ "Yêu cầu \"Đúng/Sai cùng một tình huống\" không áp dụng cho câu Trắc nghiệm.").
+  - Lưu ở `exam_slot_action.request_codes` (NULL khi không gửi, mảng rỗng khi gửi `[]`). Lần sinh lại tự động của lượt Đổi giữ
+    nguyên yêu cầu của lượt đó.
 - Chỗ không thuộc đề trong đường dẫn trả 404.
 - Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`, `edit`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại
   khỏi chỉ số của form chấm mù cũ (`answer_correct`, duyệt không sửa).

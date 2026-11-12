@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Alert, Button, Form, Input, Modal, Radio, Space, Tag, Tooltip, Typography } from "antd";
 import { InfoCircleOutlined, SwapOutlined, BulbOutlined, DatabaseOutlined, RobotOutlined } from "@ant-design/icons";
 
-import type { ExamQuestionItem, ChangeQuestionRequest, ExamQuestionType, ReplaceReason } from "../types/exam.types";
+import type { ExamQuestionItem, ChangeQuestionRequest, ExamQuestionType, ReplaceReason, TeacherRequestCode } from "../types/exam.types";
+import { teacherRequestOptionsFor } from "../types/exam.types";
 import { REPLACE_REASON_OPTIONS, describeLevel, resolveQuestionType, describeFailureReason } from "../../../utils/exam.utils";
 import QuestionContent from "../components/QuestionContent";
 
@@ -11,8 +12,8 @@ import "./ChangeQuestionModal.css";
 const { Text } = Typography;
 const { TextArea } = Input;
 
-// Backend API spec mục 7.5: instruction tối đa 500 ký tự
-const MAX_INSTRUCTION_LENGTH = 500;
+// Backend API spec mục 7.5: instruction tối đa 1000 ký tự (PR B, bằng giới hạn của đề và ô, để văn bản thừa hưởng điền đủ)
+const MAX_INSTRUCTION_LENGTH = 1000;
 
 /** Kết quả trang cha báo lại: "bank_exhausted" khi backend trả 409 BANK_EXHAUSTED (docs/api mục 7.5). */
 export type ChangeQuestionResult = void | "bank_exhausted";
@@ -43,6 +44,8 @@ export default function ChangeQuestionModal({
     const [bankExhausted, setBankExhausted] = useState(false);
     // Lý do đổi (tùy chọn); undefined = không chọn, không gửi lên backend
     const [reason, setReason] = useState<ReplaceReason | undefined>(undefined);
+    // Chip yêu cầu của lượt Đổi (PR B): mở hộp thì chọn sẵn chip thừa hưởng của ô hoặc đề
+    const [requestCodes, setRequestCodes] = useState<TeacherRequestCode[]>([]);
 
     const watchedSource = Form.useWatch("source", form) ?? "generate";
     const isBusy = loading || submitting;
@@ -75,14 +78,20 @@ export default function ChangeQuestionModal({
         return <Tag color={diffConfig.color}>{diffConfig.label}</Tag>;
     };
 
+    // Yêu cầu thừa hưởng (docs/api mục 7.4): Đổi câu THAY HẲN yêu cầu của ô và đề, nên chọn sẵn chip và điền sẵn văn bản
+    const inherited = question?.inheritedRequests;
+    const requestOptions = teacherRequestOptionsFor(qType);
+
     useEffect(() => {
         if (open) {
             form.resetFields();
-            form.setFieldsValue({ source: "generate", instruction: "" });
+            form.setFieldsValue({ source: "generate", instruction: inherited?.text ?? "" });
             setSubmitting(false);
             setBankExhausted(false);
             setReason(undefined);
+            setRequestCodes((inherited?.codes ?? []).filter(c => requestOptions.some(o => o.value === c)));
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, question?.id, form]);
 
     const handleSubmit = async () => {
@@ -107,6 +116,8 @@ export default function ChangeQuestionModal({
                 instruction,
                 source,
                 ...(finalReason ? { reason: finalReason } : {}),
+                // Soạn mới: luôn gửi chip (kể cả [] khi đã bỏ hết) để backend coi là tự đặt yêu cầu
+                ...(source === "generate" ? { requestCodes } : {}),
             });
             if (result === "bank_exhausted") {
                 // Không tự soạn: chỉ chuyển sang "Soạn câu mới" để giáo viên tự bấm (mỗi lần soạn tốn lượt gọi AI)
@@ -319,6 +330,36 @@ export default function ChangeQuestionModal({
                             <Text type="secondary" className="change-question-reason-hint">
                                 Giúp hệ thống biết câu cũ chưa tốt ở đâu. Không chọn cũng được.
                             </Text>
+                        </section>
+                    )}
+
+                    {/* Chip yêu cầu (PR B): chỉ khi soạn mới; ẩn chip không hợp dạng câu */}
+                    {watchedSource === "generate" && (
+                        <section className="change-question-reason-section">
+                            <Text strong>Yêu cầu cho câu mới (tùy chọn)</Text>
+                            <div className="change-question-reason-chips" role="group" aria-label="Yêu cầu cho câu mới">
+                                {requestOptions.map((option) => (
+                                    <Tag.CheckableTag
+                                        key={option.value}
+                                        className="change-question-reason-chip"
+                                        checked={requestCodes.includes(option.value)}
+                                        onChange={(checked) => {
+                                            if (isBusy) return;
+                                            setRequestCodes(prev => checked
+                                                ? [...prev, option.value]
+                                                : prev.filter(c => c !== option.value));
+                                        }}
+                                    >
+                                        {option.label}
+                                    </Tag.CheckableTag>
+                                ))}
+                            </div>
+                            {inherited && (
+                                <Text type="secondary" className="change-question-reason-hint">
+                                    {inherited.scope === "cell" ? "Yêu cầu của ô" : "Yêu cầu của đề"} đã được chọn và điền sẵn;
+                                    bỏ chọn hoặc sửa nếu không muốn giữ.
+                                </Text>
+                            )}
                         </section>
                     )}
                 </div>

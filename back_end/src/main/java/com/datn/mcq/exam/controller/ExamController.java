@@ -160,12 +160,20 @@ public class ExamController {
      *
      * @param source      W1-4 (D5-B): "generate" (mặc định khi bỏ trống) sinh câu mới qua hàng đợi; "bank" lấy câu ngân
      *                    hàng khớp ô, hết câu thì 409 BANK_EXHAUSTED (không tự sinh); giá trị khác thì 400
-     * @param instruction yêu cầu bổ sung của giáo viên cho lượt sinh lại này (tùy chọn; trim, tối đa 500 ký tự, dài hơn
-     *                    thì 400; trống thì như không có); không dùng với source = bank
+     * @param instruction yêu cầu bổ sung của giáo viên cho lượt sinh lại này (tùy chọn; trim, tối đa 1000 ký tự từ PR B,
+     *                    dài hơn thì 400; trống thì như không có); không dùng với source = bank
      * @param reason      B7 (V25): lý do Đổi do giáo viên chọn (tùy chọn): wrong_answer, ambiguous_options, off_matrix,
      *                    duplicate_pattern, latex_format, too_hard, too_easy, other; trống thì không ghi; giá trị khác 400
+     * @param requestCodes (12/11, PR B) mã chip yêu cầu của lượt Đổi. Không gửi hoặc null: thừa hưởng yêu cầu của ô, không có
+     *                    thì của đề. Có gửi (kể cả []) hoặc có instruction: lượt Đổi TỰ ĐẶT yêu cầu, bỏ hẳn yêu cầu của ô và
+     *                    đề. Mã lạ, mã không hợp dạng câu của chỗ, hoặc mã khác rỗng với source = bank: 400 INVALID_REQUEST
      */
-    public record ReplaceRequest(String source, String instruction, String reason) {
+    public record ReplaceRequest(String source, String instruction, String reason, List<String> requestCodes) {
+        /** Chữ ký trước PR B (không có mã yêu cầu). */
+        public ReplaceRequest(String source, String instruction, String reason) {
+            this(source, instruction, reason, null);
+        }
+
         /** Chữ ký trước B7 (không có lý do). */
         public ReplaceRequest(String source, String instruction) {
             this(source, instruction, null);
@@ -180,7 +188,8 @@ public class ExamController {
     public ExamItemDto replace(CurrentUser user, @PathVariable Integer examId, @PathVariable Integer slotId,
                                @RequestBody(required = false) ReplaceRequest request) {
         return examActionService.replace(examId, slotId, user.id(), request != null ? request.source() : null,
-                request != null ? request.instruction() : null, request != null ? request.reason() : null);
+                request != null ? request.instruction() : null, request != null ? request.reason() : null,
+                request != null ? request.requestCodes() : null);
     }
 
     /**

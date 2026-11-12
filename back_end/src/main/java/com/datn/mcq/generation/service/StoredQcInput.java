@@ -19,10 +19,19 @@ public final class StoredQcInput {
     private StoredQcInput() {}
 
     /**
+     * Kèm yêu cầu của giáo viên đã lưu ở câu (PR B, 12/11), nên chạy lại QC, job answer_check của bản sửa và công cụ đo Solver
+     * đều kiểm yêu cầu như lúc sinh. Câu cũ (NULL) đi đường không có yêu cầu.
+     *
      * @param statements 4 ý a-d của câu tf đã lưu (rỗng với mcq/sa)
      */
     public static QuestionQcInput of(GeneratedQuestion gq, List<GeneratedQuestionStatement> statements,
                                      boolean validateLatex, boolean runAnswerCheck) {
+        return withoutRequest(gq, statements, validateLatex, runAnswerCheck)
+                .withRequest(gq.getRequestCodes(), gq.getRequestText());
+    }
+
+    private static QuestionQcInput withoutRequest(GeneratedQuestion gq, List<GeneratedQuestionStatement> statements,
+                                                  boolean validateLatex, boolean runAnswerCheck) {
         boolean parseSuccess = Boolean.TRUE.equals(gq.getParseSuccess());
         if (gq.getQuestionType() == QuestionType.TF) {
             List<String> texts = new ArrayList<>();

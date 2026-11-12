@@ -14,6 +14,7 @@ câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên databa
 | [`05-grounding.sql`](05-grounding.sql) | Câu sinh có tài liệu bài học: tỉ lệ SUPPORTED / NOT_SUPPORTED / UNKNOWN, chưa chấm, lỗi; trích dẫn kiểm chứng được; câu bị hạ vì trích dẫn không có thật (theo dạng câu, có/không tài liệu) |
 | [`06-chi-phi.sql`](06-chi-phi.sql) | Chi phí trung bình mỗi câu LLM (token và thời gian gọi LLM) = sinh + Solver + grounding, theo dạng câu và có/không tài liệu; số câu thiếu số đo (V21) |
 | [`07-van-hanh.sql`](07-van-hanh.sql) | Vận hành hàng đợi theo ngày và loại job: số job đã kết thúc, tỉ lệ thất bại, thời gian chờ và xử lý (p50, p95), job bị stale reset |
+| [`10-yeu-cau-giao-vien.sql`](10-yeu-cau-giao-vien.sql) | Yêu cầu của giáo viên (chip, PR B): tỉ lệ `request_check` met / partial / not_met theo từng mã và theo mức lấy yêu cầu (replace, cell, exam); số lượt Đổi câu ngay sau câu not_met hay partial của cùng chỗ |
 
 ## Số liệu vận hành thời gian thực (Prometheus)
 

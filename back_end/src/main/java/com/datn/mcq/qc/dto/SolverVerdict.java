@@ -2,6 +2,7 @@ package com.datn.mcq.qc.dto;
 
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.QuestionType;
+import com.datn.mcq.enums.RequestVerdict;
 import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.StatementKey;
 import com.datn.mcq.enums.TruthChoice;
@@ -22,6 +23,9 @@ import java.util.List;
  *                     (không có lượt gọi nào, nên không được tính chi phí lần nữa)
  * @param mcqOptionCorrect mcq (Solver v3): kết luận từng phương án A-D; null với dạng khác, Solver cũ, phản hồi thiếu
  *                     {@code options_verdict} và kết quả chép. Không lưu cột riêng: đã nằm trong ghi chú Solver (V14).
+ * @param requestVerdict (12/11, PR B) kết luận về yêu cầu của giáo viên ({@code request_check}, cùng lượt gọi); null khi câu
+ *                     không có yêu cầu hoặc Solver không trả kết luận hợp lệ. Không ảnh hưởng {@code passed}
+ * @param requestReason (PR B) lý do ngắn của kết luận trên; null khi không có
  */
 public record SolverVerdict(
         QuestionType questionType,
@@ -33,11 +37,27 @@ public record SolverVerdict(
         String saJudgeAnswer,
         List<TruthChoice> tfLabels,
         LlmUsage usage,
-        List<Boolean> mcqOptionCorrect
+        List<Boolean> mcqOptionCorrect,
+        RequestVerdict requestVerdict,
+        String requestReason
 ) {
     public SolverVerdict {
         tfLabels = tfLabels == null ? null : List.copyOf(tfLabels);
         mcqOptionCorrect = mcqOptionCorrect == null ? null : List.copyOf(mcqOptionCorrect);
+        requestReason = requestVerdict == null ? null : requestReason;
+    }
+
+    public SolverVerdict(QuestionType questionType, boolean passed, String judgeModel, String reasoning,
+                         AnswerChoice judgeAnswer, SaJudgeKind saJudgeKind, String saJudgeAnswer,
+                         List<TruthChoice> tfLabels, LlmUsage usage, List<Boolean> mcqOptionCorrect) {
+        this(questionType, passed, judgeModel, reasoning, judgeAnswer, saJudgeKind, saJudgeAnswer, tfLabels, usage,
+                mcqOptionCorrect, null, null);
+    }
+
+    /** Bản sao kèm kết luận về yêu cầu của giáo viên (PR B). */
+    public SolverVerdict withRequestCheck(RequestVerdict verdict, String reason) {
+        return new SolverVerdict(questionType, passed, judgeModel, reasoning, judgeAnswer, saJudgeKind, saJudgeAnswer,
+                tfLabels, usage, mcqOptionCorrect, verdict, reason);
     }
 
     public SolverVerdict(QuestionType questionType, boolean passed, String judgeModel, String reasoning,

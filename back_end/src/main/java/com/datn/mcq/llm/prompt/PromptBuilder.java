@@ -10,11 +10,22 @@ import java.util.List;
 public class PromptBuilder {
 
     /**
-     * Phiên bản prompt Solver mcq mặc định (chốt 31/10 sau lần đo v3 được 0/9): như v3, thêm quy tắc "phương án ĐÚNG nếu
-     * học sinh bảo vệ được theo đúng chữ của đề" (phân tích nhân tử chưa triệt để, khẳng định hình học không có "luôn"),
-     * để bắt đề mơ hồ. Cùng JSON với v3.
+     * Phiên bản prompt Solver mặc định (12/11, PR B): câu KHÔNG có yêu cầu của giáo viên dùng prompt và schema y như
+     * {@link #SOLVER_PROMPT_VERSION_V4} (mcq) và như cũ (tf, sa), từng ký tự; câu CÓ yêu cầu thêm khối yêu cầu sau đề bài và
+     * trường {@code request_check} ở cuối schema, trong cùng lượt gọi ({@link TeacherRequestPrompt}). Bản kế tiếp (PA1,
+     * phương án nhiễu kèm lỗi sai) sẽ là {@code solver-v6}.
      */
-    public static final String SOLVER_PROMPT_VERSION = "solver-v4-literal-reading";
+    public static final String SOLVER_PROMPT_VERSION_V5 = "solver-v5-request-check";
+
+    /** Phiên bản prompt Solver mặc định ({@link #SOLVER_PROMPT_VERSION_V5} từ 12/11). */
+    public static final String SOLVER_PROMPT_VERSION = SOLVER_PROMPT_VERSION_V5;
+
+    /**
+     * Phiên bản prompt Solver mcq v4 (chốt 31/10 sau lần đo v3 được 0/9, mặc định tới 12/11): như v3, thêm quy tắc
+     * "phương án ĐÚNG nếu học sinh bảo vệ được theo đúng chữ của đề" (phân tích nhân tử chưa triệt để, khẳng định hình học
+     * không có "luôn"), để bắt đề mơ hồ. Cùng JSON với v3. Không kiểm yêu cầu của giáo viên.
+     */
+    public static final String SOLVER_PROMPT_VERSION_V4 = "solver-v4-literal-reading";
 
     /**
      * Phiên bản prompt Solver mcq v3 (thẩm định 31/10, lần thử 1): xét TỪNG phương án A-D, trả thêm
@@ -31,7 +42,13 @@ public class PromptBuilder {
 
     /** Các phiên bản prompt Solver mcq có trong code. */
     public static final List<String> SOLVER_PROMPT_VERSIONS =
-            List.of(SOLVER_PROMPT_VERSION_V2, SOLVER_PROMPT_VERSION_V3, SOLVER_PROMPT_VERSION);
+            List.of(SOLVER_PROMPT_VERSION_V2, SOLVER_PROMPT_VERSION_V3, SOLVER_PROMPT_VERSION_V4,
+                    SOLVER_PROMPT_VERSION_V5);
+
+    /** Phiên bản có kiểm yêu cầu của giáo viên ({@code request_check}). */
+    public static boolean checksRequests(String version) {
+        return SOLVER_PROMPT_VERSION_V5.equals(version);
+    }
 
     /** Trả phiên bản đã trim nếu có trong code; ngược lại ném IllegalArgumentException. */
     public static String requireSolverPromptVersion(String version) {
@@ -119,6 +136,7 @@ public class PromptBuilder {
         return switch (v) {
             case SOLVER_PROMPT_VERSION_V2 -> solverPromptV2(q, a, b, c, d);
             case SOLVER_PROMPT_VERSION_V3 -> solverPromptV3(q, a, b, c, d);
+            // v5 không có yêu cầu: y như v4 (khối yêu cầu do AnswerSolverChecker chèn khi câu có yêu cầu).
             default -> solverPromptV4(q, a, b, c, d);
         };
     }

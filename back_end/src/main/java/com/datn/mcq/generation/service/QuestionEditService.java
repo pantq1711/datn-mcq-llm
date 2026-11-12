@@ -239,6 +239,9 @@ public class QuestionEditService {
         v.setTemplateId(base.getTemplateId());
         v.setRunId(base.getRunId());
         v.setEditedFromQuestionId(base.getId());
+        // PR B (12/11): bản sửa giữ yêu cầu của giáo viên của bản trước (Solver kiểm lại bản sửa vẫn kèm yêu cầu).
+        v.setRequestCodes(base.getRequestCodes());
+        v.setRequestText(base.getRequestText());
         v.setQuestionText(c.questionText);
         v.setExplanation(c.explanation);
         if (type == QuestionType.MCQ) {

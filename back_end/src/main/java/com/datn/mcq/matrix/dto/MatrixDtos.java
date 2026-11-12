@@ -72,6 +72,8 @@ public final class MatrixDtos {
      * @param extraInstruction (W2-3) "yêu cầu thêm cho AI" cho cả lần sinh, tối đa 1000 ký tự; tùy chọn
      * @param challenge        (12/11) mức thử thách: "standard" (mặc định khi bỏ trống) hoặc "advanced"; giá trị khác là
      *                         400 INVALID_REQUEST trước mọi ghi
+     * @param requestCodes     (12/11, PR B) mã chip yêu cầu của giáo viên cho cả lần sinh (TeacherRequest); tùy chọn. Mã lạ
+     *                         là 400 INVALID_REQUEST trước mọi ghi; mã không hợp dạng của một câu không áp cho câu đó
      */
     public record CreateLessonRequest(
             Integer subjectId,
@@ -83,8 +85,17 @@ public final class MatrixDtos {
             List<LessonCellInput> cells,
             List<Integer> materialIds,
             String extraInstruction,
-            String challenge
+            String challenge,
+            List<String> requestCodes
     ) {
+        /** Chữ ký trước PR B (không có mã yêu cầu). */
+        public CreateLessonRequest(Integer subjectId, Integer gradeLevel, String lesson, String content, String title,
+                                   Map<String, String> learningOutcomes, List<LessonCellInput> cells,
+                                   List<Integer> materialIds, String extraInstruction, String challenge) {
+            this(subjectId, gradeLevel, lesson, content, title, learningOutcomes, cells, materialIds, extraInstruction,
+                    challenge, null);
+        }
+
         /** Chữ ký trước 12/11 (đề chuẩn). */
         public CreateLessonRequest(Integer subjectId, Integer gradeLevel, String lesson, String content, String title,
                                    Map<String, String> learningOutcomes, List<LessonCellInput> cells,

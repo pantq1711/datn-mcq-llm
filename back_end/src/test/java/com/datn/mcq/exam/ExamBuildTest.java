@@ -1265,7 +1265,7 @@ class ExamBuildTest {
     }
 
     @Test
-    void doiCauYeuCauRongNhuCuQua500KyTuTra400() throws Exception {
+    void doiCauYeuCauRongNhuCuQua1000KyTuTra400() throws Exception {
         int examId = readyExam();
         int slot = slotId(examId, "mcq", 2);
         json(replaceWith(examId, slot, "   ").andExpect(status().isOk()));
@@ -1279,19 +1279,27 @@ class ExamBuildTest {
         processAll();
         assertFalse(generator.mcqPrompts.get(generator.mcqPrompts.size() - 1).contains("Yêu cầu bổ sung"));
 
+        progress(examId);
         int actions = jdbc.queryForObject("SELECT count(*) FROM exam_slot_action", Integer.class);
         int jobs = jdbc.queryForObject("SELECT count(*) FROM generation_job", Integer.class);
-        JsonNode error = json(replaceWith(examId, slot, "x".repeat(501)).andExpect(status().isBadRequest()));
-        assertTrue(error.get("error").asText().contains("500"), error.toString());
+        Map<String, Object> slotBefore = jdbc.queryForMap("SELECT state, generated_question_id, attempts FROM exam_slot"
+                + " WHERE id = ?", slot);
+        // PR B (12/11): giới hạn Đổi câu tăng 500 -> 1000, bằng giới hạn của đề và ô.
+        JsonNode error = json(replaceWith(examId, slot, " " + "x".repeat(1001) + " ").andExpect(status().isBadRequest()));
+        assertTrue(error.get("error").asText().contains("1000"), error.toString());
         assertEquals(actions, jdbc.queryForObject("SELECT count(*) FROM exam_slot_action", Integer.class));
         assertEquals(jobs, jdbc.queryForObject("SELECT count(*) FROM generation_job", Integer.class));
-        json(replaceWith(examId, slot, " " + "y".repeat(500) + " ").andExpect(status().isOk()));
-        assertEquals("y".repeat(500), lastInstruction(slot), "đúng 500 ký tự sau trim thì nhận");
+        assertEquals(slotBefore, jdbc.queryForMap("SELECT state, generated_question_id, attempts FROM exam_slot"
+                + " WHERE id = ?", slot), "chỗ giữ nguyên");
+        json(replaceWith(examId, slot, " " + "y".repeat(1000) + " ").andExpect(status().isOk()));
+        assertEquals("y".repeat(1000), lastInstruction(slot), "đúng 1000 ký tự sau trim thì nhận và lưu đủ");
 
-        // V9: cột instruction chỉ cho dòng 'replace', 1-500 ký tự.
+        // V9, nâng lên 1000 ở V28: cột instruction chỉ cho dòng 'replace', 1-1000 ký tự.
+        jdbc.update("INSERT INTO exam_slot_action (slot_id, action, instruction) VALUES (?, 'replace', repeat('z', 1000))",
+                slot);
         for (String bad : List.of("INSERT INTO exam_slot_action (slot_id, action, instruction) VALUES (?, 'keep', 'x')",
                 "INSERT INTO exam_slot_action (slot_id, action, instruction) VALUES (?, 'replace', '')",
-                "INSERT INTO exam_slot_action (slot_id, action, instruction) VALUES (?, 'replace', repeat('z', 501))")) {
+                "INSERT INTO exam_slot_action (slot_id, action, instruction) VALUES (?, 'replace', repeat('z', 1001))")) {
             org.junit.jupiter.api.Assertions.assertThrows(
                     org.springframework.dao.DataIntegrityViolationException.class, () -> jdbc.update(bad, slot), bad);
         }

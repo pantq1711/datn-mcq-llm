@@ -127,6 +127,58 @@ public class GenerationJob {
     @Column(name = "claim_seq", nullable = false)
     private Integer claimSeq = 0;
 
+    /** V28 (PR B): {@code request_scope} của job Đổi câu tự đặt yêu cầu (thay hẳn yêu cầu của ô và đề). */
+    public static final String REQUEST_SCOPE_REPLACE = "replace";
+    /** V28: yêu cầu lấy từ ô. */
+    public static final String REQUEST_SCOPE_CELL = "cell";
+    /** V28: yêu cầu lấy từ cả đề. */
+    public static final String REQUEST_SCOPE_EXAM = "exam";
+
+    /**
+     * V28 (12/11, PR B): mã chip yêu cầu hiệu lực của job (đã lọc theo dạng câu); null khi không có. Worker chép sang câu.
+     * Không đưa ra API.
+     */
+    @JsonIgnore
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "request_codes", columnDefinition = "text[]")
+    private String[] requestCodes;
+
+    /** V28: văn bản tự do của yêu cầu hiệu lực (đã chuẩn hóa); null khi không có. */
+    @JsonIgnore
+    @Column(name = "request_text", columnDefinition = "TEXT")
+    private String requestText;
+
+    /** V28: mức lấy yêu cầu ({@link #REQUEST_SCOPE_REPLACE}, cell, exam); null khi job không có yêu cầu. */
+    @JsonIgnore
+    @Column(name = "request_scope", length = 10)
+    private String requestScope;
+
+    /** Mã yêu cầu của job; null khi không có. */
+    public java.util.List<String> getRequestCodes() {
+        return requestCodes == null ? null : java.util.List.of(requestCodes);
+    }
+
+    /** Rỗng hoặc null thì lưu NULL. */
+    public void setRequestCodes(java.util.List<String> codes) {
+        this.requestCodes = codes == null || codes.isEmpty() ? null : codes.toArray(String[]::new);
+    }
+
+    public String getRequestText() {
+        return requestText;
+    }
+
+    public void setRequestText(String requestText) {
+        this.requestText = requestText;
+    }
+
+    public String getRequestScope() {
+        return requestScope;
+    }
+
+    public void setRequestScope(String requestScope) {
+        this.requestScope = requestScope;
+    }
+
     public Integer getClaimSeq() {
         return claimSeq;
     }

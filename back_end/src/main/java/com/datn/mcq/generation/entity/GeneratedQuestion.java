@@ -5,12 +5,15 @@ import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionOrigin;
 import com.datn.mcq.enums.QuestionStatus;
 import com.datn.mcq.enums.QuestionType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -115,7 +118,39 @@ public class GeneratedQuestion {
     @Column(name = "import_batch_id", updatable = false)
     private Integer importBatchId;
 
+    /**
+     * V28 (12/11, PR B): mã chip yêu cầu của giáo viên mà câu được sinh theo (chép từ job; bản sửa chép từ bản trước); null
+     * khi không có.
+     */
+    @JsonIgnore
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "request_codes", columnDefinition = "text[]")
+    private String[] requestCodes;
+
+    /** V28: văn bản tự do của yêu cầu (chép từ job); null khi không có. */
+    @JsonIgnore
+    @Column(name = "request_text", columnDefinition = "TEXT")
+    private String requestText;
+
     public GeneratedQuestion() {}
+
+    /** Mã yêu cầu của câu; null khi không có. */
+    public java.util.List<String> getRequestCodes() {
+        return requestCodes == null ? null : java.util.List.of(requestCodes);
+    }
+
+    /** Rỗng hoặc null thì lưu NULL. */
+    public void setRequestCodes(java.util.List<String> codes) {
+        this.requestCodes = codes == null || codes.isEmpty() ? null : codes.toArray(String[]::new);
+    }
+
+    public String getRequestText() {
+        return requestText;
+    }
+
+    public void setRequestText(String requestText) {
+        this.requestText = requestText;
+    }
 
     public QuestionOrigin getOrigin() {
         return origin;
