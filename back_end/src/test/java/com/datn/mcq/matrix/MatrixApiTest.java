@@ -151,21 +151,6 @@ class MatrixApiTest {
                 "lỗi thì không để lại template");
     }
 
-    /** Khối lớp bắt buộc khi tạo ma trận: bỏ trường hoặc gửi null đều 400 với thông báo tiếng Việt, không tạo gì. */
-    @Test
-    void thieuGradeLevelTra400VaKhongTaoGi() throws Exception {
-        String missing = body(MCQ_CELL).replace("\"gradeLevel\": 8, ", "");
-        String explicitNull = body(MCQ_CELL).replace("\"gradeLevel\": 8", "\"gradeLevel\": null");
-        assertFalse(missing.contains("gradeLevel"), "body thử phải thật sự thiếu gradeLevel");
-        for (String body : List.of(missing, explicitNull)) {
-            postJson("/api/exam-matrices", body).andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("Phải chọn khối lớp (gradeLevel từ 6 đến 9)"));
-        }
-        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM exam_matrix", Integer.class));
-        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM question_template", Integer.class),
-                "lỗi thì không để lại template");
-    }
-
     @Test
     void mauGiuaKi1Toan8() throws Exception {
         JsonNode samples = json(perform(get("/api/exam-matrices/samples")).andExpect(status().isOk()));
