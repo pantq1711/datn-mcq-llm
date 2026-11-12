@@ -741,6 +741,16 @@ public class GenerationJobProcessor {
     }
 
     /**
+     * C-01: hết hạn mức ngày thì hoãn mọi job pending đã đến hạn tới {@code resetAt} (cùng dấu hiệu "quota:" và next_run_at
+     * như {@link #deferJobOnQuotaExhausted}), để Giữ, đối soát và tiến độ nói được lý do và giờ chạy tiếp. Trả số job đã đánh dấu.
+     */
+    @Transactional
+    public int deferDuePendingOnQuota(LocalDateTime resetAt, String reason) {
+        return generationJobRepository.deferDuePending(resetAt, TextClip.clip("quota: " + reason, MAX_SOLVER_ERROR),
+                LocalDateTime.now());
+    }
+
+    /**
      * F-09: job đang gọi Gemini thì ứng dụng tắt (cờ running = false hoặc luồng bị interrupt): trả về {@code pending} chạy
      * lại ngay lúc khởi động sau, xóa {@code started_at} và hoàn lại lượt {@code attempt} đã tăng lúc nhận job (không tính
      * lỗi, không backoff). Rào bằng {@link #holdsClaim} như {@link #deferJobOnQuotaExhausted}.

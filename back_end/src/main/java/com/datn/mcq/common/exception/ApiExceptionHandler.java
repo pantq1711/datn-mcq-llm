@@ -32,6 +32,7 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 import com.datn.mcq.llm.client.QuotaExhaustedException;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -297,8 +298,12 @@ public class ApiExceptionHandler {
         if (retryAfterSeconds > 0) {
             builder.header(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSeconds));
         }
+        // C-01: nói với giáo viên bằng giờ chạy tiếp (giờ Việt Nam, từ mốc đặt lại); chi tiết kỹ thuật (số lượt, tên nhà cung cấp)
+        // chỉ ở log.
         return builder.body(Map.of(
-                "error", ex.getMessage() != null ? ex.getMessage() : "Đã chạm hạn mức gọi Gemini trong ngày",
+                "error", ex.getResetAt() != null
+                        ? QuotaExhaustedException.resumeMessage(ex.getResetAt(), ZoneId.systemDefault())
+                        : "Hết lượt AI hôm nay, hệ thống sẽ chạy tiếp khi sang ngày mới",
                 "code", "LLM_DAILY_QUOTA_EXHAUSTED"
         ));
     }

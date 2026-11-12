@@ -37,6 +37,17 @@ class LlmClientUpstreamErrorTest {
     void otherStatusesKeepPreviousBehaviour() {
         RuntimeException ex = LlmClient.errorForStatus(500, "boom");
         assertFalse(ex instanceof UpstreamServiceException);
+        assertFalse(ex instanceof NonRetryableLlmException, "5xx là lỗi tạm thời, vẫn thử lại");
         assertTrue(ex.getMessage().startsWith("HTTP 500 từ Gemini API"), ex.getMessage());
+    }
+
+    /** C-04: HTTP 4xx khác 429 gọi lại cũng lỗi như cũ: lỗi không thử lại, thông điệp giữ nguyên dạng cũ. */
+    @Test
+    void http4xxKhac429LaLoiKhongThuLai() {
+        for (int status : new int[] {400, 401, 403, 404, 422}) {
+            RuntimeException ex = LlmClient.errorForStatus(status, "{\"error\":\"bad\"}");
+            assertInstanceOf(NonRetryableLlmException.class, ex, "HTTP " + status);
+            assertTrue(ex.getMessage().startsWith("HTTP " + status + " từ Gemini API"), ex.getMessage());
+        }
     }
 }

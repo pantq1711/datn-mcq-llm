@@ -21,6 +21,7 @@ import com.datn.mcq.experiment.entity.ExperimentRun;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.generation.service.QuotaDeferral;
 import com.datn.mcq.llm.prompt.McqAnswerPlan;
 import com.datn.mcq.llm.prompt.MatrixCellSpec;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
@@ -327,7 +328,19 @@ public class ExamBuildService {
         }
         String status = generating > 0 ? "generating" : failed > 0 ? "partial" : "ready";
         return new ProgressDto(exam.getId(), exam.getExamCode(), exam.getTitle(), status, slots.size(), ready,
-                generating, failed, fromBank, cellDtos);
+                generating, failed, fromBank, cellDtos, quotaNotice(slots));
+    }
+
+    /**
+     * C-01: khi có chỗ đang chờ sinh mà job của chỗ đó hoãn vì AI hết lượt trong ngày thì tiến độ nói rõ giờ chạy tiếp
+     * ("Hết lượt AI hôm nay, hệ thống chạy tiếp lúc HH:mm", giờ Việt Nam) thay vì để giáo viên tưởng hệ thống hỏng; null khi
+     * không có.
+     */
+    private String quotaNotice(List<ExamSlot> slots) {
+        List<Integer> waiting = slots.stream()
+                .filter(s -> !hasQuestion(s) && !ExamSlot.FAILED.equals(s.getState()))
+                .map(ExamSlot::getId).toList();
+        return generationService.earliestQuotaResume(waiting).map(QuotaDeferral::message).orElse(null);
     }
 
     /** Các chỗ của một ô (tóm tắt); kiểm tra chủ sở hữu rồi mới đối soát. */
@@ -402,6 +415,14 @@ public class ExamBuildService {
                 Optional<GenerationJob> check = generationService.latestAnswerCheckJob(q.getId());
                 if (check.isPresent() && (check.get().getStatus() == JobStatus.PENDING
                         || check.get().getStatus() == JobStatus.RUNNING)) {
+                    if (!QuotaDeferral.isDeferred(check.get(), LocalDateTime.now())) {
+                        return;
+                    }
+                    // C-01: job Solver đang HOÃN vì AI hết lượt trong ngày (có thể nhiều giờ): không để chỗ kẹt generating tới
+                    // mốc đặt lại. Dùng câu đã sinh (kèm cờ solver_pending, Solver chưa kiểm), không sinh lại (hết lượt rồi
+                    // job sinh lại cũng không chạy được). Job Solver vẫn chạy tiếp khi hết hoãn và ghi kết quả vào câu.
+                    useBest(slot, q);
+                    slotRepository.save(slot);
                     return;
                 }
                 boolean solverInconsistent = Boolean.FALSE.equals(qcSummaryService.summarize(q.getId()).answerCheckPassed());

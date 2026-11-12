@@ -189,6 +189,11 @@ public class GeminiRateLimiter {
         LOG.warn("Gemini trả HTTP 429: tạm dừng toàn bộ bộ điều tiết {} ms", delayMs);
     }
 
+    /** C-01: mốc đặt lại hạn mức ngày kế tiếp (00:00 giờ Thái Bình Dương) theo giờ của đồng hồ (giờ máy chủ). */
+    public synchronized LocalDateTime nextResetAt() {
+        return nextResetLocalDateTime(clock.instant());
+    }
+
     public synchronized int getDailyUsed() {
         refreshDayLocked(clock.instant());
         return dailyUsed;

@@ -336,16 +336,16 @@ public class QuestionEditService {
                 throw invalid("Thiếu nội dung câu sửa");
             }
             Content c = new Content(type);
-            c.questionText = text("question_text", required(in.questionText(), "questionText"), repairs);
-            c.explanation = text("explanation", required(in.explanation(), "explanation"), repairs);
+            c.questionText = text("question_text", required(in.questionText(), "questionText"), type, repairs);
+            c.explanation = text(EXPLANATION, required(in.explanation(), "explanation"), type, repairs);
             switch (type) {
                 case MCQ -> {
                     forbid(in.saAnswer(), "saAnswer", type);
                     forbid(in.statements(), "statements", type);
-                    c.optionA = text("option_a", required(in.optionA(), "optionA"), repairs);
-                    c.optionB = text("option_b", required(in.optionB(), "optionB"), repairs);
-                    c.optionC = text("option_c", required(in.optionC(), "optionC"), repairs);
-                    c.optionD = text("option_d", required(in.optionD(), "optionD"), repairs);
+                    c.optionA = text("option_a", required(in.optionA(), "optionA"), type, repairs);
+                    c.optionB = text("option_b", required(in.optionB(), "optionB"), type, repairs);
+                    c.optionC = text("option_c", required(in.optionC(), "optionC"), type, repairs);
+                    c.optionD = text("option_d", required(in.optionD(), "optionD"), type, repairs);
                     String raw = required(in.correctOption(), "correctOption").strip().toUpperCase();
                     if (!List.of("A", "B", "C", "D").contains(raw)) {
                         throw invalid("correctOption phải là A, B, C hoặc D");
@@ -356,7 +356,7 @@ public class QuestionEditService {
                     forbidOptions(in, type);
                     forbid(in.statements(), "statements", type);
                     // Như parser sa: đáp số chỉ trim, vẫn tự đóng "$" (ví dụ "$3\sqrt{2}").
-                    c.saAnswer = text("answer", required(in.saAnswer(), "saAnswer"), repairs);
+                    c.saAnswer = text("answer", required(in.saAnswer(), "saAnswer"), type, repairs);
                     // 27/10: đáp án đạt STRICT được lưu ở dạng chuẩn hóa; không đạt thì giữ nguyên để FormatChecker báo 400.
                     String normalized = ShortAnswerValue.normalizedStrictAnswer(c.saAnswer);
                     c.saAnswer = normalized != null ? normalized : c.saAnswer;
@@ -377,7 +377,7 @@ public class QuestionEditService {
                         if (i < 0 || !seen.add(key)) {
                             throw invalid("Câu đúng/sai phải gửi đủ 4 ý a, b, c, d (mỗi ý một lần)");
                         }
-                        texts[i] = text("statement_" + key, required(s.text(), "statements[" + key + "].text"),
+                        texts[i] = text("statement_" + key, required(s.text(), "statements[" + key + "].text"), type,
                                 repairs);
                         labels[i] = TruthValue.fromLabel(required(s.label(), "statements[" + key + "].label"));
                         if (labels[i] == null) {
@@ -459,35 +459,15 @@ public class QuestionEditService {
             }
         }
 
-        private static String text(String field, String value, List<String> repairs) {
-            String s = value.strip();
-            // Như parser sinh câu: gỡ vỏ \text{...} ngoài $ rồi mới tự đóng $ (27/10, đơn vị đo viết ngoài công thức).
-            LlmOutputRepair.TextRepair t = LlmOutputRepair.stripTextOutsideMath(s);
-            if (t.removed() > 0) {
-                repairs.add(LlmOutputRepair.textWarning(field, t.removed()));
-                s = t.text();
-            }
-            LlmOutputRepair.DollarRepair d = LlmOutputRepair.closeTrailingDollar(s);
-            if (d.closed()) {
-                repairs.add(LlmOutputRepair.dollarWarning(field, s));
-                s = d.text();
-            }
-            // 31/10: như parser sinh câu, "75^\bullet" / "85^{\triangle}" trong công thức thành "^{\circ}".
-            LlmOutputRepair.DegreeRepair g = LlmOutputRepair.fixDegreeSymbol(s);
-            if (g.fixed() > 0) {
-                repairs.add(LlmOutputRepair.degreeWarning(field, g.fixed()));
-                s = g.text();
-            }
-            // F-12: như parser sinh câu, lệnh LaTeX liền mạch nằm ngoài $...$ (giáo viên gõ \frac{1}{2} quên $) được bọc $
-            // thay vì bị từ chối 400. Đáp số của câu trả lời ngắn là số viết trần: để bước kiểm định dạng báo lỗi dạng đáp án.
-            if (!"answer".equals(field)) {
-                LlmOutputRepair.WrapRepair w = LlmOutputRepair.wrapLatexOutsideMath(s);
-                if (w.wrapped() > 0) {
-                    repairs.add(LlmOutputRepair.wrapWarning(field, w.wrapped()));
-                    s = w.text();
-                }
-            }
-            return s;
+        /**
+         * C-07: đúng chuỗi chuẩn hóa của lúc lưu câu sinh ({@link LlmOutputRepair#normalizeField}): "\n" và "\\" chữ, thẻ br,
+         * \text ngoài $, tự đóng $, lệnh LaTeX thiếu "\", ký hiệu độ, bọc dòng công thức (lời giải) và LaTeX ngoài $ (giáo
+         * viên gõ \frac{1}{2} quên $ được bọc thay vì bị từ chối 400), mũi tên, "\\" trong công thức, "&" căn lề, dấu câu của
+         * câu dẫn và ý Đúng/Sai. Đáp số của câu trả lời ngắn là số viết trần: để bước kiểm định dạng báo lỗi dạng đáp án.
+         */
+        private static String text(String field, String value, QuestionType type, List<String> repairs) {
+            return LlmOutputRepair.normalizeField(field, value.strip(), EXPLANATION.equals(field),
+                    type == QuestionType.TF, repairs);
         }
 
         private static String required(String value, String name) {
