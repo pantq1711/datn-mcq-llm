@@ -61,7 +61,8 @@ class MatrixManageTest extends ExamFlowTestBase {
     }
 
     private int lessonMatrix() throws Exception {
-        int examId = json(postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"lesson\": \"Bài 1\","
+        int examId = json(postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"gradeLevel\": 8,"
+                + " \"lesson\": \"Bài 1\","
                 + " \"cells\": [{\"questionType\": \"mcq\", \"difficulty\": \"easy\", \"questionCount\": 1}]}")
                 .andExpect(status().isOk())).get("examId").asInt();
         return count("SELECT matrix_id FROM exam WHERE id = ?", examId);
@@ -117,6 +118,23 @@ class MatrixManageTest extends ExamFlowTestBase {
         perform(put(url(matrix)).contentType(MediaType.APPLICATION_JSON)
                 .content(body("Tên", null, mcqCell(TOPIC, null, 1)).replace("\"subjectId\": " + subject,
                         "\"subjectId\": 999999"))).andExpect(status().isNotFound());
+        assertEquals(before, getMatrix(matrix));
+        assertEquals(1, templates());
+    }
+
+    /** Khối lớp bắt buộc khi sửa ma trận: bỏ trường hoặc gửi null đều 400 với thông báo tiếng Việt, ma trận giữ nguyên. */
+    @Test
+    void suaThieuGradeLevelTra400VaKhongDoiGi() throws Exception {
+        int matrix = createMatrix(mcqCell(TOPIC, null, 1));
+        JsonNode before = getMatrix(matrix);
+        String valid = body("Tên mới", null, mcqCell("Phân thức", null, 2));
+        String missing = valid.replace(", \"gradeLevel\": 8", "");
+        assertTrue(!missing.contains("gradeLevel"), "body thử phải thật sự thiếu gradeLevel");
+        for (String body : List.of(missing, valid.replace("\"gradeLevel\": 8", "\"gradeLevel\": null"))) {
+            perform(put(url(matrix)).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("Phải chọn khối lớp (gradeLevel từ 6 đến 9)"));
+        }
         assertEquals(before, getMatrix(matrix));
         assertEquals(1, templates());
     }
