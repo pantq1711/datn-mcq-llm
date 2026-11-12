@@ -487,8 +487,6 @@ POST /api/exam-matrices
  "examCount": 0}
 ```
 
-- `gradeLevel` (khối lớp, 6-9) bắt buộc khi tạo, sửa ma trận: bỏ trường hoặc gửi `null` trả 400
-  `Phải chọn khối lớp (gradeLevel từ 6 đến 9)`. Ma trận lưu từ trước chưa có khối vẫn đọc được.
 - Phần I chỉ chứa `mcq`, phần II chỉ `tf`, phần III chỉ `sa` (DB cũng kiểm). `mcq`/`sa` cần `difficulty`; `tf` cần
   `statementDifficulties` gồm đúng 4 mức (ý a-d) và không có `difficulty`. `questionCount` từ 1 đến 50 mỗi ô; **tổng
   `questionCount` của cả ma trận tối đa 60** (D1, xem 7.2b), vượt thì 400 `Một ma trận tối đa 60 câu (hiện N)` khi tạo hoặc sửa.
@@ -637,9 +635,8 @@ POST /api/exams/build-by-lesson
    "fromBank": 3, "jobsQueued": 5, "kind": "lesson"}
 ```
 
-- Bắt buộc: `subjectId`, `gradeLevel` (khối lớp, 6-9; thiếu hoặc `null` trả 400 `Phải chọn khối lớp (gradeLevel từ 6 đến
-  9)`), `lesson` (tên bài, tối đa 255 ký tự), `cells` (ít nhất 1). Tùy chọn: `content` (phạm vi trong bài), `title` (trống
-  thì lấy tên bài, tối đa 255), `learningOutcomes` (khóa `easy`, `medium`, `hard`).
+- Bắt buộc: `subjectId`, `lesson` (tên bài, tối đa 255 ký tự), `cells` (ít nhất 1). Tùy chọn: `gradeLevel` (6-9), `content`
+  (phạm vi trong bài), `title` (trống thì lấy tên bài, tối đa 255), `learningOutcomes` (khóa `easy`, `medium`, `hard`).
 - `cells`: mỗi phần tử là một nhóm câu cùng dạng và mức: `mcq`/`sa` cần `difficulty`; `tf` dùng `statementDifficulties`
   (4 mức ý a-d) và KHÔNG có `difficulty`; `tf` bỏ trống `statementDifficulties` thì mặc định dễ, dễ, vừa, khó. Phần I/II/III
   suy từ dạng câu. `questionCount` 1-50 mỗi nhóm. **Tổng số câu tối đa 60 mỗi lần** (D1; trước đây 50; cấu hình

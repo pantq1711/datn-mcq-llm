@@ -172,8 +172,8 @@ class ExamMaterialPromptTest extends ExamFlowTestBase {
 
     @Test
     void khongCoTaiLieuThiCotNullVaPromptKhongCoKhoi() throws Exception {
-        int examId = json(postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"gradeLevel\": 8,"
-                + " \"lesson\": \"" + LESSON + "\", \"extraInstruction\": \"Ngữ cảnh mua sắm\", \"cells\": [" + MCQ.formatted(1) + "]}")
+        int examId = json(postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"lesson\": \"" + LESSON
+                + "\", \"extraInstruction\": \"Ngữ cảnh mua sắm\", \"cells\": [" + MCQ.formatted(1) + "]}")
                 .andExpect(status().isOk())).get("examId").asInt();
         Map<String, Object> job = jobs(examId).get(0);
         assertNull(job.get("material_context"));

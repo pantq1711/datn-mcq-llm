@@ -319,8 +319,8 @@ class ReplaceFromBankTest extends ExamFlowTestBase {
         int template = count("SELECT template_id FROM exam_matrix_cell WHERE id = ?", cellId(matrix, 1));
         int item = bankMcq(template, TOPIC, "easy", "Câu nguồn", "Câu từ ô ma trận",
                 new String[] {"$1$", "$2$", "$3$", "$4$"});
-        int examId = json(postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"gradeLevel\": 8,"
-                + " \"lesson\": \"" + TOPIC + "\", \"cells\": [{\"questionType\": \"mcq\", \"difficulty\": \"easy\", \"questionCount\": 1,"
+        int examId = json(postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"lesson\": \""
+                + TOPIC + "\", \"cells\": [{\"questionType\": \"mcq\", \"difficulty\": \"easy\", \"questionCount\": 1,"
                 + " \"statementDifficulties\": null}]}").andExpect(status().isOk())).get("examId").asInt();
         // Ngân hàng đã có câu nên chỗ lấy luôn từ lúc tạo; đổi bằng ngân hàng thì hết câu (câu duy nhất đang trong đề).
         int slot = count("SELECT id FROM exam_slot WHERE exam_id = ?", examId);

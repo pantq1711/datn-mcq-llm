@@ -85,8 +85,7 @@ class MatrixCellTextLimitTest extends ExamFlowTestBase {
     }
 
     private ResultActions lesson(String content, String outcomesJson) throws Exception {
-        return postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"gradeLevel\": 8,"
-                + " \"lesson\": \"Bài 1\","
+        return postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"lesson\": \"Bài 1\","
                 + (content == null ? "" : " \"content\": \"" + content + "\",")
                 + (outcomesJson == null ? "" : " \"learningOutcomes\": " + outcomesJson + ",")
                 + " \"cells\": [{\"questionType\": \"mcq\", \"difficulty\": \"easy\", \"questionCount\": 1}]}");
