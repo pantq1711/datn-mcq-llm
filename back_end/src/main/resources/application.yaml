@@ -72,6 +72,10 @@ app:
     rate-limit-cooldown-ms: ${LLM_RATE_LIMIT_COOLDOWN_MS:60000}
   embedding:
     model: ${EMBEDDING_MODEL:}
+  # Độ sâu (12/11): file JSON câu mẫu theo mức do giáo viên chọn, NẰM NGOÀI repo (ví dụ ../data/private/cau-mau-do-sau.json);
+  # trống, thiếu file hoặc file hỏng thì prompt không có khối câu mẫu. Định dạng: docs/contract/enums.md mục 3, "Độ sâu".
+  prompt:
+    depth-examples-file: ${DEPTH_EXAMPLES_FILE:}
   # Công cụ thí nghiệm (quyết định 25/10): /api/generation/* và /api/catalog/templates chỉ tồn tại khi bật. Mặc định tắt;
   # không bật ở prod (admin gọi các đường này sẽ gọi Gemini tính phí).
   experiment:

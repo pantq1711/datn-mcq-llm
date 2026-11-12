@@ -116,6 +116,7 @@ public final class ExamViewDtos {
      * @param buildStatus như {@link ExamBuildDtos.ProgressDto#status()}
      * @param matrixId    null với đề sinh theo bài (ma trận ẩn)
      * @param kind        (W1-4) "matrix" (tạo từ ma trận), "lesson" (sinh theo bài) hoặc "manual" (đề cũ không có ma trận)
+     * @param challenge   (12/11) mức thử thách của đề: "standard" hoặc "advanced"
      */
     public record ExamViewDto(
             Integer examId,
@@ -128,8 +129,17 @@ public final class ExamViewDtos {
             String buildStatus,
             int needsReviewCount,
             List<PartDto> parts,
-            String kind
+            String kind,
+            String challenge
     ) {
+        /** Chữ ký trước 12/11 (đề chuẩn). */
+        public ExamViewDto(Integer examId, String examCode, String title, String mode, ExamStatus status,
+                           Integer matrixId, LocalDateTime createdAt, String buildStatus, int needsReviewCount,
+                           List<PartDto> parts, String kind) {
+            this(examId, examCode, title, mode, status, matrixId, createdAt, buildStatus, needsReviewCount, parts, kind,
+                    "standard");
+        }
+
         /** Chữ ký trước W1-4 (đề tạo từ ma trận). */
         public ExamViewDto(Integer examId, String examCode, String title, String mode, ExamStatus status,
                            Integer matrixId, LocalDateTime createdAt, String buildStatus, int needsReviewCount,

@@ -199,6 +199,9 @@ public class ExamActionService {
             }
             newBankItemId = candidates.get(0);
         }
+        // 12/11: lý do quá dễ / quá khó kèm câu cũ vào prompt; đọc câu cũ TRƯỚC khi bỏ khỏi chỗ.
+        String oldQuestion = newBankItemId == null && MatrixPromptDraftV0.replaceReasonBlock(cleanReason, null) != null
+                ? currentQuestionText(slot) : null;
         ExamSlotAction log = new ExamSlotAction(slot.getId(), ExamSlotAction.REPLACE, slot.getGeneratedQuestionId(),
                 slot.getBankItemId(), null, actorId);
         log.setInstruction(cleanInstruction);
@@ -214,7 +217,7 @@ public class ExamActionService {
         if (newBankItemId != null) {
             slot.setState(ExamSlot.READY);
         } else {
-            buildService.enqueueReplace(slot, cleanInstruction);
+            buildService.enqueueReplace(slot, cleanInstruction, cleanReason, oldQuestion);
         }
         slotRepository.save(slot);
         return viewService.item(slot, matrixService.getCell(slot.getCellId()));
@@ -237,6 +240,17 @@ public class ExamActionService {
                 .flatMap(job -> QuotaDeferral.resumeAt(job, now))
                 .map(at -> QuotaDeferral.message(at) + ". Chỗ này đang chờ sinh câu hỏi, hãy thao tác sau.")
                 .orElse(fallback);
+    }
+
+    /** Đề dẫn của câu đang ở chỗ (câu sinh hoặc câu ngân hàng); null khi chỗ chưa có câu. */
+    private String currentQuestionText(ExamSlot slot) {
+        if (slot.getGeneratedQuestionId() != null) {
+            return generationService.getQuestionById(slot.getGeneratedQuestionId()).getQuestionText();
+        }
+        if (slot.getBankItemId() != null) {
+            return bankService.getItem(slot.getBankItemId()).questionText();
+        }
+        return null;
     }
 
     /** B7: bỏ trống thì null; chỉ nhận các giá trị của {@link ExamSlotAction#REPLACE_REASONS} (không phân biệt hoa thường). */

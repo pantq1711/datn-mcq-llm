@@ -17,9 +17,16 @@ public final class ExamBuildDtos {
      * @param materialIds (W2-3) tài liệu bài học áp cho cả ma trận (của chính người gọi); tùy chọn
      * @param cells       (W2-3) ngữ cảnh riêng của từng ô (tài liệu, yêu cầu thêm cho AI); tùy chọn. Tối đa 5 tài liệu
      *                    khác nhau trong cả lần tạo đề
+     * @param challenge   (12/11) mức thử thách: "standard" (mặc định khi bỏ trống) hoặc "advanced"; giá trị khác là 400
+     *                    INVALID_REQUEST trước mọi ghi
      */
     public record BuildExamRequest(Integer matrixId, String title, List<Integer> materialIds,
-                                   List<CellContextInput> cells) {}
+                                   List<CellContextInput> cells, String challenge) {
+        /** Chữ ký trước 12/11 (đề chuẩn). */
+        public BuildExamRequest(Integer matrixId, String title, List<Integer> materialIds, List<CellContextInput> cells) {
+            this(matrixId, title, materialIds, cells, null);
+        }
+    }
 
     /**
      * Ngữ cảnh sinh câu riêng của một ô ma trận (W2-3). Ô có tài liệu hoặc yêu cầu thêm thì bỏ qua ngân hàng khi tạo đề
@@ -37,9 +44,10 @@ public final class ExamBuildDtos {
      * @param jobsQueued số job sinh câu đã xếp hàng cho phần còn thiếu
      * @param matrixId   null với đề sinh theo bài (ma trận ẩn, không dùng được theo id)
      * @param kind       "matrix" (tạo từ ma trận) hoặc "lesson" (sinh theo bài), W1-4
+     * @param challenge  (12/11) mức thử thách đã lưu của đề: "standard" hoặc "advanced"
      */
     public record BuildResultDto(Integer examId, String examCode, String title, Integer matrixId, int slots,
-                                 int fromBank, int jobsQueued, String kind) {}
+                                 int fromBank, int jobsQueued, String kind, String challenge) {}
 
     /**
      * Tiến độ của một ô.

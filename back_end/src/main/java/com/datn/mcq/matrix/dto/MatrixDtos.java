@@ -70,6 +70,8 @@ public final class MatrixDtos {
      * @param learningOutcomes yêu cầu cần đạt theo mức (khóa easy, medium, hard), ghi đè mặc định; tùy chọn
      * @param materialIds      (W2-3) tài liệu bài học đính kèm (của chính người gọi, tối đa 5); tùy chọn
      * @param extraInstruction (W2-3) "yêu cầu thêm cho AI" cho cả lần sinh, tối đa 1000 ký tự; tùy chọn
+     * @param challenge        (12/11) mức thử thách: "standard" (mặc định khi bỏ trống) hoặc "advanced"; giá trị khác là
+     *                         400 INVALID_REQUEST trước mọi ghi
      */
     public record CreateLessonRequest(
             Integer subjectId,
@@ -80,8 +82,17 @@ public final class MatrixDtos {
             Map<String, String> learningOutcomes,
             List<LessonCellInput> cells,
             List<Integer> materialIds,
-            String extraInstruction
-    ) {}
+            String extraInstruction,
+            String challenge
+    ) {
+        /** Chữ ký trước 12/11 (đề chuẩn). */
+        public CreateLessonRequest(Integer subjectId, Integer gradeLevel, String lesson, String content, String title,
+                                   Map<String, String> learningOutcomes, List<LessonCellInput> cells,
+                                   List<Integer> materialIds, String extraInstruction) {
+            this(subjectId, gradeLevel, lesson, content, title, learningOutcomes, cells, materialIds, extraInstruction,
+                    null);
+        }
+    }
 
     /** Body tạo ma trận từ mẫu có sẵn. */
     public record CreateFromSampleRequest(Integer subjectId) {}

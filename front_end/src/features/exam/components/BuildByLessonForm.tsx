@@ -6,7 +6,8 @@ import { useNavigate } from "react-router-dom";
 import MaterialManagerModal from "../../materials/components/MaterialManagerModal";
 import type { MaterialDto } from "../../materials/types/material.types";
 
-import type { ExamSubjectOption, BuildByLessonPayload, LessonCellInput, BuildResultDto } from "../types/exam.types";
+import type { ExamSubjectOption, BuildByLessonPayload, LessonCellInput, BuildResultDto, ExamChallenge } from "../types/exam.types";
+import { EXAM_CHALLENGE_OPTIONS } from "../types/exam.types";
 import { buildByLesson } from "../services/examApi";
 import type { BankTopic } from "../../question-bank/types/questionBank.types";
 import { getBankTopics } from "../../question-bank/services/questionBankApi";
@@ -33,6 +34,7 @@ interface FormValues {
     content?: string;
     title?: string;
     extraInstruction?: string;
+    challenge: ExamChallenge;
     mcqEasy: number;
     mcqMedium: number;
     mcqHard: number;
@@ -72,6 +74,7 @@ export default function BuildByLessonForm({
     const watchedLesson = Form.useWatch("lesson", form);
     const watchedContent = Form.useWatch("content", form);
     const watchedExtraInstruction = Form.useWatch("extraInstruction", form);
+    const watchedChallenge = Form.useWatch("challenge", form);
 
     const mcqEasy = Form.useWatch("mcqEasy", form) || 0;
     const mcqMedium = Form.useWatch("mcqMedium", form) || 0;
@@ -229,6 +232,8 @@ export default function BuildByLessonForm({
         const matchedTopic = topicMap.get(watchedLesson.trim().toLowerCase());
         if (matchedTopic) {
             const trimmedContent = watchedContent?.trim() ?? "";
+            // Đề Nâng cao (docs/api mục 7.2): ô mức Vận dụng (mcq/sa mức Vận dụng; tf mặc định có ý d Vận dụng) luôn soạn mới
+            const advancedApplyNew = watchedChallenge === "advanced" && mcqHard + saHard + tfCount > 0;
             // count là tổng mọi dạng, mọi mức của bài; backend chỉ dùng lại câu cùng dạng, cùng mức (và cùng nội dung nếu nhập phạm vi), docs/api mục 7.2a
             return (
                 <div style={{ marginTop: 4 }}>
@@ -236,6 +241,15 @@ export default function BuildByLessonForm({
                         Ngân hàng có {matchedTopic.count} câu của bài này (tính mọi dạng, mọi mức). Hệ thống dùng lại câu
                         cùng dạng và mức trước, phần thiếu sẽ soạn mới.
                     </Text>
+                    {advancedApplyNew && (
+                        <div>
+                            <Text type="warning" style={{ fontSize: 12 }}>
+                                <ExclamationCircleOutlined style={{ marginRight: 4 }} />
+                                Mức thử thách Nâng cao: câu mức Vận dụng (Trắc nghiệm, Trả lời ngắn mức Vận dụng và mọi câu
+                                Đúng/Sai) luôn được soạn mới, không lấy từ ngân hàng.
+                            </Text>
+                        </div>
+                    )}
                     {trimmedContent !== "" && (
                         <div>
                             <Text type="secondary" style={{ fontSize: 12 }}>
@@ -258,6 +272,10 @@ export default function BuildByLessonForm({
         watchedLesson,
         watchedContent,
         watchedExtraInstruction,
+        watchedChallenge,
+        mcqHard,
+        saHard,
+        tfCount,
         selectedMaterials,
         loadingTopics,
         topicsError,
@@ -330,6 +348,7 @@ export default function BuildByLessonForm({
             cells,
             materialIds: selectedMaterials.length > 0 ? selectedMaterials.map((m) => m.id) : undefined,
             extraInstruction: values.extraInstruction?.trim() || undefined,
+            challenge: values.challenge,
         };
 
         setSubmitting(true);
@@ -384,6 +403,7 @@ export default function BuildByLessonForm({
                 onFinish={handleSubmit}
                 initialValues={{
                     gradeLevel: 8,
+                    challenge: "standard",
                     mcqEasy: 4,
                     mcqMedium: 2,
                     mcqHard: 0,
@@ -658,6 +678,13 @@ export default function BuildByLessonForm({
 
                 {/* Phần 4: Yêu cầu bổ sung cho AI */}
                 <Card size="small" className="build-lesson-section" title="4. Yêu cầu thêm cho AI (tùy chọn)">
+                    <Form.Item
+                        name="challenge"
+                        label="Mức thử thách"
+                        tooltip="Nâng cao: câu mức Vận dụng cần nhiều bước hơn, kết hợp nhiều kiến thức, có thể có bẫy lỗi hay gặp. Câu Vận dụng khi đó luôn được soạn mới (không lấy từ ngân hàng)."
+                    >
+                        <Select options={EXAM_CHALLENGE_OPTIONS} style={{ maxWidth: 320 }} />
+                    </Form.Item>
                     <Form.Item
                         name="extraInstruction"
                         label="Chỉ dẫn thêm cho câu hỏi soạn mới"

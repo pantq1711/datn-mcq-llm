@@ -7,7 +7,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import BuildByLessonForm from "../components/BuildByLessonForm";
 import MaterialManagerModal from "../../materials/components/MaterialManagerModal";
 import type { MaterialDto } from "../../materials/types/material.types";
-import type { ExamSubjectOption, BuildResultDto, CellContextInput, BuildExamRequest } from "../types/exam.types";
+import type { ExamSubjectOption, BuildResultDto, CellContextInput, BuildExamRequest, ExamChallenge } from "../types/exam.types";
+import { EXAM_CHALLENGE_OPTIONS } from "../types/exam.types";
 import type { ExamMatrix, ExamMatrixDetail, ExamMatrixCellPayload } from "../../exam-matrix/types/examMatrix.types";
 import { getCatalogSubjects, buildExamByMatrix } from "../services/examApi";
 import { describeLevel } from "../../../utils/exam.utils";
@@ -81,6 +82,7 @@ export default function GenerateExamPage() {
     const [matrixDetail, setMatrixDetail] = useState<ExamMatrixDetail | null>(null);
     const [loadingMatrixDetail, setLoadingMatrixDetail] = useState<boolean>(false);
     const [matrixExamTitle, setMatrixExamTitle] = useState<string>("");
+    const [matrixChallenge, setMatrixChallenge] = useState<ExamChallenge>("standard");
     const [buildingMatrixExam, setBuildingMatrixExam] = useState<boolean>(false);
     const [duplicating, setDuplicating] = useState<boolean>(false);
 
@@ -293,6 +295,7 @@ export default function GenerateExamPage() {
             title: matrixExamTitle.trim() || undefined,
             materialIds: globalMaterials.length > 0 ? globalMaterials.map((m) => m.id) : undefined,
             cells: cellsPayload.length > 0 ? cellsPayload : undefined,
+            challenge: matrixChallenge,
         };
 
         setBuildingMatrixExam(true);
@@ -710,6 +713,18 @@ export default function GenerateExamPage() {
                                                                 onChange={(e) => setMatrixExamTitle(e.target.value)}
                                                                 placeholder="Mặc định lấy theo tên ma trận"
                                                                 maxLength={255}
+                                                            />
+                                                        </Form.Item>
+                                                    </Col>
+                                                    <Col xs={24} md={10}>
+                                                        <Form.Item
+                                                            label="Mức thử thách"
+                                                            tooltip="Nâng cao: câu mức Vận dụng cần nhiều bước hơn, kết hợp nhiều kiến thức, có thể có bẫy lỗi hay gặp. Câu Vận dụng khi đó luôn được soạn mới (không lấy từ ngân hàng)."
+                                                        >
+                                                            <Select
+                                                                value={matrixChallenge}
+                                                                onChange={setMatrixChallenge}
+                                                                options={EXAM_CHALLENGE_OPTIONS}
                                                             />
                                                         </Form.Item>
                                                     </Col>

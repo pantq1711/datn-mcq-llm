@@ -1,5 +1,6 @@
 package com.datn.mcq.exam.entity;
 
+import com.datn.mcq.enums.ExamChallenge;
 import com.datn.mcq.enums.ExamStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -48,10 +49,22 @@ public class Exam {
     @Column(name = "created_at", nullable = false)
     private java.time.LocalDateTime createdAt = java.time.LocalDateTime.now();
 
+    /** V27 (12/11): mức thử thách của đề, 'standard' (mặc định, cả đề cũ và đề thủ công) hoặc 'advanced'. */
+    @Column(name = "challenge", nullable = false, length = 10)
+    private ExamChallenge challenge = ExamChallenge.STANDARD;
+
     public static final String MODE_MANUAL = "manual";
     public static final String MODE_TEACHER = "teacher";
 
     public Exam() {}
+
+    public ExamChallenge getChallenge() {
+        return challenge;
+    }
+
+    public void setChallenge(ExamChallenge challenge) {
+        this.challenge = challenge == null ? ExamChallenge.STANDARD : challenge;
+    }
 
     public Integer getMatrixId() {
         return matrixId;

@@ -107,9 +107,9 @@ class MatrixPromptDraftV0Test {
 
     @Test
     void phienBanVaThongSoOLuuDuoc() {
-        assertEquals("matrix-mcq-v8-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
-        assertEquals("matrix-tf-v10-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
-        assertEquals("matrix-sa-v10-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
+        assertEquals("matrix-mcq-v9-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
+        assertEquals("matrix-tf-v11-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-sa-v11-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion("sa-v1-draft"));
         assertFalse(MatrixPromptDraftV0.isMatrixVersion(null));
@@ -141,7 +141,9 @@ class MatrixPromptDraftV0Test {
     private static final List<String> SCOPE_COMMON = List.of(
             "- Chỉ dùng kiến thức của lớp %d đã học đến hết bài trong ô ma trận này (Chương trình GDPT 2018). Không dùng "
                     + "kiến thức của lớp trên hoặc của bài học sau.",
-            "- Ở mức Vận dụng, tăng độ khó bằng cách phối hợp nhiều bước của chính bài này, không đưa thêm kiến thức mới.",
+            // 12/11 (mcq v9, sa v11, tf v11): thay dòng "phối hợp nhiều bước của chính bài này"
+            "- Ở mức Vận dụng, được kết hợp kiến thức các bài ĐÃ HỌC trước đó cùng lớp (vẫn trong PHẠM VI KIẾN THỨC này), "
+                    + "không đưa kiến thức chưa học.",
             "- Câu hoặc ý hỏi giá trị lớn nhất, nhỏ nhất, giá trị nguyên chỉ được ra khi giá trị đó tồn tại và tìm được "
                     + "bằng kiến thức trong phạm vi trên.");
 
