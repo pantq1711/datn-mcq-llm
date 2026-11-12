@@ -41,6 +41,29 @@ public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
+    /** A-07: thông báo cho giáo viên khi xuất file lỗi phía máy chủ (500); chi tiết (log pandoc) chỉ ghi log. */
+    public static final String EXPORT_ERROR_MESSAGE = "Lỗi khi xuất file, thầy cô thử lại sau";
+
+    private static final String PROJECT_PACKAGE = "com.datn.";
+    private static final String EXCEPTION_PACKAGE = ApiExceptionHandler.class.getPackageName() + ".";
+
+    /**
+     * A-05 (rà soát 11/11): khung stack đầu tiên thuộc code của dự án ({@code com.datn.}), dạng "Lớp.hàm:dòng" (tên lớp không
+     * gồm package), để phân biệt các nơi ném cùng một loại ngoại lệ. Bỏ qua hàm tạo ngoại lệ của dự án
+     * ({@code ApiErrorException.conflict}...), vì nơi cần biết là chỗ gọi nó. "-" khi không có khung nào.
+     */
+    static String firstProjectFrame(Throwable ex) {
+        for (StackTraceElement f : ex.getStackTrace()) {
+            String cls = f.getClassName();
+            if (!cls.startsWith(PROJECT_PACKAGE)
+                    || (cls.startsWith(EXCEPTION_PACKAGE) && cls.endsWith("Exception"))) {
+                continue;
+            }
+            return cls.substring(cls.lastIndexOf('.') + 1) + "." + f.getMethodName() + ":" + f.getLineNumber();
+        }
+        return "-";
+    }
+
     /** Giới hạn một file khi tải lên, từ cấu hình multipart (ghi trong thông báo 413). */
     @Value("${spring.servlet.multipart.max-file-size:10MB}")
     private DataSize maxFileSize = DataSize.ofMegabytes(10);
@@ -58,12 +81,13 @@ public class ApiExceptionHandler {
 
     /**
      * Ghi WARN cho lỗi 4xx: mã trạng thái, mã lỗi (nếu có, không thì tên lớp ngoại lệ), đường dẫn và userId (nếu đã đăng
-     * nhập). KHÔNG ghi thân request, chuỗi truy vấn, mật khẩu, token hay nội dung thông báo lỗi (có thể chứa dữ liệu người
-     * dùng nhập).
+     * nhập), và nơi ném (A-05: {@link #firstProjectFrame}). KHÔNG ghi thân request, chuỗi truy vấn, mật khẩu, token hay nội
+     * dung thông báo lỗi (có thể chứa dữ liệu người dùng nhập).
      */
     private static void warn4xx(HttpStatusCode status, String code, Throwable ex) {
-        log.warn("Lỗi phía client {} (mã {}) {} userId={}", status.value(), code != null ? code : ex.getClass().getSimpleName(),
-                requestPath(), currentUserId());
+        log.warn("Lỗi phía client {} (mã {}) {} userId={} tại {}", status.value(),
+                code != null ? code : ex.getClass().getSimpleName(), requestPath(), currentUserId(),
+                firstProjectFrame(ex));
     }
 
     /** 5xx: ERROR kèm stacktrace, cùng đường dẫn và userId để lần ra request. */
@@ -168,7 +192,11 @@ public class ApiExceptionHandler {
         return null;
     }
 
-    /** Xuất đề ra Word không thành (thiếu pandoc, quá thời gian, pandoc báo lỗi): trả đúng mã kèm thông báo. */
+    /**
+     * Xuất đề ra Word không thành (thiếu pandoc, quá thời gian, pandoc báo lỗi): trả đúng mã kèm thông báo. A-07: lỗi 500
+     * (pandoc báo lỗi, kèm log của pandoc) trả {@link #EXPORT_ERROR_MESSAGE}; chi tiết chỉ ở log ERROR. 503 giữ thông báo
+     * riêng (bận, quá giờ, chưa cài pandoc: do hệ thống tự viết, không chứa dữ liệu ngoài).
+     */
     @ExceptionHandler(DocumentExportException.class)
     public ResponseEntity<Map<String, String>> handleExport(DocumentExportException ex) {
         if (ex.getHttpStatus() >= 500) {
@@ -181,7 +209,7 @@ public class ApiExceptionHandler {
             builder.header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()));
         }
         Map<String, String> body = new LinkedHashMap<>();
-        body.put("error", ex.getMessage() != null ? ex.getMessage() : "Không xuất được đề");
+        body.put("error", ex.getHttpStatus() == 500 || ex.getMessage() == null ? EXPORT_ERROR_MESSAGE : ex.getMessage());
         if (ex.getCode() != null) {
             body.put("code", ex.getCode());
         }

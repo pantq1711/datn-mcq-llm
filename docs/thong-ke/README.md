@@ -42,8 +42,26 @@ một câu sinh lại nhiều lần được đếm nhiều lần, khác với f
    `generated_question.edited_from_question_id IS NULL` (quy tắc bắt buộc của W1-2: bản giáo viên sửa không phải đầu ra
    LLM, xem `docs/contract/enums.md`) và `generated_question.origin = 'llm'` (V26: câu nhập từ Word không phải đầu ra LLM).
    Kết cục của một câu LLM được gom theo cả chuỗi bản sửa của nó.
-3. **Loại tài khoản của nhóm phát triển**: mỗi file có CTE `dev_users` lấy theo email trong mảng `ARRAY[]::text[]`
-   (mặc định rỗng). **Điền email của nhóm vào mảng trước khi chạy** để số liệu không lẫn thao tác thử của nhóm.
+3. **Loại tài khoản của nhóm phát triển và tài khoản dùng thử** (11/11, N-10): cả 7 file ở đây và
+   `docs/experiments/trial/queries.sql` dùng CHUNG biến psql `dev_emails` (danh sách email cách nhau bằng dấu phẩy, không
+   phân biệt hoa thường, khoảng trắng bị bỏ). Đầu mỗi file khai báo mặc định rỗng (`\set dev_emails ''`, chỉ khi chưa được
+   truyền vào) rồi CTE `dev_users` đọc `:'dev_emails'`. **Truyền email khi chạy, không sửa file và không commit email
+   thật** để số liệu không lẫn thao tác thử của nhóm:
+
+   ```bash
+   # một file
+   psql "$DATABASE_URL" -v dev_emails='nhom1@truong.edu.vn,nhom2@truong.edu.vn' -f docs/thong-ke/01-ket-cuc-cau-llm.sql
+   # cả 7 file và truy vấn dùng thử với cùng một danh sách (đặt một lần trong biến môi trường của phiên shell)
+   DEV_EMAILS='nhom1@truong.edu.vn,nhom2@truong.edu.vn'
+   for f in docs/thong-ke/*.sql docs/experiments/trial/queries.sql; do
+     psql "$DATABASE_URL" -v dev_emails="$DEV_EMAILS" -f "$f"
+   done
+   ```
+
+   Không truyền `-v dev_emails` thì không loại ai (in ra như cũ). Cần psql 10 trở lên (`\if`). Chạy trong công cụ khác psql
+   (không hiểu `\set`, `:'dev_emails'`): bỏ bốn dòng `\if … \endif` và thay `:'dev_emails'` bằng chuỗi email trong dấu
+   nháy đơn. Test (`StatisticsSqlTest`, `TrialQueriesSqlTest`, `GroundingPipelineTest`) đọc file qua `PsqlFile`, làm đúng
+   hai việc đó với giá trị mặc định.
 4. Các file 02 và 04 chỉ tính câu đã nằm (hoặc từng nằm) trong một chỗ của đề giáo viên, nên câu sinh ra nhưng chưa vào đề
    (ví dụ lần sinh bị lỗi định dạng rồi sinh lại) vẫn được tính ở file 02 qua `generation_job.exam_slot_id`.
 5. Dữ liệu trước V13 (chưa có chuỗi bản sửa) và trước V14 (chưa có `solver_error`, `solver_reasoning`) vẫn truy vấn được;

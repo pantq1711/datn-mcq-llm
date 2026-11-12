@@ -1,6 +1,7 @@
 package com.datn.mcq.exam;
 
 import com.datn.mcq.config.TestSafetyConfiguration;
+import com.datn.mcq.exam.service.ExamQcTraceService;
 import com.datn.mcq.generation.worker.GenerationJobProcessor;
 import com.datn.mcq.generation.worker.StaleJobRecovery;
 import com.datn.mcq.qc.checker.GroundingChecker;
@@ -15,7 +16,6 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -265,7 +265,10 @@ class GroundingPipelineTest extends ExamFlowTestBase {
         assertTrue(reasons(item(examId)).contains("grounding_failed"));
         JsonNode grounding = trace(examId).get("qc").get("grounding");
         assertEquals("error", grounding.get("state").asText());
-        assertTrue(grounding.get("error").asText().contains("Gemini lỗi giả lập"));
+        // A-07: giáo viên chỉ thấy thông báo chung (DB last_error ở trên vẫn giữ chi tiết).
+        assertEquals(ExamQcTraceService.AI_ERROR_MESSAGE, grounding.get("error").asText());
+        assertEquals(ExamQcTraceService.AI_ERROR_MESSAGE, grounding.get("job").get("error").asText());
+        assertFalse(grounding.toString().contains("Gemini lỗi giả lập"), grounding.toString());
         assertEquals("qc_passed", jdbc.queryForObject("SELECT status FROM generated_question WHERE id = ?", String.class,
                 questionOf(examId)));
     }
@@ -520,8 +523,7 @@ class GroundingPipelineTest extends ExamFlowTestBase {
     // ---------- chi phí trung bình mỗi câu (docs/thong-ke/06-chi-phi.sql) ----------
 
     private List<Map<String, Object>> cost() throws IOException {
-        return jdbc.queryForList(Files.readString(Path.of("..", "docs", "thong-ke", "06-chi-phi.sql"),
-                StandardCharsets.UTF_8));
+        return jdbc.queryForList(PsqlFile.load(Path.of("..", "docs", "thong-ke", "06-chi-phi.sql")));
     }
 
     private static Map<String, Object> costRow(List<Map<String, Object>> rows, boolean withMaterial) {
@@ -579,8 +581,7 @@ class GroundingPipelineTest extends ExamFlowTestBase {
     // ---------- thống kê (docs/thong-ke/05-grounding.sql) ----------
 
     private List<Map<String, Object>> stats() throws IOException {
-        return jdbc.queryForList(Files.readString(Path.of("..", "docs", "thong-ke", "05-grounding.sql"),
-                StandardCharsets.UTF_8));
+        return jdbc.queryForList(PsqlFile.load(Path.of("..", "docs", "thong-ke", "05-grounding.sql")));
     }
 
     private static Map<String, Object> statRow(List<Map<String, Object>> rows, boolean withMaterial, String state) {

@@ -15,10 +15,19 @@
 --     cho_p95_giay của job generate làm số đo gần đúng.
 --
 -- BỘ LỌC CHUNG (xem docs/thong-ke/README.md): chỉ job của đề chế độ giáo viên (exam.mode = 'teacher'), loại tài khoản của
--- nhóm phát triển (điền email vào ARRAY[...]); job không gắn chỗ trong đề (exam_slot_id IS NULL, ví dụ job Solver của câu
+-- nhóm phát triển (biến psql dev_emails); job không gắn chỗ trong đề (exam_slot_id IS NULL, ví dụ job Solver của câu
 -- được sửa) vẫn được tính. Không lọc theo origin vì job chỉ sinh ra cho câu LLM.
+--
+-- dev_emails: email cần loại (nhóm phát triển, tài khoản dùng thử), cách nhau bằng dấu phẩy, truyền khi chạy
+-- (KHÔNG ghi email thật vào file):
+--   psql -v dev_emails='nhom1@truong.edu.vn,gv-thu@truong.edu.vn' -f 07-van-hanh.sql
+-- Không truyền thì rỗng (không loại ai). Xem docs/thong-ke/README.md.
+\if :{?dev_emails}
+\else
+\set dev_emails ''
+\endif
 WITH dev_users AS (
-    SELECT id FROM users WHERE lower(email) = ANY (ARRAY[]::text[])   -- ví dụ ARRAY['nhom1@truong.edu.vn']
+    SELECT id FROM users WHERE lower(email) = ANY (string_to_array(replace(lower(:'dev_emails'), ' ', ''), ','))
 ),
 jobs AS (
     SELECT j.job_type, j.status, j.last_error, j.created_at, j.started_at, j.updated_at,

@@ -3,7 +3,7 @@
 -- database của hệ thống đã triển khai; mỗi khối là một câu lệnh độc lập, kết thúc bằng dấu chấm phẩy.
 --
 -- BỘ LỌC CHUNG (như docs/thong-ke/README.md): chỉ đề chế độ giáo viên (exam.mode = 'teacher'); loại đề của tài khoản
--- nhóm phát triển: điền email vào ARRAY[...] của CTE dev_users ở MỖI khối (mặc định rỗng = không loại ai).
+-- nhóm phát triển và tài khoản dùng thử: biến psql dev_emails (khai báo một lần ở dưới, dùng chung cho mọi khối).
 --
 -- GIỚI HẠN (phải ghi trong báo cáo): giáo viên nhìn thấy đáp án, lời giải và cờ "cần xem kỹ" khi quyết định, nên Giữ /
 -- Sửa / Đổi chỉ phản ánh mức chấp nhận, không phải độ đúng; Đổi không có nghĩa câu sai. Cột "co_co" bên dưới là cờ ƯỚC
@@ -12,12 +12,21 @@
 -- thể khác; muốn đúng từng lý do thì lấy từ API GET /api/exams/{id}/slots/{slotId}/qc-trace.
 -- replace_reason (V25) có giá trị: wrong_answer, ambiguous_options, off_matrix, duplicate_pattern, latex_format,
 -- too_hard, too_easy, other; NULL khi giáo viên không chọn lý do (hoặc dòng Đổi trước V25).
+--
+-- dev_emails: email cần loại, cách nhau bằng dấu phẩy, truyền khi chạy (KHÔNG ghi email thật vào file):
+--   psql -v dev_emails='nhom1@truong.edu.vn,gv-thu@truong.edu.vn' -f queries.sql
+-- Không truyền thì rỗng (không loại ai). Chạy riêng một khối trong công cụ khác psql thì thay :'dev_emails' bằng chuỗi
+-- email, ví dụ 'nhom1@truong.edu.vn,gv-thu@truong.edu.vn'. Xem docs/thong-ke/README.md.
+\if :{?dev_emails}
+\else
+\set dev_emails ''
+\endif
 
 -- ===========================================================================================================
 -- Q1. Quy mô: số đề, số chỗ (câu), số chỗ theo trạng thái
 -- ===========================================================================================================
 WITH dev_users AS (
-    SELECT id FROM users WHERE lower(email) = ANY (ARRAY[]::text[])
+    SELECT id FROM users WHERE lower(email) = ANY (string_to_array(replace(lower(:'dev_emails'), ' ', ''), ','))
 ),
 trial_exams AS (
     SELECT e.id FROM exam e
@@ -39,7 +48,7 @@ WHERE s.exam_id IN (SELECT id FROM trial_exams);
 --     giu_nguyen = Giữ mà chưa từng Sửa hay Đổi; chua_thao_tac = còn lại.
 -- ===========================================================================================================
 WITH dev_users AS (
-    SELECT id FROM users WHERE lower(email) = ANY (ARRAY[]::text[])
+    SELECT id FROM users WHERE lower(email) = ANY (string_to_array(replace(lower(:'dev_emails'), ' ', ''), ','))
 ),
 per_slot AS (
     SELECT s.id AS slot_id,
@@ -71,7 +80,7 @@ ORDER BY so_cho DESC;
 -- Q3. Các lần ĐỔI theo lý do (replace_reason) và theo nguồn câu thay thế (bank = ngân hàng, generate = sinh mới)
 -- ===========================================================================================================
 WITH dev_users AS (
-    SELECT id FROM users WHERE lower(email) = ANY (ARRAY[]::text[])
+    SELECT id FROM users WHERE lower(email) = ANY (string_to_array(replace(lower(:'dev_emails'), ' ', ''), ','))
 )
 SELECT coalesce(a.replace_reason, '(không chọn)') AS ly_do_doi,
        a.replace_source AS nguon_thay_the,
@@ -90,7 +99,7 @@ ORDER BY so_lan_doi DESC;
 -- ===========================================================================================================
 WITH RECURSIVE
 dev_users AS (
-    SELECT id FROM users WHERE lower(email) = ANY (ARRAY[]::text[])
+    SELECT id FROM users WHERE lower(email) = ANY (string_to_array(replace(lower(:'dev_emails'), ' ', ''), ','))
 ),
 roots AS (
     SELECT DISTINCT j.question_id AS root, j.exam_slot_id AS slot_id
@@ -153,7 +162,7 @@ ORDER BY 1, so_cau_llm DESC;
 --     Dòng Đổi lấy câu ngân hàng (generated_question_id NULL) hoặc câu ngân hàng không có dữ liệu QC thì không có cờ để so.
 -- ===========================================================================================================
 WITH dev_users AS (
-    SELECT id FROM users WHERE lower(email) = ANY (ARRAY[]::text[])
+    SELECT id FROM users WHERE lower(email) = ANY (string_to_array(replace(lower(:'dev_emails'), ' ', ''), ','))
 ),
 replaced AS (
     SELECT a.id AS action_id, a.replace_reason, a.generated_question_id AS question_id

@@ -765,10 +765,12 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
   - câu hệ thống sinh được chép vào ngân hàng: ghi `teacher_review` production với `review_mode = 'assisted'` (duyệt
     nguyên trạng theo đáp án/nhãn của LLM) và `bank_item` trong cùng transaction; câu chuyển `in_bank`;
   - câu lệch Solver cũng Giữ được, vì giáo viên đã thấy cờ;
-  - (10/11) câu đang có cờ "cần xem kỹ" lúc Giữ (`needsReview = true`, cùng tiêu chí mục 7.4) vẫn Giữ được (200, không có
-    409 hay tham số xác nhận), nhưng `bank_item.visible_to_user_id` = người Giữ: câu vào ngân hàng **riêng** của người đó,
-    không vào đề của giáo viên khác (giống câu sinh từ tài liệu). Phản hồi không có trường riêng cho việc này; giao diện
-    dựa vào `needsReview` của câu trước khi bấm để báo "lưu vào ngân hàng riêng";
+  - (10/11, làm rõ 11/11) câu có cờ **về nội dung** lúc Giữ (mọi lý do trong `reviewReasons` trừ `similar_in_exam: …`;
+    cờ cùng khuôn là về đề, không phải về câu) vẫn Giữ được (200, không có 409 hay tham số xác nhận), nhưng
+    `bank_item.visible_to_user_id` = người Giữ: câu vào ngân hàng **riêng** của người đó, không vào đề của giáo viên khác
+    (giống câu sinh từ tài liệu). Câu chỉ có lý do `similar_in_exam: …` vào ngân hàng dùng chung như câu không cờ. Phản
+    hồi không có trường riêng cho việc này; giao diện chỉ báo "lưu vào ngân hàng riêng" khi câu (trước khi bấm) có ít nhất
+    một lý do không bắt đầu bằng `similar_in_exam:`;
   - câu lấy từ ngân hàng thì chỉ đánh dấu `kept`, không tạo đánh giá mới;
   - Giữ lần hai trả 409 `Câu hỏi này đã được giữ.`; chỗ chưa có câu trả 409;
   - W1-2: câu giáo viên đã sửa được chép đúng bản sửa vào ngân hàng và chỗ thành `edited` (thay vì `kept`); khi Solver
@@ -976,7 +978,7 @@ GET /api/exams/12/export/docx?equation=abc       → 400
   w:val="15"/></w:compat>` (trước `<w:rsids>`) để Word không mở file ở Compatibility Mode (lệnh Convert Equations của
   MathType mới chạy), và đặt font mặc định cùng kiểu Normal là Times New Roman 13 trong `word/styles.xml`. Tiêu đề
   (Heading) vẫn dùng font theo theme của pandoc.
-- Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; khi hệ thống đang bận (tiến trình trích xuất tài liệu hoặc xuất Word khác đang giữ Semaphore) và chờ quá thời gian xếp hàng (`queue-wait`, mặc định 30s) trả 503 kèm mã `EXPORT_BUSY` và header `Retry-After`; pandoc báo lỗi trả 500.
+- Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; khi hệ thống đang bận (tiến trình trích xuất tài liệu hoặc xuất Word khác đang giữ Semaphore) và chờ quá thời gian xếp hàng (`queue-wait`, mặc định 30s) trả 503 kèm mã `EXPORT_BUSY` và header `Retry-After`; pandoc báo lỗi trả 500 kèm `error` chung "Lỗi khi xuất file, thầy cô thử lại sau" (11/11, A-07: log của pandoc chỉ ghi ở log máy chủ).
   trả 500.
 - **Cài pandoc** (backend không tự cài):
   - Windows: tải bộ cài `.msi` ở <https://pandoc.org/installing.html> (hoặc `winget install --id JohnMacFarlane.Pandoc`),
@@ -1064,6 +1066,10 @@ không có hoặc của giáo viên khác, hoặc chỗ không thuộc đề: 40
   kết quả: `error` là lý do; với bản sửa còn `job.status = "failed"`), `pending` (job `answer_check` đang chờ hoặc chạy),
   `not_run` (chưa chạy, `reason` là `format_failed`, `duplicate`, `dedup_not_concluded`, `solver_not_run`, `superseded`
   hoặc `not_recorded`). `consistent`/`inconsistent` đọc từ dòng `answer_check` đã lưu.
+- (11/11, A-07) Mọi trường `error` của vết QC (`answerCheck.error`, `grounding.error`, `job.error`) là thông báo chung
+  "Lỗi khi gọi dịch vụ AI, hệ thống sẽ thử lại", không phải thân lỗi Gemini hay message ngoại lệ nội bộ; chỉ các mã trạng
+  thái do hệ thống tự ghi (`superseded`, `skipped: superseded…`, `stale: reset`) giữ nguyên. Chi tiết vẫn ở
+  `generation_job.last_error`, `generated_question.solver_error` và log máy chủ.
 - `reviewReasons`: lý do "cần xem kỹ" của riêng phiên bản đó, cùng tên với API xem đề (7.4), rỗng với bản đã vào ngân hàng.
 - `actions`: Sửa / Đổi / Giữ của chỗ theo thứ tự thời gian; `Đổi` kèm `instruction`; `Sửa` kèm `changedFields`,
   `editDistance`. `questionId` là câu bị thao tác (Đổi: câu bị đổi ra khỏi chỗ).

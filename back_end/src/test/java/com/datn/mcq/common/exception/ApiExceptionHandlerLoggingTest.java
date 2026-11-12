@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.datn.mcq.exam.export.DocumentExportException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,6 +65,11 @@ class ApiExceptionHandlerLoggingTest {
         @PostMapping("/t/body")
         public String body(@RequestBody Map<String, String> body) {
             throw new IllegalArgumentException("sai");
+        }
+
+        @GetMapping("/t/export")
+        public String export() {
+            throw new DocumentExportException(500, "pandoc báo lỗi (mã 64): chi-tiet-log-pandoc exam.md:3:1");
         }
     }
 
@@ -141,6 +147,54 @@ class ApiExceptionHandlerLoggingTest {
         String body = mockMvc.perform(get("/t/npe")).andReturn().getResponse().getContentAsString();
         assertFalse(body.contains("NullPointer") && body.contains("trim"), body);
         assertFalse(body.contains("String.trim"), body);
+    }
+
+    /**
+     * A-05: log 4xx kèm khung stack đầu tiên trong code của dự án (lớp.hàm:dòng) để phân biệt các nơi ném cùng loại
+     * ngoại lệ; bỏ qua hàm tạo ngoại lệ (ApiErrorException.conflict...). Vẫn không ghi nội dung thông báo.
+     */
+    @Test
+    void loi4xxGhiKhungStackDauTienCuaDuAnKhongGhiThongBao() throws Exception {
+        mockMvc.perform(get("/t/bad")).andExpect(status().isBadRequest());
+        String line = logs.list.get(0).getFormattedMessage();
+        assertTrue(line.matches(".* tại ApiExceptionHandlerLoggingTest\\$Controller\\.bad:\\d+$"), line);
+        assertFalse(all().contains("bi-mat-trong-thong-bao"), all());
+
+        logs.list.clear();
+        mockMvc.perform(get("/t/coded")).andExpect(status().isConflict());
+        line = logs.list.get(0).getFormattedMessage();
+        assertTrue(line.matches(".* tại ApiExceptionHandlerLoggingTest\\$Controller\\.coded:\\d+$"),
+                "khung của nơi gọi, không phải hàm tạo ngoại lệ: " + line);
+    }
+
+    private static IllegalArgumentException withStack(StackTraceElement... frames) {
+        IllegalArgumentException ex = new IllegalArgumentException("x");
+        ex.setStackTrace(frames);
+        return ex;
+    }
+
+    @Test
+    void khungStackLayKhungDauTrongComDatnKhongCoThiGhiGachNgang() {
+        assertEquals("-", ApiExceptionHandler.firstProjectFrame(
+                withStack(new StackTraceElement("org.springframework.X", "y", "X.java", 10))));
+        assertEquals("AssistedKeepService.keepAssisted:85", ApiExceptionHandler.firstProjectFrame(withStack(
+                new StackTraceElement("java.util.Objects", "requireNonNull", "Objects.java", 1),
+                new StackTraceElement("com.datn.mcq.exam.service.AssistedKeepService", "keepAssisted",
+                        "AssistedKeepService.java", 85),
+                new StackTraceElement("com.datn.mcq.exam.service.ExamActionService", "keep",
+                        "ExamActionService.java", 120))));
+    }
+
+    /** A-07: lỗi pandoc (500) trả thông báo chung cho giáo viên; chi tiết chỉ ở log ERROR. */
+    @Test
+    void loiPandocTraThongBaoChungChiTietChiOLog() throws Exception {
+        String body = mockMvc.perform(get("/t/export"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error").value(ApiExceptionHandler.EXPORT_ERROR_MESSAGE))
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertFalse(body.contains("pandoc") || body.contains("chi-tiet-log-pandoc"), body);
+        ILoggingEvent error = logs.list.stream().filter(e -> e.getLevel() == Level.ERROR).findFirst().orElseThrow();
+        assertTrue(error.getThrowableProxy().getMessage().contains("chi-tiet-log-pandoc"), "chi tiết vẫn ở log");
     }
 
     @Test

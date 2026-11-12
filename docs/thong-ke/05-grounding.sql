@@ -6,15 +6,24 @@
 -- Dùng cho thử nghiệm "tài liệu bài học": so tỉ lệ SUPPORTED giữa nhóm có và không có tài liệu.
 --
 -- BỘ LỌC CHUNG (xem docs/thong-ke/README.md): đề exam.mode = 'teacher'; chỉ câu LLM gốc (edited_from_question_id IS NULL,
--- run production 'matrix-%'); loại đề của tài khoản nhóm phát triển (điền email vào ARRAY[...]). Bản giáo viên sửa cũng được
+-- run production 'matrix-%'); loại đề của tài khoản nhóm phát triển (biến psql dev_emails). Bản giáo viên sửa cũng được
 -- chấm lại và lưu ở question_grounding nhưng không phải đầu ra LLM nên không tính ở đây.
 -- GIỚI HẠN: judge là một LLM cùng họ với bộ sinh câu nên có thể thiên về SUPPORTED; kết quả là cảnh báo chứ không phải độ
 -- đúng. UNKNOWN nghĩa là các đoạn tài liệu đã đưa không đủ để kết luận (hoặc trích dẫn không kiểm chứng được). Nhóm KHÔNG có
 -- tài liệu (co_tai_lieu = FALSE) chỉ có dòng 'khong_cham' cho tới khi có đường chấm riêng cho thí nghiệm; đừng suy ra tỉ lệ
 -- SUPPORTED của nhóm đó từ file này.
+--
+-- dev_emails: email cần loại (nhóm phát triển, tài khoản dùng thử), cách nhau bằng dấu phẩy, truyền khi chạy
+-- (KHÔNG ghi email thật vào file):
+--   psql -v dev_emails='nhom1@truong.edu.vn,gv-thu@truong.edu.vn' -f 05-grounding.sql
+-- Không truyền thì rỗng (không loại ai). Xem docs/thong-ke/README.md.
+\if :{?dev_emails}
+\else
+\set dev_emails ''
+\endif
 WITH
 dev_users AS (
-    SELECT id FROM users WHERE lower(email) = ANY (ARRAY[]::text[])   -- ví dụ ARRAY['nhom1@truong.edu.vn']
+    SELECT id FROM users WHERE lower(email) = ANY (string_to_array(replace(lower(:'dev_emails'), ' ', ''), ','))
 ),
 roots AS (
     SELECT DISTINCT ON (j.question_id) j.question_id AS id, (j.material_context IS NOT NULL) AS co_tai_lieu

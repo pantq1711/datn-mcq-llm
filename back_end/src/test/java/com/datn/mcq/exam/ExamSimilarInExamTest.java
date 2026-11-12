@@ -1,6 +1,7 @@
 package com.datn.mcq.exam;
 
 import com.datn.mcq.config.TestSafetyConfiguration;
+import com.datn.mcq.exam.service.ExamQuestionSimilarity;
 import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +14,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -200,6 +202,48 @@ class ExamSimilarInExamTest extends ExamFlowTestBase {
         assertEquals(List.of("similar_in_exam: I.1"), reasons(items.get(1)));
         assertEquals(List.of("similar_in_exam: I.1", "similar_in_exam: I.2"), reasons(items.get(2)));
         assertEquals(2, view().get("needsReviewCount").asInt());
+    }
+
+    /**
+     * A-03 (rà soát 11/11): Giữ KHÔNG tính {@code similar_in_exam} vào tiêu chí ngân hàng riêng (cờ này là về đề, không
+     * phải về nội dung câu): câu chỉ có lý do đó vào ngân hàng dùng chung; câu lệch Solver (cờ về nội dung) vào ngân hàng
+     * riêng của người Giữ.
+     */
+    @Test
+    void giuCauChiCoCoCungKhuonThiDungChungCauLechSolverThiRiengTu() throws Exception {
+        SOLVER.saJudge = "7"; // câu sa của FakeGenerator đáp số 5: lệch Solver
+        String saCell = "{\"part\": \"III\", \"questionType\": \"sa\", \"difficulty\": \"medium\", \"questionCount\": 1,"
+                + " \"topic\": \"Tứ giác\", \"content\": \"Tứ giác\", \"learningOutcomes\": {\"medium\": \"Tính góc.\"}}";
+        int matrixId = createMatrix(mcqCell("Đa thức", "Đơn thức", 1), mcqCell("Phân thức", "Rút gọn", 1), saCell);
+        examId = build(matrixId).get("examId").asInt();
+        settle(examId);
+
+        List<JsonNode> items = items(view());
+        JsonNode similar = items.get(1);
+        assertEquals(List.of("similar_in_exam: I.1"), reasons(similar), "chỉ có lý do cùng khuôn");
+        assertTrue(similar.get("needsReview").asBoolean());
+        JsonNode sa = items.get(2);
+        assertEquals("sa", sa.get("questionType").asText());
+        assertTrue(sa.get("needsReview").asBoolean(), "câu sa lệch Solver có cờ");
+        assertFalse(reasons(sa).stream().allMatch(r -> r.startsWith(ExamQuestionSimilarity.REASON_PREFIX)),
+                "câu sa có lý do về nội dung: " + reasons(sa));
+
+        JsonNode keptSimilar = json(postJson("/api/exams/" + examId + "/slots/" + slotOf(similar) + "/keep", "{}")
+                .andExpect(status().isOk()));
+        assertNull(visibleTo(keptSimilar), "chỉ cờ cùng khuôn: ngân hàng dùng chung");
+
+        JsonNode keptSa = json(postJson("/api/exams/" + examId + "/slots/" + slotOf(sa) + "/keep", "{}")
+                .andExpect(status().isOk()));
+        assertEquals(teacher, visibleTo(keptSa), "cờ Solver: ngân hàng riêng của người Giữ");
+    }
+
+    private static int slotOf(JsonNode item) {
+        return item.get("slotId").asInt();
+    }
+
+    private Integer visibleTo(JsonNode kept) {
+        return jdbc.queryForObject("SELECT visible_to_user_id FROM bank_item WHERE id = ?", Integer.class,
+                kept.get("bankItemId").asInt());
     }
 
     @Test

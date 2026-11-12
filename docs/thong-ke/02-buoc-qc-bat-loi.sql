@@ -1,14 +1,31 @@
 -- 02-buoc-qc-bat-loi.sql
 -- Bước QC nào phát hiện vấn đề nhiều nhất trên câu LLM sinh cho đề giáo viên: format, trùng, Solver lệch, Solver lỗi /
--- chưa chạy; kèm số lần hệ thống tự sửa (escape LaTeX, tự đóng $). Gom theo dạng câu. Mỗi câu thuộc đúng một nhóm kết cục
--- cuối cùng (qua_ca_ba_buoc + các nhóm "bị chặn ở bước ..."), các cột tu_sua_* đếm riêng.
+-- chưa chạy; kèm số câu được hệ thống tự sửa theo từng loại (cột tu_sua_*, tu_dong_dau_dola). Gom theo dạng câu. Mỗi câu
+-- thuộc đúng một nhóm kết cục cuối cùng (qua_ca_ba_buoc + các nhóm "bị chặn ở bước ..."), các cột tự sửa đếm riêng (một
+-- câu có thể nằm ở nhiều cột tự sửa).
+-- Cột tự sửa (11/11, C-03: trước đây tu_sua_escape_latex đếm mọi cảnh báo "json: đã sửa ..."), theo nguồn cảnh báo:
+--   tu_sua_escape_latex           "json: đã sửa N escape LaTeX (...)"              LlmOutputRepair.EscapeRepair
+--   tu_sua_dau_cau_cuoi           "json: đã sửa dấu câu cuối ..."                  StemPunctuation
+--   tu_sua_lenh_latex_thieu_gach  "json: đã sửa N lệnh LaTeX thiếu \ (...)"        MissingLatexBackslash
+--   tu_sua_xuong_dong_lot         "json: đã sửa N ký tự \n lọt vào công thức ..."  LiteralNewlines
+--   tu_sua_ky_hieu_do             "json: đã sửa N ký hiệu độ (...)"                LlmOutputRepair.degreeWarning
+--   tu_sua_dau_can_le             "json: đã sửa N dấu & căn lề ..."                AlignmentAmpersand
+--   (gỡ vỏ \text{} và đổi $$...$$ thành $...$ chưa có cột riêng)
 --
 -- BỘ LỌC CHUNG (xem docs/thong-ke/README.md): đề exam.mode = 'teacher'; chỉ câu LLM gốc (edited_from_question_id IS NULL,
--- run production 'matrix-%'); loại đề của tài khoản nhóm phát triển (điền email vào ARRAY[...]).
+-- run production 'matrix-%'); loại đề của tài khoản nhóm phát triển và dùng thử (biến psql dev_emails, bên dưới).
 -- GIỚI HẠN: "bắt lỗi" nghĩa là bước đó báo vấn đề, không chứng minh vấn đề có thật (Solver lệch có thể do chính Solver
 -- sai). Không dùng làm độ chính xác của Solver. Dữ liệu trước V14: Solver lỗi nằm chung trong solver_khong_chay_hoac_loi.
+--
+-- dev_emails: email cần loại, cách nhau bằng dấu phẩy, truyền khi chạy (KHÔNG ghi email thật vào file):
+--   psql -v dev_emails='nhom1@truong.edu.vn,gv-thu@truong.edu.vn' -f 02-buoc-qc-bat-loi.sql
+-- Không truyền thì rỗng (không loại ai). Xem docs/thong-ke/README.md.
+\if :{?dev_emails}
+\else
+\set dev_emails ''
+\endif
 WITH dev_users AS (
-    SELECT id FROM users WHERE lower(email) = ANY (ARRAY[]::text[])   -- ví dụ ARRAY['nhom1@truong.edu.vn']
+    SELECT id FROM users WHERE lower(email) = ANY (string_to_array(replace(lower(:'dev_emails'), ' ', ''), ','))
 ),
 llm_questions AS (
     SELECT DISTINCT j.question_id AS id
@@ -28,7 +45,17 @@ SELECT g.question_type,
            AS solver_khong_chay_hoac_loi,
        count(*) FILTER (WHERE f.passed AND d.passed AND a.passed) AS qua_ca_ba_buoc,
        count(*) FILTER (WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(f.warnings) w
-                                      WHERE w LIKE 'json: đã sửa %')) AS tu_sua_escape_latex,
+                                      WHERE w LIKE 'json: đã sửa % escape LaTeX (%')) AS tu_sua_escape_latex,
+       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(f.warnings) w
+                                      WHERE w LIKE 'json: đã sửa dấu câu cuối %')) AS tu_sua_dau_cau_cuoi,
+       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(f.warnings) w
+                                      WHERE w LIKE 'json: đã sửa % lệnh LaTeX thiếu %')) AS tu_sua_lenh_latex_thieu_gach,
+       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(f.warnings) w
+                                      WHERE w LIKE 'json: đã sửa % lọt vào công thức%')) AS tu_sua_xuong_dong_lot,
+       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(f.warnings) w
+                                      WHERE w LIKE 'json: đã sửa % ký hiệu độ (%')) AS tu_sua_ky_hieu_do,
+       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(f.warnings) w
+                                      WHERE w LIKE 'json: đã sửa % dấu & căn lề %')) AS tu_sua_dau_can_le,
        count(*) FILTER (WHERE EXISTS (SELECT 1 FROM jsonb_array_elements_text(f.warnings) w
                                       WHERE w LIKE '%: đã tự đóng $')) AS tu_dong_dau_dola
 FROM llm_questions q

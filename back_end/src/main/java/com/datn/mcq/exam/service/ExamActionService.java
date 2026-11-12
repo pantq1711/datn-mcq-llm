@@ -115,6 +115,8 @@ public class ExamActionService {
             edited = generationService.getQuestionById(slot.getGeneratedQuestionId()).getEditedFromQuestionId() != null;
             // L5 (10/11): cờ "cần xem kỹ" tính TRƯỚC khi Giữ (sau Giữ chỗ hiện bản ngân hàng, không còn cờ), cùng tiêu chí
             // needsReview của API xem đề. Giữ vẫn được; chỉ khác là câu có cờ vào ngân hàng riêng của người Giữ.
+            // A-03 (11/11): item() không gắn similar_in_exam (cờ về đề, không về nội dung) nên câu chỉ có lý do đó vào
+            // ngân hàng dùng chung, có chủ ý (ExamSimilarInExamTest, docs/api/README.md mục 7.5).
             boolean flagged = viewService.item(slot, matrixService.getCell(slot.getCellId())).needsReview();
             Integer bankItemId = assistedKeepService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
             slot.setBankItemId(bankItemId);

@@ -22,6 +22,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -123,7 +124,12 @@ public class AuthService {
         return UserDto.of(userService.getById(userId));
     }
 
-    /** Sai mật khẩu hiện tại hoặc mật khẩu mới không hợp lệ: 400. Thành công: thu hồi mọi phiên, phải đăng nhập lại. */
+    /**
+     * Sai mật khẩu hiện tại hoặc mật khẩu mới không hợp lệ: 400. Thành công: thu hồi mọi phiên, phải đăng nhập lại. A-11
+     * (11/11): cập nhật hash và thu hồi refresh token trong CÙNG một transaction; thu hồi lỗi thì hash mới rollback, không
+     * để mật khẩu đã đổi mà phiên cũ còn sống.
+     */
+    @Transactional
     public void changePassword(Integer userId, String currentPassword, String newPassword) {
         UserAccount user = userService.getById(userId);
         if (currentPassword == null || user.getPasswordHash() == null
