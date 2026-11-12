@@ -5,7 +5,7 @@ import { ArrowLeftOutlined, DownOutlined, FileWordOutlined, SyncOutlined, Warnin
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
 import type { ExamPreviewData, ExamProgress, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
-import { examKindConfig, examStatusConfig, describeReviewReason } from "../../../utils/exam.utils";
+import { examKindConfig, examStatusConfig, describeReviewReason, hasContentFlag } from "../../../utils/exam.utils";
 import { keepQuestion, replaceQuestion, getExamDetail, getExamProgress, getExamExportDocx, getCatalogSubjects, type ExportEquationFormat } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
 import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
@@ -390,11 +390,12 @@ export default function ExamDetailPage() {
 
     const handleKeep = async (question: ExamQuestionItem) => {
         if (!examId || question.slotId === undefined) return;
-        if (!question.needsReview) {
+        // Chỉ cờ về nội dung mới đưa câu vào ngân hàng riêng; câu chỉ có "gần giống câu khác trong đề" vào ngân hàng chung
+        if (!hasContentFlag(question.needsReview, question.reviewReasons)) {
             await doKeep(question, false);
             return;
         }
-        // Câu có cờ vẫn Giữ được nhưng vào ngân hàng riêng (docs/api mục 7.5, 10/11)
+        // Câu có cờ nội dung vẫn Giữ được nhưng vào ngân hàng riêng (docs/api mục 7.5, 10/11, làm rõ 11/11)
         const reasons = question.reviewReasons ?? [];
         Modal.confirm({
             title: "Lưu câu đang có cảnh báo?",

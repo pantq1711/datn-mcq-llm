@@ -5,7 +5,7 @@ import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, Warnin
 import "./ExamQuestionList.css";
 import type { ExamQuestionItem } from "../types/exam.types";
 import { describeInfoReason, teacherRequestLabel } from "../types/exam.types";
-import { describeFailureReason, describeLevel, describeReviewReason, resolveQuestionType } from "../../../utils/exam.utils";
+import { describeFailureReason, describeLevel, describeReviewReason, hasContentFlag, resolveQuestionType } from "../../../utils/exam.utils";
 import QuestionContent from "./QuestionContent";
 
 const { Text } = Typography;
@@ -166,8 +166,8 @@ export default function ExamQuestionList({
                                         {canKeep && (
                                             <Tooltip
                                                 title={
-                                                    // Câu có cờ vẫn Giữ được nhưng vào ngân hàng riêng (docs/api mục 7.5, 10/11)
-                                                    question.needsReview
+                                                    // Câu có cờ nội dung vẫn Giữ được nhưng vào ngân hàng riêng (docs/api mục 7.5, làm rõ 11/11)
+                                                    hasContentFlag(question.needsReview, reasons)
                                                         ? "Câu có cảnh báo sẽ chỉ được lưu vào ngân hàng riêng của thầy/cô."
                                                         : "Câu này sẽ được lưu vào ngân hàng chung để dùng cho các đề sau."
                                                 }
