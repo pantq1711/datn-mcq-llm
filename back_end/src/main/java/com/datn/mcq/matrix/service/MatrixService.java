@@ -553,7 +553,10 @@ public class MatrixService {
         if (req.subjectId() == null) {
             throw new IllegalArgumentException("Phải truyền subjectId");
         }
-        if (req.gradeLevel() != null && (req.gradeLevel() < 6 || req.gradeLevel() > 9)) {
+        if (req.gradeLevel() == null) {
+            throw new IllegalArgumentException("Phải chọn khối lớp (gradeLevel từ 6 đến 9)");
+        }
+        if (req.gradeLevel() < 6 || req.gradeLevel() > 9) {
             throw new IllegalArgumentException("gradeLevel phải nằm trong khoảng 6 đến 9");
         }
         if (req.cells() == null || req.cells().isEmpty()) {
