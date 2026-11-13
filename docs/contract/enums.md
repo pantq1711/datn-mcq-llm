@@ -33,6 +33,7 @@ Java: đặt tên hằng kiểu `ZERO_SHOT`, `FEW_SHOT_STRUCTURED`... và có b�
 | `SaJudgeKind` (V4) | `quality_check_result.judge_sa_kind` |
 | `QuestionOrigin` (V26) | `generated_question.origin` |
 | `ImportBatchStatus` (V26) | `import_batch.status` (chưa có enum Java, hằng ở `ImportBatch.STATUS_*`) |
+| `ExamChallenge` (V27, 12/11) | `exam.challenge` |
 
 ## 2. Giá trị của từng enum
 
@@ -253,6 +254,13 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
 | `confirmed` | Đã xác nhận: câu đã vào ngân hàng riêng tư, `preview` đã xóa (NULL), có `confirmed_at`, `imported_count` |
 | `expired` | Quá hạn chưa xác nhận: `preview` đã xóa (NULL). Lô `preview` bị hủy thì xóa hẳn dòng, không có trạng thái riêng |
 
+### `ExamChallenge` (V27, độ sâu 12/11)
+
+| Giá trị trong DB | Hiển thị / ý nghĩa |
+|---|---|
+| `standard` | Chuẩn (mặc định: mọi đề cũ, đề thủ công, và khi client bỏ trống `challenge`) |
+| `advanced` | Nâng cao: prompt của ô mcq/sa mức Vận dụng, hoặc ô tf có ý mức Vận dụng, thêm khối "Mức NÂNG CAO" (≥ 3 bước, có thể có bẫy là lỗi sai thường gặp, kết hợp ≥ 2 kiến thức). Ô đó không lấy câu ngân hàng (luôn sinh mới); ô Biết/Hiểu như đề chuẩn. Đổi câu trong đề nâng cao giữ mức (run của ô mang mức trong `experiment_run.hyperparams`) |
+
 ## 3. Quy tắc đi kèm (cần nhớ khi code, DB không tự đảm bảo hết)
 
 - **Đáp án đúng luôn do giáo viên quyết.** API lấy câu để chấm không được trả `correct_option` về form, kể cả trong JSON ẩn. Backend tự so để ra `answer_correct`.
@@ -397,7 +405,16 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
   - `matrix-mcq-v8-draft` (08/11): thêm khối phạm vi kiến thức theo lớp (`MatrixPromptDraftV0.gradeScopeBlock`). Run cũ giữ `matrix-mcq-v7-draft` trở về trước.
   - `matrix-sa-v10-draft` (08/11): thêm khối phạm vi kiến thức theo lớp. Run cũ giữ `matrix-sa-v9-draft` trở về trước.
   - `matrix-tf-v10-draft` (08/11): thêm khối phạm vi kiến thức theo lớp. Run cũ giữ `matrix-tf-v9-draft` trở về trước.
-    - Nội dung khối (cả 3 dạng, sau dòng mức độ mục tiêu): chỉ dùng kiến thức của lớp đến hết bài trong ô; mức Vận dụng chỉ phối hợp nhiều bước của chính bài; câu hỏi giá trị lớn nhất, nhỏ nhất, giá trị nguyên chỉ ra khi giá trị đó tồn tại và tìm được trong phạm vi. Môn Toán lớp 8 và lớp 9 có thêm một dòng liệt kê kiến thức cấm của lớp đó. Ô không có lớp (`gradeLevel` null) thì không có khối.
+    - Nội dung khối (cả 3 dạng, sau dòng mức độ mục tiêu): chỉ dùng kiến thức của lớp đến hết bài trong ô; mức Vận dụng chỉ phối hợp nhiều bước của chính bài (từ 12/11 thay bằng dòng mới, xem dưới); câu hỏi giá trị lớn nhất, nhỏ nhất, giá trị nguyên chỉ ra khi giá trị đó tồn tại và tìm được trong phạm vi. Môn Toán lớp 8 và lớp 9 có thêm một dòng liệt kê kiến thức cấm của lớp đó. Ô không có lớp (`gradeLevel` null) thì không có khối.
+  - **Độ sâu + yêu cầu giáo viên (12/11)**, phần A (độ sâu; góp ý dùng thử 11/11 "đề theo ma trận đơn giản, chưa có chiều sâu kiến thức", "chưa thấy câu nâng cao"): prompt ma trận `matrix-mcq-v9-draft`, `matrix-sa-v11-draft`, `matrix-tf-v11-draft`. Run cũ giữ `matrix-mcq-v8-draft`, `matrix-sa-v10-draft`, `matrix-tf-v10-draft` trở về trước. Solver không đổi ở phần A. Phần B (yêu cầu giáo viên, PR sau) sẽ dùng Solver `solver-v5-request-check`; phương án nhiễu (PA1) dùng `solver-v6`.
+    - Khối phạm vi: dòng mức Vận dụng thành "Ở mức Vận dụng, được kết hợp kiến thức các bài ĐÃ HỌC trước đó cùng lớp (vẫn trong PHẠM VI KIẾN THỨC này), không đưa kiến thức chưa học" (`MatrixPromptDraftV0.APPLY_SCOPE_LINE`).
+    - Khối "YÊU CẦU MỨC VẬN DỤNG" (`APPLY_LEVEL_HEADER`, `APPLY_LEVEL_RULES`; ngay sau khối phạm vi), chỉ khi ô mcq/sa mức `hard` hoặc ô tf có ít nhất một ý `hard`: kết hợp kiến thức các bài đã học trước đó cùng lớp; lời giải ≥ 2 bước biến đổi có ý nghĩa, không thay số trực tiếp vào một công thức; ưu tiên bối cảnh thực tế, giá trị lớn nhất/nhỏ nhất bằng kiến thức trong lớp, nhận định cần suy luận. Ô Biết/Hiểu không có khối này.
+    - Đề nâng cao (`exam.challenge = advanced`): thêm một dòng "Mức NÂNG CAO…" (`ADVANCED_RULE`) ngay sau khối Vận dụng, cùng điều kiện ô.
+    - `tf` (`TF_SHARED_CONTEXT_RULES`, ngay sau quy tắc ý hiện có, mọi ô tf): 4 ý xoay quanh CÙNG MỘT ngữ cảnh của đề dẫn; độ khó tăng dần a→d theo mức mục tiêu của từng ý (thường a Nhận biết, b Thông hiểu, c Thông hiểu hoặc Vận dụng, d Vận dụng); ý sau có thể dùng kết quả ý trước; ≥ 1 ý gắn bối cảnh thực tế hoặc hình học. Quy tắc nhãn, mẫu nhãn và phân bố nhãn giữ nguyên. Lưu ý: mức của từng ý vẫn lấy từ ô ma trận (mẫu "Giữa kì I – Toán 8" cũ là Biết, Biết, Hiểu, Vận dụng).
+    - `sa` mức `hard` (`SA_APPLY_FORMS_RULE`, trong "Quy tắc nội dung"): ưu tiên dạng "cho điều kiện giữa các biến, tính giá trị biểu thức", "tính nhanh bằng hằng đẳng thức", "tính góc từ quan hệ giữa các góc"; đáp số theo `SA_ANSWER_RULES` như cũ.
+    - Câu mẫu độ sâu (`DepthExampleCatalog`, `MatrixPromptDraftV0.depthExamplesBlock`): file JSON NGOÀI repo, cấu hình `app.prompt.depth-examples-file` (biến `DEPTH_EXAMPLES_FILE`), nạp một lần lúc khởi động. Định dạng `{"examples": [{"subject": "Toán", "grade": 8, "level": "hard", "questionType": "sa", "text": "..."}]}`; `level` (`easy`/`medium`/`hard`) và `text` bắt buộc, `subject`/`grade`/`questionType` bỏ trống là áp mọi môn/lớp/dạng; phần tử sai bị bỏ qua; đường dẫn trống, thiếu file hoặc file hỏng thì không có câu mẫu. Lúc tạo đề, mỗi ô lấy tối đa 2 câu mỗi mức ô dùng (khớp môn, lớp, dạng), lưu trong `experiment_run.hyperparams` (khóa `depthExamples`). Prompt có khối "VÍ DỤ ĐỘ SÂU MONG MUỐN" ngay sau khối phạm vi (và khối Vận dụng nếu có), mỗi câu một dòng `- <mức>: <<< ... >>>` qua `PromptData.neutralize`, gộp khoảng trắng, cắt 600 ký tự, kèm lời dặn "học độ sâu và cách hỏi, KHÔNG chép số liệu hay câu chữ".
+    - `experiment_run.hyperparams` (`MatrixCellSpec`) có thêm khóa `challenge` (chỉ khi `advanced`) và `depthExamples` (chỉ khi có): JSON của ô chuẩn không câu mẫu giữ nguyên như trước.
+    - Đổi câu theo lý do (`replace_reason`, V25): `too_easy`/`too_hard` thêm một dòng "Lý do giáo viên Đổi câu trước: QUÁ DỄ. Câu mới phải cùng ô, cùng mức nhưng khó hơn rõ rệt (thêm bước, kết hợp kiến thức, bối cảnh)." / "QUÁ KHÓ. … dễ hơn, ít bước hơn.", kèm tối đa 200 ký tự đề dẫn câu cũ trong `<<< >>>` (qua `neutralize`, gộp khoảng trắng). Dòng nằm trong `generation_job.prompt_note` sau các dòng hệ thống, trước khối yêu cầu bổ sung của giáo viên; prompt đặt cả hai ở CUỐI (sau quy tắc đầu ra). Lần sinh lại tự động của cùng lượt Đổi giữ dòng này. Lý do khác hoặc không chọn lý do: prompt như cũ.
   - Dấu câu cuối câu dẫn và ý Đúng/Sai do BƯỚC GIẢI MÃ của parser (chế độ production, `StemPunctuation`; 4/11, dev-log L-70), không dựa vào prompt (đo đề 16: quy tắc "?" trong prompt chỉ được 0/4 câu tuân thủ nên đã bỏ khỏi prompt), nên web và Word thấy cùng một chữ:
     - Câu dẫn (`question_text`) mcq/sa/tf kết thúc bằng `là:` hoặc `là :` thành `là` (câu nối kết thúc bằng "là", không dấu câu); câu kết thúc bằng "là" giữ nguyên.
     - Câu dẫn **mcq và sa** có từ hỏi (`nào`, `bao nhiêu`, `gì`, `mấy`; so theo từ nguyên, không phân biệt hoa thường, chữ trong `$…$` không tính) ở CÂU CUỐI (sau dấu `. ? ! ; :` hoặc xuống dòng cuối cùng) mà không kết thúc bằng dấu câu (`. ? ! … : ; ,`) và không kết thúc bằng "là" thì thêm `?`. `đúng hay sai` và `có phải` KHÔNG là từ hỏi.

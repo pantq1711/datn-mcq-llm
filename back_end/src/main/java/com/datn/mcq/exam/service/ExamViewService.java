@@ -266,7 +266,8 @@ public class ExamViewService {
         String kind = kindOf(exam, exam.getMatrixId() == null ? Map.of()
                 : matrixService.kindsByIds(List.of(exam.getMatrixId())));
         return new ExamViewDto(exam.getId(), exam.getExamCode(), exam.getTitle(), exam.getMode(), exam.getStatus(),
-                publicMatrixId(exam, kind), exam.getCreatedAt(), buildStatus, needsReview, parts, kind);
+                publicMatrixId(exam, kind), exam.getCreatedAt(), buildStatus, needsReview, parts, kind,
+                exam.getChallenge().getDbValue());
     }
 
     /**

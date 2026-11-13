@@ -153,7 +153,7 @@ public final class ExamMarkdownBuilder {
                         p.items().stream().map(ExamMarkdownBuilder::withoutLiteralNewlines).toList()))
                 .toList();
         return new ExamViewDto(exam.examId(), exam.examCode(), exam.title(), exam.mode(), exam.status(), exam.matrixId(),
-                exam.createdAt(), exam.buildStatus(), exam.needsReviewCount(), parts, exam.kind());
+                exam.createdAt(), exam.buildStatus(), exam.needsReviewCount(), parts, exam.kind(), exam.challenge());
     }
 
     private static ExamItemDto withoutLiteralNewlines(ExamItemDto i) {

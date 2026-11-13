@@ -178,7 +178,16 @@ export interface ExamDetail {
     needsReviewCount: number;
     parts: ExamPartDto[];
     kind: ExamKind;
+    challenge?: ExamChallenge;
 }
+
+/** Mức thử thách của đề (12/11): "advanced" thêm yêu cầu nâng cao cho câu mức Vận dụng. */
+export type ExamChallenge = "standard" | "advanced";
+
+export const EXAM_CHALLENGE_OPTIONS: { label: string; value: ExamChallenge }[] = [
+    { label: "Chuẩn", value: "standard" },
+    { label: "Nâng cao (câu Vận dụng khó hơn)", value: "advanced" },
+];
 
 /** Body của PUT /api/exams/{id}/slots/{slotId}/question (docs/api mục 7.5a). */
 export interface UpdateSlotQuestionPayload {
@@ -225,6 +234,7 @@ export interface BuildByLessonPayload {
     cells: LessonCellInput[];
     materialIds?: number[];
     extraInstruction?: string;
+    challenge?: ExamChallenge;
 }
 
 export interface BuildResultDto {
@@ -236,6 +246,7 @@ export interface BuildResultDto {
     fromBank: number;
     jobsQueued: number;
     kind: ExamKind;
+    challenge?: ExamChallenge;
 }
 
 export interface ReplaceQuestionParams {
@@ -255,4 +266,5 @@ export interface BuildExamRequest {
     title?: string;
     materialIds?: number[];
     cells?: CellContextInput[];
+    challenge?: ExamChallenge;
 }

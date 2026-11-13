@@ -547,9 +547,14 @@ trước ma trận nào đang bị khóa). Quyền như mục 7: chỉ giáo vi�
 
 ```http
 POST /api/exams/build
-{"matrixId": 3, "title": "Đề giữa kì I"}
-→ {"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "matrixId": 3, "slots": 18, "fromBank": 5, "jobsQueued": 13, "kind": "matrix"}
+{"matrixId": 3, "title": "Đề giữa kì I", "challenge": "advanced"}
+→ {"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "matrixId": 3, "slots": 18, "fromBank": 5, "jobsQueued": 13, "kind": "matrix", "challenge": "advanced"}
 ```
+
+- **Mức thử thách (12/11, tùy chọn):** `challenge` = `standard` (mặc định khi bỏ trống) hoặc `advanced` (không phân biệt hoa
+  thường). Giá trị khác: 400 `INVALID_REQUEST`, không tạo đề. Lưu ở `exam.challenge`, trả lại trong kết quả tạo đề và
+  `GET /api/exams/{id}` (mục 7.4). `advanced` chỉ đổi prompt của ô mcq/sa mức Vận dụng và ô tf có ý mức Vận dụng (khối
+  "Mức NÂNG CAO", docs/contract/enums.md mục 3); các ô đó **bỏ qua ngân hàng** (sinh mới). Đổi câu trong đề nâng cao giữ mức.
 
 - `title` bỏ trống thì lấy tên ma trận. Người tạo đề là người đăng nhập (`teacherId` đã bỏ khỏi API từ W1-1; gửi lên
   thì bị bỏ qua). Ma trận phải của chính người gọi, không thì 404. Đề có `mode = teacher`, `status = draft`.
@@ -638,8 +643,11 @@ POST /api/exams/build-by-lesson
   {"questionType": "tf", "statementDifficulties": ["easy", "easy", "medium", "hard"], "questionCount": 1},
   {"questionType": "sa", "difficulty": "medium", "questionCount": 2}]}
 → {"examId": 31, "examCode": "MT261025090000123", "title": "Ôn tập bài 3", "matrixId": null, "slots": 8,
-   "fromBank": 3, "jobsQueued": 5, "kind": "lesson"}
+   "fromBank": 3, "jobsQueued": 5, "kind": "lesson", "challenge": "standard"}
 ```
+
+- Tùy chọn (12/11): `challenge` (`standard` | `advanced`) như mục 7.2; giá trị khác là 400 `INVALID_REQUEST` trước khi tạo
+  ma trận ẩn.
 
 - Bắt buộc: `subjectId`, `gradeLevel` (khối lớp, 6-9; thiếu hoặc `null` trả 400 `Phải chọn khối lớp (gradeLevel từ 6 đến
   9)`), `lesson` (tên bài, tối đa 255 ký tự), `cells` (ít nhất 1). Tùy chọn: `content` (phạm vi trong bài), `title` (trống
@@ -716,6 +724,7 @@ khác để sinh lại).
 ```json
 {"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "mode": "teacher", "status": "draft",
  "kind": "matrix", "matrixId": 3, "createdAt": "2026-10-22T21:30:00", "buildStatus": "ready", "needsReviewCount": 1,
+ "challenge": "standard",
  "parts": [{"part": "III", "required": 4, "ready": 4, "items": [
    {"slotId": 101, "cellId": 21, "slotNo": 1, "part": "III", "topic": "Tứ giác", "questionType": "sa", "state": "ready",
     "source": "generated", "questionId": 345, "questionText": "Tứ giác $ABCD$ có ba góc…", "saAnswer": "90",
@@ -800,7 +809,10 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
 - **Lý do Đổi (B7, V25):** `POST .../replace` nhận thêm trường tùy chọn `reason` ∈ `wrong_answer`, `ambiguous_options`,
   `off_matrix`, `duplicate_pattern`, `latex_format`, `too_hard`, `too_easy`, `other` (không phân biệt hoa thường), lưu ở
   `exam_slot_action.replace_reason`. Bỏ trống thì không ghi lý do; giá trị khác thì 400 `INVALID_REQUEST` trước mọi thay
-  đổi. Dùng cho thống kê dùng thử: `docs/experiments/trial/queries.sql`.
+  đổi. Dùng cho thống kê dùng thử: `docs/experiments/trial/queries.sql`. Từ 12/11, khi sinh mới: `too_easy` / `too_hard`
+  thêm vào prompt một dòng lý do (câu mới cùng ô, cùng mức nhưng khó hơn rõ rệt / dễ hơn, ít bước hơn) kèm tối đa 200 ký
+  tự đề dẫn câu cũ làm DỮ LIỆU; lần sinh lại tự động của cùng lượt Đổi giữ dòng này. Lý do khác không đổi prompt
+  (docs/contract/enums.md mục 3, "Độ sâu").
 - **Đổi bằng câu ngân hàng (W1-4, D5-B):** `POST .../replace` nhận `{"source": "bank" | "generate", "instruction"?, "reason"?}`. Bỏ
   trống `source` (hoặc không gửi body) là `generate`: giữ nguyên hành vi cũ (sinh mới qua hàng đợi), nên client cũ không vỡ.
   - `bank`: lấy ngay câu ngân hàng khớp ô, cùng tiêu chí và xếp hạng mềm như lúc tạo đề (mục 7.2; đề theo bài: 7.2a).

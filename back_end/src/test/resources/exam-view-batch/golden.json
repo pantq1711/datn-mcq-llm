@@ -227,7 +227,8 @@
         "failureReason" : "llm_error"
       } ]
     } ],
-    "kind" : "matrix"
+    "kind" : "matrix",
+    "challenge" : "standard"
   },
   "viewLesson" : {
     "examId" : "exam#2",
@@ -321,7 +322,8 @@
       "ready" : 0,
       "items" : [ ]
     } ],
-    "kind" : "lesson"
+    "kind" : "lesson",
+    "challenge" : "standard"
   },
   "list" : {
     "items" : [ {
