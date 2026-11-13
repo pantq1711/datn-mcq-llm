@@ -26,6 +26,8 @@ export interface ExamMatrixBasicInfoFormProps {
     loadingSubjects?: boolean;
     /** Ma trận đã có đề: khóa môn và khối (docs/api mục 7.1a). */
     lockStructure?: boolean;
+    /** Ma trận cũ chưa có khối: vẫn cho chọn khối dù đã khóa cấu trúc. */
+    allowGradeFill?: boolean;
     disabled?: boolean;
     form: FormInstance<ExamMatrixBasicInfoValues>;
 }
@@ -40,6 +42,7 @@ export function ExamMatrixBasicInfoForm({
     subjects = [],
     loadingSubjects = false,
     lockStructure = false,
+    allowGradeFill = false,
     disabled = false,
     form,
 }: ExamMatrixBasicInfoFormProps) {
@@ -96,7 +99,7 @@ export function ExamMatrixBasicInfoForm({
                         <Select
                             placeholder="Chọn khối lớp"
                             options={GRADE_OPTIONS}
-                            disabled={lockStructure}
+                            disabled={lockStructure && !allowGradeFill}
                         />
                     </Form.Item>
                 </Col>

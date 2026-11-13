@@ -112,7 +112,8 @@ class GenerationLimitTest extends ExamFlowTestBase {
 
     @Test
     void sinhTheoBaiVuotTranTongSoCauBi400VaKhongTaoGiCa() throws Exception {
-        postAs(teacher, "/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"lesson\": \"Bài 1\","
+        postAs(teacher, "/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"gradeLevel\": 8,"
+                + " \"lesson\": \"Bài 1\","
                 + " \"cells\": [{\"questionType\": \"mcq\", \"difficulty\": \"easy\", \"questionCount\": 6},"
                 + " {\"questionType\": \"mcq\", \"difficulty\": \"medium\", \"questionCount\": 5}]}")
                 .andExpect(status().isBadRequest())
