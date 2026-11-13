@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, AutoComplete, Button, Card, Col, Form, Input, InputNumber, Row, Select, Space, Spin, Tag, Typography, message } from "antd";
+import { Alert, AutoComplete, Button, Card, Checkbox, Col, Form, Input, InputNumber, Row, Select, Space, Spin, Tag, Typography, message } from "antd";
 import { BulbOutlined, ExclamationCircleOutlined, PaperClipOutlined, RocketOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 
 import MaterialManagerModal from "../../materials/components/MaterialManagerModal";
 import type { MaterialDto } from "../../materials/types/material.types";
 
-import type { ExamSubjectOption, BuildByLessonPayload, LessonCellInput, BuildResultDto, ExamChallenge } from "../types/exam.types";
-import { EXAM_CHALLENGE_OPTIONS } from "../types/exam.types";
+import type { ExamSubjectOption, BuildByLessonPayload, LessonCellInput, BuildResultDto, ExamChallenge, TeacherRequestCode } from "../types/exam.types";
+import { EXAM_CHALLENGE_OPTIONS, TEACHER_REQUEST_OPTIONS } from "../types/exam.types";
 import { buildByLesson } from "../services/examApi";
 import type { BankTopic } from "../../question-bank/types/questionBank.types";
 import { getBankTopics } from "../../question-bank/services/questionBankApi";
@@ -35,6 +35,8 @@ interface FormValues {
     title?: string;
     extraInstruction?: string;
     challenge: ExamChallenge;
+    /** Chip yêu cầu cho cả lần sinh (PR B). */
+    requestCodes?: TeacherRequestCode[];
     mcqEasy: number;
     mcqMedium: number;
     mcqHard: number;
@@ -75,6 +77,7 @@ export default function BuildByLessonForm({
     const watchedContent = Form.useWatch("content", form);
     const watchedExtraInstruction = Form.useWatch("extraInstruction", form);
     const watchedChallenge = Form.useWatch("challenge", form);
+    const watchedRequestCodes = Form.useWatch("requestCodes", form);
 
     const mcqEasy = Form.useWatch("mcqEasy", form) || 0;
     const mcqMedium = Form.useWatch("mcqMedium", form) || 0;
@@ -212,7 +215,9 @@ export default function BuildByLessonForm({
     const bankHint = useMemo(() => {
         // Mức 1: Có tài liệu hoặc extraInstruction khác rỗng -> Thắng tất cả
         const hasMaterials = selectedMaterials && selectedMaterials.length > 0;
-        const hasExtra = watchedExtraInstruction && watchedExtraInstruction.trim() !== "";
+        // PR B: chip yêu cầu cũng làm hệ thống soạn mới (gần đúng: chip chỉ cho Đúng/Sai không áp cho câu khác)
+        const hasExtra = (watchedExtraInstruction && watchedExtraInstruction.trim() !== "")
+            || (watchedRequestCodes?.length ?? 0) > 0;
         if (hasMaterials || hasExtra) {
             return (
                 <Text type="warning" style={{ display: "block", marginTop: 4 }}>
@@ -272,6 +277,7 @@ export default function BuildByLessonForm({
         watchedLesson,
         watchedContent,
         watchedExtraInstruction,
+        watchedRequestCodes,
         watchedChallenge,
         mcqHard,
         saHard,
@@ -349,6 +355,7 @@ export default function BuildByLessonForm({
             materialIds: selectedMaterials.length > 0 ? selectedMaterials.map((m) => m.id) : undefined,
             extraInstruction: values.extraInstruction?.trim() || undefined,
             challenge: values.challenge,
+            requestCodes: values.requestCodes && values.requestCodes.length > 0 ? values.requestCodes : undefined,
         };
 
         setSubmitting(true);
@@ -684,6 +691,13 @@ export default function BuildByLessonForm({
                         tooltip="Nâng cao: câu mức Vận dụng cần nhiều bước hơn, kết hợp nhiều kiến thức, có thể có bẫy lỗi hay gặp. Câu Vận dụng khi đó luôn được soạn mới (không lấy từ ngân hàng)."
                     >
                         <Select options={EXAM_CHALLENGE_OPTIONS} style={{ maxWidth: 320 }} />
+                    </Form.Item>
+                    <Form.Item
+                        name="requestCodes"
+                        label="Yêu cầu cho câu soạn mới"
+                        tooltip="Hệ thống tự kiểm câu ra có đúng yêu cầu không và báo bằng thẻ thông tin trên từng câu. Yêu cầu chỉ cho Đúng/Sai không áp cho câu dạng khác."
+                    >
+                        <Checkbox.Group options={TEACHER_REQUEST_OPTIONS.map((o) => ({ label: o.label, value: o.value }))} />
                     </Form.Item>
                     <Form.Item
                         name="extraInstruction"

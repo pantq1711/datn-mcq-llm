@@ -71,7 +71,25 @@ public class ExamSlotAction {
     public static final java.util.List<String> REPLACE_REASONS = java.util.List.of("wrong_answer", "ambiguous_options",
             "off_matrix", "duplicate_pattern", "latex_format", "too_hard", "too_easy", "other");
 
+    /**
+     * V28 (12/11, PR B): mã chip yêu cầu gửi ở lượt Đổi câu (nhật ký); null khi không gửi {@code requestCodes}, mảng rỗng khi
+     * gửi {@code []} (giáo viên bỏ hết chip).
+     */
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "request_codes", columnDefinition = "text[]")
+    private String[] requestCodes;
+
     public ExamSlotAction() {}
+
+    /** null khi lượt Đổi không gửi mã. */
+    public java.util.List<String> getRequestCodes() {
+        return requestCodes == null ? null : java.util.List.of(requestCodes);
+    }
+
+    /** null giữ NULL; danh sách rỗng lưu mảng rỗng. */
+    public void setRequestCodes(java.util.List<String> codes) {
+        this.requestCodes = codes == null ? null : codes.toArray(String[]::new);
+    }
 
     public String getReplaceReason() {
         return replaceReason;

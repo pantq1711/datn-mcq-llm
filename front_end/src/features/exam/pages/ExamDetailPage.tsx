@@ -103,6 +103,9 @@ function toQuestionItem(item: ExamItemDto): ExamQuestionItem {
         edited: item.edited,
         originalQuestionId: item.originalQuestionId,
         failureReason: item.failureReason,
+        infoReasons: item.infoReasons ?? [],
+        requests: item.requests,
+        inheritedRequests: item.inheritedRequests,
     };
 }
 
@@ -332,6 +335,8 @@ export default function ExamDetailPage() {
             await replaceQuestion(examId, request.question.slotId, {
                 source,
                 ...(source === "generate" && request.instruction ? { instruction: request.instruction } : {}),
+                // PR B: soạn mới luôn gửi requestCodes (kể cả []) để backend coi là lượt Đổi tự đặt yêu cầu
+                ...(source === "generate" && request.requestCodes ? { requestCodes: request.requestCodes } : {}),
                 ...(request.reason ? { reason: request.reason } : {}),
             });
             message.success(

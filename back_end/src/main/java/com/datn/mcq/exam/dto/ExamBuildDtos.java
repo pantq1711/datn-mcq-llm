@@ -19,9 +19,19 @@ public final class ExamBuildDtos {
      *                    khác nhau trong cả lần tạo đề
      * @param challenge   (12/11) mức thử thách: "standard" (mặc định khi bỏ trống) hoặc "advanced"; giá trị khác là 400
      *                    INVALID_REQUEST trước mọi ghi
+     * @param requestCodes (12/11, PR B) mã chip yêu cầu của giáo viên cho cả đề (TeacherRequest); tùy chọn, null hoặc rỗng là
+     *                    không có. Không phân biệt hoa thường, mã trùng gộp lại; mã lạ là 400 INVALID_REQUEST trước mọi ghi.
+     *                    Mã không hợp dạng của một câu (ví dụ tf_shared_context với câu mcq) được nhận nhưng không áp cho câu
+     *                    đó. Ô có yêu cầu riêng (mã hoặc văn bản) thì THAY HẲN yêu cầu của đề
      */
     public record BuildExamRequest(Integer matrixId, String title, List<Integer> materialIds,
-                                   List<CellContextInput> cells, String challenge) {
+                                   List<CellContextInput> cells, String challenge, List<String> requestCodes) {
+        /** Chữ ký trước PR B (không có mã yêu cầu). */
+        public BuildExamRequest(Integer matrixId, String title, List<Integer> materialIds, List<CellContextInput> cells,
+                                String challenge) {
+            this(matrixId, title, materialIds, cells, challenge, null);
+        }
+
         /** Chữ ký trước 12/11 (đề chuẩn). */
         public BuildExamRequest(Integer matrixId, String title, List<Integer> materialIds, List<CellContextInput> cells) {
             this(matrixId, title, materialIds, cells, null);
@@ -36,8 +46,16 @@ public final class ExamBuildDtos {
      * @param materialIds      tài liệu của ô (hợp với tài liệu của cả ma trận)
      * @param extraInstruction "yêu cầu thêm cho AI" cho ô, tối đa 1000 ký tự; là DỮ LIỆU cho prompt, không đổi định dạng,
      *                         số lượng, mức độ hay QC
+     * @param requestCodes     (12/11, PR B) mã chip yêu cầu của ô; cùng quy tắc như {@link BuildExamRequest#requestCodes()}.
+     *                         Ô có mã hoặc văn bản thì cả bộ của ô THAY HẲN yêu cầu của đề
      */
-    public record CellContextInput(Integer cellId, List<Integer> materialIds, String extraInstruction) {}
+    public record CellContextInput(Integer cellId, List<Integer> materialIds, String extraInstruction,
+                                   List<String> requestCodes) {
+        /** Chữ ký trước PR B. */
+        public CellContextInput(Integer cellId, List<Integer> materialIds, String extraInstruction) {
+            this(cellId, materialIds, extraInstruction, null);
+        }
+    }
 
     /**
      * @param fromBank   số chỗ lấy câu từ ngân hàng

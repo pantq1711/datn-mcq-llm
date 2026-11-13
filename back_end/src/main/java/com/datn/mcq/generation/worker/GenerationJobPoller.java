@@ -474,6 +474,8 @@ public class GenerationJobPoller {
                     savedQuestion.getId(), parsed, ctx.validateLatex(), runAnswerCheck);
             parseError = parsed.parseError();
         }
+        // PR B (12/11): yêu cầu của giáo viên (chép từ job khi lưu câu) đi kèm câu vào Solver, cùng một lượt gọi.
+        qcInput = qcInput.withRequest(savedQuestion.getRequestCodes(), savedQuestion.getRequestText());
 
         QcPipelineReport qcReport;
         try {

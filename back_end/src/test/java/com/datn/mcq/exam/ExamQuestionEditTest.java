@@ -12,6 +12,7 @@ import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.llm.prompt.PromptBuilder;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
+import com.datn.mcq.llm.prompt.TeacherRequestPrompt;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
@@ -87,6 +88,14 @@ class ExamQuestionEditTest {
         /** Chạy một lần ở lần gọi tới, trong lúc Solver "đang chạy" (ngoài transaction của worker). */
         ThrowingRunnable onCall;
         int calls;
+        /** PR B: prompt và schema của từng lượt gọi (để kiểm khối yêu cầu và số lượt gọi). */
+        final List<String> prompts = new ArrayList<>();
+        final List<String> schemas = new ArrayList<>();
+        /**
+         * PR B: phần {@code request_check} thêm vào phản hồi khi schema có trường này: JSON của trường (ví dụ
+         * {@code {"verdict": "not_met", "reason": "x"}}), hoặc null là không trả trường này.
+         */
+        String requestCheck;
 
         EditSolver() {
             super("FAKE_KEY_FOR_TESTS", "fake-solver-model");
@@ -100,6 +109,8 @@ class ExamQuestionEditTest {
         @Override
         public LlmCallResult callJsonModeWithSchema(String prompt, String modelName, Double temperature, String schema) {
             calls++;
+            prompts.add(prompt);
+            schemas.add(schema);
             if (onCall != null) {
                 ThrowingRunnable hook = onCall;
                 onCall = null;
@@ -113,17 +124,23 @@ class ExamQuestionEditTest {
                 throw new IllegalStateException("Solver giả: hết thời gian chờ");
             }
             String body;
-            if (TfPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON.equals(schema)) {
+            boolean withRequest = schema != null && schema.contains("\"request_check\"");
+            if (TfPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON.equals(schema)
+                    || TeacherRequestPrompt.TF_SOLVER_SCHEMA.equals(schema)) {
                 String[] j = (tfJudges != null ? tfJudges : ExamBuildTest.FakeGenerator.lastTfLabels).split(",");
                 body = "{\"reasoning_a\": \"r\", \"judge_a\": \"" + j[0] + "\", \"reasoning_b\": \"r\", \"judge_b\": \""
                         + j[1] + "\", \"reasoning_c\": \"r\", \"judge_c\": \"" + j[2] + "\", \"reasoning_d\": \"r\","
                         + " \"judge_d\": \"" + j[3] + "\"}";
-            } else if (SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON.equals(schema)) {
+            } else if (SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON.equals(schema)
+                    || TeacherRequestPrompt.SA_SOLVER_SCHEMA.equals(schema)) {
                 body = "{\"reasoning\": \"" + reasoning + "\", \"judge_answer\": \"" + saJudge + "\"}";
             } else if (mcqOptions != null) {
                 body = optionCheckJson(reasoning, mcqOptions);
             } else {
                 body = "{\"reasoning\": \"" + reasoning + "\", \"judge_answer\": \"" + mcqJudge + "\"}";
+            }
+            if (withRequest && requestCheck != null) {
+                body = body.substring(0, body.lastIndexOf('}')) + ", \"request_check\": " + requestCheck + "}";
             }
             return new LlmCallResult(body, 10, 1.0, 0.0, modelName);
         }

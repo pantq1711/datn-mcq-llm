@@ -14,6 +14,7 @@ import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.llm.dto.LlmUsage;
 import com.datn.mcq.llm.prompt.PromptBuilder;
+import com.datn.mcq.llm.prompt.TeacherRequestPrompt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,16 +35,26 @@ public class AnswerSolverChecker {
      * @param optionCorrect (v3) kết luận Solver cho từng phương án theo thứ tự A-D; null khi phản hồi không có
      *                      {@code options_verdict} hợp lệ (Solver cũ, hoặc thiếu/hỏng: kết luận theo judge_answer như cũ)
      */
+    /**
+     * @param requestCheck (12/11, PR B) kết luận về yêu cầu của giáo viên; null khi câu không có yêu cầu hoặc phản hồi thiếu,
+     *                     hỏng {@code request_check}
+     */
     public record SolverCheckOutcome(
             boolean passed,
             AnswerChoice judgeAnswer,
             String judgeModel,
             String reasoning,
             LlmUsage usage,
-            List<Boolean> optionCorrect
+            List<Boolean> optionCorrect,
+            TeacherRequestPrompt.RequestCheck requestCheck
     ) {
         public SolverCheckOutcome {
             optionCorrect = optionCorrect == null ? null : List.copyOf(optionCorrect);
+        }
+
+        public SolverCheckOutcome(boolean passed, AnswerChoice judgeAnswer, String judgeModel, String reasoning,
+                                  LlmUsage usage, List<Boolean> optionCorrect) {
+            this(passed, judgeAnswer, judgeModel, reasoning, usage, optionCorrect, null);
         }
 
         public SolverCheckOutcome(boolean passed, AnswerChoice judgeAnswer, String judgeModel, String reasoning) {
@@ -61,7 +72,12 @@ public class AnswerSolverChecker {
         }
 
         SolverCheckOutcome withUsage(LlmUsage newUsage) {
-            return new SolverCheckOutcome(passed, judgeAnswer, judgeModel, reasoning, newUsage, optionCorrect);
+            return new SolverCheckOutcome(passed, judgeAnswer, judgeModel, reasoning, newUsage, optionCorrect,
+                    requestCheck);
+        }
+
+        SolverCheckOutcome withRequestCheck(TeacherRequestPrompt.RequestCheck check) {
+            return new SolverCheckOutcome(passed, judgeAnswer, judgeModel, reasoning, usage, optionCorrect, check);
         }
     }
 
@@ -88,6 +104,13 @@ public class AnswerSolverChecker {
             },"required":["reasoning","options_verdict","correct_count","judge_answer"],
             "propertyOrdering":["reasoning","options_verdict","correct_count","judge_answer"]}
             """;
+
+    /**
+     * Cấu trúc JSON Solver mcq của câu CÓ yêu cầu của giáo viên ({@link PromptBuilder#SOLVER_PROMPT_VERSION_V5}): như
+     * {@link #SOLVER_RESPONSE_SCHEMA_JSON}, thêm {@code request_check} ở cuối.
+     */
+    public static final String SOLVER_RESPONSE_SCHEMA_JSON_REQUEST =
+            TeacherRequestPrompt.withRequestCheck(SOLVER_RESPONSE_SCHEMA_JSON);
 
     /** Cấu trúc JSON cho phản hồi Solver mcq v2 ({@link PromptBuilder#SOLVER_PROMPT_VERSION_V2}). */
     public static final String SOLVER_RESPONSE_SCHEMA_JSON_V2 = """
@@ -148,11 +171,41 @@ public class AnswerSolverChecker {
             String optionC,
             String optionD,
             Option generatorCorrectOption) {
+        return check(questionText, optionA, optionB, optionC, optionD, generatorCorrectOption, null, null);
+    }
+
+    /**
+     * Như trên, kèm yêu cầu của giáo viên (12/11, PR B). Câu không có yêu cầu ({@code requestCodes} rỗng, {@code requestText}
+     * trống), hoặc phiên bản prompt không phải v5: prompt và schema y như cũ. Câu có yêu cầu: vẫn MỘT lượt gọi, prompt thêm
+     * khối yêu cầu sau đề và phương án, schema thêm {@code request_check}; cách xét đáp án không đổi.
+     */
+    public SolverCheckOutcome check(
+            String questionText,
+            String optionA,
+            String optionB,
+            String optionC,
+            String optionD,
+            Option generatorCorrectOption,
+            List<String> requestCodes,
+            String requestText) {
         String prompt = promptBuilder.buildSolverPrompt(promptVersion, questionText, optionA, optionB, optionC, optionD);
-        LlmCallResult result = llmClient.callJsonModeWithSchema(prompt, solverModel, 0.0,
-                optionCheckPrompt() ? SOLVER_RESPONSE_SCHEMA_JSON : SOLVER_RESPONSE_SCHEMA_JSON_V2);
-        return parseAndCompare(result.rawText(), result.modelName(), generatorCorrectOption)
+        String block = PromptBuilder.checksRequests(promptVersion)
+                ? TeacherRequestPrompt.solverBlock(requestCodes, requestText) : null;
+        String schema = optionCheckPrompt() ? SOLVER_RESPONSE_SCHEMA_JSON : SOLVER_RESPONSE_SCHEMA_JSON_V2;
+        if (block != null) {
+            prompt = TeacherRequestPrompt.withSolverBlock(prompt, block);
+            schema = SOLVER_RESPONSE_SCHEMA_JSON_REQUEST;
+        }
+        LlmCallResult result = llmClient.callJsonModeWithSchema(prompt, solverModel, 0.0, schema);
+        SolverCheckOutcome outcome = parseAndCompare(result.rawText(), result.modelName(), generatorCorrectOption)
                 .withUsage(LlmUsage.of(result));
+        return block == null ? outcome : outcome.withRequestCheck(TeacherRequestPrompt.parse(result.rawText()));
+    }
+
+    /** Khối yêu cầu cho Solver tf/sa (không có phiên bản riêng): theo phiên bản đang dùng, như mcq. */
+    private String requestBlock(List<String> requestCodes, String requestText) {
+        return PromptBuilder.checksRequests(promptVersion) ? TeacherRequestPrompt.solverBlock(requestCodes, requestText)
+                : null;
     }
 
     /**
@@ -168,15 +221,25 @@ public class AnswerSolverChecker {
             String judgeAnswer,
             String judgeModel,
             String reasoning,
-            LlmUsage usage
+            LlmUsage usage,
+            TeacherRequestPrompt.RequestCheck requestCheck
     ) {
+        public SaSolverOutcome(boolean passed, SaJudgeKind judgeKind, String judgeAnswer, String judgeModel,
+                               String reasoning, LlmUsage usage) {
+            this(passed, judgeKind, judgeAnswer, judgeModel, reasoning, usage, null);
+        }
+
         public SaSolverOutcome(boolean passed, SaJudgeKind judgeKind, String judgeAnswer, String judgeModel,
                                String reasoning) {
             this(passed, judgeKind, judgeAnswer, judgeModel, reasoning, null);
         }
 
         SaSolverOutcome withUsage(LlmUsage newUsage) {
-            return new SaSolverOutcome(passed, judgeKind, judgeAnswer, judgeModel, reasoning, newUsage);
+            return new SaSolverOutcome(passed, judgeKind, judgeAnswer, judgeModel, reasoning, newUsage, requestCheck);
+        }
+
+        SaSolverOutcome withRequestCheck(TeacherRequestPrompt.RequestCheck check) {
+            return new SaSolverOutcome(passed, judgeKind, judgeAnswer, judgeModel, reasoning, usage, check);
         }
     }
 
@@ -191,10 +254,16 @@ public class AnswerSolverChecker {
             List<TruthChoice> judgeLabels,
             String judgeModel,
             String reasoning,
-            LlmUsage usage
+            LlmUsage usage,
+            TeacherRequestPrompt.RequestCheck requestCheck
     ) {
         public TfSolverOutcome {
             judgeLabels = List.copyOf(judgeLabels);
+        }
+
+        public TfSolverOutcome(boolean passed, List<TruthChoice> judgeLabels, String judgeModel, String reasoning,
+                               LlmUsage usage) {
+            this(passed, judgeLabels, judgeModel, reasoning, usage, null);
         }
 
         public TfSolverOutcome(boolean passed, List<TruthChoice> judgeLabels, String judgeModel, String reasoning) {
@@ -202,7 +271,11 @@ public class AnswerSolverChecker {
         }
 
         TfSolverOutcome withUsage(LlmUsage newUsage) {
-            return new TfSolverOutcome(passed, judgeLabels, judgeModel, reasoning, newUsage);
+            return new TfSolverOutcome(passed, judgeLabels, judgeModel, reasoning, newUsage, requestCheck);
+        }
+
+        TfSolverOutcome withRequestCheck(TeacherRequestPrompt.RequestCheck check) {
+            return new TfSolverOutcome(passed, judgeLabels, judgeModel, reasoning, usage, check);
         }
     }
 
@@ -210,10 +283,20 @@ public class AnswerSolverChecker {
 
     /** Gọi Solver cho câu tf. Solver chỉ thấy đề dẫn và 4 ý, không thấy nhãn và lời giải của người soạn. */
     public TfSolverOutcome checkTrueFalse(String questionText, List<String> statements, List<String> llmLabels) {
+        return checkTrueFalse(questionText, statements, llmLabels, null, null);
+    }
+
+    /** Như trên, kèm yêu cầu của giáo viên (12/11, PR B; cách làm như {@link #check} mcq). */
+    public TfSolverOutcome checkTrueFalse(String questionText, List<String> statements, List<String> llmLabels,
+                                          List<String> requestCodes, String requestText) {
         String prompt = TfPromptDraftV0.buildSolverPrompt(questionText, statements);
+        String block = requestBlock(requestCodes, requestText);
         LlmCallResult result = llmClient.callJsonModeWithSchema(
-                prompt, solverModel, 0.0, TfPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON);
-        return parseAndCompareTrueFalse(result.rawText(), result.modelName(), llmLabels).withUsage(LlmUsage.of(result));
+                TeacherRequestPrompt.withSolverBlock(prompt, block), solverModel, 0.0,
+                block == null ? TfPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON : TeacherRequestPrompt.TF_SOLVER_SCHEMA);
+        TfSolverOutcome outcome = parseAndCompareTrueFalse(result.rawText(), result.modelName(), llmLabels)
+                .withUsage(LlmUsage.of(result));
+        return block == null ? outcome : outcome.withRequestCheck(TeacherRequestPrompt.parse(result.rawText()));
     }
 
     /**
@@ -261,10 +344,20 @@ public class AnswerSolverChecker {
 
     /** Gọi Solver cho câu sa. Solver chỉ thấy đề, không thấy đáp số và lời giải của người soạn. */
     public SaSolverOutcome checkShortAnswer(String questionText, String llmAnswer) {
+        return checkShortAnswer(questionText, llmAnswer, null, null);
+    }
+
+    /** Như trên, kèm yêu cầu của giáo viên (12/11, PR B; cách làm như {@link #check} mcq). */
+    public SaSolverOutcome checkShortAnswer(String questionText, String llmAnswer, List<String> requestCodes,
+                                            String requestText) {
         String prompt = SaPromptDraftV0.buildSolverPrompt(questionText);
+        String block = requestBlock(requestCodes, requestText);
         LlmCallResult result = llmClient.callJsonModeWithSchema(
-                prompt, solverModel, 0.0, SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON);
-        return parseAndCompareShortAnswer(result.rawText(), result.modelName(), llmAnswer).withUsage(LlmUsage.of(result));
+                TeacherRequestPrompt.withSolverBlock(prompt, block), solverModel, 0.0,
+                block == null ? SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON : TeacherRequestPrompt.SA_SOLVER_SCHEMA);
+        SaSolverOutcome outcome = parseAndCompareShortAnswer(result.rawText(), result.modelName(), llmAnswer)
+                .withUsage(LlmUsage.of(result));
+        return block == null ? outcome : outcome.withRequestCheck(TeacherRequestPrompt.parse(result.rawText()));
     }
 
     /**

@@ -28,6 +28,13 @@ public interface GenerationJobRepository extends JpaRepository<GenerationJob, In
     /** V7: job mới nhất của một chỗ trong đề. */
     Optional<GenerationJob> findFirstByExamSlotIdOrderByIdDesc(Integer examSlotId);
 
+    /** PR B (V28): mức lấy yêu cầu của job sinh ra từng câu (câu, request_scope); một truy vấn cho cả tập câu. */
+    @Query(value = """
+            SELECT question_id, request_scope FROM generation_job
+            WHERE question_id IN (:ids) AND job_type = 'generate' AND request_scope IS NOT NULL
+            """, nativeQuery = true)
+    List<Object[]> findRequestScopes(@Param("ids") java.util.Collection<Integer> questionIds);
+
     /** W1-3: mọi job sinh câu của một chỗ trong đề, theo thứ tự tạo (vết QC). */
     List<GenerationJob> findByExamSlotIdAndJobTypeOrderByIdAsc(Integer examSlotId, String jobType);
 

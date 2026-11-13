@@ -10,6 +10,7 @@ import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.llm.client.QuotaExhaustedException;
 import com.datn.mcq.llm.dto.LlmUsage;
+import com.datn.mcq.llm.prompt.TeacherRequestPrompt;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.FormatChecker;
 import com.datn.mcq.qc.checker.GroundingChecker;
@@ -289,26 +290,32 @@ public class QcOrchestrator {
         if (!answerSolverChecker.canRunOnline()) {
             throw new IllegalStateException(SOLVER_NOT_CONFIGURED);
         }
+        // PR B (12/11): yêu cầu của giáo viên (nếu có) được kiểm trong CÙNG lượt gọi; câu không có yêu cầu gọi y như cũ.
         if (input.questionType() == QuestionType.TF) {
             if (answerCheckRecorder == null) {
                 throw new IllegalStateException("Chưa có bộ ghi kết quả Solver câu đúng/sai");
             }
             AnswerSolverChecker.TfSolverOutcome tf = answerSolverChecker.checkTrueFalse(
-                    input.questionText(), input.statements(), input.statementLabels());
-            return new SolverVerdict(QuestionType.TF, tf.passed(), tf.judgeModel(), tf.reasoning(), null, null, null,
-                    tf.judgeLabels(), tf.usage());
+                    input.questionText(), input.statements(), input.statementLabels(), input.requestCodes(),
+                    input.requestText());
+            return withRequestCheck(new SolverVerdict(QuestionType.TF, tf.passed(), tf.judgeModel(), tf.reasoning(),
+                    null, null, null, tf.judgeLabels(), tf.usage()), tf.requestCheck());
         }
         if (input.questionType() == QuestionType.SA) {
             AnswerSolverChecker.SaSolverOutcome sa = answerSolverChecker.checkShortAnswer(
-                    input.questionText(), input.saAnswer());
-            return new SolverVerdict(QuestionType.SA, sa.passed(), sa.judgeModel(), sa.reasoning(), null,
-                    sa.judgeKind(), sa.judgeAnswer(), null, sa.usage());
+                    input.questionText(), input.saAnswer(), input.requestCodes(), input.requestText());
+            return withRequestCheck(new SolverVerdict(QuestionType.SA, sa.passed(), sa.judgeModel(), sa.reasoning(),
+                    null, sa.judgeKind(), sa.judgeAnswer(), null, sa.usage()), sa.requestCheck());
         }
         AnswerSolverChecker.SolverCheckOutcome mcq = answerSolverChecker.check(
                 input.questionText(), input.optionA(), input.optionB(), input.optionC(), input.optionD(),
-                input.correctOption());
-        return new SolverVerdict(QuestionType.MCQ, mcq.passed(), mcq.judgeModel(), mcq.reasoning(), mcq.judgeAnswer(),
-                null, null, null, mcq.usage(), mcq.optionCorrect());
+                input.correctOption(), input.requestCodes(), input.requestText());
+        return withRequestCheck(new SolverVerdict(QuestionType.MCQ, mcq.passed(), mcq.judgeModel(), mcq.reasoning(),
+                mcq.judgeAnswer(), null, null, null, mcq.usage(), mcq.optionCorrect()), mcq.requestCheck());
+    }
+
+    private static SolverVerdict withRequestCheck(SolverVerdict verdict, TeacherRequestPrompt.RequestCheck check) {
+        return check == null ? verdict : verdict.withRequestCheck(check.verdict(), check.reason());
     }
 
     /** Phiên bản prompt Solver mcq đang dùng (công cụ đo đối chiếu trước khi gọi). */
@@ -337,17 +344,21 @@ public class QcOrchestrator {
             case MCQ -> upsertCheckResult(questionId, QuestionType.MCQ, CheckType.ANSWER_CHECK, verdict.passed(),
                     verdict.judgeAnswer(), verdict.judgeModel(), null, null, null, null, verdict.reasoning());
         }
-        recordSolverUsage(questionId, verdict.usage());
+        recordSolverUsage(questionId, verdict);
     }
 
     /**
      * Đo chi phí (V21): ghi token và độ trễ của lượt Solver vào chính dòng answer_check vừa ghi. Kết quả được chép từ bản
-     * trước ({@code usage} null) để NULL, nên không bị tính chi phí hai lần.
+     * trước ({@code usage} null) để NULL, nên không bị tính chi phí hai lần. PR B (V28): cùng lúc ghi kết luận về yêu cầu
+     * của giáo viên (NULL khi không có), ghi đè kết luận cũ của dòng.
      */
-    private void recordSolverUsage(Integer questionId, LlmUsage usage) {
+    private void recordSolverUsage(Integer questionId, SolverVerdict verdict) {
+        LlmUsage usage = verdict.usage();
         qualityCheckResultRepository.findByQuestionIdAndCheckType(questionId, CheckType.ANSWER_CHECK).ifPresent(row -> {
             row.setTokenCount(usage == null ? null : usage.tokenCount());
             row.setLatencyMs(usage == null ? null : usage.latencyMs());
+            row.setRequestVerdict(verdict.requestVerdict());
+            row.setRequestReason(verdict.requestReason());
             qualityCheckResultRepository.save(row);
         });
     }
@@ -375,9 +386,10 @@ public class QcOrchestrator {
             }
             labels = answerCheckRecorder.judgeLabels(r.getId());
         }
+        // PR B: bản sửa chép yêu cầu của bản trước, nên kết luận về yêu cầu cũng được chép.
         SolverVerdict copy = new SolverVerdict(r.getQuestionType(), Boolean.TRUE.equals(r.getPassed()),
                 r.getJudgeModel(), r.getSolverReasoning(), r.getJudgeAnswer(), r.getJudgeSaKind(),
-                r.getJudgeSaAnswer(), labels);
+                r.getJudgeSaAnswer(), labels).withRequestCheck(r.getRequestVerdict(), r.getRequestReason());
         recordSolver(toQuestionId, copy);
         return Optional.of(copy.status());
     }

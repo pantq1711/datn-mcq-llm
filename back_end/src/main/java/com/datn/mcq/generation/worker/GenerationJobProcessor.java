@@ -224,7 +224,7 @@ public class GenerationJobProcessor {
         // V7: run sinh câu theo ô ma trận mang thông số ô ở hyperparams; prompt dựng lại kèm câu đã sinh của ô.
         boolean matrix = MatrixPromptDraftV0.isMatrixVersion(run.getPromptVersion()) && run.getHyperparams() != null;
         String prompt = matrix
-                ? MatrixPromptDraftV0.buildGenerationPrompt(MatrixCellSpec.fromJson(run.getHyperparams()),
+                ? MatrixPromptDraftV0.buildGenerationPrompt(matrixSpec(run.getHyperparams(), job),
                         previousQuestionLookup.recentForMatrix(tpl.getId(), questionType), job.getPromptNote(),
                         job.getMaterialContext(), sameCellQuestions(job.getExamSlotId()))
                 : questionType == QuestionType.TF
@@ -564,6 +564,25 @@ public class GenerationJobProcessor {
         job.setLastError(parseError);
         job.setUpdatedAt(LocalDateTime.now());
         generationJobRepository.save(job);
+        // PR B (12/11): câu mang yêu cầu hiệu lực của job (để Solver kiểm và để hiện cho giáo viên), cùng transaction.
+        if (job.getRequestCodes() != null || job.getRequestText() != null) {
+            generatedQuestionRepository.findById(questionId).ifPresent(q -> {
+                q.setRequestCodes(job.getRequestCodes());
+                q.setRequestText(job.getRequestText());
+                generatedQuestionRepository.save(q);
+            });
+        }
+    }
+
+    /**
+     * Thông số ô để dựng prompt (PR B, 12/11): job Đổi câu tự đặt yêu cầu ({@code request_scope = replace}) THAY HẲN yêu cầu
+     * của ô và đề trong spec của run: mã lấy từ job, bỏ văn bản tự do của ô hay đề (văn bản của lượt Đổi đã nằm trong ghi
+     * chú của job). Job khác dùng spec của run như cũ.
+     */
+    static MatrixCellSpec matrixSpec(String hyperparams, GenerationJob job) {
+        MatrixCellSpec spec = MatrixCellSpec.fromJson(hyperparams);
+        return GenerationJob.REQUEST_SCOPE_REPLACE.equals(job.getRequestScope())
+                ? spec.withRequest(job.getRequestCodes(), null) : spec;
     }
 
     /**

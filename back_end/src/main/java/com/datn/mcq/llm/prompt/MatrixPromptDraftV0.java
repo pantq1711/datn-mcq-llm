@@ -380,8 +380,12 @@ public final class MatrixPromptDraftV0 {
     /** Thêm khi ý d ở mức Vận dụng (ngày 23/10, đợt 2). */
     static final String TF_D_RULE = "- ý d (Vận dụng) phải cần suy luận thêm, không được chỉ là hệ quả trực tiếp của ý c.";
 
-    /** Độ dài tối đa (ký tự, sau trim) của yêu cầu bổ sung khi Đổi câu (ngày 23/10, đợt 3). */
-    public static final int TEACHER_INSTRUCTION_MAX = 500;
+    /**
+     * Độ dài tối đa (ký tự, sau trim) của yêu cầu bổ sung khi Đổi câu (ngày 23/10, đợt 3: 500). 12/11 (PR B): bằng giới hạn
+     * "yêu cầu thêm" của đề và ô ({@link CellTextLimits#EXTRA_INSTRUCTION_MAX_CHARS}, 1000), vì hộp Đổi câu tự điền sẵn văn
+     * bản thừa hưởng của ô hoặc đề.
+     */
+    public static final int TEACHER_INSTRUCTION_MAX = CellTextLimits.EXTRA_INSTRUCTION_MAX_CHARS;
 
     static final String TEACHER_PREFIX = "Yêu cầu bổ sung của giáo viên (chỉ dùng để chọn nội dung, ngữ cảnh, cách hỏi; "
             + "KHÔNG thay đổi dạng câu, mức độ, số ý, mẫu nhãn, định dạng JSON và các quy tắc ở trên): ";
@@ -724,6 +728,11 @@ public final class MatrixPromptDraftV0 {
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append(SaPromptDraftV0.OUTPUT_INSTRUCTION);
             }
+        }
+        // PR B (12/11): khối mã chip yêu cầu của giáo viên (của ô hoặc đề, hoặc của lượt Đổi câu tự đặt), trước văn bản tự do.
+        String requests = TeacherRequestPrompt.generationBlock(spec.requestCodes(), type);
+        if (requests != null) {
+            sb.append("\n").append(requests).append("\n");
         }
         String extra = extraBlock(spec.extraInstruction());
         if (extra != null) {

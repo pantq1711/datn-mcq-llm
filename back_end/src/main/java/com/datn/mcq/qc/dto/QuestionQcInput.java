@@ -18,6 +18,9 @@ import java.util.List;
  * @param parseWarnings    (tf) cảnh báo từ bước giải mã, FormatChecker chép vào answerWarnings; rỗng khi không có
  * @param llmOutput        câu là đầu ra của LLM (luồng sinh), không phải chữ giáo viên viết hay sửa; FormatChecker chỉ áp cho
  *                         đầu ra LLM quy tắc loại lời giải tf tự thú nhận gán nhãn theo mẫu. Mặc định false.
+ * @param requestCodes     (12/11, PR B) mã chip yêu cầu của giáo viên của câu (generated_question.request_codes); rỗng khi
+ *                         không có. Solver kiểm yêu cầu trong cùng lượt gọi
+ * @param requestText      (PR B) văn bản tự do của yêu cầu (generated_question.request_text); null khi không có
  */
 public record QuestionQcInput(
         Integer questionId,
@@ -38,7 +41,9 @@ public record QuestionQcInput(
         List<String> statements,
         List<String> statementLabels,
         List<String> parseWarnings,
-        boolean llmOutput
+        boolean llmOutput,
+        List<String> requestCodes,
+        String requestText
 ) {
     public QuestionQcInput {
         questionType = questionType != null ? questionType : QuestionType.MCQ;
@@ -47,6 +52,41 @@ public record QuestionQcInput(
         statementLabels = statementLabels == null ? List.of()
                 : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(statementLabels));
         parseWarnings = parseWarnings == null ? List.of() : List.copyOf(parseWarnings);
+        requestCodes = requestCodes == null ? List.of() : List.copyOf(requestCodes);
+        requestText = requestText == null || requestText.isBlank() ? null : requestText;
+    }
+
+    /** Chữ ký trước PR B (câu không có yêu cầu của giáo viên). */
+    public QuestionQcInput(
+            Integer questionId,
+            boolean parseSuccess,
+            String questionText,
+            String optionA,
+            String optionB,
+            String optionC,
+            String optionD,
+            Option correctOption,
+            String explanation,
+            boolean validateLatex,
+            boolean runAnswerCheck,
+            String parseError,
+            QuestionType questionType,
+            String saAnswer,
+            boolean saAnswerIsString,
+            List<String> statements,
+            List<String> statementLabels,
+            List<String> parseWarnings,
+            boolean llmOutput) {
+        this(questionId, parseSuccess, questionText, optionA, optionB, optionC, optionD, correctOption, explanation,
+                validateLatex, runAnswerCheck, parseError, questionType, saAnswer, saAnswerIsString, statements,
+                statementLabels, parseWarnings, llmOutput, null, null);
+    }
+
+    /** Bản sao kèm yêu cầu của giáo viên (PR B, đọc từ generated_question). */
+    public QuestionQcInput withRequest(List<String> codes, String text) {
+        return new QuestionQcInput(questionId, parseSuccess, questionText, optionA, optionB, optionC, optionD,
+                correctOption, explanation, validateLatex, runAnswerCheck, parseError, questionType, saAnswer,
+                saAnswerIsString, statements, statementLabels, parseWarnings, llmOutput, codes, text);
     }
 
     /** Không phải đầu ra của LLM (chữ ký trước khi có {@code llmOutput}). */
@@ -113,14 +153,14 @@ public record QuestionQcInput(
     public QuestionQcInput withParseWarnings(List<String> warnings) {
         return new QuestionQcInput(questionId, parseSuccess, questionText, optionA, optionB, optionC, optionD,
                 correctOption, explanation, validateLatex, runAnswerCheck, parseError, questionType, saAnswer,
-                saAnswerIsString, statements, statementLabels, warnings, llmOutput);
+                saAnswerIsString, statements, statementLabels, warnings, llmOutput, requestCodes, requestText);
     }
 
     /** Bản sao đánh dấu câu là đầu ra của LLM (luồng sinh) hay không. */
     public QuestionQcInput withLlmOutput(boolean fromLlm) {
         return new QuestionQcInput(questionId, parseSuccess, questionText, optionA, optionB, optionC, optionD,
                 correctOption, explanation, validateLatex, runAnswerCheck, parseError, questionType, saAnswer,
-                saAnswerIsString, statements, statementLabels, parseWarnings, fromLlm);
+                saAnswerIsString, statements, statementLabels, parseWarnings, fromLlm, requestCodes, requestText);
     }
 
     /** Câu Trả lời ngắn (V4): không có phương án và correct_option. */

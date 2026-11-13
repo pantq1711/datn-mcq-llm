@@ -34,6 +34,8 @@ Java: đặt tên hằng kiểu `ZERO_SHOT`, `FEW_SHOT_STRUCTURED`... và có b�
 | `QuestionOrigin` (V26) | `generated_question.origin` |
 | `ImportBatchStatus` (V26) | `import_batch.status` (chưa có enum Java, hằng ở `ImportBatch.STATUS_*`) |
 | `ExamChallenge` (V27, 12/11) | `exam.challenge` |
+| `TeacherRequest` (V28, PR B 12/11) | phần tử của mảng `request_codes TEXT[]` ở `exam_generation_context`, `exam_slot_action`, `generation_job`, `generated_question` |
+| `RequestVerdict` (V28, PR B 12/11) | `quality_check_result.request_verdict` (chỉ dòng `answer_check`) |
 
 ## 2. Giá trị của từng enum
 
@@ -261,6 +263,30 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
 | `standard` | Chuẩn (mặc định: mọi đề cũ, đề thủ công, và khi client bỏ trống `challenge`) |
 | `advanced` | Nâng cao: prompt của ô mcq/sa mức Vận dụng, hoặc ô tf có ý mức Vận dụng, thêm khối "Mức NÂNG CAO" (≥ 3 bước, có thể có bẫy là lỗi sai thường gặp, kết hợp ≥ 2 kiến thức). Ô đó không lấy câu ngân hàng (luôn sinh mới); ô Biết/Hiểu như đề chuẩn. Đổi câu trong đề nâng cao giữ mức (run của ô mang mức trong `experiment_run.hyperparams`) |
 
+### `TeacherRequest` (V28, yêu cầu của giáo viên, PR B 12/11)
+
+Mỗi mã ứng với MỘT đoạn prompt cố định (hằng ở `enums/TeacherRequest.java`; sửa chữ thì sửa ở đó và ở `TeacherRequestPromptTest`).
+API nhận không phân biệt hoa thường, gộp mã trùng; lưu theo thứ tự của bảng dưới. CHECK V28: mảng chỉ gồm 6 mã này.
+
+| Giá trị trong DB | Nhãn chip | Đoạn prompt | Dạng câu |
+|---|---|---|---|
+| `real_context` | Bối cảnh thực tế | Câu hỏi đặt trong một bối cảnh thực tế quen thuộc với học sinh (đo đạc, mua bán, chuyển động, diện tích…); số liệu hợp lý với bối cảnh. | mcq, tf, sa |
+| `multi_step` | Nhiều bước biến đổi | Lời giải cần ít nhất 2 bước biến đổi có ý nghĩa; không giải được bằng cách thay số trực tiếp vào một công thức. | mcq, tf, sa |
+| `common_trap` | Có bẫy lỗi hay gặp | Có ít nhất một bẫy là lỗi sai học sinh hay mắc (sai dấu khi phá ngoặc, nhầm hằng đẳng thức…); với trắc nghiệm, ít nhất một phương án nhiễu ứng với lỗi đó. | mcq, tf, sa |
+| `extremum` | Tìm giá trị lớn nhất/nhỏ nhất | Câu hỏi yêu cầu tìm giá trị lớn nhất hoặc nhỏ nhất, giải được bằng kiến thức trong lớp. | mcq, tf, sa |
+| `geometry_link` | Liên hệ hình học | Câu hỏi gắn với một hình (độ dài, chu vi, diện tích, góc) và dùng kiến thức của bài để giải. | mcq, tf, sa |
+| `tf_shared_context` | Đúng/Sai cùng một tình huống | Bốn ý cùng xoay quanh một tình huống của đề dẫn; ý sau dùng kết quả ý trước. | chỉ tf |
+
+### `RequestVerdict` (V28, PR B 12/11)
+
+| Giá trị trong DB | Ý nghĩa |
+|---|---|
+| `met` | Solver kết luận câu đáp ứng đủ mọi yêu cầu (không cờ) |
+| `partial` | Chỉ đáp ứng một phần: cờ thông tin `request_partial: <lý do>` |
+| `not_met` | Không đáp ứng: cờ thông tin `request_not_met: <lý do>` |
+
+NULL: câu không có yêu cầu, hoặc Solver không trả `request_check` hợp lệ (thiếu, hỏng, verdict lạ; không coi là lỗi Solver).
+
 ## 3. Quy tắc đi kèm (cần nhớ khi code, DB không tự đảm bảo hết)
 
 - **Đáp án đúng luôn do giáo viên quyết.** API lấy câu để chấm không được trả `correct_option` về form, kể cả trong JSON ẩn. Backend tự so để ra `answer_correct`.
@@ -329,7 +355,7 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     (lệch ma trận), `duplicate_pattern` (trùng khuôn với câu khác), `latex_format` (lỗi công thức / định dạng), `too_hard`,
     `too_easy`, `other`; NULL khi không chọn và với `keep`/`edit`/dòng `replace` trước V25. API nhận qua trường `reason` của
     `POST .../replace`, giá trị ngoài danh sách là 400 `INVALID_REQUEST`.
-  - `exam_slot_action.action`: `keep`, `edit`, `replace` (`edit_distance` chỉ với `edit`). `instruction` (V9): yêu cầu bổ sung của giáo viên khi Đổi câu, 1–500 ký tự, chỉ dòng `replace`; NULL khi không có. `changed_fields` (V13): chỉ dòng `edit` (xem mục "Giáo viên sửa câu trong đề").
+  - `exam_slot_action.action`: `keep`, `edit`, `replace` (`edit_distance` chỉ với `edit`). `instruction` (V9): yêu cầu bổ sung của giáo viên khi Đổi câu, 1–1000 ký tự (từ migration PR B, V28; trước đó 1–500), chỉ dòng `replace`; NULL khi không có. `request_codes` (V28): mã chip gửi ở lượt Đổi, chỉ dòng `replace`; NULL khi không gửi `requestCodes`, mảng rỗng khi gửi `[]`. `changed_fields` (V13): chỉ dòng `edit` (xem mục "Giáo viên sửa câu trong đề").
   - `teacher_review.review_mode`: `blind` (mặc định cột; chỉ còn ở dữ liệu cũ vì form chấm mù đã gỡ ngày 25/10) hoặc `assisted` (Giữ/Sửa ở chế độ giáo viên,
     mọi dòng mới). Đánh giá `assisted` bị loại khỏi mọi chỉ số chấm mù cũ (`answer_correct`, duyệt không sửa).
   - Run sinh câu theo ô: `purpose = 'production'`, `strategy = 'zero-shot'`, `prompt_version` `matrix-mcq-v1-draft`,
@@ -415,6 +441,25 @@ Nhãn mà người chấm hoặc Solver đưa ra cho một ý (giống quan hệ
     - Câu mẫu độ sâu (`DepthExampleCatalog`, `MatrixPromptDraftV0.depthExamplesBlock`): file JSON NGOÀI repo, cấu hình `app.prompt.depth-examples-file` (biến `DEPTH_EXAMPLES_FILE`), nạp một lần lúc khởi động. Định dạng `{"examples": [{"subject": "Toán", "grade": 8, "level": "hard", "questionType": "sa", "text": "..."}]}`; `level` (`easy`/`medium`/`hard`) và `text` bắt buộc, `subject`/`grade`/`questionType` bỏ trống là áp mọi môn/lớp/dạng; phần tử sai bị bỏ qua; đường dẫn trống, thiếu file hoặc file hỏng thì không có câu mẫu. Lúc tạo đề, mỗi ô lấy tối đa 2 câu mỗi mức ô dùng (khớp môn, lớp, dạng), lưu trong `experiment_run.hyperparams` (khóa `depthExamples`). Prompt có khối "VÍ DỤ ĐỘ SÂU MONG MUỐN" ngay sau khối phạm vi (và khối Vận dụng nếu có), mỗi câu một dòng `- <mức>: <<< ... >>>` qua `PromptData.neutralize`, gộp khoảng trắng, cắt 600 ký tự, kèm lời dặn "học độ sâu và cách hỏi, KHÔNG chép số liệu hay câu chữ".
     - `experiment_run.hyperparams` (`MatrixCellSpec`) có thêm khóa `challenge` (chỉ khi `advanced`) và `depthExamples` (chỉ khi có): JSON của ô chuẩn không câu mẫu giữ nguyên như trước.
     - Đổi câu theo lý do (`replace_reason`, V25): `too_easy`/`too_hard` thêm một dòng "Lý do giáo viên Đổi câu trước: QUÁ DỄ. Câu mới phải cùng ô, cùng mức nhưng khó hơn rõ rệt (thêm bước, kết hợp kiến thức, bối cảnh)." / "QUÁ KHÓ. … dễ hơn, ít bước hơn.", kèm tối đa 200 ký tự đề dẫn câu cũ trong `<<< >>>` (qua `neutralize`, gộp khoảng trắng). Dòng nằm trong `generation_job.prompt_note` sau các dòng hệ thống, trước khối yêu cầu bổ sung của giáo viên; prompt đặt cả hai ở CUỐI (sau quy tắc đầu ra). Lần sinh lại tự động của cùng lượt Đổi giữ dòng này. Lý do khác hoặc không chọn lý do: prompt như cũ.
+  - **Yêu cầu của giáo viên (PR B, 12/11, V28)**: chip `TeacherRequest` ở 3 chỗ (cả đề: `requestCodes` của tạo đề theo ma trận
+    hoặc theo bài; từng ô: `cells[].requestCodes`; Đổi câu: `requestCodes`). Phiên bản prompt ma trận KHÔNG đổi: ô không có mã
+    giữ prompt như cũ.
+    - Prompt sinh câu: khối "YÊU CẦU CỦA GIÁO VIÊN (bắt buộc, không được trái các quy tắc ở trên):", mỗi mã một dòng
+      `- <đoạn cố định>`, đặt sau yêu cầu định dạng đầu ra, trước khối văn bản tự do (`extraBlock` / `teacherBlock`).
+    - Mã không hợp dạng câu (`tf_shared_context` với mcq/sa): ở mức đề và ô được nhận nhưng không vào prompt, không lưu vào
+      câu, không được kiểm; ở Đổi câu trả 400 `INVALID_REQUEST` "Yêu cầu \"<nhãn>\" không áp dụng cho câu <Trắc nghiệm|Đúng/Sai|Trả lời ngắn>."
+    - Ưu tiên Đổi câu > ô > đề, mức cụ thể hơn THAY HẲN mức dưới, cho cả mã lẫn văn bản: ô có mã hoặc văn bản thì dùng cả bộ
+      của ô; Đổi câu có gửi `requestCodes` (kể cả `[]`) hoặc có `instruction` thì tự đặt (`generation_job.request_scope =
+      replace`), prompt bỏ hẳn mã và văn bản của ô và đề (trước PR B, `instruction` của Đổi câu được CỘNG vào văn bản của ô).
+      Không gửi gì thì thừa hưởng của ô, không có thì của đề. Ô có yêu cầu áp dụng cho dạng câu của ô thì không lấy câu ngân hàng.
+    - `generation_job.request_codes`/`request_text`/`request_scope`: yêu cầu hiệu lực tính lúc xếp hàng (mã đã lọc theo dạng
+      câu); lần sinh lại tự động giữ yêu cầu của job trước. Worker chép mã và văn bản sang `generated_question`; bản giáo viên
+      sửa chép từ bản trước. `experiment_run.hyperparams` có khóa `requestCodes` (chỉ khi có mã).
+  - **`ExamItemDto.infoReasons`** (PR B): cờ THÔNG TIN, luôn có (`[]` khi không có), mỗi giá trị dạng `<mã>` hoặc `<mã>: <chi tiết>`:
+    `request_partial: <lý do>`, `request_not_met: <lý do>` (tính từ `request_verdict` của dòng answer_check). Không bật
+    `needsReview`, không vào `reviewReasons`, không tính vào `needsReviewCount`/`needsReviewSlots`, không đổi `qcState`, trạng thái
+    câu hay ngân hàng riêng/chung khi Giữ. Về sau dùng thêm cho "Có hình" và lỗi phương án nhiễu (PA1). Frontend hiện giá trị lạ
+    nguyên văn.
   - Dấu câu cuối câu dẫn và ý Đúng/Sai do BƯỚC GIẢI MÃ của parser (chế độ production, `StemPunctuation`; 4/11, dev-log L-70), không dựa vào prompt (đo đề 16: quy tắc "?" trong prompt chỉ được 0/4 câu tuân thủ nên đã bỏ khỏi prompt), nên web và Word thấy cùng một chữ:
     - Câu dẫn (`question_text`) mcq/sa/tf kết thúc bằng `là:` hoặc `là :` thành `là` (câu nối kết thúc bằng "là", không dấu câu); câu kết thúc bằng "là" giữ nguyên.
     - Câu dẫn **mcq và sa** có từ hỏi (`nào`, `bao nhiêu`, `gì`, `mấy`; so theo từ nguyên, không phân biệt hoa thường, chữ trong `$…$` không tính) ở CÂU CUỐI (sau dấu `. ? ! ; :` hoặc xuống dòng cuối cùng) mà không kết thúc bằng dấu câu (`. ? ! … : ; ,`) và không kết thúc bằng "là" thì thêm `?`. `đúng hay sai` và `có phải` KHÔNG là từ hỏi.
@@ -592,6 +637,9 @@ Solver chỉ thấy đề dẫn và 4 ý, không thấy nhãn và lời giải c
 
 ### 4.6. Solver câu `mcq` (4 trường, `solver-v4-literal-reading` và `solver-v3-option-check`, thẩm định 31/10)
 
+Từ 12/11 (PR B) mặc định là `solver-v5-request-check`: câu không có yêu cầu của giáo viên dùng đúng prompt và JSON v4 dưới
+đây (từng ký tự); câu có yêu cầu xem mục 4.7. Bản kế tiếp (PA1, phương án nhiễu kèm lỗi sai) sẽ là `solver-v6`.
+
 Solver chỉ thấy đề và 4 phương án, không thấy đáp án và lời giải của câu. Solver giải bài rồi xét **từng** phương án A–D,
 không dừng ở phương án đầu tiên khớp. Thứ tự: `reasoning`, `options_verdict`, `correct_count`, `judge_answer`.
 
@@ -616,6 +664,27 @@ v2 và v3 giữ nguyên để đo lại, chọn bằng `app.llm.solver-prompt-ve
 
 Backend đếm số phương án đúng từ chính `options_verdict`. `correct_count` hoặc `judge_answer` lệch thì ghi cảnh báo vào
 log và vẫn theo `options_verdict`.
+
+### 4.7. Solver kèm yêu cầu của giáo viên (`solver-v5-request-check`, PR B 12/11)
+
+Áp cho cả 3 dạng câu khi câu có yêu cầu (`generated_question.request_codes` hoặc `request_text`) và phiên bản Solver là v5
+(mặc định; cấu hình v2, v3, v4 thì không kiểm yêu cầu). Vẫn MỘT lượt gọi Gemini.
+
+- Prompt: khối sau đề bài, phương án/ý và các bước giải, ngay trước dòng "Trả về DUY NHẤT …" (dòng đó thêm `"request_check"`
+  vào cuối danh sách trường và tăng số trường thêm 1):
+  ```
+  YÊU CẦU CỦA GIÁO VIÊN ĐỐI VỚI CÂU NÀY (chỉ xét SAU KHI đã giải xong và chọn đáp án; yêu cầu không được làm thay đổi cách giải hay đáp án):
+  - <đoạn cố định của từng mã>
+  - Yêu cầu khác: <<< văn bản tự do, qua neutralize, gộp khoảng trắng >>>
+  Trong request_check: verdict = met nếu câu đáp ứng đủ mọi yêu cầu, partial nếu chỉ một phần, not_met nếu không; reason ≤ 20 từ.
+  ```
+- Schema: thêm `request_check` = `{"verdict": "met" | "partial" | "not_met", "reason": chuỗi}` ở CUỐI `properties`,
+  `required`, `propertyOrdering` (mcq: `AnswerSolverChecker.SOLVER_RESPONSE_SCHEMA_JSON_REQUEST`; tf, sa:
+  `TeacherRequestPrompt.TF_SOLVER_SCHEMA`, `SA_SOLVER_SCHEMA`). Các trường cũ giữ nguyên thứ tự.
+- Cách xét đáp án không đổi: `passed`, `judge_*`, sinh lại do Solver lệch như cũ. `request_check` không bao giờ làm câu không
+  đạt và không kích hoạt sinh lại. Thiếu hoặc hỏng `request_check`: `request_verdict` NULL, không cờ, không lỗi.
+- Lưu: `quality_check_result.request_verdict`, `request_reason` (cắt 500 ký tự) trên dòng `answer_check`; chép sang bản sửa
+  khi bản sửa chỉ đổi lời giải.
 
 `options_verdict` có nhưng hỏng (không đủ 4 phần tử A-D hợp lệ: thiếu, trùng chữ cái, `correct` không phải boolean, phần tử
 không phải đối tượng) với prompt xét từng phương án (v3, v4) (F-03, 3/11): đã đọc được từ 2 phương án `correct = true` ở những

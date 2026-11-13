@@ -133,22 +133,29 @@ class ExamContextBuildTest extends ExamFlowTestBase {
     }
 
     @Test
-    void doiCauBangSinhLaiGiuYeuCauCuaOVaKhoiYeuCauDoiCauDungSau() throws Exception {
+    void doiCauCoYeuCauThayHanYeuCauCuaDeKhongCoThiGiuYeuCauCuaDe() throws Exception {
         JsonNode built = json(lesson("\"extraInstruction\": \"Ngữ cảnh mua sắm\"").andExpect(status().isOk()));
         int examId = built.get("examId").asInt();
         settle(examId);
         int cell = count("SELECT cell_id FROM exam_slot WHERE exam_id = ? LIMIT 1", examId);
         int slot = slotId(examId, cell, 1);
+        // PR B (12/11, docs/design/kiem-soat-do-kho.md 4.2): yêu cầu của lượt Đổi câu THAY HẲN yêu cầu của ô và đề
+        // (trước đây được cộng thêm sau yêu cầu của ô).
         generator.mcqPrompts.clear();
         perform(post("/api/exams/" + examId + "/slots/" + slot + "/replace")
                 .contentType("application/json").content("{\"instruction\": \"Chỉ dùng số nguyên\"}"))
                 .andExpect(status().isOk());
         settle(examId);
         String prompt = generator.mcqPrompts.get(generator.mcqPrompts.size() - 1);
-        assertTrue(prompt.contains("<<< Ngữ cảnh mua sắm >>>"), prompt);
+        assertFalse(prompt.contains("Ngữ cảnh mua sắm"), prompt);
         assertTrue(prompt.contains("<<< Chỉ dùng số nguyên >>>"), prompt);
-        assertTrue(prompt.indexOf("Ngữ cảnh mua sắm") < prompt.indexOf("Chỉ dùng số nguyên"),
-                "yêu cầu của ô trước, yêu cầu của lượt Đổi câu sau cùng");
+        // Đổi câu không gửi gì: vẫn theo yêu cầu thừa hưởng của đề
+        generator.mcqPrompts.clear();
+        perform(post("/api/exams/" + examId + "/slots/" + slot + "/replace")).andExpect(status().isOk());
+        settle(examId);
+        prompt = generator.mcqPrompts.get(generator.mcqPrompts.size() - 1);
+        assertTrue(prompt.contains("<<< Ngữ cảnh mua sắm >>>"), prompt);
+        assertFalse(prompt.contains("Chỉ dùng số nguyên"), "lượt Đổi sau không mang yêu cầu của lượt trước");
     }
 
     // ---------- kiểm tra đầu vào ----------
