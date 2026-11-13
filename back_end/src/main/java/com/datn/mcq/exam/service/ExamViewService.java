@@ -11,6 +11,7 @@ import com.datn.mcq.exam.dto.ExamViewDtos.ExamSummaryDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ItemStatementDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.PartDto;
+import com.datn.mcq.exam.dto.ExamViewDtos.RequestsDto;
 import com.datn.mcq.exam.entity.Exam;
 import com.datn.mcq.exam.entity.ExamSlot;
 import com.datn.mcq.exam.repository.ExamRepository;
@@ -56,18 +57,20 @@ public class ExamViewService {
     private final GenerationService generationService;
     private final BankService bankService;
     private final QcSummaryService qcSummaryService;
+    private final ExamContextService contextService;
 
     private final double similarThreshold;
 
     public ExamViewService(ExamBuildService buildService, ExamRepository examRepository,
                            ExamSlotRepository slotRepository, MatrixService matrixService,
                            GenerationService generationService, BankService bankService,
-                           QcSummaryService qcSummaryService,
+                           QcSummaryService qcSummaryService, ExamContextService contextService,
                            @Value("${app.exam.similar-threshold:0.82}") double similarThreshold) {
         if (!(similarThreshold > 0.0 && similarThreshold <= 1.0)) {
             throw new IllegalArgumentException("app.exam.similar-threshold phải nằm trong (0, 1], nhận " + similarThreshold);
         }
         this.similarThreshold = similarThreshold;
+        this.contextService = contextService;
         this.buildService = buildService;
         this.examRepository = examRepository;
         this.slotRepository = slotRepository;
@@ -128,10 +131,13 @@ public class ExamViewService {
      * @param originals  bản gốc LLM của câu sinh đã sửa và của câu sinh đứng sau chỗ đã có bản ngân hàng
      * @param jobs       job answer_check và grounding_check mới nhất của {@code questions}
      * @param qc         tóm tắt QC của {@code questions}
+     * @param scopes     (PR B) mức lấy yêu cầu của job đã sinh ra câu (theo id câu gốc LLM)
+     * @param requests   (PR B) yêu cầu của đề và các ô theo id đề, để tính yêu cầu thừa hưởng của từng chỗ
      */
     private record Loaded(Map<Integer, BankItemDto> bank, Map<Integer, GeneratedQuestion> questions,
                           Map<Integer, List<GeneratedQuestionStatement>> statements, Map<Integer, Integer> originals,
-                          GenerationService.CheckJobs jobs, Map<Integer, QcSummary> qc) {}
+                          GenerationService.CheckJobs jobs, Map<Integer, QcSummary> qc, Map<Integer, String> scopes,
+                          Map<Integer, ExamContextService.Resolved> requests) {}
 
     private Loaded load(Collection<ExamSlot> slots) {
         Set<Integer> bankIds = new LinkedHashSet<>();
@@ -159,9 +165,36 @@ public class ExamViewService {
                 originalIds.add(q.getId());
             }
         }
-        return new Loaded(bank, questions, generationService.statementsByQuestionIds(tfIds),
-                generationService.originalQuestionIds(originalIds), generationService.latestCheckJobs(generatedIds),
-                qcSummaryService.summarizeAll(generatedIds));
+        Map<Integer, Integer> originals = generationService.originalQuestionIds(originalIds);
+        // PR B: số truy vấn cố định (một cho mức yêu cầu của job, một cho yêu cầu của đề và ô), không theo số câu.
+        Set<Integer> scopeIds = new LinkedHashSet<>(generatedIds);
+        questions.values().forEach(q -> scopeIds.add(originals.getOrDefault(q.getId(), q.getId())));
+        Set<Integer> examIds = new LinkedHashSet<>();
+        slots.forEach(s -> examIds.add(s.getExamId()));
+        return new Loaded(bank, questions, generationService.statementsByQuestionIds(tfIds), originals,
+                generationService.latestCheckJobs(generatedIds), qcSummaryService.summarizeAll(generatedIds),
+                generationService.requestScopes(scopeIds), contextService.requestsOf(examIds));
+    }
+
+    /** PR B: yêu cầu thừa hưởng của chỗ (mã đã lọc theo dạng câu); null khi không có. */
+    private static RequestsDto inheritedRequests(ExamSlot slot, Loaded data) {
+        ExamContextService.Resolved resolved = data.requests().get(slot.getExamId());
+        ExamContextService.RequestLevel level = resolved == null ? null : resolved.requestFor(slot.getCellId());
+        if (level == null) {
+            return null;
+        }
+        List<String> codes = level.codesFor(slot.getQuestionType());
+        return codes.isEmpty() && level.text() == null ? null : new RequestsDto(codes, level.text(), level.scope());
+    }
+
+    /** PR B: yêu cầu mà câu sinh {@code q} được sinh theo; null khi câu không có yêu cầu. */
+    private static RequestsDto ownRequests(GeneratedQuestion q, Loaded data) {
+        List<String> codes = q.getRequestCodes() == null ? List.of() : q.getRequestCodes();
+        if (codes.isEmpty() && q.getRequestText() == null) {
+            return null;
+        }
+        Integer root = q.getEditedFromQuestionId() == null ? q.getId() : data.originals().getOrDefault(q.getId(), q.getId());
+        return new RequestsDto(codes, q.getRequestText(), data.scopes().get(root));
     }
 
     /**
@@ -303,6 +336,16 @@ public class ExamViewService {
     }
 
     private ExamItemDto toItem(ExamSlot slot, ExamMatrixCell cell, Loaded data) {
+        ExamItemDto item = toItemWithoutRequests(slot, cell, data);
+        // PR B: cờ thông tin và yêu cầu chỉ có với câu hệ thống sinh đang hiện bản sinh (chưa có bản ngân hàng).
+        boolean generated = ExamBuildService.hasQuestion(slot) && slot.getBankItemId() == null
+                && slot.getGeneratedQuestionId() != null;
+        GeneratedQuestion q = generated ? data.questions().get(slot.getGeneratedQuestionId()) : null;
+        return item.withRequests(q == null ? List.of() : data.qc().get(q.getId()).infoReasons(),
+                q == null ? null : ownRequests(q, data), inheritedRequests(slot, data));
+    }
+
+    private ExamItemDto toItemWithoutRequests(ExamSlot slot, ExamMatrixCell cell, Loaded data) {
         String source = slot.getGeneratedQuestionId() != null ? "generated"
                 : slot.getBankItemId() != null ? "bank" : null;
         boolean hasQuestion = ExamBuildService.hasQuestion(slot);

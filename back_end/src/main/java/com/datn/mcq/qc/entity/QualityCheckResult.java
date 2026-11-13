@@ -3,6 +3,7 @@ package com.datn.mcq.qc.entity;
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
 import com.datn.mcq.enums.QuestionType;
+import com.datn.mcq.enums.RequestVerdict;
 import com.datn.mcq.enums.SaJudgeKind;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -70,6 +71,33 @@ public class QualityCheckResult {
     /** V21: độ trễ (mili giây) của lượt gọi Solver đó; cùng quy tắc NULL với {@link #tokenCount}. */
     @Column(name = "latency_ms")
     private Double latencyMs;
+
+    /**
+     * V28 (12/11, PR B): kết luận của Solver về yêu cầu của giáo viên (chỉ dòng answer_check); NULL khi câu không có yêu cầu
+     * hoặc Solver không trả kết luận hợp lệ.
+     */
+    @Column(name = "request_verdict", length = 10)
+    private RequestVerdict requestVerdict;
+
+    /** V28: lý do ngắn của kết luận trên; NULL khi không có. */
+    @Column(name = "request_reason", columnDefinition = "TEXT")
+    private String requestReason;
+
+    public RequestVerdict getRequestVerdict() {
+        return requestVerdict;
+    }
+
+    public void setRequestVerdict(RequestVerdict requestVerdict) {
+        this.requestVerdict = requestVerdict;
+    }
+
+    public String getRequestReason() {
+        return requestReason;
+    }
+
+    public void setRequestReason(String requestReason) {
+        this.requestReason = requestReason;
+    }
 
     @Column(name = "checked_at")
     private LocalDateTime checkedAt;

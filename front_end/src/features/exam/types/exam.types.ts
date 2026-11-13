@@ -62,6 +62,55 @@ export interface ExamQuestionItem {
     edited?: boolean;
     originalQuestionId?: number;
     failureReason?: ExamSlotFailureReason;
+    infoReasons?: string[];
+    requests?: TeacherRequests;
+    inheritedRequests?: TeacherRequests;
+}
+
+/** Chip yêu cầu của giáo viên (PR B, docs/contract/enums.md TeacherRequest). */
+export type TeacherRequestCode =
+    | "real_context"
+    | "multi_step"
+    | "common_trap"
+    | "extremum"
+    | "geometry_link"
+    | "tf_shared_context";
+
+/** Nhãn chip; tfOnly: chỉ áp cho câu Đúng/Sai (ẩn với dạng khác). */
+export const TEACHER_REQUEST_OPTIONS: { value: TeacherRequestCode; label: string; tfOnly?: boolean }[] = [
+    { value: "real_context", label: "Bối cảnh thực tế" },
+    { value: "multi_step", label: "Nhiều bước biến đổi" },
+    { value: "common_trap", label: "Có bẫy lỗi hay gặp" },
+    { value: "extremum", label: "Tìm giá trị lớn nhất/nhỏ nhất" },
+    { value: "geometry_link", label: "Liên hệ hình học" },
+    { value: "tf_shared_context", label: "Đúng/Sai cùng một tình huống", tfOnly: true },
+];
+
+/** Các chip hợp dạng câu (ẩn chip chỉ cho Đúng/Sai với câu khác). */
+export function teacherRequestOptionsFor(type?: ExamQuestionType) {
+    return TEACHER_REQUEST_OPTIONS.filter(o => !o.tfOnly || type === undefined || type === "tf");
+}
+
+/** Nhãn chip của một mã; mã lạ hiện nguyên văn. */
+export function teacherRequestLabel(code: string): string {
+    return TEACHER_REQUEST_OPTIONS.find(o => o.value === code)?.label ?? code;
+}
+
+/** Chuỗi hiển thị một cờ thông tin (infoReasons); giá trị lạ hiện nguyên văn. */
+export function describeInfoReason(reason: string): string {
+    const at = reason.indexOf(": ");
+    const code = at < 0 ? reason : reason.slice(0, at);
+    const detail = at < 0 ? "" : reason.slice(at + 2);
+    if (code === "request_partial") return `Đúng một phần yêu cầu${detail ? `: ${detail}` : ""}`;
+    if (code === "request_not_met") return `Chưa đúng yêu cầu${detail ? `: ${detail}` : ""}`;
+    return reason;
+}
+
+/** Yêu cầu của câu (requests) hoặc yêu cầu thừa hưởng của chỗ (inheritedRequests), docs/api mục 7.4. */
+export interface TeacherRequests {
+    codes: TeacherRequestCode[];
+    text?: string | null;
+    scope: "replace" | "cell" | "exam";
 }
 
 export interface Subject {
@@ -85,6 +134,8 @@ export interface ChangeQuestionRequest {
     source?: "generate" | "bank";
     /** Lý do giáo viên chọn khi Đổi (tùy chọn); không chọn thì không gửi. */
     reason?: ReplaceReason;
+    /** Chip yêu cầu của lượt Đổi; khi soạn mới luôn gửi (kể cả []) để backend coi là tự đặt yêu cầu. */
+    requestCodes?: TeacherRequestCode[];
 }
 
 /** Lý do Đổi câu, khớp CHECK chk_esa_replace_reason (V25) và docs/contract/enums.md. */
@@ -156,6 +207,10 @@ export interface ExamItemDto {
     edited: boolean;
     originalQuestionId?: number;
     failureReason?: ExamSlotFailureReason;
+    /** Cờ thông tin (không phải "cần xem kỹ"), luôn có: request_partial: …, request_not_met: … */
+    infoReasons?: string[];
+    requests?: TeacherRequests;
+    inheritedRequests?: TeacherRequests;
 }
 
 export interface ExamPartDto {
@@ -235,6 +290,7 @@ export interface BuildByLessonPayload {
     materialIds?: number[];
     extraInstruction?: string;
     challenge?: ExamChallenge;
+    requestCodes?: TeacherRequestCode[];
 }
 
 export interface BuildResultDto {
@@ -253,12 +309,14 @@ export interface ReplaceQuestionParams {
     source?: "generate" | "bank";
     instruction?: string;
     reason?: ReplaceReason;
+    requestCodes?: TeacherRequestCode[];
 }
 
 export interface CellContextInput {
     cellId: number;
     materialIds?: number[];
     extraInstruction?: string;
+    requestCodes?: TeacherRequestCode[];
 }
 
 export interface BuildExamRequest {
@@ -267,4 +325,5 @@ export interface BuildExamRequest {
     materialIds?: number[];
     cells?: CellContextInput[];
     challenge?: ExamChallenge;
+    requestCodes?: TeacherRequestCode[];
 }

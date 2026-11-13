@@ -600,6 +600,36 @@ public class GenerationService {
     @Transactional
     public GenerationJob enqueueMatrixJob(Integer runId, Integer templateId, MatrixCellSpec spec, Integer examSlotId,
                                           LocalDateTime nextRunAt, String promptNote, MaterialSnapshot material) {
+        return enqueueMatrixJob(runId, templateId, spec, examSlotId, nextRunAt, promptNote, material, JobRequest.NONE);
+    }
+
+    /**
+     * Yêu cầu hiệu lực của một job sinh câu (12/11, PR B, V28), tính lúc xếp hàng.
+     *
+     * @param codes mã chip đã lọc theo dạng câu (rỗng khi không có)
+     * @param text  văn bản tự do đã chuẩn hóa; null khi không có
+     * @param scope {@code replace} (lượt Đổi câu tự đặt, kể cả khi bỏ hết), {@code cell}, {@code exam}; null khi job không
+     *              có yêu cầu
+     */
+    public record JobRequest(List<String> codes, String text, String scope) {
+        public static final JobRequest NONE = new JobRequest(List.of(), null, null);
+
+        public JobRequest {
+            codes = codes == null ? List.of() : List.copyOf(codes);
+            text = text == null || text.isBlank() ? null : text;
+        }
+
+        /** Yêu cầu đã lưu của một job (lần sinh lại tự động giữ yêu cầu của lượt đó). */
+        public static JobRequest of(GenerationJob job) {
+            return new JobRequest(job.getRequestCodes(), job.getRequestText(), job.getRequestScope());
+        }
+    }
+
+    /** Như trên, kèm yêu cầu hiệu lực của job (PR B); {@code request} null là không có yêu cầu. */
+    @Transactional
+    public GenerationJob enqueueMatrixJob(Integer runId, Integer templateId, MatrixCellSpec spec, Integer examSlotId,
+                                          LocalDateTime nextRunAt, String promptNote, MaterialSnapshot material,
+                                          JobRequest request) {
         LocalDateTime now = LocalDateTime.now();
         GenerationJob job = new GenerationJob();
         job.setQuestionType(spec.questionType());
@@ -612,6 +642,11 @@ public class GenerationService {
         job.setPromptNote(promptNote == null || promptNote.isBlank() ? null : promptNote);
         job.setMaterialContext(material == null ? null : material.context());
         job.setMaterialRefs(material == null ? null : material.refsJson());
+        if (request != null) {
+            job.setRequestCodes(request.codes());
+            job.setRequestText(request.text());
+            job.setRequestScope(request.scope());
+        }
         job.setStatus(JobStatus.PENDING);
         job.setAttempt(0);
         job.setNextRunAt(nextRunAt != null ? nextRunAt : now);
@@ -718,6 +753,22 @@ public class GenerationService {
         }
         for (Integer id : questionIds) {
             out.putIfAbsent(id, id);
+        }
+        return out;
+    }
+
+    /**
+     * PR B (12/11): mức lấy yêu cầu ({@code replace}, {@code cell}, {@code exam}) của job đã sinh ra từng câu, một truy vấn;
+     * câu không có job hoặc job không có yêu cầu thì vắng mặt.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<Integer, String> requestScopes(java.util.Collection<Integer> questionIds) {
+        java.util.Map<Integer, String> out = new java.util.HashMap<>();
+        if (questionIds.isEmpty()) {
+            return out;
+        }
+        for (Object[] row : generationJobRepository.findRequestScopes(questionIds)) {
+            out.put(((Number) row[0]).intValue(), String.valueOf(row[1]));
         }
         return out;
     }

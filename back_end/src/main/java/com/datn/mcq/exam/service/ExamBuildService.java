@@ -112,9 +112,14 @@ public class ExamBuildService {
             throw new IllegalArgumentException("Phải truyền matrixId");
         }
         ExamChallenge challenge = parseChallenge(req.challenge());
+        // PR B (12/11): mã chip của đề và của từng ô kiểm trước mọi ghi (mã lạ 400).
+        List<String> requestCodes = ExamContextService.normalizeRequestCodes(req.requestCodes());
+        if (req.cells() != null) {
+            req.cells().forEach(c -> ExamContextService.normalizeRequestCodes(c == null ? null : c.requestCodes()));
+        }
         // W1-4: khóa chia sẻ hàng ma trận tới hết transaction, để xóa/sửa ma trận đồng thời phải chờ (không thành 500).
         return buildFromMatrix(matrixService.getOwnedMatrixShared(req.matrixId(), actorId), req.title(), actorId,
-                req.materialIds(), null, req.cells(), challenge);
+                req.materialIds(), null, requestCodes, req.cells(), challenge);
     }
 
     /** 400 INVALID_REQUEST khi mức thử thách ngoài standard | advanced (12/11); trống là standard. Kiểm trước mọi ghi. */
@@ -135,8 +140,10 @@ public class ExamBuildService {
     @Transactional
     public BuildResultDto buildByLesson(CreateLessonRequest req, Integer actorId) {
         ExamChallenge challenge = parseChallenge(req == null ? null : req.challenge());
+        List<String> requestCodes = ExamContextService.normalizeRequestCodes(req == null ? null : req.requestCodes());
         ExamMatrix matrix = matrixService.createLesson(req, actorId);
-        return buildFromMatrix(matrix, null, actorId, req.materialIds(), req.extraInstruction(), null, challenge);
+        return buildFromMatrix(matrix, null, actorId, req.materialIds(), req.extraInstruction(), requestCodes, null,
+                challenge);
     }
 
     /**
@@ -148,10 +155,11 @@ public class ExamBuildService {
      */
     private BuildResultDto buildFromMatrix(ExamMatrix matrix, String requestedTitle, Integer actorId,
                                            List<Integer> materialIds, String extraInstruction,
-                                           List<CellContextInput> cellInputs, ExamChallenge challenge) {
+                                           List<String> requestCodes, List<CellContextInput> cellInputs,
+                                           ExamChallenge challenge) {
         List<ExamMatrixCell> cells = matrixService.cells(matrix.getId());
         ExamContextService.Resolved context = contextService.resolve(actorId, cells, materialIds, extraInstruction,
-                cellInputs);
+                requestCodes, cellInputs);
         Subject subject = catalogService.getSubjectById(matrix.getSubjectId());
         String title = requestedTitle == null || requestedTitle.isBlank() ? matrix.getName() : requestedTitle.trim();
         if (title.length() > 255) {
@@ -192,8 +200,10 @@ public class ExamBuildService {
             slotRepository.saveAllAndFlush(slots);
             total += slots.size();
 
-            String cellInstruction = context.instructionFor(cell.getId());
-            boolean withContext = !context.materialsFor(cell.getId()).isEmpty() || cellInstruction != null
+            // PR B: yêu cầu hiệu lực của ô (của ô, không thì của đề; cả mã lẫn văn bản cùng một mức), đã lọc theo dạng câu.
+            ExamContextService.RequestLevel level = context.requestFor(cell.getId());
+            GenerationService.JobRequest cellRequest = level == null ? null : level.forType(cell.getQuestionType());
+            boolean withContext = !context.materialsFor(cell.getId()).isEmpty() || cellRequest != null
                     || (challenge == ExamChallenge.ADVANCED && outcomeLevelsUsed(cell).contains(Difficulty.HARD));
             List<Integer> bank = withContext ? List.of()
                     : bankCandidates(exam.getId(), actorId, matrix, cell, slots.size());
@@ -207,7 +217,7 @@ public class ExamBuildService {
                     missing.add(slots.get(i));
                 }
             }
-            plans.add(new CellPlan(cell, slots, missing, cellInstruction));
+            plans.add(new CellPlan(cell, slots, missing, cellRequest));
             toGenerate += missing.size();
         }
         // D1: giữ chỗ cho đúng số câu phải sinh (câu ngân hàng không tính) rồi mới xếp job, cùng transaction; vượt trần thì
@@ -220,9 +230,9 @@ public class ExamBuildService {
             ExamMatrixCell cell = plan.cell();
             List<ExamSlot> slots = plan.slots();
             List<ExamSlot> missing = plan.missing();
-            String cellInstruction = plan.instruction();
+            GenerationService.JobRequest cellRequest = plan.request();
             if (!missing.isEmpty()) {
-                MatrixCellSpec spec = spec(cell, matrix, subject, cellInstruction, challenge);
+                MatrixCellSpec spec = spec(cell, matrix, subject, cellRequest, challenge);
                 ExperimentRun run = generationService.createMatrixRun(subject.getId(), spec, missing.size());
                 MaterialPassageService.Loaded materials = passageService.load(context.materialsFor(cell.getId()));
                 String details = selectionDetails(spec);
@@ -242,7 +252,7 @@ public class ExamBuildService {
                     }
                     generationService.enqueueMatrixJob(run.getId(), cell.getTemplateId(), spec, slot.getId(),
                             start, joinNote(note),
-                            snapshotOf(materials, cell.getTopic(), details, slot.getSlotNo() - 1, 0));
+                            snapshotOf(materials, cell.getTopic(), details, slot.getSlotNo() - 1, 0), cellRequest);
                     jobs++;
                 }
             }
@@ -294,8 +304,12 @@ public class ExamBuildService {
         return out;
     }
 
-    /** Kế hoạch của một ô lúc tạo đề: các chỗ, phần chỗ chưa có câu ngân hàng (cần sinh) và yêu cầu thêm hiệu lực của ô. */
-    private record CellPlan(ExamMatrixCell cell, List<ExamSlot> slots, List<ExamSlot> missing, String instruction) {}
+    /**
+     * Kế hoạch của một ô lúc tạo đề: các chỗ, phần chỗ chưa có câu ngân hàng (cần sinh) và yêu cầu hiệu lực của ô (PR B: mã
+     * và văn bản của cùng một mức, đã lọc theo dạng câu; null khi không có).
+     */
+    private record CellPlan(ExamMatrixCell cell, List<ExamSlot> slots, List<ExamSlot> missing,
+                            GenerationService.JobRequest request) {}
 
     /**
      * Câu ngân hàng khớp một ô, đã xếp hạng mềm theo số lần dùng và đã loại câu đã có trong đề {@code examId} hoặc đã bị
@@ -551,9 +565,17 @@ public class ExamBuildService {
      */
     void enqueueRetry(ExamSlot slot) {
         Optional<GenerationJob> previous = generationService.latestJobForSlot(slot.getId());
-        // 12/11: khối lý do Đổi câu (quá dễ / quá khó) của cùng lượt Đổi cũng được giữ.
+        // 12/11: khối lý do Đổi câu (quá dễ / quá khó) của cùng lượt Đổi cũng được giữ. PR B: yêu cầu hiệu lực (mã, văn bản,
+        // mức) của job trước cũng được giữ, nên lần sinh lại của một lượt Đổi tự đặt yêu cầu vẫn thay hẳn yêu cầu của ô và đề.
         enqueue(slot, previous.map(j -> MatrixPromptDraftV0.teacherInstruction(j.getPromptNote())).orElse(null),
-                previous.map(j -> MatrixPromptDraftV0.reasonBlockOf(j.getPromptNote())).orElse(null));
+                previous.map(j -> MatrixPromptDraftV0.reasonBlockOf(j.getPromptNote())).orElse(null),
+                previous.map(GenerationService.JobRequest::of).orElseGet(() -> inheritedRequest(slot)));
+    }
+
+    /** Yêu cầu thừa hưởng của chỗ (của ô, không thì của đề), đã lọc theo dạng câu; null khi không có. */
+    private GenerationService.JobRequest inheritedRequest(ExamSlot slot) {
+        ExamContextService.RequestLevel level = contextService.requestFor(slot.getExamId(), slot.getCellId());
+        return level == null ? null : level.forType(slot.getQuestionType());
     }
 
     /**
@@ -562,11 +584,26 @@ public class ExamBuildService {
      * ({@link MatrixPromptDraftV0#replaceReasonBlock}); lý do khác hoặc null không đổi prompt.
      */
     void enqueueReplace(ExamSlot slot, String instruction, String reason, String oldQuestion) {
-        enqueue(slot, instruction, MatrixPromptDraftV0.replaceReasonBlock(reason, oldQuestion));
+        enqueueReplace(slot, instruction, reason, oldQuestion, null);
     }
 
-    /** Một job sinh lại cho chỗ, dùng lại run của ô; chạy ngay. */
-    private void enqueue(ExamSlot slot, String instruction, String reasonBlock) {
+    /**
+     * Như trên, kèm (PR B) mã chip của lượt Đổi ({@code requestCodes}, đã kiểm hợp lệ và hợp dạng câu; null là không gửi).
+     * Có gửi mã (kể cả rỗng) hoặc có {@code instruction}: lượt Đổi TỰ ĐẶT yêu cầu ({@code request_scope = replace}), prompt bỏ
+     * hẳn mã và văn bản của ô và đề. Không thì thừa hưởng yêu cầu của ô, không có thì của đề.
+     */
+    void enqueueReplace(ExamSlot slot, String instruction, String reason, String oldQuestion, List<String> requestCodes) {
+        GenerationService.JobRequest request = requestCodes != null || instruction != null
+                ? new GenerationService.JobRequest(requestCodes, instruction, GenerationJob.REQUEST_SCOPE_REPLACE)
+                : inheritedRequest(slot);
+        enqueue(slot, instruction, MatrixPromptDraftV0.replaceReasonBlock(reason, oldQuestion), request);
+    }
+
+    /**
+     * Một job sinh lại cho chỗ, dùng lại run của ô; chạy ngay. {@code request} (PR B) là yêu cầu hiệu lực ghi vào job; null
+     * là không có.
+     */
+    private void enqueue(ExamSlot slot, String instruction, String reasonBlock, GenerationService.JobRequest request) {
         // Chuyển trạng thái trước mọi truy vấn: Hibernate có thể ghi chỗ xuống DB trước khi truy vấn exam_slot, và chỗ
         // vừa bỏ câu khi Đổi mà còn 'ready' thì vi phạm chk_es_ready.
         slot.setState(ExamSlot.GENERATING);
@@ -577,8 +614,8 @@ public class ExamBuildService {
         // 12/11: run của ô đã mang mức thử thách của đề; chỗ chưa có run (hiếm) thì lấy mức từ đề, nên Đổi câu giữ mức.
         ExamChallenge challenge = examRepository.findById(slot.getExamId()).map(Exam::getChallenge)
                 .orElse(ExamChallenge.STANDARD);
-        MatrixCellSpec spec = spec(cell, matrix, subject, contextService.instructionFor(slot.getExamId(), cell.getId()),
-                challenge);
+        // Spec của ô mang yêu cầu thừa hưởng (như lúc tạo đề); job Đổi câu tự đặt yêu cầu được worker thay hẳn phần này.
+        MatrixCellSpec spec = spec(cell, matrix, subject, inheritedRequest(slot), challenge);
         if (slot.getRunId() == null) {
             slot.setRunId(generationService.createMatrixRun(subject.getId(), spec, 1).getId());
         }
@@ -589,7 +626,7 @@ public class ExamBuildService {
                 : snapshotOf(passageService.load(materialIds), cell.getTopic(), selectionDetails(spec),
                         slot.getSlotNo() - 1, generationService.generateJobsForSlot(slot.getId()).size());
         generationService.enqueueMatrixJob(slot.getRunId(), cell.getTemplateId(), spec, slot.getId(),
-                LocalDateTime.now(), promptNote(slot, cell, instruction, reasonBlock), snapshot);
+                LocalDateTime.now(), promptNote(slot, cell, instruction, reasonBlock), snapshot, request);
         slot.setAttempts(slot.getAttempts() + 1);
     }
 
@@ -747,11 +784,19 @@ public class ExamBuildService {
      */
     MatrixCellSpec spec(ExamMatrixCell cell, ExamMatrix matrix, Subject subject, String extraInstruction,
                         ExamChallenge challenge) {
-        MatrixCellSpec base = spec(cell, matrix, subject, extraInstruction);
+        return spec(cell, matrix, subject, extraInstruction == null ? null
+                : new GenerationService.JobRequest(List.of(), extraInstruction, null), challenge);
+    }
+
+    /** Như trên, với yêu cầu hiệu lực của ô (PR B: mã chip và văn bản tự do của cùng một mức); null là không có. */
+    MatrixCellSpec spec(ExamMatrixCell cell, ExamMatrix matrix, Subject subject, GenerationService.JobRequest request,
+                        ExamChallenge challenge) {
+        MatrixCellSpec base = spec(cell, matrix, subject, request == null ? null : request.text());
         return new MatrixCellSpec(base.subjectName(), base.gradeLevel(), base.topic(), base.content(),
                 base.learningOutcomes(), base.questionType(), base.difficulty(),
                 base.questionType() == QuestionType.TF ? base.statementDifficulties() : null, base.extraInstruction(),
-                challenge, depthExamples.select(base.subjectName(), base.gradeLevel(), base.questionType(), base.levels()));
+                challenge, depthExamples.select(base.subjectName(), base.gradeLevel(), base.questionType(), base.levels()),
+                request == null ? null : request.codes());
     }
 
     /** Các mức ô dùng: mức của câu (mcq/sa) hoặc mức của 4 ý (tf). */

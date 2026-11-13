@@ -26,8 +26,8 @@ class SolverOptionCheckPromptTest {
     void vanGiuV2VaV3DeDoLai() {
         assertEquals("solver-v3-option-check", PromptBuilder.SOLVER_PROMPT_VERSION_V3);
         assertEquals("solver-v2-delimited", PromptBuilder.SOLVER_PROMPT_VERSION_V2);
-        assertEquals(List.of("solver-v2-delimited", "solver-v3-option-check", "solver-v4-literal-reading"),
-                PromptBuilder.SOLVER_PROMPT_VERSIONS);
+        assertEquals(List.of("solver-v2-delimited", "solver-v3-option-check", "solver-v4-literal-reading",
+                "solver-v5-request-check"), PromptBuilder.SOLVER_PROMPT_VERSIONS);
         assertEquals(PromptBuilder.SOLVER_PROMPT_VERSION, AnswerSolverChecker.SOLVER_PROMPT_VERSION);
     }
 

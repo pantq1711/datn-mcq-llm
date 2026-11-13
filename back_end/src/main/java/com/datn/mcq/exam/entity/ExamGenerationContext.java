@@ -10,6 +10,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
@@ -46,7 +48,22 @@ public class ExamGenerationContext {
     @Column(name = "material_id", nullable = false)
     private Set<Integer> materialIds = new LinkedHashSet<>();
 
+    /** V28 (12/11, PR B): mã chip yêu cầu của phạm vi này (đã chuẩn hóa, không trùng); null khi không có. */
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "request_codes", columnDefinition = "text[]")
+    private String[] requestCodes;
+
     public ExamGenerationContext() {}
+
+    /** Mã yêu cầu; danh sách rỗng khi không có. */
+    public java.util.List<String> getRequestCodes() {
+        return requestCodes == null ? java.util.List.of() : java.util.List.of(requestCodes);
+    }
+
+    /** Rỗng hoặc null thì lưu NULL. */
+    public void setRequestCodes(java.util.List<String> codes) {
+        this.requestCodes = codes == null || codes.isEmpty() ? null : codes.toArray(String[]::new);
+    }
 
     public Integer getId() {
         return id;

@@ -5,6 +5,7 @@ import com.datn.mcq.enums.DbEnum;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.ExamChallenge;
 import com.datn.mcq.enums.QuestionType;
+import com.datn.mcq.enums.TeacherRequest;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -23,6 +24,10 @@ import java.util.Map;
  * @param challenge             (12/11) mức thử thách của đề; null là {@link ExamChallenge#STANDARD}. Nâng cao chỉ thêm khối
  *                              vào ô (hoặc ý tf) mức Vận dụng ({@link MatrixPromptDraftV0#ADVANCED_RULE})
  * @param depthExamples         (12/11) câu mẫu độ sâu chọn cho ô lúc tạo đề ({@link DepthExampleCatalog}); rỗng khi không có
+ * @param requestCodes          (12/11, PR B) mã chip yêu cầu của giáo viên hiệu lực cho ô (của ô, không có thì của đề), đã
+ *                              lọc theo dạng câu, không trùng, theo thứ tự danh mục ({@link TeacherRequest}); rỗng khi không có.
+ *                              Đi cùng {@code extraInstruction} của CÙNG mức. Prompt có khối
+ *                              {@link TeacherRequestPrompt#GENERATION_HEADER}
  */
 public record MatrixCellSpec(
         String subjectName,
@@ -35,7 +40,8 @@ public record MatrixCellSpec(
         List<Difficulty> statementDifficulties,
         String extraInstruction,
         ExamChallenge challenge,
-        List<DepthExample> depthExamples
+        List<DepthExample> depthExamples,
+        List<String> requestCodes
 ) {
     public MatrixCellSpec {
         learningOutcomes = learningOutcomes == null ? Map.of() : java.util.Collections.unmodifiableMap(
@@ -44,6 +50,25 @@ public record MatrixCellSpec(
         extraInstruction = extraInstruction == null || extraInstruction.isBlank() ? null : extraInstruction;
         challenge = challenge == null ? ExamChallenge.STANDARD : challenge;
         depthExamples = depthExamples == null ? List.of() : List.copyOf(depthExamples);
+        requestCodes = TeacherRequest.applicable(requestCodes, questionType);
+    }
+
+    /** Chữ ký trước PR B (không có mã yêu cầu). */
+    public MatrixCellSpec(String subjectName, Integer gradeLevel, String topic, String content,
+                          Map<Difficulty, String> learningOutcomes, QuestionType questionType, Difficulty difficulty,
+                          List<Difficulty> statementDifficulties, String extraInstruction, ExamChallenge challenge,
+                          List<DepthExample> depthExamples) {
+        this(subjectName, gradeLevel, topic, content, learningOutcomes, questionType, difficulty, statementDifficulties,
+                extraInstruction, challenge, depthExamples, null);
+    }
+
+    /**
+     * Bản sao với yêu cầu khác (PR B): job Đổi câu tự đặt yêu cầu thì worker THAY HẲN mã và văn bản tự do của ô hay đề
+     * bằng của lượt Đổi (văn bản của lượt Đổi nằm trong ghi chú của job, nên {@code extra} thường là null).
+     */
+    public MatrixCellSpec withRequest(List<String> codes, String extra) {
+        return new MatrixCellSpec(subjectName, gradeLevel, topic, content, learningOutcomes, questionType, difficulty,
+                statementDifficulties, extra, challenge, depthExamples, codes);
     }
 
     /** Chữ ký trước 12/11 (đề chuẩn, không câu mẫu). */
@@ -100,6 +125,9 @@ public record MatrixCellSpec(
                 // 12/11: như trên, chỉ thêm khóa khi khác mặc định (đề chuẩn, không câu mẫu).
                 + (challenge == ExamChallenge.STANDARD ? "" : ",\"challenge\":" + SimpleJson.quote(challenge.getDbValue()))
                 + (depthExamples.isEmpty() ? "" : ",\"depthExamples\":" + examplesJson())
+                // PR B: như trên, chỉ thêm khóa khi có mã.
+                + (requestCodes.isEmpty() ? "" : ",\"requestCodes\":[" + String.join(",",
+                        requestCodes.stream().map(SimpleJson::quote).toList()) + "]")
                 + "}";
     }
 
@@ -136,7 +164,8 @@ public record MatrixCellSpec(
                 levels,
                 m.get("extraInstruction") instanceof String extra ? extra : null,
                 m.get("challenge") instanceof String c ? DbEnum.fromDbValue(ExamChallenge.class, c) : null,
-                examplesFrom(m.get("depthExamples")));
+                examplesFrom(m.get("depthExamples")),
+                m.get("requestCodes") instanceof List<?> codes ? codes.stream().map(String::valueOf).toList() : null);
     }
 
     private static List<DepthExample> examplesFrom(Object raw) {

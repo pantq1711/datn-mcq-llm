@@ -169,6 +169,43 @@ class StatisticsSqlTest extends ExamFlowTestBase {
         }
     }
 
+    /** PR B (12/11): 10-yeu-cau-giao-vien.sql đếm kết luận request_check theo mã, theo mức và lượt Đổi sau not_met. */
+    @Test
+    void yeuCauGiaoVienDemTheoMaTheoMucVaLuotDoiSauCanhBao() throws Exception {
+        SOLVER.requestCheck = "{\"verdict\": \"not_met\", \"reason\": \"thiếu\"}";
+        int matrix = createMatrix(mcqCell("Đa thức", "Đơn thức", 1));
+        int examId = json(postJson("/api/exams/build", "{\"matrixId\": " + matrix
+                + ", \"requestCodes\": [\"real_context\", \"multi_step\"]}").andExpect(status().isOk()))
+                .get("examId").asInt();
+        settle(examId);
+        int slot = slotId(examId, cellId(matrix, 1), 1);
+        SOLVER.requestCheck = "{\"verdict\": \"met\", \"reason\": \"ok\"}";
+        perform(post("/api/exams/" + examId + "/slots/" + slot + "/replace")).andExpect(status().isOk());
+        settle(examId);
+        // câu không có yêu cầu không được tính
+        int plain = createMatrix(mcqCell("Phân thức", "Rút gọn", 1));
+        settle(build(plain).get("examId").asInt());
+
+        List<Map<String, Object>> rows = run("10-yeu-cau-giao-vien.sql");
+        Map<String, Object> real = rows.stream().filter(r -> "ma".equals(r.get("bang")) && "real_context".equals(r.get("nhom")))
+                .findFirst().orElseThrow(() -> new AssertionError(rows.toString()));
+        assertEquals(2, count(real, "so_cau"), rows.toString());
+        assertEquals(1, count(real, "met"));
+        assertEquals(1, count(real, "not_met"));
+        assertEquals(0, count(real, "partial"));
+        Map<String, Object> multi = rows.stream().filter(r -> "ma".equals(r.get("bang")) && "multi_step".equals(r.get("nhom")))
+                .findFirst().orElseThrow();
+        assertEquals(2, count(multi, "so_cau"), "câu nhiều mã được tính cho mỗi mã");
+        Map<String, Object> scope = rows.stream().filter(r -> "scope".equals(r.get("bang")) && "exam".equals(r.get("nhom")))
+                .findFirst().orElseThrow(() -> new AssertionError(rows.toString()));
+        assertEquals(2, count(scope, "so_cau"));
+        Map<String, Object> after = rows.stream().filter(r -> "doi_sau".equals(r.get("bang"))).findFirst()
+                .orElseThrow(() -> new AssertionError(rows.toString()));
+        assertEquals("not_met", after.get("nhom"));
+        assertEquals(1, count(after, "so_cau"));
+        assertEquals(4, rows.size(), rows.toString());
+    }
+
     @Test
     void loaiDeCuaTaiKhoanNhomPhatTrienBangDanhSachEmail() throws Exception {
         sampleData();
@@ -188,7 +225,7 @@ class StatisticsSqlTest extends ExamFlowTestBase {
             list.filter(p -> p.toString().endsWith(".sql")).forEach(files::add);
         }
         files.add(Path.of("..", "docs", "experiments", "trial", "queries.sql"));
-        assertEquals(8, files.size());
+        assertEquals(9, files.size());
         for (Path p : files) {
             String raw = Files.readString(p, StandardCharsets.UTF_8);
             assertTrue(raw.contains("\\set dev_emails ''"), p + ": khai báo mặc định rỗng");
@@ -201,7 +238,7 @@ class StatisticsSqlTest extends ExamFlowTestBase {
     void coMotCauLenhSelectDocLapMoiFile() throws IOException {
         try (var files = Files.list(DIR)) {
             List<Path> sqlFiles = files.filter(p -> p.toString().endsWith(".sql")).sorted().toList();
-            assertEquals(7, sqlFiles.size());
+            assertEquals(8, sqlFiles.size());
             for (Path p : sqlFiles) {
                 // bỏ phần chú thích (-- ...) trước khi kiểm
                 String sql = Files.readString(p, StandardCharsets.UTF_8).lines()

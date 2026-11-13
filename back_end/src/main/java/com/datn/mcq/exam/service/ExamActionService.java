@@ -4,6 +4,8 @@ import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.common.exception.ApiErrorException;
 import com.datn.mcq.common.util.JsonStringArray;
 import com.datn.mcq.enums.JobStatus;
+import com.datn.mcq.enums.QuestionType;
+import com.datn.mcq.enums.TeacherRequest;
 import com.datn.mcq.exam.dto.ExamEditDtos.EditQuestionRequest;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamItemDto;
 import com.datn.mcq.generation.dto.QuestionEditInput;
@@ -169,13 +171,34 @@ public class ExamActionService {
     @Transactional
     public ExamItemDto replace(Integer examId, Integer slotId, Integer actorId, String source, String instruction,
                                String reason) {
+        return replace(examId, slotId, actorId, source, instruction, reason, null);
+    }
+
+    /**
+     * @param requestCodes (12/11, PR B) mã chip yêu cầu của lượt Đổi; null là không gửi (thừa hưởng yêu cầu của ô, không có
+     *                     thì của đề). Có gửi (kể cả rỗng) hoặc có {@code instruction}: lượt Đổi tự đặt yêu cầu, thay hẳn yêu
+     *                     cầu của ô và đề. 400 INVALID_REQUEST, kiểm TRƯỚC mọi thay đổi: mã lạ; mã khác rỗng với
+     *                     {@code source = bank}; mã không hợp dạng câu của chỗ (thông báo tiếng Việt theo nhãn chip)
+     */
+    @Transactional
+    public ExamItemDto replace(Integer examId, Integer slotId, Integer actorId, String source, String instruction,
+                               String reason, List<String> requestCodes) {
         buildService.getOwnedExam(examId, actorId);
         String replaceSource = normalizeSource(source);
         String cleanInstruction = normalizeInstruction(instruction);
         String cleanReason = normalizeReason(reason);
+        List<String> cleanCodes = ExamContextService.normalizeRequestCodes(requestCodes);
         if (ExamSlotAction.SOURCE_BANK.equals(replaceSource) && cleanInstruction != null) {
             throw ApiErrorException.badRequest(QuestionEditService.INVALID_REQUEST,
                     "instruction chỉ dùng khi source = generate (lấy câu ngân hàng không sinh câu mới).");
+        }
+        if (ExamSlotAction.SOURCE_BANK.equals(replaceSource) && cleanCodes != null && !cleanCodes.isEmpty()) {
+            throw ApiErrorException.badRequest(QuestionEditService.INVALID_REQUEST,
+                    "requestCodes chỉ dùng khi source = generate (lấy câu ngân hàng không sinh câu mới).");
+        }
+        if (cleanCodes != null && !cleanCodes.isEmpty()) {
+            // Dạng câu của chỗ không đổi; đọc trước đối soát (đối soát có ghi) để không ghi gì khi trả 400.
+            requireApplicable(cleanCodes, loadSlot(examId, slotId).getQuestionType());
         }
         buildService.reconcile(examId);
         ExamSlot slot = loadSlot(examId, slotId);
@@ -207,6 +230,7 @@ public class ExamActionService {
         log.setInstruction(cleanInstruction);
         log.setReplaceSource(replaceSource);
         log.setReplaceReason(cleanReason);
+        log.setRequestCodes(cleanCodes);
         actionRepository.save(log);
         slot.setBankItemId(newBankItemId);
         slot.setGeneratedQuestionId(null);
@@ -217,7 +241,7 @@ public class ExamActionService {
         if (newBankItemId != null) {
             slot.setState(ExamSlot.READY);
         } else {
-            buildService.enqueueReplace(slot, cleanInstruction, cleanReason, oldQuestion);
+            buildService.enqueueReplace(slot, cleanInstruction, cleanReason, oldQuestion, cleanCodes);
         }
         slotRepository.save(slot);
         return viewService.item(slot, matrixService.getCell(slot.getCellId()));
@@ -251,6 +275,20 @@ public class ExamActionService {
             return bankService.getItem(slot.getBankItemId()).questionText();
         }
         return null;
+    }
+
+    /**
+     * PR B: 400 INVALID_REQUEST khi có mã không hợp dạng câu {@code type} của chỗ, thông báo theo nhãn chip, ví dụ
+     * "Yêu cầu \"Đúng/Sai cùng một tình huống\" không áp dụng cho câu Trắc nghiệm."
+     */
+    static void requireApplicable(List<String> codes, QuestionType type) {
+        for (String code : codes) {
+            TeacherRequest request = TeacherRequest.parseOrNull(code);
+            if (request != null && !request.appliesTo(type)) {
+                throw ApiErrorException.badRequest(QuestionEditService.INVALID_REQUEST, "Yêu cầu \"" + request.label()
+                        + "\" không áp dụng cho câu " + TeacherRequest.typeName(type) + ".");
+            }
+        }
     }
 
     /** B7: bỏ trống thì null; chỉ nhận các giá trị của {@link ExamSlotAction#REPLACE_REASONS} (không phân biệt hoa thường). */

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Button, Empty, List, Skeleton, Space, Tag, Tooltip, Typography } from "antd";
-import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, WarningOutlined, ReloadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, WarningOutlined, ReloadOutlined, InfoCircleOutlined } from "@ant-design/icons";
 
 import "./ExamQuestionList.css";
 import type { ExamQuestionItem } from "../types/exam.types";
+import { describeInfoReason, teacherRequestLabel } from "../types/exam.types";
 import { describeFailureReason, describeLevel, describeReviewReason, hasContentFlag, resolveQuestionType } from "../../../utils/exam.utils";
 import QuestionContent from "./QuestionContent";
 
@@ -231,6 +232,25 @@ export default function ExamQuestionList({
                                             ))}
                                         </Space>
                                     </div>
+                                )}
+
+                                {/* PR B: yêu cầu của câu (chữ xám) và cờ thông tin (thẻ xanh, không phải "cần xem kỹ") */}
+                                {question.requests && (
+                                    <Text type="secondary">
+                                        Yêu cầu: {[
+                                            ...question.requests.codes.map(teacherRequestLabel),
+                                            ...(question.requests.text ? [question.requests.text] : []),
+                                        ].join("; ")}
+                                    </Text>
+                                )}
+                                {(question.infoReasons ?? []).length > 0 && (
+                                    <Space size={[6, 4]} wrap>
+                                        {(question.infoReasons ?? []).map((info) => (
+                                            <Tag key={info} color="blue" icon={<InfoCircleOutlined />}>
+                                                {describeInfoReason(info)}
+                                            </Tag>
+                                        ))}
+                                    </Space>
                                 )}
 
                                 {!hasContent ? (
