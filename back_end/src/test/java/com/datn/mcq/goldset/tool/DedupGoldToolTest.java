@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -159,9 +160,10 @@ class DedupGoldToolTest {
         List<SampledPair> pairs = DedupGoldPairSampler.sample(items, new Quotas(4, 4, 4, 3, 2, 1, 0.7), 5).pairs();
         List<String> csv = DedupGoldRunner.keyCsv(pairs);
         assertThat(csv.get(0)).startsWith("cap,q1,q2,dang,tang,cosine,cung_so_lieu,cung_phu_dinh,cung_van_tay,du_doan_050")
-                .endsWith(",du_doan_090,du_doan_095");
+                .endsWith(",du_doan_090,du_doan_095,lo,nhom,da_chan");
         assertThat(csv).hasSize(pairs.size() + 1);
-        assertThat(csv.get(1).split(",")).hasSize(9 + 10);
+        assertThat(csv.get(1).split(",")).hasSize(9 + 10 + 3);
+        assertThat(csv.get(1)).endsWith(",1,lo1,0");
 
         List<String> content = DedupGoldRunner.contentJsonl(pairs);
         assertThat(content).hasSize(pairs.size());
@@ -175,6 +177,90 @@ class DedupGoldToolTest {
         poolById.remove(pairs.get(0).pair().first().id());
         assertThatThrownBy(() -> DedupGoldRunner.readPairs(String.join("\n", csv), poolById))
                 .hasMessageContaining("không còn trong kho");
+    }
+
+    /** pool() cộng các câu cùng số liệu, khác cách diễn đạt (id 100-103) để có cặp "cùng số liệu". */
+    private static List<Item> poolWithParaphrases() {
+        List<Item> items = pool();
+        items.add(new Item(mcq(100, "Giá trị của biểu thức $3x - 4$ tại $x = 2$ là"), 7, 4));
+        items.add(new Item(mcq(101, "Tính giá trị biểu thức $3x - 4$ tại $x = 2$"), 8, 4));
+        items.add(new Item(mcq(102, "Giá trị của biểu thức $3x - 4$ tại $x = 2$ là bao nhiêu"), 9, 4));
+        items.add(new Item(mcq(103, "Cho biểu thức $3x - 4$. Tìm giá trị của biểu thức khi $x = 2$"), 9, 3));
+        return items;
+    }
+
+    @Test
+    void batch2CoversBlockedAndSameNumberPairsWithoutOverlap() {
+        List<Item> items = poolWithParaphrases();
+        List<SampledPair> b1 = DedupGoldPairSampler.sample(items, new Quotas(4, 4, 4, 3, 2, 1, 0.7), 5).pairs();
+        Set<String> batch1 = b1.stream().map(p -> p.pair().key()).collect(Collectors.toSet());
+        String inBatch1 = batch1.iterator().next();
+        int a = Integer.parseInt(inBatch1.split("-")[0]);
+        int b = Integer.parseInt(inBatch1.split("-")[1]);
+        List<DedupGoldPairSampler.BlockedPair> blocked = List.of(
+                new DedupGoldPairSampler.BlockedPair(102, 100),   // thứ tự (bị loại, khớp) tùy ý
+                new DedupGoldPairSampler.BlockedPair(b, a),       // đã có ở lô 1: không thêm lần nữa
+                new DedupGoldPairSampler.BlockedPair(102, 100),   // dòng lặp
+                new DedupGoldPairSampler.BlockedPair(9999, 100)); // câu không còn trong kho
+        DedupGoldPairSampler.Batch2Quotas q = new DedupGoldPairSampler.Batch2Quotas(6, 2);
+
+        DedupGoldPairSampler.Result r = DedupGoldPairSampler.sampleBatch2(items, batch1, blocked, q, 11);
+        List<SampledPair> b2 = r.pairs();
+        assertThat(b2).hasSizeLessThanOrEqualTo(q.total());
+        assertThat(b2).allMatch(p -> p.batch() == 2 && p.pairNo() == 0);
+        assertThat(b2.stream().map(p -> p.pair().key()).toList()).doesNotContainAnyElementsOf(batch1)
+                .doesNotHaveDuplicates();
+        assertThat(r.log().get(0)).contains("4 dòng").contains("không còn trong kho/không cùng dạng 1")
+                .contains("đã có ở lô 1 1").contains("thêm vào lô 2 1");
+        SampledPair blockedPair = b2.stream().filter(p -> p.pair().key().equals("100-102")).findFirst().orElseThrow();
+        assertThat(blockedPair.group()).isEqualTo(DedupGoldPairSampler.GROUP_BLOCKED);
+        assertThat(blockedPair.pair().first().id()).isLessThan(blockedPair.pair().second().id());
+        for (SampledPair sp : b2) {
+            PairDiagnostics d = sp.pair().diagnostics();
+            if (DedupGoldPairSampler.GROUP_SAME_NUMBERS_HIGH.equals(sp.group())) {
+                assertThat(d.sameSignature() && d.cosine() >= 0.90).isTrue();
+            } else if (DedupGoldPairSampler.GROUP_SAME_NUMBERS_MID.equals(sp.group())) {
+                assertThat(d.sameSignature() && d.cosine() >= 0.60 && d.cosine() < 0.90).isTrue();
+            } else {
+                assertThat(sp.group()).isEqualTo(DedupGoldPairSampler.GROUP_BLOCKED);
+            }
+        }
+        assertThat(b2.stream().filter(p -> DedupGoldPairSampler.GROUP_SAME_NUMBERS_HIGH.equals(p.group())).count())
+                .isLessThanOrEqualTo(q.maxSameHigh());
+        // cùng seed và dữ liệu thì cùng lô 2
+        assertThat(DedupGoldPairSampler.sampleBatch2(items, batch1, blocked, q, 11).pairs().stream()
+                .map(p -> p.pair().key() + p.group()).toList())
+                .containsExactlyElementsOf(b2.stream().map(p -> p.pair().key() + p.group()).toList());
+
+        // gộp: xáo, mã liên tục 1..N, giữ lô và nhóm; CSV ghi lo/nhom/da_chan và đọc lại được
+        List<SampledPair> merged = DedupGoldPairSampler.merge(b1, b2, 11);
+        assertThat(merged).hasSize(b1.size() + b2.size());
+        assertThat(merged.stream().map(SampledPair::pairNo).toList())
+                .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, merged.size()).boxed().toList());
+        assertThat(merged.stream().filter(p -> p.batch() == 1).count()).isEqualTo(b1.size());
+        assertThat(merged.stream().map(p -> p.pair().key()).toList()).doesNotHaveDuplicates();
+        assertThat(merged.stream().map(SampledPair::batch).toList()).isNotEqualTo(
+                merged.stream().map(SampledPair::batch).sorted().toList()); // đã xáo, không xếp lô 1 rồi lô 2
+
+        List<String> csv = DedupGoldRunner.keyCsv(merged, Set.of("100-102"));
+        assertThat(csv.stream().filter(l -> l.endsWith(",1")).count()).isEqualTo(1);
+        assertThat(csv.stream().filter(l -> l.contains(",2,da_chan,")).count()).isEqualTo(1);
+        Map<Integer, Item> byId = new HashMap<>();
+        items.forEach(i -> byId.put(i.id(), i));
+        List<SampledPair> again = DedupGoldRunner.readPairs(String.join("\n", csv), byId);
+        assertThat(again.stream().map(p -> p.batch() + p.group()).toList())
+                .containsExactlyElementsOf(merged.stream().map(p -> p.batch() + p.group()).toList());
+        // nội dung phiếu không lộ lô hay nhóm
+        assertThat(String.join("\n", DedupGoldRunner.contentJsonl(merged))).doesNotContain("da_chan", "cung_so_lieu",
+                "lo1", "\"lo\"", "nhom");
+    }
+
+    @Test
+    void batch2IsLoggedWhenSameNumberPairsAreScarce() {
+        DedupGoldPairSampler.Result r = DedupGoldPairSampler.sampleBatch2(pool(), Set.of(), List.of(),
+                new DedupGoldPairSampler.Batch2Quotas(60, 15), 1);
+        assertThat(r.log()).anyMatch(s -> s.startsWith("Cùng số liệu, cosine 0,60-0,90: cần"));
+        assertThat(r.pairs().size()).isLessThan(60);
     }
 
     @Test

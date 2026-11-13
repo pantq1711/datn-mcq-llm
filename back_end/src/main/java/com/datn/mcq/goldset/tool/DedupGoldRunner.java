@@ -2,6 +2,8 @@ package com.datn.mcq.goldset.tool;
 
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.SamplingStratum;
+import com.datn.mcq.goldset.tool.DedupGoldPairSampler.Batch2Quotas;
+import com.datn.mcq.goldset.tool.DedupGoldPairSampler.BlockedPair;
 import com.datn.mcq.goldset.tool.DedupGoldPairSampler.Item;
 import com.datn.mcq.goldset.tool.DedupGoldPairSampler.Pair;
 import com.datn.mcq.goldset.tool.DedupGoldPairSampler.Quotas;
@@ -28,6 +30,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -69,21 +73,30 @@ public class DedupGoldRunner implements ApplicationRunner {
             SELECT question_id, position, statement_text FROM generated_question_statement
             WHERE statement_text IS NOT NULL ORDER BY question_id, position""";
 
+    /** Các cặp dedup từng chặn: câu bị loại vì trùng và câu nó khớp (đã lưu bởi DedupService). */
+    static final String BLOCKED_SQL = """
+            SELECT question_id, compared_to_question_id FROM quality_check_result
+            WHERE check_type = 'dedup' AND passed = FALSE AND compared_to_question_id IS NOT NULL
+            ORDER BY question_id""";
+
     private final JdbcTemplate jdbc;
     private final ConfigurableApplicationContext context;
     private final String outDir;
     private final String seed;
     private final String pairsFile;
+    private final String batch2Seed;
 
     public DedupGoldRunner(JdbcTemplate jdbc, ConfigurableApplicationContext context,
                            @Value("${app.dedup-gold.out-dir}") String outDir,
                            @Value("${app.dedup-gold.seed:}") String seed,
-                           @Value("${app.dedup-gold.pairs-file:}") String pairsFile) {
+                           @Value("${app.dedup-gold.pairs-file:}") String pairsFile,
+                           @Value("${app.dedup-gold.batch2-seed:}") String batch2Seed) {
         this.jdbc = jdbc;
         this.context = context;
         this.outDir = outDir;
         this.seed = seed == null ? "" : seed.trim();
         this.pairsFile = pairsFile == null ? "" : pairsFile.trim();
+        this.batch2Seed = batch2Seed == null ? "" : batch2Seed.trim();
     }
 
     @Override
@@ -106,12 +119,33 @@ public class DedupGoldRunner implements ApplicationRunner {
             pairs = readPairs(Files.readString(Path.of(pairsFile), StandardCharsets.UTF_8), pool);
             notes.add("Tính lại dự đoán cho tập cặp có sẵn: " + pairsFile);
         }
+        List<BlockedPair> blocked = loadBlocked();
+        if (!batch2Seed.isEmpty()) {
+            if (pairsFile.isEmpty()) {
+                throw new IllegalStateException("app.dedup-gold.batch2-seed cần app.dedup-gold.pairs-file (cặp lô 1)");
+            }
+            if (pairs.stream().anyMatch(p -> p.batch() == 2)) {
+                throw new IllegalStateException("pairs-file đã có cặp lô 2; không thêm lô 2 lần nữa");
+            }
+            Set<String> existing = new HashSet<>();
+            pairs.forEach(p -> existing.add(p.pair().key()));
+            DedupGoldPairSampler.Result b2 = DedupGoldPairSampler.sampleBatch2(new ArrayList<>(pool.values()), existing,
+                    blocked, Batch2Quotas.defaults(), Long.parseLong(batch2Seed));
+            notes.addAll(b2.log());
+            notes.add("batch2-seed=" + batch2Seed + ", " + Batch2Quotas.defaults() + ", lô 2: " + b2.pairs().size()
+                    + " cặp; theo nhóm: " + countByGroup(b2.pairs()));
+            pairs = DedupGoldPairSampler.merge(pairs, b2.pairs(), Long.parseLong(batch2Seed));
+        }
+        Set<String> blockedKeys = new HashSet<>();
+        blocked.forEach(b -> blockedKeys.add(DedupGoldPairSampler.keyOf(b.subjectId(), b.comparedId())));
         Files.createDirectories(out);
-        Files.writeString(out.resolve(KEY_FILE), "﻿" + String.join("\n", keyCsv(pairs)) + "\n",
+        Files.writeString(out.resolve(KEY_FILE), "﻿" + String.join("\n", keyCsv(pairs, blockedKeys)) + "\n",
                 StandardCharsets.UTF_8);
         Files.writeString(out.resolve(CONTENT_FILE), String.join("\n", contentJsonl(pairs)) + "\n",
                 StandardCharsets.UTF_8);
-        notes.add(pairs.size() + " cặp; theo tầng: " + countByStratum(pairs));
+        notes.add(pairs.size() + " cặp; theo tầng: " + countByStratum(pairs) + "; theo nhóm: " + countByGroup(pairs)
+                + "; cặp dedup từng chặn trong tập: "
+                + pairs.stream().filter(p -> blockedKeys.contains(p.pair().key())).count());
         Files.writeString(out.resolve(LOG_FILE), String.join("\n", notes) + "\n", StandardCharsets.UTF_8);
         log.info("Công cụ D6 xong: {} cặp -> {}. {}", pairs.size(), out, notes);
         System.exit(SpringApplication.exit(context, () -> 0));
@@ -136,13 +170,29 @@ public class DedupGoldRunner implements ApplicationRunner {
         return out;
     }
 
-    /** cap-vang.csv: một dòng mỗi cặp; cột du_doan_XXX = 1 khi DedupChecker báo trùng ở ngưỡng XXX/100. */
+    private List<BlockedPair> loadBlocked() {
+        List<BlockedPair> out = new ArrayList<>();
+        jdbc.query(BLOCKED_SQL, rs -> {
+            out.add(new BlockedPair(rs.getInt("question_id"), rs.getInt("compared_to_question_id")));
+        });
+        return out;
+    }
+
+    /**
+     * cap-vang.csv: một dòng mỗi cặp; cột du_doan_XXX = 1 khi DedupChecker báo trùng ở ngưỡng XXX/100; cuối dòng: lo
+     * (1 hoặc 2), nhom (nhóm lấy mẫu trong lô), da_chan (1 khi cặp từng bị dedup chặn trong DB).
+     */
     static List<String> keyCsv(List<SampledPair> pairs) {
+        return keyCsv(pairs, Set.of());
+    }
+
+    static List<String> keyCsv(List<SampledPair> pairs, Set<String> blockedKeys) {
         List<String> lines = new ArrayList<>();
         StringBuilder header = new StringBuilder("cap,q1,q2,dang,tang,cosine,cung_so_lieu,cung_phu_dinh,cung_van_tay");
         for (double t : DedupGoldPairSampler.THRESHOLDS) {
             header.append(",du_doan_").append(String.format(Locale.ROOT, "%03d", Math.round(t * 100)));
         }
+        header.append(",lo,nhom,da_chan");
         lines.add(header.toString());
         for (SampledPair sp : pairs) {
             Pair p = sp.pair();
@@ -157,6 +207,8 @@ public class DedupGoldRunner implements ApplicationRunner {
             for (double t : DedupGoldPairSampler.THRESHOLDS) {
                 line.append(',').append(bit(p.predictedDuplicate(t)));
             }
+            line.append(',').append(sp.batch()).append(',').append(sp.group()).append(',')
+                    .append(bit(blockedKeys.contains(p.key())));
             lines.add(line.toString());
         }
         return lines;
@@ -205,6 +257,9 @@ public class DedupGoldRunner implements ApplicationRunner {
         if (lines.length == 0 || !lines[0].startsWith("cap,q1,q2,dang,tang")) {
             throw new IllegalStateException("pairs-file không đúng định dạng cap-vang.csv");
         }
+        List<String> header = List.of(lines[0].split(","));
+        int loCol = header.indexOf("lo");
+        int nhomCol = header.indexOf("nhom");
         for (int i = 1; i < lines.length; i++) {
             if (lines[i].isBlank()) {
                 continue;
@@ -216,8 +271,20 @@ public class DedupGoldRunner implements ApplicationRunner {
                 throw new IllegalStateException("Cặp " + f[0] + ": câu " + (a == null ? f[1] : f[2]) + " không còn trong kho");
             }
             SamplingStratum stratum = SamplingStratum.valueOf(f[4].toUpperCase(Locale.ROOT));
-            out.add(new SampledPair(Integer.parseInt(f[0]),
-                    new Pair(a, b, stratum, DedupChecker.diagnose(a.candidate(), b.candidate()))));
+            Pair pair = new Pair(a, b, stratum, DedupChecker.diagnose(a.candidate(), b.candidate()));
+            if (loCol >= 0 && nhomCol >= 0 && f.length > Math.max(loCol, nhomCol)) {
+                out.add(new SampledPair(Integer.parseInt(f[0]), pair, Integer.parseInt(f[loCol]), f[nhomCol]));
+            } else {
+                out.add(new SampledPair(Integer.parseInt(f[0]), pair));
+            }
+        }
+        return out;
+    }
+
+    private static Map<String, Integer> countByGroup(List<SampledPair> pairs) {
+        Map<String, Integer> out = new LinkedHashMap<>();
+        for (SampledPair p : pairs) {
+            out.merge(p.group(), 1, Integer::sum);
         }
         return out;
     }

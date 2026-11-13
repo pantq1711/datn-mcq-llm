@@ -36,6 +36,14 @@ public final class DedupGoldPairSampler {
     public static final double BAND_LOW = 0.60;
     public static final double BAND_HIGH = 0.95;
     public static final double CHANGED_NUMBERS_MIN_COSINE = 0.80;
+    /** Nhóm của lô 1 (lấy mẫu phân tầng). */
+    public static final String GROUP_BATCH1 = "lo1";
+    /** Lô 2: cặp dedup từng chặn trong DB (câu bị loại vì trùng, câu nó khớp). */
+    public static final String GROUP_BLOCKED = "da_chan";
+    /** Lô 2: cùng số liệu/công thức, cosine [0,60; 0,90): ứng viên diễn đạt lại mà dedup có thể bỏ sót (đo recall). */
+    public static final String GROUP_SAME_NUMBERS_MID = "cung_so_lieu_0.60-0.90";
+    /** Lô 2: cùng số liệu/công thức, cosine >= 0,90 (đo báo nhầm khi số liệu giống nhưng hỏi khác ý). */
+    public static final String GROUP_SAME_NUMBERS_HIGH = "cung_so_lieu_tu_0.90";
     /** Ngưỡng quét: 0,50 đến 0,95, bước 0,05. */
     public static final List<Double> THRESHOLDS = thresholds();
 
@@ -98,9 +106,138 @@ public final class DedupGoldPairSampler {
         }
     }
 
-    public record SampledPair(int pairNo, Pair pair) {}
+    /**
+     * Cặp đã chọn kèm số cặp trên phiếu, lô (1 = lấy mẫu phân tầng, 2 = lô bù) và nhóm trong lô. Nhóm lô 1 luôn là
+     * {@value #GROUP_BATCH1}; nhóm lô 2 là một trong {@link #GROUP_BLOCKED}, {@link #GROUP_SAME_NUMBERS_MID},
+     * {@link #GROUP_SAME_NUMBERS_HIGH}.
+     */
+    public record SampledPair(int pairNo, Pair pair, int batch, String group) {
+        public SampledPair(int pairNo, Pair pair) {
+            this(pairNo, pair, 1, GROUP_BATCH1);
+        }
+
+        SampledPair withPairNo(int no) {
+            return new SampledPair(no, pair, batch, group);
+        }
+    }
 
     public record Result(List<SampledPair> pairs, List<String> log) {}
+
+    /** Cặp dedup từng chặn trong DB: câu bị loại vì trùng và câu nó khớp (thứ tự tùy ý). */
+    public record BlockedPair(int subjectId, int comparedId) {}
+
+    /**
+     * @param total          tổng số cặp tối đa của lô 2
+     * @param maxSameHigh    số cặp tối đa của nhóm cùng số liệu, cosine >= 0,90
+     */
+    public record Batch2Quotas(int total, int maxSameHigh) {
+        public static Batch2Quotas defaults() {
+            return new Batch2Quotas(60, 15);
+        }
+    }
+
+    /** Khóa không phụ thuộc thứ tự của một cặp id. */
+    public static String keyOf(int idA, int idB) {
+        return Math.min(idA, idB) + "-" + Math.max(idA, idB);
+    }
+
+    /**
+     * Lô 2 (bù cho lô 1, vốn dồn vào cặp "đổi số liệu"): (1) mọi cặp dedup từng chặn trong DB còn trong kho và chưa có ở
+     * lô 1; (2) cặp cùng số liệu, cosine {@code >=} 0,90 (tối đa {@code maxSameHigh}); (3) cặp cùng số liệu cosine
+     * [0,60; 0,90) cho tới đủ {@code total}. Không trùng {@code existingKeys}; tầng cấu trúc của cặp tính như lô 1.
+     * Số cặp trả về có {@code pairNo = 0}: {@link #merge} xáo và đánh số.
+     */
+    public static Result sampleBatch2(List<Item> items, Set<String> existingKeys, List<BlockedPair> blocked,
+                                      Batch2Quotas quotas, long seed) {
+        Random rng = new Random(seed);
+        List<String> log = new ArrayList<>();
+        Set<String> taken = new HashSet<>(existingKeys);
+        List<SampledPair> out = new ArrayList<>();
+        Map<Integer, Item> byId = new java.util.HashMap<>();
+        items.forEach(i -> byId.put(i.id(), i));
+
+        int missing = 0;
+        int alreadyInBatch1 = 0;
+        List<Pair> blockedPairs = new ArrayList<>();
+        Set<String> seenBlocked = new HashSet<>();
+        for (BlockedPair b : blocked) {
+            Item x = byId.get(b.subjectId());
+            Item y = byId.get(b.comparedId());
+            String key = keyOf(b.subjectId(), b.comparedId());
+            if (x == null || y == null || x.candidate().questionType() != y.candidate().questionType()
+                    || x.id() == y.id()) {
+                missing++;
+                continue;
+            }
+            if (!seenBlocked.add(key)) {
+                continue;
+            }
+            if (existingKeys.contains(key)) {
+                alreadyInBatch1++;
+                continue;
+            }
+            Item a = x.id() < y.id() ? x : y;
+            Item c = x.id() < y.id() ? y : x;
+            blockedPairs.add(new Pair(a, c, stratumOf(a, c), DedupChecker.diagnose(a.candidate(), c.candidate())));
+        }
+        log.add("Cặp dedup từng chặn: " + blocked.size() + " dòng; không còn trong kho/không cùng dạng " + missing
+                + "; đã có ở lô 1 " + alreadyInBatch1 + "; thêm vào lô 2 " + blockedPairs.size());
+        for (Pair p : blockedPairs) {
+            out.add(new SampledPair(0, p, 2, GROUP_BLOCKED));
+            taken.add(p.key());
+        }
+
+        List<Pair> all = allPairs(items).stream().filter(p -> p.diagnostics().sameSignature()).toList();
+        int roomHigh = Math.max(0, Math.min(quotas.maxSameHigh(), quotas.total() - out.size()));
+        int high = takeBatch2(rng, all, p -> p.diagnostics().cosine() >= PROVISIONAL_HIGH, roomHigh, taken, out,
+                GROUP_SAME_NUMBERS_HIGH);
+        if (high < quotas.maxSameHigh()) {
+            log.add("Cùng số liệu, cosine >= 0,90: tối đa " + quotas.maxSameHigh() + ", chỉ có " + high + " cặp mới");
+        }
+        int roomMid = Math.max(0, quotas.total() - out.size());
+        int mid = takeBatch2(rng, all, p -> p.diagnostics().cosine() >= BAND_LOW
+                && p.diagnostics().cosine() < PROVISIONAL_HIGH, roomMid, taken, out, GROUP_SAME_NUMBERS_MID);
+        if (mid < roomMid) {
+            log.add("Cùng số liệu, cosine 0,60-0,90: cần " + roomMid + ", chỉ có " + mid);
+        }
+        if (out.size() > quotas.total()) {
+            log.add("Lô 2 vượt " + quotas.total() + " cặp vì số cặp dedup từng chặn nhiều hơn hạn mức: " + out.size());
+        }
+        return new Result(out, log);
+    }
+
+    private static final double PROVISIONAL_HIGH = 0.90;
+
+    private static int takeBatch2(Random rng, List<Pair> pool, Predicate<Pair> filter, int k, Set<String> taken,
+                                  List<SampledPair> out, String group) {
+        if (k <= 0) {
+            return 0;
+        }
+        List<Pair> candidates = new ArrayList<>(pool.stream().filter(filter).filter(p -> !taken.contains(p.key())).toList());
+        Collections.shuffle(candidates, rng);
+        int n = 0;
+        for (Pair p : candidates) {
+            if (n >= k) {
+                break;
+            }
+            out.add(new SampledPair(0, p, 2, group));
+            taken.add(p.key());
+            n++;
+        }
+        return n;
+    }
+
+    /** Gộp hai lô thành một danh sách: xáo bằng {@code seed} rồi đánh số 1..N liên tục. */
+    public static List<SampledPair> merge(List<SampledPair> batch1, List<SampledPair> batch2, long seed) {
+        List<SampledPair> all = new ArrayList<>(batch1);
+        all.addAll(batch2);
+        Collections.shuffle(all, new Random(seed));
+        List<SampledPair> out = new ArrayList<>();
+        for (int i = 0; i < all.size(); i++) {
+            out.add(all.get(i).withPairNo(i + 1));
+        }
+        return out;
+    }
 
     /** Tầng cấu trúc của một cặp (không bao giờ là random). */
     static SamplingStratum stratumOf(Item a, Item b) {

@@ -45,5 +45,9 @@ Bạn **không** cần biết điểm cosine (phiếu không hiện). Gán theo 
 
 1. Mở `cap-gan-nhan.docx` (đọc công thức dễ) và `cap-<tên>.xlsx` (phiếu). Mỗi cặp có số **Cặp**; thứ tự cặp đã xáo,
    không theo độ giống.
-2. Chọn nhãn ở cột **Nhãn**; ghi chú tùy ý.
-3. Người thứ hai (nếu có) gán độc lập, không xem phiếu người thứ nhất.
+2. **Luyện tập trước:** sheet **Luyện tập** (đứng đầu phiếu, cũng ở đầu `cap-gan-nhan.docx`) có 3 cặp mẫu L1–L3 lấy từ
+   các ví dụ ở mục 3. Gán thử, rồi đối chiếu cột *Đáp án mẫu*: L1 diễn đạt lại cùng số liệu → Trùng; L2 đổi số liệu →
+   Không trùng; L3 (trả lời ngắn) cùng đề, cùng giá trị đáp số → Trùng. Ba cặp này **không tính vào kết quả** (phân tích
+   chỉ đọc sheet **Gán nhãn cặp**).
+3. Sang sheet **Gán nhãn cặp**: chọn nhãn ở cột **Nhãn**; ghi chú tùy ý.
+4. Người thứ hai (nếu có) gán độc lập, không xem phiếu người thứ nhất.

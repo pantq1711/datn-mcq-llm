@@ -34,6 +34,15 @@ Vì vậy D6 tạo tập cặp mới bằng `DedupGoldRunner` (chỉ đọc DB).
 - Dự đoán ở mỗi ngưỡng gọi đúng `DedupChecker.check(câu id lớn, [câu id nhỏ], t)` như lúc QC (gồm dấu vân tay, hai chốt
   chặn và tầng theo ý của câu Đ/S).
 
+### Lô 2 (bù mẫu lệch, 13/11)
+
+Lô 1 có 130/150 cặp khác số liệu (nhãn gần như hiển nhiên "không trùng") và chỉ 19 cặp cosine ≥ 0,90; câu trong kho đã qua
+dedup nên cặp trùng thật đã bị loại khi sinh. Lô 2 (≤ 60 cặp, seed khác, không trùng lô 1, chỉ đọc DB) gồm: mọi cặp dedup
+từng chặn trong `quality_check_result` (câu bị loại, câu nó khớp); cặp **cùng số liệu** cosine 0,60–0,90 (ứng viên diễn đạt
+lại mà dedup bỏ sót: đo recall); cặp cùng số liệu cosine ≥ 0,90 (đo báo nhầm khi số liệu giống nhưng hỏi khác ý). Hai lô được
+xáo thành một phiếu; file khóa có cột `lo`, `nhom`, `da_chan` để báo cáo tách được. Lô 2 chọn có chủ đích nên P/R phải đọc
+theo từng lô trước khi gộp.
+
 Hạn chế cần ghi: tập cặp dồn vào vùng khó nên P/R là trên tập hiệu chỉnh, không phải tỉ lệ trên mọi cặp trong ngân hàng.
 
 ## Cách chạy

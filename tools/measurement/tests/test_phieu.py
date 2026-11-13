@@ -150,6 +150,39 @@ class PhieuCapTest(unittest.TestCase):
             self.assertNotIn(s, md)
         self.assertIn('"Trùng,Không trùng,Không chắc"', text)
 
+    def test_sheet_luyen_tap_dung_dau_va_khop_huong_dan(self):
+        from openpyxl import load_workbook
+        caps = [{"cap": 1, "dang": "mcq", "cau_1": {"dang": "mcq", "de": "x"}, "cau_2": {"dang": "mcq", "de": "y"}}]
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "cap-An.xlsx")
+            phieu.xlsx_phieu_cap(path, caps)
+            wb = load_workbook(path)
+            self.assertEqual([phieu.SHEET_LUYEN, phieu.SHEET_CAP, "Hướng dẫn"], wb.sheetnames)
+            self.assertEqual(phieu.SHEET_LUYEN, wb.active.title)
+            ws = wb[phieu.SHEET_LUYEN]
+            rows = [r for r in ws.iter_rows(min_row=2, max_row=4, values_only=True)]
+            self.assertEqual(["L1", "L2", "L3"], [r[0] for r in rows])
+            self.assertEqual(["Trùng", "Không trùng", "Trùng"], [r[6] for r in rows])  # đáp án mẫu theo quy tắc
+            self.assertTrue(all(r[4] is None and r[5] is None for r in rows))             # chưa gán sẵn
+            self.assertTrue(all(r[6] in phieu.NHAN_CAP for r in rows))
+            self.assertEqual('"Trùng,Không trùng,Không chắc"', ws.data_validations.dataValidation[0].formula1)
+            # sheet thật vẫn chỉ có đúng 1 cặp, không lẫn cặp luyện
+            self.assertEqual(2, wb[phieu.SHEET_CAP].max_row)
+        md = phieu.markdown_cap(caps)
+        self.assertLess(md.index("PHẦN LUYỆN TẬP"), md.index("Cặp L1"))
+        self.assertLess(md.index("Cặp L3"), md.index("CẶP CÂU CẦN GÁN NHÃN"))
+        self.assertLess(md.index("CẶP CÂU CẦN GÁN NHÃN"), md.index("Cặp 1 "))
+        self.assertNotIn("PHẦN LUYỆN TẬP", phieu.markdown_cap(caps, luyen=False))
+        # cặp luyện không chứa điểm hay tầng và là câu tự soạn, nên không lộ gì của dữ liệu thật
+        for s in ("cosine", "same_run", "du_doan", "0,90"):
+            self.assertNotIn(s, md)
+        huong_dan = os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs", "experiments", "d6",
+                                 "huong-dan-gan-nhan.md")
+        with open(huong_dan, encoding="utf-8") as f:
+            gd = f.read()
+        for s in ("Luyện tập", "L1", "L2", "L3", "Trùng", "Không trùng", "Không chắc"):
+            self.assertIn(s, gd)
+
 
 if __name__ == "__main__":
     unittest.main()

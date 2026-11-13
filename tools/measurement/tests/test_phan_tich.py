@@ -223,5 +223,114 @@ class PhanTichD6Test(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+CAP_CHAN = [  # cap, cosine, cùng số liệu, cùng phủ định, cùng dấu vân tay, lô, nhóm, nhãn
+    ("1", 0.97, 1, 1, 0, "1", "lo1", "Trùng"),
+    ("2", 0.95, 0, 1, 0, "1", "lo1", "Không trùng"),         # thô báo trùng, chốt chặn số liệu chặn đúng
+    ("3", 0.93, 1, 0, 0, "1", "lo1", "Không trùng"),         # chốt chặn phủ định chặn đúng
+    ("4", 0.92, 1, 1, 0, "2", "da_chan", "Không trùng"),     # báo nhầm ở 0,90 (FP)
+    ("5", 0.85, 1, 1, 0, "2", "cung_so_lieu_0.60-0.90", "Trùng"),  # bỏ sót ở 0,90 (FN)
+    ("6", 0.60, 1, 1, 0, "2", "cung_so_lieu_0.60-0.90", "Không chắc"),
+    ("7", 1.00, 1, 1, 1, "1", "lo1", "Trùng"),
+    ("8", 0.70, 0, 1, 0, "1", "lo1", "Không trùng"),
+    ("9", 0.50, 1, 1, 0, "1", "lo1", None),                  # chưa gán
+]
+
+
+class PhanTichD6MoRongTest(unittest.TestCase):
+    def setUp(self):
+        self.caps, self.nhan = [], {}
+        for cap, cos, ss, sn, vt, lo, nhom, nh in CAP_CHAN:
+            row = {"cap": cap, "q1": str(int(cap) * 10), "q2": str(int(cap) * 10 + 1), "dang": "mcq",
+                   "tang": "same_run", "cosine": str(cos), "cung_so_lieu": str(ss), "cung_phu_dinh": str(sn),
+                   "cung_van_tay": str(vt), "lo": lo, "nhom": nhom}
+            for t in phan_tich_d6.NGUONG:
+                row[phan_tich_d6.cot_du_doan(t)] = "1" if vt or (ss and sn and cos >= t) else "0"
+            self.caps.append(row)
+            if nh:
+                self.nhan[cap] = nh
+
+    def test_chot_chan_so_voi_cosine_tho(self):
+        h, rows, n = phan_tich_d6.bang_chot_chan(self.caps, self.nhan)
+        self.assertEqual(7, n)  # bỏ cặp 6 (Không chắc) và 9 (chưa gán)
+        by = {r[0]: dict(zip(h, r)) for r in rows}
+        # 0,90: thô báo cặp 1,2,3,4,7 (TP 2: 1,7; FP 3: 2,3,4); chốt chặn bỏ 2 và 3
+        r = by["0,90"]
+        self.assertEqual([3, 1, 2, 2, 2, 0], [r["FP thô"], r["FP + chốt chặn"], r["Chốt chặn bỏ được FP"],
+                                              r["TP thô"], r["TP + chốt chặn"], r["Chốt chặn làm mất TP"]])
+        self.assertEqual("0,400", r["P thô"])          # 2/5
+        self.assertEqual("0,667", r["P + chốt chặn"])  # 2/3
+        self.assertEqual(r["P + chốt chặn"], r["P đầy đủ"])
+        self.assertEqual("0,667", r["R + chốt chặn"])  # TP 2, FN 1 (cặp 5)
+        # 0,50: thô thêm cặp 8 (cosine 0,70, khác số liệu) vào FP; chốt chặn vẫn bỏ được 3 FP (2, 3, 8)
+        self.assertEqual([4, 1, 3], [by["0,50"]["FP thô"], by["0,50"]["FP + chốt chặn"],
+                                     by["0,50"]["Chốt chặn bỏ được FP"]])
+        self.assertIsNone(phan_tich_d6.bang_chot_chan([{"cap": "1"}], {"1": "Trùng"}))
+
+    def test_f1_cao_nhat_va_nguong_hien_tai(self):
+        _, rows, curve, n = phan_tich_d6.bang_nguong(self.caps, self.nhan)
+        self.assertEqual(7, n)
+        by = {r[0]: r for r in rows}
+        # 0,50-0,85: TP 3 (1,5,7), FP 1 (4), F1 = 0,857 (cao nhất); 0,90: F1 0,667; 0,95: 0,8
+        self.assertEqual("0,857", by["0,85"][7])
+        self.assertEqual("F1 cao nhất", by["0,85"][8])
+        self.assertEqual("0,667", by["0,90"][7])
+        self.assertEqual("PROVISIONAL_THRESHOLD (hiện tại)", by["0,90"][8])
+        self.assertEqual("0,800", by["0,95"][7])
+        self.assertEqual(8, sum(1 for c in curve if c[-2] == 1))
+        self.assertEqual(["0.90"], [c[0] for c in curve if c[-1] == 1])
+        # trùng ngưỡng hiện tại và cao nhất thì ghi cả hai
+        _, rows2, _, _ = phan_tich_d6.bang_nguong(self.caps, {"1": "Trùng", "7": "Trùng", "4": "Trùng"})
+        self.assertEqual("PROVISIONAL_THRESHOLD (hiện tại); F1 cao nhất", {r[0]: r for r in rows2}["0,90"][8])
+
+    def test_cap_doan_sai_o_090(self):
+        h, rows = phan_tich_d6.cap_doan_sai(self.caps, self.nhan)
+        got = {r[0]: dict(zip(h, r)) for r in rows}
+        self.assertEqual({"4", "5"}, set(got))
+        self.assertEqual("FP (báo trùng nhầm)", got["4"]["loai"])
+        self.assertEqual("FN (bỏ sót)", got["5"]["loai"])
+        self.assertEqual(("40", "41", "da_chan", "Không trùng", "Trùng"),
+                         (got["4"]["q1"], got["4"]["q2"], got["4"]["nhom"], got["4"]["nhan"], got["4"]["he_thong_doan"]))
+
+    def test_bao_cao_ghi_du_file_va_chiu_duoc_thieu_cot(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            phan_tich_d6.bao_cao(self.caps, [self.nhan], ["An"], tmp)
+            for f in ("ket-qua-d6.md", "d6-chot-chan.csv", "d6-cap-sai-090.csv", "d6-so-nhan.csv",
+                      "d6-duong-cong.csv", "d6-nguong-lo-1.csv", "d6-nguong-lo-2.csv", "d6-tang.csv"):
+                self.assertTrue(os.path.exists(os.path.join(tmp, f)), f)
+            with open(os.path.join(tmp, "d6-so-nhan.csv"), encoding="utf-8-sig") as f:
+                self.assertEqual(["An", "9", "3", "4", "1", "1"], list(csv.reader(f))[1])  # 1 Không chắc, 1 chưa gán
+            with open(os.path.join(tmp, "ket-qua-d6.md"), encoding="utf-8") as f:
+                md = f.read()
+            for s in ("F1 cao nhất", "Bảng D6-4", "Bảng D6-5", "lo=2", "nhom=da_chan", "không sinh ảnh"):
+                self.assertIn(s, md)
+            # cap-vang.csv cũ thiếu cột chẩn đoán: không có bảng chốt chặn, vẫn chạy
+            cu = [{k: v for k, v in c.items() if k not in ("cung_so_lieu", "cung_phu_dinh", "cung_van_tay")}
+                  for c in self.caps]
+            out2 = os.path.join(tmp, "cu")
+            phan_tich_d6.bao_cao(cu, [self.nhan], ["An"], out2)
+            self.assertFalse(os.path.exists(os.path.join(out2, "d6-chot-chan.csv")))
+            self.assertTrue(os.path.exists(os.path.join(out2, "d6-cap-sai-090.csv")))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_phieu_luyen_tap_khong_vao_ket_qua(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            path = os.path.join(tmp, "cap-An.xlsx")
+            phieu.xlsx_phieu_cap(path, [{"cap": 1, "dang": "mcq", "cau_1": {"dang": "mcq", "de": "x"},
+                                         "cau_2": {"dang": "mcq", "de": "y"}}])
+            from openpyxl import load_workbook
+            wb = load_workbook(path)
+            ws = wb[phieu.SHEET_LUYEN]
+            for r in range(2, 2 + len(phieu.CAP_LUYEN)):
+                ws.cell(row=r, column=5, value="Trùng")  # gán đủ 3 cặp luyện
+            wb[phieu.SHEET_CAP].cell(row=2, column=5, value="Không trùng")
+            wb.save(path)
+            self.assertEqual({"1": "Không trùng"}, phan_tich_d6.doc_nhan(path))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

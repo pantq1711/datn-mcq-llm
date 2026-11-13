@@ -99,9 +99,16 @@ $env:SPRING_DATASOURCE_URL='jdbc:postgresql://localhost:5432/datn_mcq_e2e'
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--server.port=0 --app.worker.enabled=false --app.dedup-gold.seed=20261113 --app.dedup-gold.out-dir=../data/private/do-luong/d6"
 ```
 
-Ra `cap-vang.csv` (FILE KHÓA: tầng, cosine, chốt chặn, dự đoán ở 10 ngưỡng), `cap-vang-noi-dung.jsonl`, `cap-vang-log.txt`.
+Ra `cap-vang.csv` (FILE KHÓA: tầng, cosine, chốt chặn, dự đoán ở 10 ngưỡng, cột `lo`, `nhom`, `da_chan`),
+`cap-vang-noi-dung.jsonl`, `cap-vang-log.txt`.
 Tính lại dự đoán cho đúng tập cặp cũ (ví dụ sau khi sửa DedupChecker): thay `--app.dedup-gold.seed=...` bằng
 `--app.dedup-gold.pairs-file=../data/private/do-luong/d6/cap-vang.csv` (ghi ra thư mục khác).
+
+**Lô 2 (bù cho lô 1, vốn dồn vào cặp đổi số liệu).** Giữ lô 1 làm pairs-file và thêm `--app.dedup-gold.batch2-seed=<seed khác>`:
+chọn ≤ 60 cặp không trùng lô 1 gồm (1) mọi cặp dedup từng chặn trong DB (`quality_check_result`: câu bị loại, câu nó khớp),
+(2) cặp cùng số liệu cosine ≥ 0,90 (≤ 15), (3) cặp cùng số liệu cosine 0,60–0,90 cho đủ; rồi xáo hai lô thành MỘT tập,
+đánh số lại 1..N. Cột `lo` (1/2), `nhom` (`lo1`, `da_chan`, `cung_so_lieu_tu_0.90`, `cung_so_lieu_0.60-0.90`) và `da_chan`
+chỉ nằm trong file khóa, không lên phiếu.
 
 **2. Phiếu gán nhãn, gán, phân tích.**
 
@@ -112,8 +119,14 @@ $PY -m do_luong.phan_tich_d6 --cap $D/d6/cap-vang.csv --nhan $D/d6/phieu/cap-An.
     --out-dir $D/d6/ket-qua
 ```
 
-Ra `ket-qua-d6.md`, `d6-nguong.csv` (bảng, dòng 0,90 ghi `PROVISIONAL_THRESHOLD`), `d6-duong-cong.csv` (dữ liệu vẽ đường
-P/R/F1 theo ngưỡng), bảng theo dạng và theo tầng, kappa nếu có người gán thứ hai.
+Phiếu `cap-<tên>.xlsx` có sheet **Luyện tập** (3 cặp mẫu L1–L3, đứng đầu, không tính vào kết quả) và `cap-gan-nhan.docx`
+có mục luyện tập ở đầu; `phan_tich_d6` chỉ đọc sheet "Gán nhãn cặp".
+
+Ra `ket-qua-d6.md`, `d6-nguong.csv` (bảng; dòng 0,90 ghi `PROVISIONAL_THRESHOLD`, ngưỡng F1 cao nhất ghi "F1 cao nhất"),
+`d6-duong-cong.csv` (dữ liệu vẽ đường P/R/F1 theo ngưỡng; không sinh PNG), `d6-so-nhan.csv` (Trùng / Không trùng / Không
+chắc / chưa gán của từng người), `d6-chot-chan.csv` (cosine thô so với cosine + 2 chốt chặn so với DedupChecker đầy đủ;
+chốt chặn bỏ được bao nhiêu báo nhầm), `d6-cap-sai-090.csv` (cặp hệ thống đoán sai ở 0,90, để chọn ví dụ),
+`d6-nguong-dang-*.csv`, `d6-nguong-lo-*.csv`, `d6-tang.csv`, kappa và `d6-cap-lech-nhan.csv` nếu có người gán thứ hai.
 
 ## Tệp
 
