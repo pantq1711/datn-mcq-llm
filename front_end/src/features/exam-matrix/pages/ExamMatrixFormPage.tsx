@@ -32,6 +32,8 @@ export default function ExamMatrixFormPage() {
     const [originalCells, setOriginalCells] = useState<ExamMatrixCellInput[]>([]);
     const [examCount, setExamCount] = useState(0);
     const isLocked = isEditMode && examCount > 0;
+    // Ma trận lưu trước khi bắt buộc khối lớp có thể chưa có khối: cho bổ sung (kể cả khi đã có đề)
+    const [missingGrade, setMissingGrade] = useState(false);
 
     const [subjects, setSubjects] = useState<ExamMatrixSubjectOption[]>([]);
     const [loadingSubjects, setLoadingSubjects] = useState(false);
@@ -124,7 +126,8 @@ export default function ExamMatrixFormPage() {
                 basicForm.setFieldsValue({
                     name: data.name,
                     subjectId: data.subjectId,
-                    gradeLevel: data.gradeLevel,
+                    // null thì để undefined cho ô hiện "Chọn khối lớp"
+                    gradeLevel: data.gradeLevel ?? undefined,
                     source: data.source ?? '',
                     notesText: data.notes?.join('\n') ?? '',
                 });
@@ -133,6 +136,7 @@ export default function ExamMatrixFormPage() {
                 setCells(loadedCells);
                 setOriginalCells(loadedCells);
                 setExamCount(data.examCount ?? 0);
+                setMissingGrade(data.gradeLevel == null);
             } catch (err: any) {
                 const msg = err?.response?.data?.error || err?.response?.data?.message || err?.message;
                 message.error(msg ?? 'Không thể tải ma trận để sửa. Vui lòng thử lại.');
@@ -181,11 +185,23 @@ export default function ExamMatrixFormPage() {
                         </Space>
                     </header>
 
+                    {missingGrade && (
+                        <Alert
+                            type="info"
+                            showIcon
+                            message="Ma trận này chưa có khối lớp. Thầy/cô chọn khối lớp trước khi lưu."
+                        />
+                    )}
+
                     {isLocked && (
                         <Alert
                             type="warning"
                             showIcon
-                            message={`Ma trận đã dùng cho ${examCount} đề: chỉ sửa được tên, nguồn, ghi chú.`}
+                            message={
+                                missingGrade
+                                    ? `Ma trận đã dùng cho ${examCount} đề: chỉ sửa được tên, nguồn, ghi chú và bổ sung khối lớp.`
+                                    : `Ma trận đã dùng cho ${examCount} đề: chỉ sửa được tên, nguồn, ghi chú.`
+                            }
                             description="Muốn đổi môn, khối hoặc các ô, hãy nhân bản ma trận rồi sửa bản sao."
                             action={
                                 <Button icon={<CopyOutlined />} loading={duplicating} onClick={handleDuplicate}>
@@ -207,6 +223,7 @@ export default function ExamMatrixFormPage() {
                                     subjects={subjects}
                                     loadingSubjects={loadingSubjects}
                                     lockStructure={isLocked}
+                                    allowGradeFill={missingGrade}
                                 />
                             </Card>
 

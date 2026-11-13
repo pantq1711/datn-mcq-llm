@@ -16,7 +16,8 @@ public final class MatrixDtos {
     /**
      * Body tạo ma trận. {@code subjectId} bỏ trống khi tạo từ mẫu thì dùng môn "Toán".
      *
-     * @param notes ghi chú tự do (giữ nguyên, không xử lý)
+     * @param gradeLevel khối lớp, bắt buộc, từ 6 đến 9 (thiếu thì 400)
+     * @param notes      ghi chú tự do (giữ nguyên, không xử lý)
      */
     public record CreateMatrixRequest(
             String name,
@@ -65,6 +66,7 @@ public final class MatrixDtos {
      * Body sinh theo bài (POST /api/exams/build-by-lesson, W1-4): một bài, các nhóm câu theo dạng và mức. Chủ đề của bài
      * là chuỗi {@code lesson}; về sau có thể thêm {@code lessonId} tùy chọn (danh mục bài) mà không đổi các trường này.
      *
+     * @param gradeLevel       khối lớp, bắt buộc, từ 6 đến 9 (thiếu thì 400)
      * @param content          phạm vi, nội dung cụ thể trong bài (tùy chọn)
      * @param title            tên đề; bỏ trống thì lấy tên bài
      * @param learningOutcomes yêu cầu cần đạt theo mức (khóa easy, medium, hard), ghi đè mặc định; tùy chọn

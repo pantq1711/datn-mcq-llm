@@ -32,7 +32,8 @@ class GenerationLimitDefaultsTest extends ExamFlowTestBase {
 
     @Test
     void sinhTheoBaiMacDinhToiDa60Cau() throws Exception {
-        postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"lesson\": \"Bài 1\", \"cells\": ["
+        postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject + ", \"gradeLevel\": 8,"
+                + " \"lesson\": \"Bài 1\", \"cells\": ["
                 + "{\"questionType\": \"mcq\", \"difficulty\": \"easy\", \"questionCount\": 30},"
                 + "{\"questionType\": \"mcq\", \"difficulty\": \"medium\", \"questionCount\": 31}]}")
                 .andExpect(status().isBadRequest())

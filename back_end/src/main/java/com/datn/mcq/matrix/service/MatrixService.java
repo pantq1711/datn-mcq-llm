@@ -246,6 +246,13 @@ public class MatrixService {
                         + "sửa được môn, khối và các ô (đề đã tạo dùng lại ô để sinh câu). Tên, nguồn và ghi chú vẫn "
                         + "sửa được; muốn đổi ô hãy nhân bản ma trận hoặc tạo ma trận mới.");
             }
+            // Ma trận lưu trước khi bắt buộc khối chưa có khối: bổ sung một lần cho ma trận và template của các ô, để
+            // câu sinh sau (Đổi/sinh lại) và lọc ngân hàng theo khối dùng đúng khối; môn và ô vẫn phải giữ nguyên
+            if (matrix.getGradeLevel() == null) {
+                matrix.setGradeLevel(req.gradeLevel());
+                catalogService.fillMissingGradeLevel(
+                        oldCells.stream().map(ExamMatrixCell::getTemplateId).toList(), req.gradeLevel());
+            }
             return toDto(matrixRepository.save(matrix));
         }
         matrix.setSubjectId(subject.getId());
@@ -270,8 +277,10 @@ public class MatrixService {
     /** Môn, khối và danh sách ô của yêu cầu giống bản đang lưu (cùng cách chuẩn hóa như lúc lưu). */
     private static boolean sameStructure(ExamMatrix matrix, List<ExamMatrixCell> cells, Integer subjectId,
                                          CreateMatrixRequest req) {
-        if (!matrix.getSubjectId().equals(subjectId) || !java.util.Objects.equals(matrix.getGradeLevel(),
-                req.gradeLevel()) || cells.size() != req.cells().size()) {
+        // Khối đang trống (ma trận cũ) thì nhận khối gửi lên như bổ sung, không coi là đổi cấu trúc
+        boolean sameGrade = matrix.getGradeLevel() == null
+                || java.util.Objects.equals(matrix.getGradeLevel(), req.gradeLevel());
+        if (!matrix.getSubjectId().equals(subjectId) || !sameGrade || cells.size() != req.cells().size()) {
             return false;
         }
         for (int i = 0; i < cells.size(); i++) {
@@ -326,6 +335,9 @@ public class MatrixService {
     @Transactional
     public MatrixDto duplicate(Integer id, String name, Integer ownerId) {
         ExamMatrix source = getOwnedMatrix(id, ownerId);
+        if (source.getGradeLevel() == null) {
+            throw new IllegalArgumentException("Ma trận chưa có khối lớp, hãy bổ sung khối lớp trước khi nhân bản.");
+        }
         String copyName;
         if (name == null || name.isBlank()) {
             String suffix = " (bản sao)";
@@ -553,7 +565,10 @@ public class MatrixService {
         if (req.subjectId() == null) {
             throw new IllegalArgumentException("Phải truyền subjectId");
         }
-        if (req.gradeLevel() != null && (req.gradeLevel() < 6 || req.gradeLevel() > 9)) {
+        if (req.gradeLevel() == null) {
+            throw new IllegalArgumentException("Phải chọn khối lớp (gradeLevel từ 6 đến 9)");
+        }
+        if (req.gradeLevel() < 6 || req.gradeLevel() > 9) {
             throw new IllegalArgumentException("gradeLevel phải nằm trong khoảng 6 đến 9");
         }
         if (req.cells() == null || req.cells().isEmpty()) {

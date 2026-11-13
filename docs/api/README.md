@@ -487,6 +487,8 @@ POST /api/exam-matrices
  "examCount": 0}
 ```
 
+- `gradeLevel` (khối lớp, 6-9) bắt buộc khi tạo, sửa ma trận: bỏ trường hoặc gửi `null` trả 400
+  `Phải chọn khối lớp (gradeLevel từ 6 đến 9)`. Ma trận lưu từ trước chưa có khối vẫn đọc được.
 - Phần I chỉ chứa `mcq`, phần II chỉ `tf`, phần III chỉ `sa` (DB cũng kiểm). `mcq`/`sa` cần `difficulty`; `tf` cần
   `statementDifficulties` gồm đúng 4 mức (ý a-d) và không có `difficulty`. `questionCount` từ 1 đến 50 mỗi ô; **tổng
   `questionCount` của cả ma trận tối đa 60** (D1, xem 7.2b), vượt thì 400 `Một ma trận tối đa 60 câu (hiện N)` khi tạo hoặc sửa.
@@ -522,11 +524,15 @@ trước ma trận nào đang bị khóa). Quyền như mục 7: chỉ giáo vi�
 - **Đã có đề (`examCount > 0`):** đề đã tạo đọc ô sống để Đổi/sinh lại và giữ khóa ngoại tới ma trận, nên:
   - sửa chỉ được **tên, nguồn, ghi chú**; gửi lại đúng cấu trúc cũ (môn, khối, mọi ô; khoảng trắng thừa không tính) thì
     200, id ô và template giữ nguyên; môn, khối hoặc ô khác thì **409** `MATRIX_IN_USE`, không đổi gì;
+  - (13/11) ma trận lưu từ trước chưa có khối (`gradeLevel: null`) được **bổ sung khối** dù đã có đề: gửi khối 6-9 cùng môn
+    và các ô như cũ thì 200, khối ghi vào ma trận và template của các ô (câu sinh sau và lọc ngân hàng theo khối dùng khối
+    này); đã có khối thì đổi khối vẫn 409;
   - xóa trả **409** `MATRIX_IN_USE`;
   - muốn ma trận khác đi: tạo ma trận mới với nội dung đã sửa (`POST /api/exam-matrices`) hoặc nhân bản.
 - **Nhân bản:** làm được cả với ma trận đã có đề. Ma trận mới độc lập (sửa hoặc xóa bản này không đụng bản kia): cùng nội
   dung ô, nguồn, ghi chú, mỗi ô có template riêng, `sampleKey` bỏ trống, `examCount = 0`, người sở hữu là người gọi. `name`
-  bỏ trống thì "&lt;tên&gt; (bản sao)" (cắt cho vừa 255 ký tự); `name` quá 255 ký tự thì 400.
+  bỏ trống thì "&lt;tên&gt; (bản sao)" (cắt cho vừa 255 ký tự); `name` quá 255 ký tự thì 400. Ma trận chưa có khối thì 400
+  `Ma trận chưa có khối lớp, hãy bổ sung khối lớp trước khi nhân bản.` (bổ sung bằng sửa ma trận như trên).
 - Ma trận ẩn của sinh theo bài (7.2a), ma trận không có hoặc của giáo viên khác: 404 cho cả ba thao tác.
 - Tạo đề và xóa/sửa ma trận đồng thời: tạo đề giữ khóa chia sẻ trên hàng ma trận, sửa/xóa khóa ghi hàng rồi mới đếm đề,
   nên lần xóa gặp tạo đề đang dở chờ rồi trả 409 `MATRIX_IN_USE`, còn tạo đề gặp ma trận vừa xóa trả 404 (không thành 500).
@@ -643,8 +649,9 @@ POST /api/exams/build-by-lesson
 - Tùy chọn (12/11): `challenge` (`standard` | `advanced`) như mục 7.2; giá trị khác là 400 `INVALID_REQUEST` trước khi tạo
   ma trận ẩn.
 
-- Bắt buộc: `subjectId`, `lesson` (tên bài, tối đa 255 ký tự), `cells` (ít nhất 1). Tùy chọn: `gradeLevel` (6-9), `content`
-  (phạm vi trong bài), `title` (trống thì lấy tên bài, tối đa 255), `learningOutcomes` (khóa `easy`, `medium`, `hard`).
+- Bắt buộc: `subjectId`, `gradeLevel` (khối lớp, 6-9; thiếu hoặc `null` trả 400 `Phải chọn khối lớp (gradeLevel từ 6 đến
+  9)`), `lesson` (tên bài, tối đa 255 ký tự), `cells` (ít nhất 1). Tùy chọn: `content` (phạm vi trong bài), `title` (trống
+  thì lấy tên bài, tối đa 255), `learningOutcomes` (khóa `easy`, `medium`, `hard`).
 - `cells`: mỗi phần tử là một nhóm câu cùng dạng và mức: `mcq`/`sa` cần `difficulty`; `tf` dùng `statementDifficulties`
   (4 mức ý a-d) và KHÔNG có `difficulty`; `tf` bỏ trống `statementDifficulties` thì mặc định dễ, dễ, vừa, khó. Phần I/II/III
   suy từ dạng câu. `questionCount` 1-50 mỗi nhóm. **Tổng số câu tối đa 60 mỗi lần** (D1; trước đây 50; cấu hình

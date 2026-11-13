@@ -101,6 +101,23 @@ public class CatalogService {
         return questionTemplateRepository.deleteUnreferenced(templateIds);
     }
 
+    /**
+     * Bổ sung khối cho các template chưa có khối (ma trận cũ được bổ sung khối khi đã có đề). Template đã có khối giữ
+     * nguyên. Trả số template đã cập nhật.
+     */
+    @Transactional
+    public int fillMissingGradeLevel(java.util.Collection<Integer> templateIds, Integer gradeLevel) {
+        if (templateIds == null || templateIds.isEmpty() || gradeLevel == null) {
+            return 0;
+        }
+        List<QuestionTemplate> missing = questionTemplateRepository.findAllById(templateIds).stream()
+                .filter(tpl -> tpl.getGradeLevel() == null)
+                .toList();
+        missing.forEach(tpl -> tpl.setGradeLevel(gradeLevel));
+        questionTemplateRepository.saveAll(missing);
+        return missing.size();
+    }
+
     private static String blankToNull(String value) {
         if (value == null) {
             return null;
