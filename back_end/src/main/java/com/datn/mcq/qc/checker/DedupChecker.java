@@ -131,6 +131,31 @@ public final class DedupChecker {
                 DedupOutcome.Layer.NONE, "Không trùng với " + ordered.size() + " ứng viên");
     }
 
+    /**
+     * Chẩn đoán một cặp câu cho công cụ đo ngưỡng (D6, {@code goldset/tool}); pipeline QC không dùng.
+     *
+     * @param cosine          cosine 3-gram của hai văn bản chuẩn, KHÔNG qua chốt chặn (1.0 khi cùng dấu vân tay)
+     * @param sameSignature   chốt chặn số liệu/công thức: true khi giống nhau
+     * @param sameNegation    chốt chặn phủ định: true khi giống nhau
+     * @param sameFingerprint cùng văn bản chuẩn (tầng dấu vân tay)
+     */
+    public record PairDiagnostics(double cosine, boolean sameSignature, boolean sameNegation, boolean sameFingerprint) {}
+
+    /** Chẩn đoán cặp (a, b) cùng dạng câu, bằng đúng văn bản chuẩn và hai chốt chặn của {@link #check}. Hàm thuần. */
+    public static PairDiagnostics diagnose(DedupCandidate a, DedupCandidate b) {
+        if (a == null || b == null || !a.hasContent() || !b.hasContent()) {
+            throw new IllegalArgumentException("Cặp câu cần chẩn đoán thiếu nội dung");
+        }
+        if (a.questionType() != b.questionType()) {
+            throw new IllegalArgumentException("Hai câu khác dạng: " + a.questionType() + " / " + b.questionType());
+        }
+        String ta = canonical(a);
+        String tb = canonical(b);
+        boolean sameFingerprint = ta.equals(tb);
+        return new PairDiagnostics(sameFingerprint ? 1.0 : McqTextNormalizer.trigramCosine(ta, tb),
+                signature(a).equals(signature(b)), negationKey(a).equals(negationKey(b)), sameFingerprint);
+    }
+
     /** Số ý tối thiểu phải ghép được để hai câu tf bị coi là trùng theo ý. */
     static final int MIN_MATCHED_STATEMENTS = 3;
 

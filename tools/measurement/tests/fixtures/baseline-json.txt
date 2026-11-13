@@ -1,0 +1,18 @@
+Đây là đề theo yêu cầu:
+```json
+[
+  {"cau": 1, "dang": "mcq", "de": "Bậc của đơn thức $5x^3y$ là", "phuong_an": {"A": "3", "B": "4", "C": "5", "D": "1"},
+   "y": null, "dap_an": "B", "loi_giai": "Bậc là $3 + 1 = 4$.\nVậy chọn B."},
+  {"cau": 2, "dang": "mcq", "de": "Tính $\frac{1}{2} \times 4$", "phuong_an": {"A": "$2$", "B": "$\neq 2$", "C": "$8$"},
+   "y": null, "dap_an": "A", "loi_giai": "..."},
+  {"cau": 3, "dang": "tf", "de": "Cho $Q = (a-b)^2$.", "phuong_an": null,
+   "y": [{"vi_tri": "a", "noi_dung": "$Q = a^2 - 2ab + b^2$", "nhan": "Đ"},
+         {"vi_tri": "b", "noi_dung": "$Q \ge 0$", "nhan": "Đ"},
+         {"vi_tri": "c", "noi_dung": "$Q = a^2 - b^2$", "nhan": "S"},
+         {"vi_tri": "d", "noi_dung": "$Q$ âm khi $a < b$", "nhan": "Sai"}],
+   "dap_an": null, "loi_giai": "Khai triển."},
+  {"cau": 4, "dang": "sa", "de": "Tính $x^2$ tại $x = -1{,}5$.", "phuong_an": null, "y": null, "dap_an": "2,25",
+   "loi_giai": "$\left(-1{,}5\right)^2 = 2{,}25$",},
+]
+```
+Chúc thầy cô dạy tốt!

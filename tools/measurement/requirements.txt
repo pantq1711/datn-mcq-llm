@@ -1,0 +1,4 @@
+# Công cụ đo chương 4. Cài vào môi trường ảo riêng (tools/measurement/.venv, đã gitignore):
+#   python -m venv .venv && .venv/Scripts/python -m pip install -r requirements.txt
+# Ngoài ra cần pandoc trên PATH (tạo .docx), giống backend.
+openpyxl==3.1.5

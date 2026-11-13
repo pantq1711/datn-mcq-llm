@@ -32,5 +32,7 @@ back_end/.test-selection
 
 # Công cụ nhập bộ câu hỏi từ Word (W2-1)
 tools/bank-import/target/
+# Công cụ đo chương 4 (Python): môi trường ảo riêng
+tools/measurement/.venv/
 # Ghi chú công việc cá nhân
 /task/
