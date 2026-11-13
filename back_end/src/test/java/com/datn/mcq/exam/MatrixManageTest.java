@@ -194,6 +194,56 @@ class MatrixManageTest extends ExamFlowTestBase {
         assertEquals(1, templates());
     }
 
+    /** Giả lập ma trận lưu trước khi bắt buộc khối: khối của ma trận và template các ô đều NULL. */
+    private void clearGradeLevel(int matrix) {
+        jdbc.update("UPDATE exam_matrix SET grade_level = NULL WHERE id = ?", matrix);
+        jdbc.update("UPDATE question_template SET grade_level = NULL WHERE id IN"
+                + " (SELECT template_id FROM exam_matrix_cell WHERE matrix_id = ?)", matrix);
+    }
+
+    /**
+     * Ma trận cũ chưa có khối, đã có đề: được bổ sung khối (môn, ô giữ nguyên); khối vào cả template các ô. Đã có khối rồi
+     * thì đổi khối vẫn 409 như đổi cấu trúc.
+     */
+    @Test
+    void maTranCuChuaCoKhoiDaCoDeDuocBoSungKhoi() throws Exception {
+        int matrix = createMatrix(mcqCell(TOPIC, "Đơn thức", 1));
+        build(matrix);
+        clearGradeLevel(matrix);
+        JsonNode before = getMatrix(matrix);
+        assertTrue(before.get("gradeLevel").isNull(), "ma trận cũ đọc được, khối trống");
+        int cell = before.get("cells").get(0).get("id").asInt();
+        int template = before.get("cells").get(0).get("templateId").asInt();
+
+        JsonNode after = update(matrix, body("Ma trận thử", null, mcqCell(TOPIC, "Đơn thức", 1)));
+        assertEquals(8, after.get("gradeLevel").asInt());
+        assertEquals(cell, after.get("cells").get(0).get("id").asInt(), "ô giữ nguyên id");
+        assertEquals(template, after.get("cells").get(0).get("templateId").asInt(), "template giữ nguyên");
+        assertEquals(8, count("SELECT grade_level FROM question_template WHERE id = ?", template),
+                "template của ô được bổ sung khối");
+        assertEquals(1, templates());
+
+        // Đã có khối: đổi khối là đổi cấu trúc
+        perform(put(url(matrix)).contentType(MediaType.APPLICATION_JSON)
+                .content(body("Ma trận thử", null, mcqCell(TOPIC, "Đơn thức", 1)).replace("\"gradeLevel\": 8",
+                        "\"gradeLevel\": 9")))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("MATRIX_IN_USE"));
+        assertEquals(8, getMatrix(matrix).get("gradeLevel").asInt());
+    }
+
+    /** Ma trận cũ chưa có khối và đã có đề: đổi ô vẫn 409, không bổ sung khối. */
+    @Test
+    void maTranCuChuaCoKhoiDaCoDeDoiOVanTra409() throws Exception {
+        int matrix = createMatrix(mcqCell(TOPIC, "Đơn thức", 1));
+        build(matrix);
+        clearGradeLevel(matrix);
+        perform(put(url(matrix)).contentType(MediaType.APPLICATION_JSON)
+                .content(body("Ma trận thử", null, mcqCell(TOPIC, "Đơn thức", 2))))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("MATRIX_IN_USE"));
+        assertTrue(getMatrix(matrix).get("gradeLevel").isNull());
+        assertEquals(0, count("SELECT count(*) FROM question_template WHERE grade_level IS NOT NULL"));
+    }
+
     // ---------- xóa ----------
 
     @Test
@@ -287,6 +337,15 @@ class MatrixManageTest extends ExamFlowTestBase {
         int matrix = createMatrix(mcqCell(TOPIC, null, 1));
         perform(post(url(matrix) + "/duplicate").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\": \"" + "y".repeat(256) + "\"}")).andExpect(status().isBadRequest());
+        assertEquals(1, count("SELECT count(*) FROM exam_matrix"));
+    }
+
+    @Test
+    void nhanBanMaTranChuaCoKhoiTra400() throws Exception {
+        int matrix = createMatrix(mcqCell(TOPIC, null, 1));
+        clearGradeLevel(matrix);
+        perform(post(url(matrix) + "/duplicate")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Ma trận chưa có khối lớp, hãy bổ sung khối lớp trước khi nhân bản."));
         assertEquals(1, count("SELECT count(*) FROM exam_matrix"));
     }
 

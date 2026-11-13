@@ -524,11 +524,15 @@ trước ma trận nào đang bị khóa). Quyền như mục 7: chỉ giáo vi�
 - **Đã có đề (`examCount > 0`):** đề đã tạo đọc ô sống để Đổi/sinh lại và giữ khóa ngoại tới ma trận, nên:
   - sửa chỉ được **tên, nguồn, ghi chú**; gửi lại đúng cấu trúc cũ (môn, khối, mọi ô; khoảng trắng thừa không tính) thì
     200, id ô và template giữ nguyên; môn, khối hoặc ô khác thì **409** `MATRIX_IN_USE`, không đổi gì;
+  - (13/11) ma trận lưu từ trước chưa có khối (`gradeLevel: null`) được **bổ sung khối** dù đã có đề: gửi khối 6-9 cùng môn
+    và các ô như cũ thì 200, khối ghi vào ma trận và template của các ô (câu sinh sau và lọc ngân hàng theo khối dùng khối
+    này); đã có khối thì đổi khối vẫn 409;
   - xóa trả **409** `MATRIX_IN_USE`;
   - muốn ma trận khác đi: tạo ma trận mới với nội dung đã sửa (`POST /api/exam-matrices`) hoặc nhân bản.
 - **Nhân bản:** làm được cả với ma trận đã có đề. Ma trận mới độc lập (sửa hoặc xóa bản này không đụng bản kia): cùng nội
   dung ô, nguồn, ghi chú, mỗi ô có template riêng, `sampleKey` bỏ trống, `examCount = 0`, người sở hữu là người gọi. `name`
-  bỏ trống thì "&lt;tên&gt; (bản sao)" (cắt cho vừa 255 ký tự); `name` quá 255 ký tự thì 400.
+  bỏ trống thì "&lt;tên&gt; (bản sao)" (cắt cho vừa 255 ký tự); `name` quá 255 ký tự thì 400. Ma trận chưa có khối thì 400
+  `Ma trận chưa có khối lớp, hãy bổ sung khối lớp trước khi nhân bản.` (bổ sung bằng sửa ma trận như trên).
 - Ma trận ẩn của sinh theo bài (7.2a), ma trận không có hoặc của giáo viên khác: 404 cho cả ba thao tác.
 - Tạo đề và xóa/sửa ma trận đồng thời: tạo đề giữ khóa chia sẻ trên hàng ma trận, sửa/xóa khóa ghi hàng rồi mới đếm đề,
   nên lần xóa gặp tạo đề đang dở chờ rồi trả 409 `MATRIX_IN_USE`, còn tạo đề gặp ma trận vừa xóa trả 404 (không thành 500).
