@@ -226,7 +226,7 @@ class MatrixPromptDepthTest {
 
     @Test
     void phienBanPromptMoi() {
-        assertEquals("matrix-mcq-v9-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
+        assertEquals("matrix-mcq-v10-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
         assertEquals("matrix-tf-v12-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
         assertEquals("matrix-sa-v12-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
     }

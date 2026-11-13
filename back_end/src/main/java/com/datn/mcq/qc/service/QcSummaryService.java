@@ -69,6 +69,11 @@ public class QcSummaryService {
     public static final String REQUEST_PARTIAL = "request_partial";
     /** PR B (12/11): cờ thông tin, Solver kết luận câu chưa đúng yêu cầu của giáo viên. */
     public static final String REQUEST_NOT_MET = "request_not_met";
+    /**
+     * PA1 (13/11): cờ thông tin, dạng {@code distractor_mismatch: <chữ>}: Solver áp lỗi sai đã nêu của phương án đó không ra
+     * đúng phương án (hoặc không ra phương án nào). Không vào reviewReasons, không bật needsReview.
+     */
+    public static final String DISTRACTOR_MISMATCH = "distractor_mismatch";
 
     /**
      * Nhóm cảnh báo format KHÔNG bật cờ "cần xem kỹ" (2/11, sau đo đề 11): hệ thống đã tự sửa và việc sửa chắc chắn không đổi

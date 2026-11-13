@@ -1,0 +1,147 @@
+{
+  "4": {"correct_option": "C", "errors": {
+    "A": "Lấy số mũ lớn nhất của riêng biến $y$",
+    "B": "Lấy số mũ lớn nhất của riêng biến $x$",
+    "C": null,
+    "D": "Nhầm giá trị tuyệt đối của hạng tử tự do là bậc"}},
+  "5": {"correct_option": "C", "errors": {
+    "A": "Nhầm $(a+b)^2 = a^2 + b^2$, bỏ hạng tử $2ab$",
+    "B": "Quên nhân đôi hạng tử giữa, viết $ab$ thay vì $2ab$",
+    "C": null,
+    "D": "Quên bình phương số hạng thứ hai, viết $3$ thay vì $3^2$"}},
+  "6": {"correct_option": "B", "errors": {
+    "A": "Không đổi dấu hạng tử $2x$ khi bỏ ngoặc có dấu trừ đằng trước",
+    "B": null,
+    "C": "Cộng hai đa thức thay vì trừ",
+    "D": "Không đổi dấu hạng tử $-4$ khi bỏ ngoặc có dấu trừ đằng trước"}},
+  "7": {"correct_option": "A", "errors": {
+    "A": null,
+    "B": "Chỉ đặt hệ số $3$ làm nhân tử chung, quên biến $x$",
+    "C": "Quên chia hệ số $12$ cho $3$ khi đặt nhân tử chung",
+    "D": "Đặt $x$ làm nhân tử chung nhưng vẫn chia hệ số $12$ cho $3$"}},
+  "8": {"correct_option": "A", "errors": {
+    "A": null,
+    "B": "Chỉ đặt hệ số $5$ làm nhân tử chung, quên biến $x$",
+    "C": "Chỉ đặt biến $x$ làm nhân tử chung, quên hệ số $5$",
+    "D": "Quên chia hệ số $10$ cho $5$ khi đặt nhân tử chung"}},
+  "15": {"correct_option": "B", "errors": {
+    "A": "Nhầm với tính chất hai đường chéo của hình thoi",
+    "B": null,
+    "C": "Nhầm với tính chất hai đường chéo của hình bình hành",
+    "D": null}},
+  "24": {"correct_option": "C", "errors": {
+    "A": "Không nhận ra biểu thức có biến ở mẫu không phải đơn thức",
+    "B": "Cho rằng biểu thức chứa căn của biến vẫn là đa thức",
+    "C": null,
+    "D": "Cho rằng thương của hai đa thức luôn là đa thức"}},
+  "25": {"correct_option": "B", "errors": {
+    "A": "Nhầm tổng của hai đơn thức vẫn là một đơn thức",
+    "B": null,
+    "C": "Cho rằng thương của hai biến vẫn là đơn thức",
+    "D": null}},
+  "27": {"correct_option": "C", "errors": {
+    "A": "Nhầm với bình phương của một tổng viết dưới dạng tích",
+    "B": "Lấy hiệu $A - B$ nhân với chính nó thay vì nhân với tổng",
+    "C": null,
+    "D": "Nhầm sang công thức khai triển bình phương của một hiệu"}},
+  "28": {"correct_option": "C", "errors": {
+    "A": "Nhầm với hằng đẳng thức hiệu hai bình phương",
+    "B": "Bình phương từng số hạng, bỏ hạng tử $2AB$",
+    "C": null,
+    "D": "Nhầm dấu hạng tử giữa, dùng công thức bình phương của một hiệu"}},
+  "29": {"correct_option": "A", "errors": {
+    "A": null,
+    "B": "Cho rằng hiệu hai bình phương bằng bình phương của một hiệu",
+    "C": "Nhầm với bình phương của một tổng",
+    "D": "Viết nhân tử thứ hai là hiệu thay vì tổng"}},
+  "30": {"correct_option": "B", "errors": {
+    "A": "Không bình phương hệ số $3$ và quên nhân đôi hạng tử giữa",
+    "B": null,
+    "C": "Quên nhân đôi hạng tử giữa, viết $ab$ thay vì $2ab$",
+    "D": "Không bình phương hệ số $3$ khi tính $(3x)^2$"}},
+  "31": {"correct_option": "A", "errors": {
+    "A": null,
+    "B": "Lấy luôn hạng tử tự do $9$ làm số hạng thứ hai, không khai căn",
+    "C": "Nhầm vị trí, gắn $3$ vào $x$ thay vì làm số hạng thứ hai",
+    "D": "Nhầm dấu, dùng bình phương của một hiệu"}},
+  "32": {"correct_option": "B", "errors": {
+    "A": "Nhầm dấu hạng tử giữa, dùng công thức bình phương của một tổng",
+    "B": null,
+    "C": "Nhầm với hằng đẳng thức hiệu hai bình phương",
+    "D": "Bình phương từng số hạng với $(-B)^2 = B^2$, bỏ hạng tử $2AB$"}},
+  "33": {"correct_option": "D", "errors": {
+    "A": "Không nhận ra $\\frac{1}{x}$ có biến ở mẫu nên không phải đơn thức",
+    "B": "Cho rằng căn bậc hai của biến vẫn là đơn thức",
+    "C": "Cho rằng chia đa thức cho một biến vẫn được đa thức",
+    "D": null}},
+  "34": {"correct_option": "B", "errors": {
+    "A": "Cho rằng chia đa thức cho một biến vẫn được đa thức",
+    "B": null,
+    "C": "Cho rằng biểu thức chứa căn của biến vẫn là đa thức",
+    "D": "Không nhận ra $\\frac{1}{x}$ có biến ở mẫu nên không phải đơn thức"}},
+  "35": {"correct_option": "C", "errors": {
+    "A": "Tính $-2x + x$ thành $-3x$ do nhầm dấu khi cộng",
+    "B": "Trừ hai đa thức thay vì cộng",
+    "C": null,
+    "D": "Trừ hai đa thức nhưng quên đổi dấu hạng tử tự do $-3$"}},
+  "37": {"correct_option": "B", "errors": {
+    "A": "Chỉ đặt $2x$ làm nhân tử chung, chưa lấy hết lũy thừa của $x$",
+    "B": null,
+    "C": "Chỉ đặt $x^2$ làm nhân tử chung, quên hệ số chung $2$",
+    "D": "Chỉ đặt hệ số $2$ làm nhân tử chung, quên phần biến"}},
+  "38": {"correct_option": "B", "errors": {
+    "A": "Quên nhân đôi hạng tử giữa, viết $ab$ thay vì $2ab$",
+    "B": null,
+    "C": "Không bình phương hệ số $2$ khi tính $(2x)^2$",
+    "D": "Nhầm dấu hạng tử giữa, dùng công thức bình phương của một tổng"}},
+  "39": {"correct_option": "B", "errors": {
+    "A": "Chỉ đặt $4x$ làm nhân tử chung, chưa lấy hết lũy thừa của $x$",
+    "B": null,
+    "C": "Chỉ đặt hệ số $4$ làm nhân tử chung, quên phần biến",
+    "D": "Lấy hệ số chung là $2$ thay vì ước chung lớn nhất $4$"}},
+  "41": {"correct_option": "A", "errors": {
+    "A": null,
+    "B": "Cộng sai tổng ba góc đã cho thành $240^\\circ$",
+    "C": "Cho rằng góc $L$ bằng góc $K$ như hai góc đối hình bình hành",
+    "D": null}},
+  "48": {"correct_option": "B", "errors": {
+    "A": "Đếm số hạng tử chứa biến thay vì tính bậc",
+    "B": null,
+    "C": "Lấy số mũ lớn nhất của riêng biến $y$",
+    "D": "Nhầm hệ số lớn nhất $6$ là bậc của đa thức"}},
+  "49": {"correct_option": "C", "errors": {
+    "A": "Lấy số mũ lớn nhất của riêng biến $y$",
+    "B": "Lấy số mũ lớn nhất của riêng biến $x$",
+    "C": null,
+    "D": "Nhân các số mũ trong hạng tử đầu thay vì cộng"}},
+  "50": {"correct_option": "B", "errors": {
+    "A": "Tính $-3x + 4x$ thành $-7x$ do cộng hai số rồi giữ dấu trừ",
+    "B": null,
+    "C": "Trừ hai đa thức nhưng không đổi dấu hạng tử $4x$",
+    "D": "Tính $-3x + 4x$ thành $7x$ do bỏ qua dấu trừ của $-3x$"}},
+  "52": {"correct_option": "A", "errors": {
+    "A": null,
+    "B": "Chỉ đặt hệ số $7$ làm nhân tử chung, quên biến $x$",
+    "C": "Quên chia hệ số $14$ cho $7$ khi đặt nhân tử chung",
+    "D": "Chỉ đặt biến $x$ làm nhân tử chung, quên hệ số $7$"}},
+  "53": {"correct_option": "A", "errors": {
+    "A": null,
+    "B": "Chỉ đặt $3x$ làm nhân tử chung, chưa lấy hết lũy thừa của $x$",
+    "C": "Nhầm dấu của hạng tử thứ hai trong ngoặc",
+    "D": "Lấy hệ số chung là $6$ thay vì ước chung lớn nhất $3$"}},
+  "60": {"correct_option": "A", "errors": {
+    "A": null,
+    "B": "Không bình phương hệ số $4$ và quên nhân đôi hạng tử giữa",
+    "C": "Quên nhân đôi hạng tử giữa, viết $ab$ thay vì $2ab$",
+    "D": "Bình phương từng số hạng và giữ dấu trừ, bỏ hạng tử $2ab$"}},
+  "61": {"correct_option": "B", "errors": {
+    "A": "Nhầm hai cạnh bên với hai cạnh kề của hình chữ nhật",
+    "B": null,
+    "C": "Nhầm hai cạnh bên với hai cạnh đáy của hình thang",
+    "D": null}},
+  "62": {"correct_option": "C", "errors": {
+    "A": "Cho rằng đa thức chỉ được chứa một biến",
+    "B": "Cho rằng hệ số là phân số thì không phải đa thức",
+    "C": null,
+    "D": "Cho rằng một số không chứa biến thì không phải đa thức"}}
+}

@@ -10,6 +10,7 @@ import com.datn.mcq.generation.dto.ParsedTfDto;
 import com.datn.mcq.generation.parser.SaJsonParser;
 import com.datn.mcq.generation.parser.TfJsonParser;
 import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.llm.prompt.MatrixPromptDraftV0;
 import com.datn.mcq.llm.prompt.McqProductionSchema;
 import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.llm.prompt.McqAnswerPlan;
@@ -181,10 +182,11 @@ public class GenerationJobPoller {
                     ? llmClient.callJsonModeWithSchema(
                             ctx.prompt(), ctx.modelName(), ctx.temperature(),
                             TfPromptDraftV0.GENERATION_RESPONSE_SCHEMA_JSON)
-                    // Câu mcq gọi kèm schema (25/10: không còn cấu hình riêng theo strategy cho run experiment).
+                    // Câu mcq gọi kèm schema (25/10: không còn cấu hình riêng theo strategy cho run experiment). 13/11 (PA1):
+                    // prompt có yêu cầu distractor_errors (ma trận mcq từ v10) thì schema 8 trường, job cũ giữ 7 trường.
                     : llmClient.callJsonModeWithSchema(
                             ctx.prompt(), ctx.modelName(), ctx.temperature(),
-                            McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON);
+                            McqProductionSchema.forPrompt(ctx.prompt()));
         } catch (QuotaExhaustedException ex) {
             LOG.warn("Job {}: chạm hạn mức ngày của Gemini khi sinh câu, trả về pending tới {}: {}",
                     ctx.jobId(), ex.getResetAt(), ex.getMessage());
@@ -462,7 +464,8 @@ public class GenerationJobPoller {
                     savedQuestion.getId(), parsedSa, ctx.validateLatex(), runAnswerCheck);
             parseError = parsedSa.parseError();
         } else {
-            ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText(), production);
+            ParsedMcqDto parsed = McqJsonParser.parse(llmResult.rawText(), production,
+                    MatrixPromptDraftV0.asksDistractorErrors(ctx.prompt()));
             // 3/11: chỗ mcq của đề theo ma trận được giao trước chữ đáp án đúng; chữ khác chỉ cảnh báo (không bật cờ, chưa sinh lại).
             String letterMismatch = parsed.parseSuccess() && parsed.correctOption() != null
                     ? McqAnswerPlan.mismatchWarning(ctx.mcqAnswerLetter(), parsed.correctOption().getDbValue()) : null;
@@ -476,6 +479,9 @@ public class GenerationJobPoller {
         }
         // PR B (12/11): yêu cầu của giáo viên (chép từ job khi lưu câu) đi kèm câu vào Solver, cùng một lượt gọi.
         qcInput = qcInput.withRequest(savedQuestion.getRequestCodes(), savedQuestion.getRequestText());
+        // 13/11 (PA1): lỗi sai kèm phương án (đã lưu ở câu) được Solver ghép mù trong cùng lượt gọi.
+        qcInput = qcInput.withDistractorErrors(
+                com.datn.mcq.common.util.LetterJson.read(savedQuestion.getDistractorErrors()));
 
         QcPipelineReport qcReport;
         try {

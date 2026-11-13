@@ -38,7 +38,41 @@ class SolverProbeToolTest {
     @Test
     void dongMcqKhopGhiConsistentMotPhuongAnDung() {
         SolverProbeRow row = SolverProbeRow.of(V, mcq(Option.B), mcqVerdict(true, AnswerChoice.B));
-        assertEquals("37," + V + ",mcq,B,B,consistent,0,1,,812,1535,gemini-x,", row.toCsvLine());
+        assertEquals("37," + V + ",mcq,B,B,consistent,0,1,,812,1535,gemini-x,,", row.toCsvLine());
+    }
+
+    /** PA1 (13/11): cột error_checks theo chữ người soạn đã gán (để báo riêng 39D, 53D khi đo TN1). */
+    @Test
+    void dongMcqCoKetQuaGhepLoi() {
+        java.util.Map<String, com.datn.mcq.enums.DistractorCheck> checks = new java.util.LinkedHashMap<>();
+        checks.put("A", com.datn.mcq.enums.DistractorCheck.MATCH);
+        checks.put("C", com.datn.mcq.enums.DistractorCheck.MISMATCH);
+        checks.put("D", com.datn.mcq.enums.DistractorCheck.UNKNOWN);
+        SolverProbeRow row = SolverProbeRow.of(V, mcq(Option.B), mcqVerdict(true, AnswerChoice.B)
+                .withDistractorChecks(checks));
+        assertEquals("A:match|C:mismatch|D:unknown", row.errorChecks());
+        assertTrue(row.toCsvLine().endsWith(",gemini-x,,A:match|C:mismatch|D:unknown"), row.toCsvLine());
+    }
+
+    @Test
+    void docTepLoiVaDoiChieuDapAn() throws Exception {
+        java.util.Map<Integer, SolverProbeRunner.ProbeErrors> m = SolverProbeRunner.parseDistractorErrors(
+                "{\"4\": {\"correct_option\": \"c\", \"errors\": {\"A\": \"Lỗi $x$\", \"B\": \" \", \"C\": null,"
+                        + " \"D\": \"Lỗi khác\"}}}");
+        SolverProbeRunner.ProbeErrors e = m.get(4);
+        assertEquals("C", e.correctOption());
+        assertEquals(java.util.Arrays.asList("Lỗi $x$", null, null, "Lỗi khác"), new java.util.ArrayList<>(e.errors().values()));
+        SolverProbeRunner.checkProbeErrors(4, e, "C");
+        assertThrows(IllegalStateException.class, () -> SolverProbeRunner.checkProbeErrors(4, e, "B"),
+                "lệch đáp án đã lưu thì không chạy");
+        assertThrows(IllegalStateException.class, () -> SolverProbeRunner.checkProbeErrors(5, null, "B"));
+        assertThrows(IllegalStateException.class, () -> SolverProbeRunner.parseDistractorErrors("{\"x\": {}}"));
+        assertThrows(IllegalStateException.class, () -> SolverProbeRunner.parseDistractorErrors("{\"4\": {\"errors\": {}}}"));
+        // tệp TN1 trong repo đọc được, đủ 29 câu
+        Path file = Path.of("..", "docs", "experiments", "tn1", "distractor-errors.json");
+        if (Files.exists(file)) {
+            assertEquals(29, SolverProbeRunner.parseDistractorErrors(Files.readString(file)).size());
+        }
     }
 
     private static SolverVerdict optionCheckVerdict(AnswerChoice judge, List<Boolean> optionCorrect) {
@@ -54,7 +88,7 @@ class SolverProbeToolTest {
         assertEquals("1", row.multipleFlag());
         assertEquals("3", row.solverCorrectCount());
         assertEquals("A:1|B:0|C:1|D:1", row.optionsVerdict());
-        assertEquals("37," + V + ",mcq,A,multiple,inconsistent,1,3,A:1|B:0|C:1|D:1,900,2000,gemini-x,",
+        assertEquals("37," + V + ",mcq,A,multiple,inconsistent,1,3,A:1|B:0|C:1|D:1,900,2000,gemini-x,,",
                 row.toCsvLine());
 
         SolverProbeRow none = SolverProbeRow.of(V, mcq(Option.A),
@@ -66,7 +100,8 @@ class SolverProbeToolTest {
     @Test
     void headerCoCotKetQuaTungPhuongAn() {
         assertEquals("question_id,prompt_version,question_type,question_answer,solver_answer,verdict,"
-                + "multiple_correct_flag,solver_correct_count,options_verdict,token_count,latency_ms,solver_model,error",
+                + "multiple_correct_flag,solver_correct_count,options_verdict,token_count,latency_ms,solver_model,error,"
+                + "error_checks",
                 SolverProbeRow.HEADER);
     }
 
@@ -96,13 +131,13 @@ class SolverProbeToolTest {
         assertEquals("T|F|T|F", row.questionAnswer());
         assertEquals("T|F|undecidable|F", row.solverAnswer());
         assertEquals("", row.multipleFlag());
-        assertEquals("5," + V + ",tf,T|F|T|F,T|F|undecidable|F,inconsistent,,,,,,m,", row.toCsvLine());
+        assertEquals("5," + V + ",tf,T|F|T|F,T|F|undecidable|F,inconsistent,,,,,,m,,", row.toCsvLine());
     }
 
     @Test
     void dongLoiMotDongVaTrichNhayKepDauPhay() {
         SolverProbeRow row = SolverProbeRow.error(V, 9, null, "Lỗi \"x\",\ndòng 2");
-        assertEquals("9," + V + ",,,,error,,,,,,,\"Lỗi \"\"x\"\", dòng 2\"", row.toCsvLine());
+        assertEquals("9," + V + ",,,,error,,,,,,,\"Lỗi \"\"x\"\", dòng 2\",", row.toCsvLine());
     }
 
     @Test

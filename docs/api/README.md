@@ -100,7 +100,7 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | POST | `/api/exams/{id}/slots/{slotId}/keep` | Giữ câu (vào ngân hàng) |
 | POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác: `source = generate` (mặc định) sinh lại đúng ô, có thể kèm yêu cầu của giáo viên; `source = bank` lấy câu ngân hàng khớp ô, hết thì 409 `BANK_EXHAUSTED` (mục 7.5) |
 | PUT | `/api/exams/{id}/slots/{slotId}/question` | Sửa câu của chỗ chưa Giữ (mục 7.5a); QC chạy lại, Solver qua hàng đợi |
-| GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; `?equation=omml` (mặc định) hoặc `mathtype` (mục 7.6); cần pandoc trên máy chủ |
+| GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; `?equation=omml` (mặc định) hoặc `mathtype`, `?includeDistractorNotes=true` (mặc định) hoặc `false` (mục 7.6); cần pandoc trên máy chủ |
 
 Chạy lại QC cho câu `generated` (quy tắc QC-RERUN, quyết định 6 ngày 22/10) đã có ở tầng service (`QcRerunService`, cả ba
 dạng) cho công cụ thí nghiệm, không có endpoint HTTP.
@@ -786,6 +786,23 @@ khác để sinh lại).
     cầu thừa hưởng của chỗ (của ô nếu ô có mã hoặc văn bản, không thì của đề; mã và văn bản luôn cùng một mức), mã đã lọc theo
     dạng câu của chỗ (`[]` khi mức đó chỉ có văn bản), `text` nguyên văn đã lưu (null khi mức đó chỉ có mã). Hộp Đổi câu dùng
     trường này để chọn sẵn chip và điền sẵn văn bản.
+- **PA1 (13/11), phương án nhiễu kèm lỗi sai của học sinh** (docs/design/phuong-an-nhieu-loi-sai.md):
+  - `distractorErrors` (vắng khi không có; chỉ câu `mcq` có ít nhất một lỗi): đối tượng theo chữ của phương án SAI có chữ lỗi
+    (không có khóa của đáp án đúng), mỗi giá trị `{"text": "...", "check": "match" | "mismatch" | "unknown" | "unchecked"}`.
+    `text` là câu mô tả lỗi sai dẫn tới phương án đó (LaTeX trong `$...$`); `check` là kết quả Solver ghép mù (khớp, không khớp,
+    không rõ, chưa kiểm). Câu hệ thống sinh: kết quả của câu (bản giáo viên sửa đang chờ hoặc kiểm lại thất bại: kết quả tạm,
+    sửa câu dẫn/đáp án thì mọi lỗi `unchecked`, sửa một phương án thì lỗi của phương án đó `unchecked`); câu ngân hàng hoặc đã
+    Giữ: bản chụp lúc Giữ (`bank_item`).
+    ```json
+    "distractorErrors": {
+      "A": {"text": "Nhầm $(a+b)^2 = a^2 + b^2$", "check": "match"},
+      "C": {"text": "Quên đổi dấu khi bỏ ngoặc", "check": "mismatch"},
+      "D": {"text": "Cộng số mũ thay vì nhân", "check": "unchecked"}
+    }
+    ```
+  - `infoReasons` thêm `distractor_mismatch: <chữ>` cho mỗi phương án `mismatch` (câu hệ thống sinh chưa Giữ). Như các cờ thông
+    tin khác: không bật `needsReview`, không đổi `qcState`, Giữ vẫn vào ngân hàng dùng chung.
+  - `/api/bank-items` chưa trả các trường này.
 
 ### 7.5. Giữ / Đổi câu khác
 
@@ -922,7 +939,14 @@ PUT /api/exams/12/slots/101/question
 GET /api/exams/12/export/docx                    → 200, file MT2610231200001.docx (Content-Disposition: attachment)
 GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đối tượng MathType; header X-Equation-Kept-Omml: 0, X-Equation-Scaled: 0
 GET /api/exams/12/export/docx?equation=abc       → 400
+GET /api/exams/12/export/docx?includeDistractorNotes=false → 200, không có dòng "Phân tích phương án nhiễu"
+GET /api/exams/12/export/docx?includeDistractorNotes=yes   → 400
 ```
+
+- **PA1 (13/11):** tham số tùy chọn `includeDistractorNotes` (`true` mặc định, `false`; không phân biệt hoa thường; giá trị khác
+  400). `true`: ở phần LỜI GIẢI CHI TIẾT, sau lời giải của mỗi câu `mcq` có lỗi kèm phương án, thêm một đoạn
+  "*Phân tích phương án nhiễu:* A – …; D – …." chỉ gồm lỗi `match` hoặc `unchecked` (không in `mismatch`, `unknown`; không còn
+  lỗi nào thì không có đoạn). Phần đề và bảng đáp án không đổi. Công thức trong lỗi chuyển như lời giải (Equation hoặc MathType).
 
 - **Khuôn đề kiểm tra THCS (4/11, theo mẫu của một trường):** tham số tùy chọn `durationMinutes` (số nguyên 5–180, ngoài khoảng
   hoặc không phải số là 400) điền "(Thời gian làm bài N phút không kể thời gian giao đề)"; không truyền thì "……". File khổ A4

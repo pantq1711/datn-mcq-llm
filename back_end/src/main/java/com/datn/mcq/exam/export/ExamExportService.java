@@ -103,8 +103,17 @@ public class ExamExportService {
      *                        kiểm khoảng hợp lệ bằng {@link ExamHeader#parseDuration}.
      */
     public DocxFile docx(Integer examId, Integer actorId, EquationFormat format, Integer durationMinutes) {
+        return docx(examId, actorId, format, durationMinutes, true);
+    }
+
+    /**
+     * @param includeDistractorNotes (13/11, PA1) in "Phân tích phương án nhiễu" sau lời giải câu mcq (mặc định true); chỉ ở
+     *                               phần lời giải chi tiết
+     */
+    public DocxFile docx(Integer examId, Integer actorId, EquationFormat format, Integer durationMinutes,
+                         boolean includeDistractorNotes) {
         ExamViewDto view = viewService.view(examId, actorId);
-        String markdown = ExamMarkdownBuilder.build(view, header(view, durationMinutes), scoring);
+        String markdown = ExamMarkdownBuilder.build(view, header(view, durationMinutes), scoring, includeDistractorNotes);
         PandocRunner.Docx docx = exportMetrics == null
                 ? pandocRunner.markdownToDocx(markdown, format)
                 : exportMetrics.measure(format == null ? "omml" : format.name().toLowerCase(java.util.Locale.ROOT),

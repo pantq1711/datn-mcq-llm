@@ -7,8 +7,10 @@ import com.datn.mcq.common.util.InlineArtifacts;
 import com.datn.mcq.common.util.LiteralNewlines;
 import com.datn.mcq.common.util.MissingLatexBackslash;
 import com.datn.mcq.config.ExamScoringProperties;
+import com.datn.mcq.enums.DistractorCheck;
 import com.datn.mcq.enums.StatementKey;
 import com.datn.mcq.enums.TruthValue;
+import com.datn.mcq.exam.dto.ExamViewDtos.DistractorErrorDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamItemDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ItemStatementDto;
@@ -103,8 +105,23 @@ public final class ExamMarkdownBuilder {
         return build(exam, header, scoring, LocalDate.now(VIETNAM));
     }
 
+    /** Như {@link #build(ExamViewDto, ExamHeader, ExamScoringProperties)}, chọn có in phân tích phương án nhiễu hay không. */
+    public static String build(ExamViewDto exam, ExamHeader header, ExamScoringProperties scoring,
+                               boolean includeDistractorNotes) {
+        return build(exam, header, scoring, LocalDate.now(VIETNAM), includeDistractorNotes);
+    }
+
     /** @param today ngày xuất; cho phép cố định ngày khi kiểm thử */
     public static String build(ExamViewDto examView, ExamHeader header, ExamScoringProperties scoring, LocalDate today) {
+        return build(examView, header, scoring, today, true);
+    }
+
+    /**
+     * @param includeDistractorNotes (13/11, PA1) in dòng "Phân tích phương án nhiễu" sau lời giải của câu mcq (chỉ ở phần lời
+     *                               giải chi tiết; phần đề và bảng đáp án không đổi)
+     */
+    public static String build(ExamViewDto examView, ExamHeader header, ExamScoringProperties scoring, LocalDate today,
+                               boolean includeDistractorNotes) {
         // Câu đã lưu từ trước có thể còn "\n" chữ trong công thức, và độ viết ^{\circ} thành chỉ số trên cỡ nhỏ: sửa trong file
         // xuất (không sửa DB), cho cả Equation và MathType.
         ExamViewDto exam = withoutLiteralNewlines(examView);
@@ -136,7 +153,7 @@ public final class ExamMarkdownBuilder {
             blocks.add(raw(paragraph("ExamSubHeading", "PHẦN " + part.part(), false)));
             int k = 1;
             for (ExamItemDto item : part.items()) {
-                solution(blocks, k++, item);
+                solution(blocks, k++, item, includeDistractorNotes);
             }
         }
         return String.join("\n\n", blocks) + "\n";
@@ -160,12 +177,20 @@ public final class ExamMarkdownBuilder {
         List<ItemStatementDto> statements = i.statements() == null ? null : i.statements().stream()
                 .map(s -> new ItemStatementDto(s.key(), cleanText(s.text()), s.label(), s.difficulty()))
                 .toList();
+        Map<String, DistractorErrorDto> distractors = null;
+        if (i.distractorErrors() != null) {
+            distractors = new LinkedHashMap<>();
+            for (Map.Entry<String, DistractorErrorDto> e : i.distractorErrors().entrySet()) {
+                distractors.put(e.getKey(), new DistractorErrorDto(cleanText(e.getValue().text()), e.getValue().check()));
+            }
+        }
         return new ExamItemDto(i.slotId(), i.cellId(), i.slotNo(), i.part(), i.topic(), i.questionType(), i.state(),
                 i.source(), i.bankItemId(), i.questionId(), cleanText(i.questionText()),
                 cleanText(i.optionA()), cleanText(i.optionB()),
                 cleanText(i.optionC()), cleanText(i.optionD()), i.correctOption(),
                 i.saAnswer(), statements, cleanText(i.explanation()), i.difficulty(),
-                i.needsReview(), i.reviewReasons(), i.qcState(), i.edited(), i.originalQuestionId(), i.failureReason());
+                i.needsReview(), i.reviewReasons(), i.qcState(), i.edited(), i.originalQuestionId(), i.failureReason())
+                .withDistractorErrors(distractors);
     }
 
     /**
@@ -373,7 +398,10 @@ public final class ExamMarkdownBuilder {
 
     // ---------------------------------------------------------------- lời giải
 
-    private static void solution(List<String> blocks, int k, ExamItemDto item) {
+    /** Nhãn đầu dòng phân tích phương án nhiễu (13/11, PA1), in nghiêng. */
+    static final String DISTRACTOR_NOTES_LABEL = "Phân tích phương án nhiễu:";
+
+    private static void solution(List<String> blocks, int k, ExamItemDto item, boolean includeDistractorNotes) {
         if (!hasQuestion(item)) {
             blocks.add(label(k) + " " + NONE);
             return;
@@ -385,6 +413,10 @@ public final class ExamMarkdownBuilder {
                         : label(k) + " " + NONE);
                 if (!explanation.isEmpty()) {
                     blocks.add(explanation);
+                }
+                String notes = includeDistractorNotes ? distractorNotes(item) : null;
+                if (notes != null) {
+                    blocks.add(notes);
                 }
             }
             case SA -> {
@@ -410,6 +442,34 @@ public final class ExamMarkdownBuilder {
                 }
             }
         }
+    }
+
+    /**
+     * Dòng "*Phân tích phương án nhiễu:* B – …; C – …." của câu mcq (13/11, PA1): chỉ lỗi {@code match} hoặc
+     * {@code unchecked} (không in {@code mismatch}, {@code unknown}); không còn lỗi nào thì null. Công thức qua {@link #inline}
+     * như lời giải.
+     */
+    static String distractorNotes(ExamItemDto item) {
+        if (item.distractorErrors() == null) {
+            return null;
+        }
+        List<String> parts = new ArrayList<>();
+        for (Map.Entry<String, DistractorErrorDto> e : item.distractorErrors().entrySet()) {
+            DistractorCheck check = e.getValue().check();
+            String text = e.getValue().text() == null ? "" : oneLine(e.getValue().text()).strip();
+            if ((check == DistractorCheck.MATCH || check == DistractorCheck.UNCHECKED) && !text.isEmpty()) {
+                parts.add(e.getKey() + " – " + inline(stripEndPeriod(text)));
+            }
+        }
+        return parts.isEmpty() ? null : "*" + DISTRACTOR_NOTES_LABEL + "* " + String.join("; ", parts) + ".";
+    }
+
+    private static String stripEndPeriod(String text) {
+        String s = text.strip();
+        while (s.endsWith(".") || s.endsWith(";")) {
+            s = s.substring(0, s.length() - 1).strip();
+        }
+        return s;
     }
 
     private static String truth(TruthValue label) {
