@@ -127,8 +127,9 @@ chmod +x /opt/datn/deploy/scripts/*.sh
 cd /opt/datn/deploy
 cp .env.example .env && chmod 600 .env
 openssl rand -base64 48        # -> JWT_SECRET
+openssl rand -base64 48        # -> QUESTION_IMAGE_URL_KEY (chạy lại, phải khác JWT_SECRET)
 openssl rand -hex 24           # -> DB_PASSWORD
-nano .env                      # điền: SITE_ADDRESS, CORS_ALLOWED_ORIGINS=https://<tên miền>, DB_PASSWORD, JWT_SECRET,
+nano .env                      # điền: SITE_ADDRESS, CORS_ALLOWED_ORIGINS=https://<tên miền>, DB_PASSWORD, JWT_SECRET, QUESTION_IMAGE_URL_KEY,
                                #       ADMIN_EMAIL, ADMIN_PASSWORD (>= 12 ký tự), LLM_API_KEY
 ```
 
@@ -455,7 +456,7 @@ nhận cookie Secure qua http).
 | API trả 403 "Invalid CORS request" | `CORS_ALLOWED_ORIGINS` không khớp `https://<tên miền>` |
 | Tải tài liệu docx báo 503 `EXTRACTOR_UNAVAILABLE` hoặc container `OOMKilled` khi tải docx/pdf lớn | docx cần pandoc (cùng bản dùng xuất Word): `docker compose exec app pandoc --version`. OOM: hạ `MATERIAL_PANDOC_HEAP_MB` hoặc tăng `mem_limit` của `app`; pdf độc có thể ăn nhiều heap, xem `docs/api/README.md` mục 9.4 |
 | Xuất Word báo 503/500 | 503 `PANDOC_UNAVAILABLE`: hết slot hoặc quá thời gian xếp hàng `MATERIAL_QUEUE_WAIT` (đang trích tài liệu hoặc xuất Word khác); thử lại sau thời gian trong header `Retry-After`. 500: kiểm tra pandoc trong container (`docker compose exec app pandoc --version`), xem log `app`; nếu container bị OOM (`docker inspect` ghi `OOMKilled`) → tăng `mem_limit` của `app` hoặc hạ `MATERIAL_PANDOC_HEAP_MB` |
-| `app` khởi động lại liên tục | `docker compose logs app`: thường là `JWT_SECRET` thiếu/ngắn, `ADMIN_PASSWORD` dưới 12 ký tự, hoặc sai mật khẩu DB (đổi `DB_PASSWORD` sau khi volume `pgdata` đã tạo không có tác dụng) |
+| `app` khởi động lại liên tục | `docker compose logs app`: thường là `JWT_SECRET` hoặc `QUESTION_IMAGE_URL_KEY` thiếu/ngắn, `ADMIN_PASSWORD` dưới 12 ký tự, hoặc sai mật khẩu DB (đổi `DB_PASSWORD` sau khi volume `pgdata` đã tạo không có tác dụng) |
 | Đĩa đầy | `docker system df`; `docker image prune -f`; kiểm thư mục sao lưu |
 
 ## 12. Việc còn mở

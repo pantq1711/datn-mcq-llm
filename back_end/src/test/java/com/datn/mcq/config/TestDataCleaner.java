@@ -38,6 +38,7 @@ public final class TestDataCleaner {
         jdbcTemplate.update("DELETE FROM question_embedding");
         jdbcTemplate.update("DELETE FROM generation_job");
         jdbcTemplate.update("DELETE FROM generated_question_statement");
+        jdbcTemplate.update("DELETE FROM question_image");
         jdbcTemplate.update("DELETE FROM generated_question");
         jdbcTemplate.update("DELETE FROM import_batch");
         jdbcTemplate.update("DELETE FROM experiment_run");

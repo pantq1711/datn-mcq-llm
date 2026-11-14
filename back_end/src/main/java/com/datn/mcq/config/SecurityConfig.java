@@ -141,6 +141,8 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/public/assignments/*/attempts",
                                 "/api/public/attempts/current/submit").permitAll()
+                        // Tải ảnh câu hỏi qua URL có chữ ký HMAC-SHA256 (H3, PR #61).
+                        .requestMatchers(HttpMethod.GET, "/api/question-images/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         // Prometheus scrape không có JWT. An toàn nhờ Caddy chặn /actuator/* từ Internet và app không
                         // publish cổng; mọi đường actuator khác vẫn chỉ ADMIN (dòng bên dưới).

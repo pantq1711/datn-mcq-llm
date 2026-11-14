@@ -43,6 +43,7 @@ com.datn.mcq
 ├── bank/                   bank_item
 ├── matrix/                 exam_matrix, exam_matrix_cell (V6: ma trận đề, mỗi ô một question_template)
 ├── material/               lesson_material (V18, W2-3: tài liệu bài học đính kèm, chỉ lưu văn bản đã trích)
+├── questionimage/          question_image (V30, PR #61: lưu trữ ảnh câu hỏi, bộ ký URL HMAC-SHA256, endpoint tải ảnh)
 ├── bankimport/             import_batch (V26, 3/11: nhập ngân hàng câu từ Word; docx/, parse/, model/ chuyển từ
 │                           tools/bank-import; công thức MathType dùng chung mtef/)
 ├── mtef/                   đọc MTEF (MathType) → LaTeX, hàm thuần (P6; dùng chung material.extract và bankimport)
@@ -69,6 +70,7 @@ experiment  ──► generation, catalog
 goldset     ──► qc, user
 qc          ──► llm   (GroundingChecker và AnswerSolverChecker gọi LlmClient)
 auth        ──► user                                   (W1-1, duyệt ngày 24/10)
+questionimage ──► user                                 (V30, PR #61: module lá, chỉ kiểm trạng thái user; native SQL chỉ đọc)
 bank, catalog, user, llm ──► (chỉ common/config)
 mathtype    ──► (không module nào; chỉ JDK, Apache POI, JLaTeXMath)
 assignment  ──► exam (chỉ ExamAssignmentSource, ExamDeletionGuard), bank (BankService.getItems), config   (V32, 16/11; exam không biết assignment)
