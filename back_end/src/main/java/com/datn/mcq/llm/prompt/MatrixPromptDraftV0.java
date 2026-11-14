@@ -94,13 +94,16 @@ public final class MatrixPromptDraftV0 {
      * kiến thức các bài đã học ({@link #APPLY_SCOPE_LINE}, {@link #APPLY_LEVEL_RULES}), tf 4 ý chung một ngữ cảnh và tăng
      * dần độ khó ({@link #TF_SHARED_CONTEXT_RULES}), dạng sa mức Vận dụng ({@link #SA_APPLY_FORMS_RULE}), khối nâng cao theo
      * mức thử thách của đề ({@link #ADVANCED_RULE}), khối câu mẫu độ sâu ({@link #depthExamplesBlock}), khối lý do Đổi câu
-     * quá dễ / quá khó ({@link #replaceReasonBlock}). Run cũ là v0 (tf: v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10; mcq:
-     * v1, v2, v3, v4, v5, v6, v7, v8; sa: v1, v2, v3, v4, v5, v6, v7, v8, v9, v10).
+     * quá dễ / quá khó ({@link #replaceReasonBlock}). sa v12, tf v12 (14/11, chạy thật main 304a782: đề nâng cao câu sa vượt 4
+     * ký tự đáp số; Đổi câu quá dễ ra cùng khuôn, cùng đáp số): sa nâng cao có thêm {@link #SA_ADVANCED_ANSWER_RULE}; khối lý
+     * do Đổi câu của sa và tf đòi dạng bài khác (sa: đáp số khác và tối đa 4 ký tự). Văn bản prompt đề mức chuẩn không qua Đổi
+     * và toàn bộ prompt mcq KHÔNG đổi; nhãn mcq giữ v9 (PA1 dùng v10). Run cũ là v0 (tf: v0, v1, v2, v3, v4, v5, v6, v7, v8, v9,
+     * v10, v11; mcq: v1, v2, v3, v4, v5, v6, v7, v8; sa: v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11).
      */
     public static String promptVersion(QuestionType type) {
         String version = switch (type) {
-            case TF -> "-v11-draft";
-            case SA -> "-v11-draft";
+            case TF -> "-v12-draft";
+            case SA -> "-v12-draft";
             case MCQ -> "-v9-draft";
         };
         return VERSION_PREFIX + type.getDbValue() + version;
@@ -320,24 +323,84 @@ public final class MatrixPromptDraftV0 {
     /** Số ký tự tối đa của câu cũ trong khối lý do Đổi câu. */
     public static final int REPLACE_OLD_QUESTION_MAX = 200;
 
+    /** Như {@link #replaceReasonBlock(String, String, QuestionType, String)} cho câu mcq (văn bản cũ, không đổi). */
+    public static String replaceReasonBlock(String reason, String oldQuestion) {
+        return replaceReasonBlock(reason, oldQuestion, null, null);
+    }
+
+    /** Số ký tự tối đa của đáp số câu cũ (câu sa) trong khối lý do Đổi câu. */
+    public static final int REPLACE_OLD_ANSWER_MAX = 20;
+
+    /**
+     * Nhắc đáp số tối đa 4 ký tự (14/11, chạy thật main 304a782: đề nâng cao ô 159 câu sa qc_exhausted vì đáp số quá 4 ký tự,
+     * lặp 3 lần; 3/4 câu format_failed của đề nâng cao cùng lý do, đề chuẩn không gặp): mức nâng cao làm model tìm độ khó ở số
+     * lớn. Dùng chung cho khối nâng cao của câu sa ({@link #SA_ADVANCED_ANSWER_RULE}) và khối lý do Đổi câu sa.
+     */
+    static final String SA_ANSWER_LENGTH_REMINDER = "Đáp số tối đa 4 ký tự tính cả dấu \"-\" và dấu \",\"; độ khó nằm ở các "
+            + "bước suy luận, KHÔNG ở số lớn; chọn số liệu ngay từ đầu sao cho đáp số gọn.";
+
+    /**
+     * Một dòng, thêm cho MỌI ô sa của đề nâng cao (sau khối Vận dụng và nâng cao nếu có). Chạy thật 14/11: ô 159 (Thông hiểu,
+     * "tính nhanh biểu thức tại x = …") qc_exhausted 3 lần vì model chọn x gần 100 nên bình phương ra 10000, dù prompt đã có
+     * câu hướng dẫn lần sinh trước. Ví dụ hợp lệ: "1000", "2,75", "-12"; vượt giới hạn: "10000", "-12,5", "12,345".
+     */
+    public static final String SA_ADVANCED_ANSWER_RULE = "- Câu Trả lời ngắn của đề NÂNG CAO: " + SA_ANSWER_LENGTH_REMINDER
+            + " Với dạng tính nhanh giá trị biểu thức tại một giá trị x cho trước, chọn x nhỏ (dưới 30) và tính kết quả trước khi "
+            + "viết đề; tránh x gần 100 vì bình phương hoặc lập phương dễ ra từ 5 chữ số. (hợp lệ: \"1000\", \"2,75\", \"-12\"; "
+            + "vượt giới hạn: \"10000\", \"-12,5\", \"12,345\").";
+
+    private static final String REASON_OLD_QUESTION_MCQ = " Câu bị đổi (DỮ LIỆU, chỉ để so độ khó, không chép): ";
+    private static final String REASON_OLD_QUESTION_VARIED = " Câu bị đổi (DỮ LIỆU, chỉ để so độ khó và tránh lặp khuôn, "
+            + "không chép): ";
+    private static final String REASON_OLD_ANSWER = " Đáp số câu bị đổi (DỮ LIỆU, đáp số mới phải khác): ";
+
     /**
      * Khối lý do Đổi câu (12/11, một dòng): {@code too_easy} → câu mới cùng ô, cùng mức nhưng khó hơn rõ rệt;
      * {@code too_hard} → dễ hơn, ít bước hơn; kèm tối đa {@value #REPLACE_OLD_QUESTION_MAX} ký tự câu cũ trong ranh giới
      * {@code <<< >>>} (qua {@link PromptData#neutralize}, gộp khoảng trắng). Lý do khác hoặc trống: null (không đổi prompt).
+     *
+     * <p>14/11 (chạy thật: ô 160 đề 28, 29 và câu Đổi quá dễ đều ra "lập phương của nhị thức", đáp số 1000): với câu sa và tf,
+     * câu mới phải dùng DẠNG BÀI hoặc cách giải KHÁC câu bị đổi (không chỉ đổi số liệu); quá dễ = thêm ít nhất một bước suy
+     * luận so với câu bị đổi. Câu sa còn phải có đáp số KHÁC ({@code oldSaAnswer} đưa đáp số cũ vào khối nếu biết) và đáp số
+     * tối đa 4 ký tự ({@link #SA_ANSWER_LENGTH_REMINDER}); câu tf phải đổi ngữ cảnh và khẳng định. Câu mcq ({@code type} null
+     * hoặc {@link QuestionType#MCQ}) GIỮ NGUYÊN văn bản cũ.
      */
-    public static String replaceReasonBlock(String reason, String oldQuestion) {
-        String ask;
-        if ("too_easy".equals(reason)) {
-            ask = "QUÁ DỄ. Câu mới phải cùng ô, cùng mức nhưng khó hơn rõ rệt (thêm bước, kết hợp kiến thức, bối cảnh).";
-        } else if ("too_hard".equals(reason)) {
-            ask = "QUÁ KHÓ. Câu mới phải cùng ô, cùng mức nhưng dễ hơn, ít bước hơn.";
-        } else {
+    public static String replaceReasonBlock(String reason, String oldQuestion, QuestionType type, String oldSaAnswer) {
+        boolean tooEasy = "too_easy".equals(reason);
+        if (!tooEasy && !"too_hard".equals(reason)) {
             return null;
         }
         String old = PromptData.neutralize(oldQuestion).replaceAll("\\s+", " ").strip();
         old = CellTextLimits.clip(old, REPLACE_OLD_QUESTION_MAX);
-        return REASON_PREFIX + ask + (old.isEmpty() ? ""
-                : " Câu bị đổi (DỮ LIỆU, chỉ để so độ khó, không chép): " + TEACHER_OPEN + old + TEACHER_CLOSE);
+        if (type != QuestionType.SA && type != QuestionType.TF) {
+            String ask = tooEasy
+                    ? "QUÁ DỄ. Câu mới phải cùng ô, cùng mức nhưng khó hơn rõ rệt (thêm bước, kết hợp kiến thức, bối cảnh)."
+                    : "QUÁ KHÓ. Câu mới phải cùng ô, cùng mức nhưng dễ hơn, ít bước hơn.";
+            return REASON_PREFIX + ask + (old.isEmpty() ? ""
+                    : REASON_OLD_QUESTION_MCQ + TEACHER_OPEN + old + TEACHER_CLOSE);
+        }
+        StringBuilder ask = new StringBuilder(tooEasy
+                ? "QUÁ DỄ. Câu mới phải cùng ô, cùng mức nhưng khó hơn rõ rệt: cần thêm ít nhất một bước suy luận so với "
+                        + "câu bị đổi (kết hợp kiến thức, bối cảnh)."
+                : "QUÁ KHÓ. Câu mới phải cùng ô, cùng mức nhưng dễ hơn, ít bước hơn.");
+        ask.append(" Câu mới phải dùng DẠNG BÀI hoặc cách giải KHÁC câu bị đổi, không chỉ đổi số liệu.");
+        if (type == QuestionType.SA) {
+            ask.append(" Đáp số phải KHÁC đáp số của câu bị đổi. ").append(SA_ANSWER_LENGTH_REMINDER);
+        } else {
+            ask.append(" Ngữ cảnh và các khẳng định KHÁC câu bị đổi.");
+        }
+        StringBuilder sb = new StringBuilder(REASON_PREFIX).append(ask);
+        if (!old.isEmpty()) {
+            sb.append(REASON_OLD_QUESTION_VARIED).append(TEACHER_OPEN).append(old).append(TEACHER_CLOSE);
+        }
+        if (type == QuestionType.SA && oldSaAnswer != null) {
+            String answer = CellTextLimits.clip(PromptData.neutralize(oldSaAnswer).replaceAll("\\s+", " ").strip(),
+                    REPLACE_OLD_ANSWER_MAX);
+            if (!answer.isEmpty()) {
+                sb.append(REASON_OLD_ANSWER).append(TEACHER_OPEN).append(answer).append(TEACHER_CLOSE);
+            }
+        }
+        return sb.toString();
     }
 
     /** Khối lý do Đổi câu trong ghi chú của job (để lần thử tự động tiếp theo của cùng lượt Đổi giữ lại); null khi không có. */
@@ -666,6 +729,11 @@ public final class MatrixPromptDraftV0 {
             if (spec.challenge() == ExamChallenge.ADVANCED) {
                 sb.append(ADVANCED_RULE).append("\n");
             }
+        }
+        // 14/11: chạy thật cho thấy ô sa hỏng ở đề nâng cao là ô mức Thông hiểu (khối nâng cao không áp vào đó), nên nhắc đáp
+        // số cho MỌI ô sa của đề nâng cao.
+        if (spec.challenge() == ExamChallenge.ADVANCED && type == QuestionType.SA) {
+            sb.append(SA_ADVANCED_ANSWER_RULE).append("\n");
         }
         String examples = depthExamplesBlock(spec.depthExamples());
         if (examples != null) {
