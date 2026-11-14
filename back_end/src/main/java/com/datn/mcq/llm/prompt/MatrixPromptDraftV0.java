@@ -16,7 +16,8 @@ import java.util.Map;
  *
  * <p>Prompt sinh câu theo một ô ma trận (phần C mục 2, ngày 22/10): sinh từ chủ đề, nội dung và yêu cầu cần đạt, không có
  * câu mẫu; production, zero-shot; có quy tắc đa dạng (bài toán mới, danh sách câu đã sinh của ô). Không sửa
- * {@link PromptBuilder}. Đầu ra dùng lại hợp đồng JSON hiện có: mcq 7 trường (McqJsonParser), sa 3 trường và tf 10 trường
+ * {@link PromptBuilder}. Đầu ra dùng lại hợp đồng JSON hiện có: mcq 8 trường từ v10 (McqJsonParser, thêm
+ * {@code distractor_errors}; schema {@link McqProductionSchema#GENERATION_RESPONSE_SCHEMA_JSON_V10}), sa 3 trường và tf 10 trường
  * (cùng schema Gemini với {@link SaPromptDraftV0}, {@link TfPromptDraftV0}).
  */
 public final class MatrixPromptDraftV0 {
@@ -97,14 +98,16 @@ public final class MatrixPromptDraftV0 {
      * quá dễ / quá khó ({@link #replaceReasonBlock}). sa v12, tf v12 (14/11, chạy thật main 304a782: đề nâng cao câu sa vượt 4
      * ký tự đáp số; Đổi câu quá dễ ra cùng khuôn, cùng đáp số): sa nâng cao có thêm {@link #SA_ADVANCED_ANSWER_RULE}; khối lý
      * do Đổi câu của sa và tf đòi dạng bài khác (sa: đáp số khác và tối đa 4 ký tự). Văn bản prompt đề mức chuẩn không qua Đổi
-     * và toàn bộ prompt mcq KHÔNG đổi; nhãn mcq giữ v9 (PA1 dùng v10). Run cũ là v0 (tf: v0, v1, v2, v3, v4, v5, v6, v7, v8, v9,
-     * v10, v11; mcq: v1, v2, v3, v4, v5, v6, v7, v8; sa: v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11).
+     * và toàn bộ prompt mcq KHÔNG đổi ở bản này. mcq v10 (13/11, PA1, docs/design/phuong-an-nhieu-loi-sai.md mục 4): mỗi phương
+     * án sai là kết quả của đúng một lỗi sai thường gặp, ghi ở trường thứ 8 {@code distractor_errors}
+     * ({@link #MCQ_MISCONCEPTION_RULES}); sa, tf không đổi. Run cũ là v0 (tf: v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11;
+     * mcq: v1, v2, v3, v4, v5, v6, v7, v8, v9; sa: v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11).
      */
     public static String promptVersion(QuestionType type) {
         String version = switch (type) {
             case TF -> "-v12-draft";
             case SA -> "-v12-draft";
-            case MCQ -> "-v9-draft";
+            case MCQ -> "-v10-draft";
         };
         return VERSION_PREFIX + type.getDbValue() + version;
     }
@@ -134,6 +137,33 @@ public final class MatrixPromptDraftV0 {
             + "đáp án đúng và có lý do toán học).\n"
             + "- Bốn phương án phải khác nhau đôi một; kết quả đúng chỉ xuất hiện ở đúng phương án được chỉ định, các "
             + "phương án còn lại là kết quả sai có lý do (sai dấu, sai hệ số, quên hạng tử…).";
+
+    /** Quy tắc khác giá trị (An bổ sung 11/11), dòng cuối của {@link #MCQ_MISCONCEPTION_RULES}. */
+    static final String MCQ_DISTINCT_VALUE_RULE = "- Mỗi phương án sai phải KHÁC GIÁ TRỊ với đáp án đúng; không dùng cách "
+            + "viết khác (phân tích chưa triệt để, đổi thứ tự nhân tử, đặt nhân tử chung khác) của cùng một biểu thức.";
+
+    /**
+     * Phương án nhiễu gắn với lỗi sai của học sinh (13/11, PA1, mcq v10, docs/design/phuong-an-nhieu-loi-sai.md mục 4). Đặt
+     * ngay sau {@link #MCQ_OPTION_RULES}. Dòng cuối là {@link #MCQ_DISTINCT_VALUE_RULE} (đề 26 có 2/13 câu mcq có phương án
+     * sai bằng đáp án đúng về giá trị).
+     */
+    static final String MCQ_MISCONCEPTION_RULES = "- Mỗi phương án sai phải là KẾT QUẢ của đúng MỘT lỗi sai thường gặp "
+            + "của học sinh lớp đó khi làm chính bài này (áp lỗi đó vào lời giải đúng thì ra đúng phương án đó).\n"
+            + "- Hai phương án sai không được xuất phát từ cùng một lỗi.\n"
+            + "- Lỗi phải nằm trong PHẠM VI KIẾN THỨC ở trên; không dùng lỗi của kiến thức lớp trên hay bài sau.\n"
+            + "- Ghi lỗi vào \"distractor_errors\": mỗi phương án sai một câu tiếng Việt tối đa 15 từ mô tả lỗi của học "
+            + "sinh (ví dụ \"Nhầm $(a+b)^2 = a^2 + b^2$\", \"Quên đổi dấu khi bỏ ngoặc\"); phương án đúng ghi null. Không "
+            + "nhắc chữ cái phương án trong câu mô tả lỗi.\n"
+            + "- Câu dẫn không được làm lộ đáp án (không gợi ý kết quả, không nêu lỗi cần tránh).\n"
+            + MCQ_DISTINCT_VALUE_RULE;
+
+    /** Dấu hiệu prompt sinh mcq có yêu cầu trường {@code distractor_errors} (chọn schema và cách giải mã theo prompt đã gửi). */
+    static final String DISTRACTOR_OUTPUT_FIELD = "\"distractor_errors\" (đối tượng A/B/C/D";
+
+    /** Prompt mcq đã gửi có yêu cầu {@code distractor_errors} (prompt ma trận mcq từ v10); job cũ xếp trước đó thì không. */
+    public static boolean asksDistractorErrors(String prompt) {
+        return prompt != null && prompt.contains(DISTRACTOR_OUTPUT_FIELD);
+    }
 
     /**
      * Quy tắc nội dung chung của cả 3 dạng (31/10, thẩm định nội dung: câu 15 và 61 thiếu "luôn", câu 42 "Biết" đòi 2 bước,
@@ -761,13 +791,15 @@ public final class MatrixPromptDraftV0 {
                         - Viết lời giải ngắn trong "explanation" và kiểm tra "correct_option" khớp với lời giải.
                         """);
                 sb.append(MCQ_DISTRACTOR_RULE).append("\n");
-                sb.append(MCQ_OPTION_RULES).append("\n").append(CONTENT_RULES).append(STYLE_RULES).append(WORDING_RULES)
+                sb.append(MCQ_OPTION_RULES).append("\n").append(MCQ_MISCONCEPTION_RULES).append("\n").append(CONTENT_RULES)
+                        .append(STYLE_RULES).append(WORDING_RULES)
                         .append(MCQ_OPTION_PUNCTUATION_RULE).append("\n").append(EXPLANATION_RULE).append("\n");
                 sb.append("\n").append(PromptBuilder.ESCAPE_HINT).append(UNIT_RULE).append("\n\n");
                 sb.append("""
-                        Trả về DUY NHẤT một đối tượng JSON có đủ 7 trường:
+                        Trả về DUY NHẤT một đối tượng JSON có đủ 8 trường:
                         "question_text", "option_a", "option_b", "option_c", "option_d", "correct_option" (A/B/C/D), \
-                        "explanation".
+                        "explanation",\s""").append(DISTRACTOR_OUTPUT_FIELD).append("""
+                        , mỗi khóa là câu mô tả lỗi sai dẫn tới phương án đó; khóa của phương án đúng là null).
                         """);
             }
             case TF -> {

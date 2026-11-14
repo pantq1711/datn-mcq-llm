@@ -5,7 +5,12 @@ import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.enums.QuestionType;
+import com.datn.mcq.common.util.LetterJson;
+import com.datn.mcq.enums.DistractorCheck;
+import com.datn.mcq.exam.dto.ExamViewDtos.DistractorErrorDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamItemDto;
+import com.datn.mcq.generation.service.DistractorView;
+import com.datn.mcq.qc.orchestrator.QcOrchestrator;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamPageDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamSummaryDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
@@ -137,7 +142,8 @@ public class ExamViewService {
     private record Loaded(Map<Integer, BankItemDto> bank, Map<Integer, GeneratedQuestion> questions,
                           Map<Integer, List<GeneratedQuestionStatement>> statements, Map<Integer, Integer> originals,
                           GenerationService.CheckJobs jobs, Map<Integer, QcSummary> qc, Map<Integer, String> scopes,
-                          Map<Integer, ExamContextService.Resolved> requests) {}
+                          Map<Integer, ExamContextService.Resolved> requests,
+                          Map<Integer, Map<String, DistractorView.Item>> distractors) {}
 
     private Loaded load(Collection<ExamSlot> slots) {
         Set<Integer> bankIds = new LinkedHashSet<>();
@@ -171,9 +177,56 @@ public class ExamViewService {
         questions.values().forEach(q -> scopeIds.add(originals.getOrDefault(q.getId(), q.getId())));
         Set<Integer> examIds = new LinkedHashSet<>();
         slots.forEach(s -> examIds.add(s.getExamId()));
+        // PA1: lỗi sai của phương án nhiễu đang hiển thị (kể cả kết quả tạm của bản sửa đang chờ kiểm, H-4). Chỉ truy vấn thêm
+        // khi có câu mcq kèm lỗi.
         return new Loaded(bank, questions, generationService.statementsByQuestionIds(tfIds), originals,
                 generationService.latestCheckJobs(generatedIds), qcSummaryService.summarizeAll(generatedIds),
-                generationService.requestScopes(scopeIds), contextService.requestsOf(examIds));
+                generationService.requestScopes(scopeIds), contextService.requestsOf(examIds),
+                generationService.distractorViews(questions.values(), Map.of(), Set.of()));
+    }
+
+    /** PA1: lỗi đang hiển thị của câu sinh, dạng API; null khi không có. */
+    private static Map<String, DistractorErrorDto> distractorDtos(Map<String, DistractorView.Item> items) {
+        if (items == null || items.isEmpty()) {
+            return null;
+        }
+        Map<String, DistractorErrorDto> out = new LinkedHashMap<>();
+        items.forEach((letter, item) -> out.put(letter, new DistractorErrorDto(item.text(), item.check())));
+        return out;
+    }
+
+    /**
+     * PA1: lỗi của câu ngân hàng (bản chụp lúc Giữ): phương án sai có chữ lỗi; kết quả kiểm đã lưu, thiếu khóa là
+     * {@code unchecked}. Null khi không có.
+     */
+    static Map<String, DistractorErrorDto> bankDistractors(BankItemDto b) {
+        Map<String, String> texts = LetterJson.read(b.distractorErrors());
+        if (texts == null || b.questionType() != QuestionType.MCQ) {
+            return null;
+        }
+        Map<String, DistractorCheck> checks = QcOrchestrator.readDistractorChecks(b.distractorChecks());
+        String correct = b.correctOption() == null ? null : b.correctOption().getDbValue();
+        Map<String, DistractorErrorDto> out = new LinkedHashMap<>();
+        texts.forEach((letter, text) -> {
+            if (!letter.equals(correct) && text != null && !text.isBlank()) {
+                out.put(letter, new DistractorErrorDto(text.strip(),
+                        checks.getOrDefault(letter, DistractorCheck.UNCHECKED)));
+            }
+        });
+        return out.isEmpty() ? null : out;
+    }
+
+    /** PA1: cờ thông tin {@code distractor_mismatch: <chữ>} cho từng phương án không khớp. */
+    static List<String> mismatchReasons(Map<String, DistractorErrorDto> errors) {
+        List<String> out = new ArrayList<>();
+        if (errors != null) {
+            errors.forEach((letter, e) -> {
+                if (e.check() == DistractorCheck.MISMATCH) {
+                    out.add(QcSummaryService.DISTRACTOR_MISMATCH + ": " + letter);
+                }
+            });
+        }
+        return out;
     }
 
     /** PR B: yêu cầu thừa hưởng của chỗ (mã đã lọc theo dạng câu); null khi không có. */
@@ -341,8 +394,20 @@ public class ExamViewService {
         boolean generated = ExamBuildService.hasQuestion(slot) && slot.getBankItemId() == null
                 && slot.getGeneratedQuestionId() != null;
         GeneratedQuestion q = generated ? data.questions().get(slot.getGeneratedQuestionId()) : null;
-        return item.withRequests(q == null ? List.of() : data.qc().get(q.getId()).infoReasons(),
-                q == null ? null : ownRequests(q, data), inheritedRequests(slot, data));
+        // PA1: lỗi sai của phương án nhiễu (câu sinh: kết quả hiện tại/tạm; câu ngân hàng: bản chụp lúc Giữ). "Không khớp"
+        // của câu sinh là cờ THÔNG TIN (như PR B), không bật needsReview.
+        Map<String, DistractorErrorDto> distractors = null;
+        if (q != null) {
+            distractors = distractorDtos(data.distractors().get(q.getId()));
+        } else if (ExamBuildService.hasQuestion(slot) && slot.getBankItemId() != null) {
+            distractors = bankDistractors(data.bank().get(slot.getBankItemId()));
+        }
+        List<String> info = new ArrayList<>(q == null ? List.of() : data.qc().get(q.getId()).infoReasons());
+        if (q != null) {
+            info.addAll(mismatchReasons(distractors));
+        }
+        return item.withRequests(info, q == null ? null : ownRequests(q, data), inheritedRequests(slot, data))
+                .withDistractorErrors(distractors);
     }
 
     private ExamItemDto toItemWithoutRequests(ExamSlot slot, ExamMatrixCell cell, Loaded data) {

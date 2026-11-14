@@ -90,6 +90,7 @@ abstract class ExamFlowTestBase {
         SOLVER.prompts.clear();
         SOLVER.schemas.clear();
         SOLVER.requestCheck = null;
+        SOLVER.errorChecks = null;
         GROUNDING.reset();
         ExamBuildTest.FakeGenerator.lastTfLabels = "T,F,T,F";
         generator = new ExamBuildTest.FakeGenerator();

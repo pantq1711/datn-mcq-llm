@@ -268,6 +268,28 @@ public class BankService {
             Option correctOption,
             String explanation,
             Difficulty difficulty) {
+        return createOrUpdateFromReview(sourceQuestionId, reviewId, questionText, optionA, optionB, optionC, optionD,
+                correctOption, explanation, difficulty, null, null);
+    }
+
+    /**
+     * Như trên, kèm lỗi sai của phương án nhiễu và kết quả kiểm lúc Giữ (13/11, PA1, V29), dạng JSON theo chữ cái
+     * ({@code LetterJson}); null là không có. Ngân hàng là bản chụp lúc Giữ, không nối về quality_check_result.
+     */
+    @Transactional
+    public BankItem createOrUpdateFromReview(
+            Integer sourceQuestionId,
+            Integer reviewId,
+            String questionText,
+            String optionA,
+            String optionB,
+            String optionC,
+            String optionD,
+            Option correctOption,
+            String explanation,
+            Difficulty difficulty,
+            String distractorErrors,
+            String distractorChecks) {
         BankItem item = bankItemRepository.findBySourceQuestionId(sourceQuestionId)
                 .orElseGet(BankItem::new);
         item.setSourceQuestionId(sourceQuestionId);
@@ -280,6 +302,8 @@ public class BankService {
         item.setCorrectOption(correctOption);
         item.setExplanation(explanation);
         item.setDifficulty(difficulty);
+        item.setDistractorErrors(distractorErrors);
+        item.setDistractorChecks(distractorErrors == null ? null : distractorChecks);
         item.setCreatedAt(LocalDateTime.now());
         return bankItemRepository.save(item);
     }

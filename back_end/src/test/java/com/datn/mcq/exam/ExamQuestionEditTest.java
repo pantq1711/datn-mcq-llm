@@ -96,6 +96,11 @@ class ExamQuestionEditTest {
          * {@code {"verdict": "not_met", "reason": "x"}}), hoặc null là không trả trường này.
          */
         String requestCheck;
+        /**
+         * PA1 (13/11): mảng {@code error_checks} thêm vào phản hồi khi schema có trường này (ví dụ
+         * {@code [{"error": 1, "result": "A", "reason": "r"}]}), hoặc null là không trả trường này.
+         */
+        String errorChecks;
 
         EditSolver() {
             super("FAKE_KEY_FOR_TESTS", "fake-solver-model");
@@ -138,6 +143,9 @@ class ExamQuestionEditTest {
                 body = optionCheckJson(reasoning, mcqOptions);
             } else {
                 body = "{\"reasoning\": \"" + reasoning + "\", \"judge_answer\": \"" + mcqJudge + "\"}";
+            }
+            if (schema != null && schema.contains("\"error_checks\"") && errorChecks != null) {
+                body = body.substring(0, body.lastIndexOf('}')) + ", \"error_checks\": " + errorChecks + "}";
             }
             if (withRequest && requestCheck != null) {
                 body = body.substring(0, body.lastIndexOf('}')) + ", \"request_check\": " + requestCheck + "}";

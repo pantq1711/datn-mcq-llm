@@ -531,6 +531,8 @@ public class GenerationService {
         gq.setOptionD(parsed.optionD());
         gq.setCorrectOption(parsed.correctOption());
         gq.setExplanation(parsed.explanation());
+        // 13/11 (PA1, V29): lỗi sai kèm phương án nếu đầu ra có (prompt sinh lẻ không yêu cầu, thường NULL).
+        gq.setDistractorErrors(com.datn.mcq.common.util.LetterJson.write(parsed.distractorErrors()));
         gq.setRawLlmOutput(llmResult.rawText() != null ? llmResult.rawText() : "");
         gq.setLlmDifficulty(llmDifficulty != null ? llmDifficulty : Difficulty.EASY);
         gq.setParseSuccess(parsed.parseSuccess());
@@ -707,6 +709,74 @@ public class GenerationService {
             }
         }
         return new CheckJobs(answer, grounding);
+    }
+
+    /**
+     * PA1 (13/11, H-4): lỗi sai của phương án nhiễu đang hiển thị của các câu ({@link DistractorView}). Chỉ câu mcq có lỗi để
+     * hiển thị có khóa trong kết quả. Kết quả kiểm đã lưu của chính các câu lấy từ {@code storedKnown} nếu nơi gọi đã nạp
+     * ({@code knownIds}: các id đã biết có hay không có dòng answer_check); bản trước của bản sửa CHƯA có dòng answer_check
+     * được nạp thêm theo lô (chỉ khi có bản sửa đang chờ kiểm lại).
+     *
+     * @param storedKnown kết quả đã lưu của các câu CÓ dòng answer_check (map rỗng khi dòng không kiểm lỗi)
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<Integer, java.util.Map<String, DistractorView.Item>> distractorViews(
+            java.util.Collection<GeneratedQuestion> questions,
+            java.util.Map<Integer, java.util.Map<String, com.datn.mcq.enums.DistractorCheck>> storedKnown,
+            java.util.Set<Integer> knownIds) {
+        java.util.Map<Integer, java.util.Map<String, DistractorView.Item>> out = new java.util.LinkedHashMap<>();
+        java.util.Map<Integer, GeneratedQuestion> cache = new java.util.HashMap<>();
+        java.util.List<GeneratedQuestion> shown = new java.util.ArrayList<>();
+        for (GeneratedQuestion q : questions) {
+            cache.put(q.getId(), q);
+            if (q.getQuestionType() == QuestionType.MCQ && !DistractorView.shownTexts(q).isEmpty()) {
+                shown.add(q);
+            }
+        }
+        if (shown.isEmpty()) {
+            return out;
+        }
+        java.util.Map<Integer, java.util.Map<String, com.datn.mcq.enums.DistractorCheck>> stored =
+                new java.util.HashMap<>(storedKnown);
+        java.util.Set<Integer> known = new java.util.HashSet<>(knownIds);
+        java.util.Set<Integer> needChecks = new java.util.LinkedHashSet<>();
+        shown.forEach(q -> {
+            if (!known.contains(q.getId())) {
+                needChecks.add(q.getId());
+            }
+        });
+        if (!needChecks.isEmpty()) {
+            stored.putAll(qcOrchestrator.storedDistractorChecks(needChecks));
+            known.addAll(needChecks);
+        }
+        // Lần ngược chuỗi bản sửa chưa có dòng answer_check, mỗi vòng một lô (số vòng = độ sâu chuỗi đang chờ, thường 1).
+        java.util.List<GeneratedQuestion> frontier = new java.util.ArrayList<>(shown);
+        for (int depth = 0; depth < DistractorView.MAX_DEPTH && !frontier.isEmpty(); depth++) {
+            java.util.Set<Integer> prevIds = new java.util.LinkedHashSet<>();
+            for (GeneratedQuestion q : frontier) {
+                if (!stored.containsKey(q.getId()) && q.getEditedFromQuestionId() != null) {
+                    prevIds.add(q.getEditedFromQuestionId());
+                }
+            }
+            java.util.Set<Integer> missing = new java.util.LinkedHashSet<>(prevIds);
+            missing.removeAll(cache.keySet());
+            if (!missing.isEmpty()) {
+                for (GeneratedQuestion p : generatedQuestionRepository.findAllById(missing)) {
+                    cache.put(p.getId(), p);
+                }
+            }
+            java.util.Set<Integer> unknown = new java.util.LinkedHashSet<>(prevIds);
+            unknown.removeAll(known);
+            if (!unknown.isEmpty()) {
+                stored.putAll(qcOrchestrator.storedDistractorChecks(unknown));
+                known.addAll(unknown);
+            }
+            frontier = prevIds.stream().map(cache::get).filter(java.util.Objects::nonNull).toList();
+        }
+        for (GeneratedQuestion q : shown) {
+            out.put(q.getId(), DistractorView.resolve(q, cache::get, stored::get));
+        }
+        return out;
     }
 
     /** F-07: nhiều câu theo id bằng một truy vấn; id không có thì NoSuchElementException như {@link #getQuestionById}. */

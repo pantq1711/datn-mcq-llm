@@ -106,6 +106,7 @@ function toQuestionItem(item: ExamItemDto): ExamQuestionItem {
         infoReasons: item.infoReasons ?? [],
         requests: item.requests,
         inheritedRequests: item.inheritedRequests,
+        distractorErrors: item.distractorErrors,
     };
 }
 

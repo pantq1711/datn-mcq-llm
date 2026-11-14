@@ -21,9 +21,10 @@ class HardeningW24aItem5Test {
     void solverPrompt_phienBanVaHangSoCoMat() {
         // Thẩm định 31/10: v4 (xét từng phương án, đọc đúng chữ của đề); v2, v3 vẫn giữ để đo lại. 12/11 (PR B): mặc định
         // là v5 (như v4 khi câu không có yêu cầu, thêm request_check khi có). 14/11 (hotfix): mặc định là v6 hai lượt (lượt 1
-        // đúng v4 cho mọi câu, lượt 2 kiểm yêu cầu).
-        assertEquals("solver-v6-two-pass", PromptBuilder.SOLVER_PROMPT_VERSION);
-        assertEquals("solver-v6-two-pass", AnswerSolverChecker.SOLVER_PROMPT_VERSION);
+        // đúng v4 cho mọi câu, lượt 2 kiểm yêu cầu). PA1 (15/11): mặc định v7 (lượt 2 thêm error_checks).
+        assertEquals("solver-v7-distractor-check", PromptBuilder.SOLVER_PROMPT_VERSION);
+        assertEquals("solver-v7-distractor-check", AnswerSolverChecker.SOLVER_PROMPT_VERSION);
+        assertEquals("solver-v6-two-pass", PromptBuilder.SOLVER_PROMPT_VERSION_V6);
         assertEquals("solver-v5-request-check", PromptBuilder.SOLVER_PROMPT_VERSION_V5);
         assertEquals("solver-v4-literal-reading", PromptBuilder.SOLVER_PROMPT_VERSION_V4);
         assertEquals("solver-v3-option-check", PromptBuilder.SOLVER_PROMPT_VERSION_V3);

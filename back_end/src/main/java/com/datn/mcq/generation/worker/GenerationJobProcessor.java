@@ -504,6 +504,8 @@ public class GenerationJobProcessor {
         gq.setOptionD(parsed.optionD());
         gq.setCorrectOption(parsed.correctOption());
         gq.setExplanation(parsed.explanation());
+        // 13/11 (PA1, V29): lỗi sai kèm phương án (prompt ma trận mcq từ v10); NULL khi đầu ra không có.
+        gq.setDistractorErrors(com.datn.mcq.common.util.LetterJson.write(parsed.distractorErrors()));
         gq.setRawLlmOutput(llmResult.rawText() != null ? llmResult.rawText() : "");
         gq.setLlmDifficulty(ctx.targetDifficulty() != null ? ctx.targetDifficulty() : Difficulty.EASY);
         gq.setParseSuccess(parsed.parseSuccess());

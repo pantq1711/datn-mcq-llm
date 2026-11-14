@@ -3,7 +3,7 @@
 Chỉ là **truy vấn đọc** (PostgreSQL) cho chương thử nghiệm trong báo cáo; chưa có trang thống kê. Mỗi file `.sql` là một
 câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên database của hệ thống đã triển khai. Test
 `StatisticsSqlTest` chạy bốn file đầu trên `datn_mcq_test` với dữ liệu mẫu để bảo đảm cú pháp và số đếm đúng; file 05 và 06 (W2-3) được
-`GroundingPipelineTest` kiểm số đếm, file 07 (giám sát, 08/11) được `StatisticsSqlTest` kiểm số đếm job, và `StatisticsSqlTest` kiểm cả bảy file chỉ là một câu lệnh đọc.
+`GroundingPipelineTest` kiểm số đếm, file 07 (giám sát, 08/11) được `StatisticsSqlTest` kiểm số đếm job, và `StatisticsSqlTest` kiểm mọi file chỉ là một câu lệnh đọc.
 
 | File | Trả lời câu hỏi |
 |---|---|
@@ -14,6 +14,7 @@ câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên databa
 | [`05-grounding.sql`](05-grounding.sql) | Câu sinh có tài liệu bài học: tỉ lệ SUPPORTED / NOT_SUPPORTED / UNKNOWN, chưa chấm, lỗi; trích dẫn kiểm chứng được; câu bị hạ vì trích dẫn không có thật (theo dạng câu, có/không tài liệu) |
 | [`06-chi-phi.sql`](06-chi-phi.sql) | Chi phí trung bình mỗi câu LLM (token và thời gian gọi LLM) = sinh + Solver + grounding, theo dạng câu và có/không tài liệu; số câu thiếu số đo (V21) |
 | [`07-van-hanh.sql`](07-van-hanh.sql) | Vận hành hàng đợi theo ngày và loại job: số job đã kết thúc, tỉ lệ thất bại, thời gian chờ và xử lý (p50, p95), job bị stale reset |
+| [`08-phuong-an-nhieu.sql`](08-phuong-an-nhieu.sql) | Phương án nhiễu kèm lỗi sai (PA1, câu mcq từ `matrix-mcq-v10-draft`): tỉ lệ câu đủ lỗi cho 3 phương án sai; tỉ lệ match / mismatch / unknown / unchecked theo từng lỗi và tỉ lệ câu cả 3 khớp; Giữ / Đổi theo nhóm có và không có lỗi `mismatch`; số lượt Đổi vì "phương án mơ hồ" (`ambiguous_options`) theo hai nhóm đó. Dạng dài `(chi_so, nhom, so_cau, mau_so, ti_le_phan_tram)`; `StatisticsSqlTest` kiểm số đếm |
 | [`10-yeu-cau-giao-vien.sql`](10-yeu-cau-giao-vien.sql) | Yêu cầu của giáo viên (chip, PR B): tỉ lệ `request_check` met / partial / not_met theo từng mã và theo mức lấy yêu cầu (replace, cell, exam); số lượt Đổi câu ngay sau câu not_met hay partial của cùng chỗ |
 
 ## Số liệu vận hành thời gian thực (Prometheus)
@@ -43,7 +44,7 @@ một câu sinh lại nhiều lần được đếm nhiều lần, khác với f
    `generated_question.edited_from_question_id IS NULL` (quy tắc bắt buộc của W1-2: bản giáo viên sửa không phải đầu ra
    LLM, xem `docs/contract/enums.md`) và `generated_question.origin = 'llm'` (V26: câu nhập từ Word không phải đầu ra LLM).
    Kết cục của một câu LLM được gom theo cả chuỗi bản sửa của nó.
-3. **Loại tài khoản của nhóm phát triển và tài khoản dùng thử** (11/11, N-10): cả 7 file ở đây và
+3. **Loại tài khoản của nhóm phát triển và tài khoản dùng thử** (11/11, N-10): mọi file ở đây và
    `docs/experiments/trial/queries.sql` dùng CHUNG biến psql `dev_emails` (danh sách email cách nhau bằng dấu phẩy, không
    phân biệt hoa thường, khoảng trắng bị bỏ). Đầu mỗi file khai báo mặc định rỗng (`\set dev_emails ''`, chỉ khi chưa được
    truyền vào) rồi CTE `dev_users` đọc `:'dev_emails'`. **Truyền email khi chạy, không sửa file và không commit email

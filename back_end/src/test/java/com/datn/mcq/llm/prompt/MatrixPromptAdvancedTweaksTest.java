@@ -220,14 +220,15 @@ class MatrixPromptAdvancedTweaksTest {
 
     /**
      * SHA-256 (UTF-8) của prompt gốc mỗi (dạng, mức) ở đề chuẩn, chụp từ main 304a782 TRƯỚC khi sửa. Lệch một byte là fail:
-     * D2 đang sinh đề mức chuẩn bằng các prompt này.
+     * D2 đang sinh đề mức chuẩn bằng các prompt này. PA1 (15/11, mcq v10) cố ý đổi văn bản mcq (quy tắc lỗi sai, trường thứ 8):
+     * ba hash mcq chụp lại từ prompt v10 (bản v9: b52b1901…, 026aa01d…, f6246598…); sa và tf giữ nguyên.
      */
     private static final Map<String, String> STANDARD_GOLDEN = new LinkedHashMap<>();
 
     static {
-        STANDARD_GOLDEN.put("MCQ/EASY", "b52b19018bce061043155aef793915d1af059bf71cdd4b5db821934199b738be");
-        STANDARD_GOLDEN.put("MCQ/MEDIUM", "026aa01d5892764a370abd3b51451454c36c21698a4deb8b34d51db1fae321cd");
-        STANDARD_GOLDEN.put("MCQ/HARD", "f6246598d47186e6d534d39ff83df03c4447a7678be74e08b7bc2c481bf12906");
+        STANDARD_GOLDEN.put("MCQ/EASY", "177f49e4325fd1a49a4f949c1879ff4889a64585749c5ef345f0e7bc4e39725f");
+        STANDARD_GOLDEN.put("MCQ/MEDIUM", "c3c87a83c7eca9066666a90647f387ef31d730fed16df8f5a23f5e36daceaec1");
+        STANDARD_GOLDEN.put("MCQ/HARD", "bac1664651247cda6a4dae07491a8a78a46d7ef920f939f04391bca922d7c8e8");
         STANDARD_GOLDEN.put("SA/EASY", "367e77ebcf2c5290197d3b3d7f1a9c5b59a3e62ed19b3ffce759737874a0b6dc");
         STANDARD_GOLDEN.put("SA/MEDIUM", "01b004f4bd1fbadae86ce1cf246584bc80aadcd547555a97626fa75c65853176");
         STANDARD_GOLDEN.put("SA/HARD", "1527710bb7cf5c5408c26d59576ab81ccf4d1fc2a868ebc7de48c13346f28141");
@@ -264,7 +265,7 @@ class MatrixPromptAdvancedTweaksTest {
 
     @Test
     void phienBanPromptSaVaTfTang() {
-        assertEquals("matrix-mcq-v9-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ), "mcq không đổi nhãn");
+        assertEquals("matrix-mcq-v10-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ), "mcq v10 của PA1");
         assertEquals("matrix-sa-v12-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
         assertEquals("matrix-tf-v12-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
     }

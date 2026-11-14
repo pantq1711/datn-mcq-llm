@@ -64,18 +64,30 @@ export default function QuestionContent({ question, showExplanation = true }: Qu
                     D: question.optionD,
                 };
                 const keys: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
+                const distractorErrors = question.distractorErrors;
 
                 return (
                     <div className="exam-question-item-options">
                         {keys.map(label => {
                             const isCorrect = label === question.correctOption;
+                            // PA1: lỗi sai dẫn tới phương án sai này; ✓ khi Solver khớp, ? khi chưa rõ hoặc chưa kiểm.
+                            const error = isCorrect ? undefined : distractorErrors?.[label];
+                            const mark = !error ? "" : error.check === "match" ? " ✓"
+                                : error.check === "mismatch" ? "" : " ?";
                             return (
                                 <div
                                     key={label}
                                     className={`exam-question-option ${isCorrect ? 'exam-question-option-correct' : ''}`}
                                 >
                                     <div className="exam-question-option-label"><Text strong>{label}.</Text></div>
-                                    <Text className="exam-question-option-text"><MathText text={optionsMap[label]} /></Text>
+                                    <Text className="exam-question-option-text">
+                                        <MathText text={optionsMap[label]} />
+                                        {error && (
+                                            <span className="exam-question-option-error">
+                                                Lỗi sai: <MathText text={error.text} />{mark}
+                                            </span>
+                                        )}
+                                    </Text>
                                     {isCorrect && (
                                         <Text strong type="success" className="exam-question-option-answer">Đáp án đúng</Text>
                                     )}

@@ -1,6 +1,7 @@
 package com.datn.mcq.exam.dto;
 
 import com.datn.mcq.enums.Difficulty;
+import com.datn.mcq.enums.DistractorCheck;
 import com.datn.mcq.enums.ExamStatus;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionType;
@@ -10,6 +11,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Xem đề ở chế độ giáo viên (V7, phần C mục 3). Đây là API production KHÔNG chấm mù: có đáp án, đáp số, nhãn từng ý,
@@ -47,6 +49,9 @@ public final class ExamViewDtos {
      *                      câu đã Giữ hiện bản ngân hàng, chỗ chưa có câu)
      * @param inheritedRequests (PR B) yêu cầu thừa hưởng của chỗ (của ô, không thì của đề; mã đã lọc theo dạng câu), để hộp
      *                      Đổi câu điền sẵn; vắng khi ô và đề không có yêu cầu áp cho chỗ này
+     * @param distractorErrors (13/11, PA1) lỗi sai của học sinh dẫn tới từng phương án sai, theo chữ A-D: {@code text} và
+     *                      {@code check} ({@code match | mismatch | unknown | unchecked}). Chỉ câu mcq có ít nhất một lỗi; chỉ
+     *                      khóa của phương án sai có chữ lỗi; vắng khi không có
      */
     public record ExamItemDto(
             Integer slotId,
@@ -77,7 +82,8 @@ public final class ExamViewDtos {
             @JsonInclude(JsonInclude.Include.NON_NULL) String failureReason,
             List<String> infoReasons,
             @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto requests,
-            @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto inheritedRequests
+            @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto inheritedRequests,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, DistractorErrorDto> distractorErrors
     ) {
         public static final String QC_CHECKING = "checking";
         public static final String QC_PASSED = "passed";
@@ -85,6 +91,30 @@ public final class ExamViewDtos {
 
         public ExamItemDto {
             infoReasons = infoReasons == null ? List.of() : List.copyOf(infoReasons);
+            distractorErrors = distractorErrors == null || distractorErrors.isEmpty() ? null
+                    : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(distractorErrors));
+        }
+
+        /** Chữ ký trước 13/11 (không có lỗi sai kèm phương án). */
+        public ExamItemDto(Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
+                           QuestionType questionType, String state, String source, Integer bankItemId,
+                           Integer questionId, String questionText, String optionA, String optionB, String optionC,
+                           String optionD, Option correctOption, String saAnswer, List<ItemStatementDto> statements,
+                           String explanation, Difficulty difficulty, boolean needsReview, List<String> reviewReasons,
+                           String qcState, boolean edited, Integer originalQuestionId, String failureReason,
+                           List<String> infoReasons, RequestsDto requests, RequestsDto inheritedRequests) {
+            this(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId, questionText,
+                    optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation, difficulty,
+                    needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, infoReasons, requests,
+                    inheritedRequests, null);
+        }
+
+        /** Bản sao kèm lỗi sai của phương án nhiễu (PA1); null hoặc rỗng là không có. */
+        public ExamItemDto withDistractorErrors(Map<String, DistractorErrorDto> errors) {
+            return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
+                    questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
+                    difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, infoReasons,
+                    requests, inheritedRequests, errors);
         }
 
         /** Chữ ký trước PR B (không có cờ thông tin và yêu cầu). */
@@ -109,7 +139,7 @@ public final class ExamViewDtos {
             return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
                     questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
                     difficulty, true, all, QC_CHECKING.equals(qcState) ? qcState : QC_NEEDS_REVIEW, edited,
-                    originalQuestionId, failureReason, infoReasons, requests, inheritedRequests);
+                    originalQuestionId, failureReason, infoReasons, requests, inheritedRequests, distractorErrors);
         }
 
         /** Bản sao kèm cờ thông tin và yêu cầu (PR B). */
@@ -117,7 +147,7 @@ public final class ExamViewDtos {
             return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
                     questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
                     difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, info, own,
-                    inherited);
+                    inherited, distractorErrors);
         }
 
         /** Chữ ký trước W2-4b (chỗ đã có câu, không có failureReason). */
@@ -143,6 +173,14 @@ public final class ExamViewDtos {
                     needsReview, reviewReasons, null, false, null, null);
         }
     }
+
+    /**
+     * Lỗi sai của học sinh dẫn tới một phương án sai (13/11, PA1).
+     *
+     * @param text  câu mô tả lỗi (LaTeX trong $...$ như các trường khác)
+     * @param check kết quả Solver ghép mù: {@code match}, {@code mismatch}, {@code unknown} hoặc {@code unchecked}
+     */
+    public record DistractorErrorDto(String text, DistractorCheck check) {}
 
     /**
      * Yêu cầu của giáo viên (12/11, PR B).

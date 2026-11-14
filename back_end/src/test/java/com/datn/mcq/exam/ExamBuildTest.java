@@ -188,15 +188,23 @@ class ExamBuildTest {
                         + "\", \"explanation\": \"" + explanation + "\"}", 10, 1.0, 0.0, modelName);
             }
             lastMcqLetter = "B";
+            // PA1 (13/11): khi đặt distractorErrors và prompt có yêu cầu trường này thì trả kèm (mặc định không trả).
+            String errors = distractorErrors != null && MatrixPromptDraftV0.asksDistractorErrors(prompt)
+                    ? ", \"distractor_errors\": " + distractorErrors : "";
             return new LlmCallResult("{\"question_text\": \"" + questionText + "\","
                     + " \"option_a\": \"" + optionA + "\", \"option_b\": \"$" + k + "$\", \"option_c\": \"$0$\","
                     + " \"option_d\": \"$" + (k + 2) + "$\", \"correct_option\": \"B\", \"explanation\": \""
-                    + explanation + "\"}", 10, 1.0, 0.0, modelName);
+                    + explanation + "\"" + errors + "}", 10, 1.0, 0.0, modelName);
         }
+
+        /** PA1: JSON của trường {@code distractor_errors} cho câu mcq đáp án B; null là không trả trường này. */
+        String distractorErrors;
 
         @Override
         public LlmCallResult callJsonModeWithSchema(String prompt, String modelName, Double temperature, String schema) {
-            if (McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON.equals(schema)) {
+            // 13/11 (PA1): prompt ma trận mcq từ v10 gọi kèm schema 8 trường.
+            if (McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON.equals(schema)
+                    || McqProductionSchema.GENERATION_RESPONSE_SCHEMA_JSON_V10.equals(schema)) {
                 return mcq(prompt, modelName);
             }
             prompts.add(prompt);
@@ -401,7 +409,7 @@ class ExamBuildTest {
                 + " AND bank_item_id IS NOT NULL", Integer.class, examId));
         List<Map<String, Object>> runs = jdbc.queryForList("SELECT * FROM experiment_run WHERE prompt_version LIKE"
                 + " 'matrix-%' ORDER BY id");
-        assertEquals(List.of("matrix-mcq-v9-draft", "matrix-tf-v12-draft", "matrix-sa-v12-draft"),
+        assertEquals(List.of("matrix-mcq-v10-draft", "matrix-tf-v12-draft", "matrix-sa-v12-draft"),
                 runs.stream().map(r -> r.get("prompt_version")).toList());
         for (Map<String, Object> run : runs) {
             assertEquals("production", run.get("purpose"));

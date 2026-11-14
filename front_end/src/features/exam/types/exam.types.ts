@@ -65,7 +65,14 @@ export interface ExamQuestionItem {
     infoReasons?: string[];
     requests?: TeacherRequests;
     inheritedRequests?: TeacherRequests;
+    distractorErrors?: DistractorErrors;
 }
+
+/** PA1 (13/11): kết quả Solver ghép lỗi sai với phương án (docs/api mục 7.4). */
+export type DistractorCheck = "match" | "mismatch" | "unknown" | "unchecked";
+
+/** PA1: lỗi sai của học sinh dẫn tới từng phương án sai (chỉ khóa của phương án sai có chữ lỗi). */
+export type DistractorErrors = Partial<Record<ExamOption, { text: string; check: DistractorCheck }>>;
 
 /** Chip yêu cầu của giáo viên (PR B, docs/contract/enums.md TeacherRequest). */
 export type TeacherRequestCode =
@@ -102,6 +109,7 @@ export function describeInfoReason(reason: string): string {
     const code = at < 0 ? reason : reason.slice(0, at);
     const detail = at < 0 ? "" : reason.slice(at + 2);
     if (code === "request_partial") return `Đúng một phần yêu cầu${detail ? `: ${detail}` : ""}`;
+    if (code === "distractor_mismatch") return `Lỗi sai ghi ở phương án ${detail} chưa khớp phương án`;
     if (code === "request_not_met") return `Chưa đúng yêu cầu${detail ? `: ${detail}` : ""}`;
     return reason;
 }
@@ -207,10 +215,12 @@ export interface ExamItemDto {
     edited: boolean;
     originalQuestionId?: number;
     failureReason?: ExamSlotFailureReason;
-    /** Cờ thông tin (không phải "cần xem kỹ"), luôn có: request_partial: …, request_not_met: … */
+    /** Cờ thông tin (không phải "cần xem kỹ"), luôn có: request_partial: …, request_not_met: …, distractor_mismatch: … */
     infoReasons?: string[];
     requests?: TeacherRequests;
     inheritedRequests?: TeacherRequests;
+    /** PA1: lỗi sai dẫn tới từng phương án sai (chỉ câu mcq có lỗi); vắng khi không có. */
+    distractorErrors?: DistractorErrors;
 }
 
 export interface ExamPartDto {

@@ -1,5 +1,6 @@
 package com.datn.mcq.generation.service;
 
+import com.datn.mcq.common.util.LetterJson;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GeneratedQuestionStatement;
@@ -20,14 +21,16 @@ public final class StoredQcInput {
 
     /**
      * Kèm yêu cầu của giáo viên đã lưu ở câu (PR B, 12/11), nên chạy lại QC, job answer_check của bản sửa và công cụ đo Solver
-     * đều kiểm yêu cầu như lúc sinh. Câu cũ (NULL) đi đường không có yêu cầu.
+     * đều kiểm yêu cầu như lúc sinh. Câu cũ (NULL) đi đường không có yêu cầu. 13/11 (PA1): kèm cả lỗi sai theo phương án đã
+     * lưu (bản sửa chép từ bản trước), nên job answer_check của bản sửa kiểm lại MỌI lỗi còn chữ (H-4).
      *
      * @param statements 4 ý a-d của câu tf đã lưu (rỗng với mcq/sa)
      */
     public static QuestionQcInput of(GeneratedQuestion gq, List<GeneratedQuestionStatement> statements,
                                      boolean validateLatex, boolean runAnswerCheck) {
         return withoutRequest(gq, statements, validateLatex, runAnswerCheck)
-                .withRequest(gq.getRequestCodes(), gq.getRequestText());
+                .withRequest(gq.getRequestCodes(), gq.getRequestText())
+                .withDistractorErrors(LetterJson.read(gq.getDistractorErrors()));
     }
 
     private static QuestionQcInput withoutRequest(GeneratedQuestion gq, List<GeneratedQuestionStatement> statements,
