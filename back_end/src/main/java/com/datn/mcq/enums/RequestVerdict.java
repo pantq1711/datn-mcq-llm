@@ -12,7 +12,13 @@ import java.util.Locale;
 public enum RequestVerdict implements DbEnum {
     MET("met"),
     PARTIAL("partial"),
-    NOT_MET("not_met");
+    NOT_MET("not_met"),
+    /**
+     * (14/11, hotfix Solver hai lượt, V29) câu có yêu cầu nhưng KHÔNG được kiểm: lượt 1 gắn cờ đáp án nên không gọi lượt 2,
+     * hoặc lượt 2 lỗi / trả kết quả hỏng. Do backend đặt, không bao giờ nhận từ Solver ({@link #parseOrNull}). Không có cờ
+     * thông tin; lý do ở {@code request_reason}.
+     */
+    UNCHECKED("unchecked");
 
     private final String dbValue;
 
@@ -26,14 +32,17 @@ public enum RequestVerdict implements DbEnum {
         return dbValue;
     }
 
-    /** Giá trị Solver trả (không phân biệt hoa thường); lạ hoặc trống thì null (không kết luận). */
+    /**
+     * Giá trị Solver trả (không phân biệt hoa thường); lạ, trống hoặc {@code unchecked} (chỉ backend đặt) thì null (không kết
+     * luận).
+     */
     public static RequestVerdict parseOrNull(Object raw) {
         if (!(raw instanceof String s)) {
             return null;
         }
         String v = s.strip().toLowerCase(Locale.ROOT);
         for (RequestVerdict r : values()) {
-            if (r.dbValue.equals(v)) {
+            if (r != UNCHECKED && r.dbValue.equals(v)) {
                 return r;
             }
         }

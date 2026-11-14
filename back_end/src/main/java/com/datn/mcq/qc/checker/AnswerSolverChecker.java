@@ -189,9 +189,21 @@ public class AnswerSolverChecker {
             List<String> requestCodes,
             String requestText) {
         String prompt = promptBuilder.buildSolverPrompt(promptVersion, questionText, optionA, optionB, optionC, optionD);
-        String block = PromptBuilder.checksRequests(promptVersion)
-                ? TeacherRequestPrompt.solverBlock(requestCodes, requestText) : null;
+        String block = requestBlock(requestCodes, requestText);
         String schema = optionCheckPrompt() ? SOLVER_RESPONSE_SCHEMA_JSON : SOLVER_RESPONSE_SCHEMA_JSON_V2;
+        if (twoPass()) {
+            // v6 (14/11): lượt 1 đúng prompt và schema v4 cho mọi câu; yêu cầu (nếu có) kiểm ở lượt 2.
+            LlmCallResult result = llmClient.callJsonModeWithSchema(prompt, solverModel, 0.0, schema);
+            SolverCheckOutcome outcome = parseAndCompare(result.rawText(), result.modelName(), generatorCorrectOption)
+                    .withUsage(LlmUsage.of(result));
+            if (block == null) {
+                return outcome;
+            }
+            List<String> choices = List.of("A. " + optionA, "B. " + optionB, "C. " + optionC, "D. " + optionD);
+            SecondPass second = secondPass(outcome.passed(), "trắc nghiệm", questionText, choices, outcome.reasoning(),
+                    block);
+            return outcome.withUsage(sum(outcome.usage(), second.usage())).withRequestCheck(second.check());
+        }
         if (block != null) {
             prompt = TeacherRequestPrompt.withSolverBlock(prompt, block);
             schema = SOLVER_RESPONSE_SCHEMA_JSON_REQUEST;
@@ -206,6 +218,53 @@ public class AnswerSolverChecker {
     private String requestBlock(List<String> requestCodes, String requestText) {
         return PromptBuilder.checksRequests(promptVersion) ? TeacherRequestPrompt.solverBlock(requestCodes, requestText)
                 : null;
+    }
+
+    /** v6: kiểm yêu cầu ở lượt gọi thứ hai. */
+    private boolean twoPass() {
+        return PromptBuilder.twoPass(promptVersion);
+    }
+
+    /** Kết quả lượt 2: kết luận về yêu cầu và số liệu lượt gọi (null khi không gọi hoặc gọi lỗi). */
+    private record SecondPass(TeacherRequestPrompt.RequestCheck check, LlmUsage usage) {}
+
+    /**
+     * Lượt 2 (v6): lượt 1 gắn cờ đáp án ({@code firstPassed} false) thì KHÔNG gọi, kết luận {@code unchecked}. Lượt 2 lỗi
+     * (mạng, HTTP, hết hạn mức) hoặc trả kết quả hỏng: {@code unchecked} kèm lý do và cảnh báo ở log; không bao giờ ném lỗi
+     * (kết luận của lượt 1 giữ nguyên).
+     */
+    private SecondPass secondPass(boolean firstPassed, String kind, String questionText, List<String> choices,
+                                  String reasoning, String block) {
+        if (!firstPassed) {
+            return new SecondPass(TeacherRequestPrompt.unchecked(TeacherRequestPrompt.UNCHECKED_FLAGGED), null);
+        }
+        String prompt = TeacherRequestPrompt.secondPassPrompt(kind, questionText, choices, reasoning, block);
+        LlmCallResult result;
+        try {
+            result = llmClient.callJsonModeWithSchema(prompt, solverModel, 0.0, TeacherRequestPrompt.SECOND_PASS_SCHEMA);
+        } catch (RuntimeException ex) {
+            log.warn("Solver lượt kiểm yêu cầu lỗi, request_check = unchecked: {}", ex.getMessage());
+            return new SecondPass(TeacherRequestPrompt.unchecked(TeacherRequestPrompt.UNCHECKED_FAILED_PREFIX + " ("
+                    + ex.getClass().getSimpleName() + ")"), null);
+        }
+        TeacherRequestPrompt.RequestCheck check = TeacherRequestPrompt.parse(result.rawText());
+        if (check == null) {
+            log.warn("Solver lượt kiểm yêu cầu trả request_check thiếu hoặc hỏng, request_check = unchecked");
+            check = TeacherRequestPrompt.unchecked(TeacherRequestPrompt.UNCHECKED_FAILED_PREFIX + " (phản hồi hỏng)");
+        }
+        return new SecondPass(check, LlmUsage.of(result));
+    }
+
+    /** Cộng số liệu hai lượt gọi (token, độ trễ); thiếu một bên thì lấy bên kia. */
+    private static LlmUsage sum(LlmUsage a, LlmUsage b) {
+        if (a == null || b == null) {
+            return a == null ? b : a;
+        }
+        Integer tokens = a.tokenCount() == null || b.tokenCount() == null
+                ? (a.tokenCount() == null ? b.tokenCount() : a.tokenCount()) : a.tokenCount() + b.tokenCount();
+        Double latency = a.latencyMs() == null || b.latencyMs() == null
+                ? (a.latencyMs() == null ? b.latencyMs() : a.latencyMs()) : a.latencyMs() + b.latencyMs();
+        return new LlmUsage(tokens, latency);
     }
 
     /**
@@ -291,6 +350,22 @@ public class AnswerSolverChecker {
                                           List<String> requestCodes, String requestText) {
         String prompt = TfPromptDraftV0.buildSolverPrompt(questionText, statements);
         String block = requestBlock(requestCodes, requestText);
+        if (twoPass()) {
+            LlmCallResult result = llmClient.callJsonModeWithSchema(prompt, solverModel, 0.0,
+                    TfPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON);
+            TfSolverOutcome outcome = parseAndCompareTrueFalse(result.rawText(), result.modelName(), llmLabels)
+                    .withUsage(LlmUsage.of(result));
+            if (block == null) {
+                return outcome;
+            }
+            List<String> choices = new ArrayList<>();
+            for (int i = 0; i < statements.size() && i < TF_KEYS.size(); i++) {
+                choices.add(TF_KEYS.get(i) + ") " + statements.get(i));
+            }
+            SecondPass second = secondPass(outcome.passed(), "đúng/sai", questionText, choices, outcome.reasoning(),
+                    block);
+            return outcome.withUsage(sum(outcome.usage(), second.usage())).withRequestCheck(second.check());
+        }
         LlmCallResult result = llmClient.callJsonModeWithSchema(
                 TeacherRequestPrompt.withSolverBlock(prompt, block), solverModel, 0.0,
                 block == null ? TfPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON : TeacherRequestPrompt.TF_SOLVER_SCHEMA);
@@ -352,6 +427,18 @@ public class AnswerSolverChecker {
                                             String requestText) {
         String prompt = SaPromptDraftV0.buildSolverPrompt(questionText);
         String block = requestBlock(requestCodes, requestText);
+        if (twoPass()) {
+            LlmCallResult result = llmClient.callJsonModeWithSchema(prompt, solverModel, 0.0,
+                    SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON);
+            SaSolverOutcome outcome = parseAndCompareShortAnswer(result.rawText(), result.modelName(), llmAnswer)
+                    .withUsage(LlmUsage.of(result));
+            if (block == null) {
+                return outcome;
+            }
+            SecondPass second = secondPass(outcome.passed(), "trả lời ngắn", questionText, List.of(),
+                    outcome.reasoning(), block);
+            return outcome.withUsage(sum(outcome.usage(), second.usage())).withRequestCheck(second.check());
+        }
         LlmCallResult result = llmClient.callJsonModeWithSchema(
                 TeacherRequestPrompt.withSolverBlock(prompt, block), solverModel, 0.0,
                 block == null ? SaPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON : TeacherRequestPrompt.SA_SOLVER_SCHEMA);

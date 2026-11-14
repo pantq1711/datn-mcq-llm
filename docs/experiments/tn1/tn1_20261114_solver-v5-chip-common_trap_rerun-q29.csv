@@ -1,0 +1,2 @@
+﻿question_id,prompt_version,question_type,question_answer,solver_answer,verdict,multiple_correct_flag,solver_correct_count,options_verdict,token_count,latency_ms,solver_model,error
+29,solver-v5-request-check,mcq,A,A,consistent,0,1,A:1|B:0|C:0|D:0,1730,2068,gemini-3.5-flash-lite,

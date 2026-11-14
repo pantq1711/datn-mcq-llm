@@ -423,10 +423,10 @@ class ExamTeacherRequestTest extends ExamFlowTestBase {
         assertEquals(0, none.get("infoReasons").size());
     }
 
-    // ---------- Solver: cùng lượt gọi, request_check (test 19, 20, 21, 22, 23, 27) ----------
+    // ---------- Solver: request_check (test 19, 20, 21, 22, 23, 27); từ 14/11 kiểm ở lượt thứ hai (solver-v6-two-pass) ----------
 
     @Test
-    void motLuotGoiSolverMoiCauCoYeuCauVaNotMetChiLaCoThongTin() throws Exception {
+    void haiLuotGoiSolverChoCauCoYeuCauVaNotMetChiLaCoThongTin() throws Exception {
         SOLVER.requestCheck = "{\"verdict\": \"not_met\", \"reason\": \"Không có bối cảnh thực tế\"}";
         int matrixId = createMatrix(mcqCell("Đa thức", null, 1));
         int examId = buildExam(matrixId, codes("real_context"), null);
@@ -434,9 +434,11 @@ class ExamTeacherRequestTest extends ExamFlowTestBase {
         int slot = slotId(examId, cellId(matrixId, 1), 1);
         int questions = count("SELECT count(*) FROM generated_question");
         assertEquals(1, questions);
-        assertEquals(1, SOLVER.calls, "đúng một lượt gọi Solver cho câu có yêu cầu");
-        assertTrue(SOLVER.prompts.get(0).contains(TeacherRequestPrompt.SOLVER_HEADER));
-        assertTrue(SOLVER.schemas.get(0).contains("\"request_check\""));
+        assertEquals(2, SOLVER.calls, "lượt giải + lượt kiểm yêu cầu");
+        assertFalse(SOLVER.prompts.get(0).contains(TeacherRequestPrompt.SOLVER_HEADER), "lượt 1 không có khối yêu cầu");
+        assertEquals(com.datn.mcq.qc.checker.AnswerSolverChecker.SOLVER_RESPONSE_SCHEMA_JSON, SOLVER.schemas.get(0));
+        assertTrue(SOLVER.prompts.get(1).contains(TeacherRequestPrompt.SOLVER_HEADER));
+        assertEquals(TeacherRequestPrompt.SECOND_PASS_SCHEMA, SOLVER.schemas.get(1));
         assertEquals(1, count("SELECT count(*) FROM generation_job WHERE exam_slot_id = ? AND job_type = 'generate'",
                 slot), "not_met không kích hoạt sinh lại");
         Map<String, Object> row = jdbc.queryForMap("SELECT passed, request_verdict, request_reason FROM"
@@ -472,33 +474,51 @@ class ExamTeacherRequestTest extends ExamFlowTestBase {
         assertEquals(List.of("request_partial: Chỉ một bước"), texts(withReq.get("infoReasons")));
         JsonNode plain = item(examId, slotId(examId, cellId(matrixId, 2), 1));
         assertEquals(0, plain.get("infoReasons").size());
-        assertEquals(2, SOLVER.calls);
+        assertEquals(3, SOLVER.calls, "câu có yêu cầu 2 lượt, câu không yêu cầu 1 lượt");
         long plainPrompts = SOLVER.prompts.stream().filter(p -> !p.contains(TeacherRequestPrompt.SOLVER_HEADER)).count();
-        assertEquals(1, plainPrompts, "câu không yêu cầu dùng prompt cũ");
-        assertTrue(SOLVER.schemas.contains(com.datn.mcq.qc.checker.AnswerSolverChecker.SOLVER_RESPONSE_SCHEMA_JSON));
+        assertEquals(2, plainPrompts, "lượt giải của mọi câu dùng prompt cũ");
+        assertEquals(2, SOLVER.schemas.stream()
+                .filter(com.datn.mcq.qc.checker.AnswerSolverChecker.SOLVER_RESPONSE_SCHEMA_JSON::equals).count());
         assertNull(jdbc.queryForObject("SELECT request_verdict FROM quality_check_result WHERE question_id = ? AND"
                 + " check_type = 'answer_check'", String.class, questionOf(slotId(examId, cellId(matrixId, 2), 1))));
     }
 
     @Test
-    void requestCheckThieuThiKetQuaSolverVanLuuVerdictNull() throws Exception {
+    void requestCheckThieuThiKetQuaSolverVanLuuVerdictUnchecked() throws Exception {
         SOLVER.requestCheck = null;
         int matrixId = createMatrix(mcqCell("Đa thức", null, 1));
         int examId = buildExam(matrixId, codes("real_context"), null);
         settle(examId);
         int slot = slotId(examId, cellId(matrixId, 1), 1);
-        Map<String, Object> row = jdbc.queryForMap("SELECT passed, request_verdict FROM quality_check_result WHERE"
-                + " question_id = ? AND check_type = 'answer_check'", questionOf(slot));
-        assertEquals(Boolean.TRUE, row.get("passed"));
-        assertNull(row.get("request_verdict"));
-        assertEquals(0, item(examId, slot).get("infoReasons").size());
+        Map<String, Object> row = jdbc.queryForMap("SELECT passed, request_verdict, request_reason FROM"
+                + " quality_check_result WHERE question_id = ? AND check_type = 'answer_check'", questionOf(slot));
+        assertEquals(Boolean.TRUE, row.get("passed"), "kết luận lượt giải giữ nguyên");
+        assertEquals("unchecked", row.get("request_verdict"), "lượt kiểm yêu cầu trả thiếu: chưa kiểm");
+        assertTrue(String.valueOf(row.get("request_reason")).startsWith(TeacherRequestPrompt.UNCHECKED_FAILED_PREFIX));
+        assertEquals(0, item(examId, slot).get("infoReasons").size(), "chưa kiểm không có cờ thông tin");
         // hỏng
         SOLVER.requestCheck = "\"met\"";
         replace(examId, slot, "{}").andExpect(status().isOk());
         settle(examId);
-        assertNull(jdbc.queryForObject("SELECT request_verdict FROM quality_check_result WHERE question_id = ? AND"
-                + " check_type = 'answer_check'", String.class, questionOf(slot)));
+        assertEquals("unchecked", jdbc.queryForObject("SELECT request_verdict FROM quality_check_result WHERE"
+                + " question_id = ? AND check_type = 'answer_check'", String.class, questionOf(slot)));
         assertEquals("ready", slotState(slot));
+    }
+
+    /** 14/11: lượt giải gắn cờ đáp án thì không gọi lượt kiểm yêu cầu; request_verdict = unchecked. */
+    @Test
+    void luotGiaiCoCoThiKhongKiemYeuCau() throws Exception {
+        SOLVER.requestCheck = "{\"verdict\": \"met\", \"reason\": \"ok\"}";
+        SOLVER.mcqJudge = "C";
+        int matrixId = createMatrix(mcqCell("Đa thức", null, 1));
+        int examId = buildExam(matrixId, codes("real_context"), null);
+        settle(examId);
+        assertTrue(SOLVER.prompts.stream().noneMatch(p -> p.contains(TeacherRequestPrompt.SOLVER_HEADER)),
+                "không có lượt kiểm yêu cầu");
+        for (String v : jdbc.queryForList("SELECT request_verdict FROM quality_check_result WHERE check_type ="
+                + " 'answer_check'", String.class)) {
+            assertEquals("unchecked", v);
+        }
     }
 
     @Test
@@ -511,7 +531,9 @@ class ExamTeacherRequestTest extends ExamFlowTestBase {
         int q = questionOf(slotId(examId, cellId(matrixId, 1), 1));
         assertEquals("met", jdbc.queryForObject("SELECT request_verdict FROM quality_check_result WHERE question_id = ?"
                 + " AND check_type = 'answer_check'", String.class, q));
-        assertTrue(SOLVER.schemas.contains(TeacherRequestPrompt.TF_SOLVER_SCHEMA));
+        assertTrue(SOLVER.schemas.contains(com.datn.mcq.llm.prompt.TfPromptDraftV0.SOLVER_RESPONSE_SCHEMA_JSON),
+                "lượt giải tf dùng schema cũ");
+        assertTrue(SOLVER.schemas.contains(TeacherRequestPrompt.SECOND_PASS_SCHEMA));
         assertEquals(0, item(examId, slotId(examId, cellId(matrixId, 1), 1)).get("infoReasons").size(), "met không cờ");
     }
 
@@ -528,7 +550,7 @@ class ExamTeacherRequestTest extends ExamFlowTestBase {
         SOLVER.prompts.clear();
         SOLVER.requestCheck = "{\"verdict\": \"partial\", \"reason\": \"x\"}";
         qcRerunService.rerun(q);
-        assertTrue(SOLVER.prompts.get(0).contains(TeacherRequest.EXTREMUM.promptLine()), SOLVER.prompts.get(0));
+        assertTrue(SOLVER.prompts.get(1).contains(TeacherRequest.EXTREMUM.promptLine()), SOLVER.prompts.get(1));
         assertEquals("partial", jdbc.queryForObject("SELECT request_verdict FROM quality_check_result WHERE"
                 + " question_id = ? AND check_type = 'answer_check'", String.class, q));
         assertTrue(examId > 0);
@@ -600,6 +622,9 @@ class ExamTeacherRequestTest extends ExamFlowTestBase {
         jdbc.update("UPDATE generation_job SET request_codes = ARRAY['real_context', 'tf_shared_context'],"
                 + " request_scope = 'exam' WHERE id = " + job);
         jdbc.update("UPDATE quality_check_result SET request_verdict = 'partial' WHERE question_id = " + q
+                + " AND check_type = 'answer_check'");
+        // V29 (14/11): 'unchecked' hợp lệ
+        jdbc.update("UPDATE quality_check_result SET request_verdict = 'unchecked' WHERE question_id = " + q
                 + " AND check_type = 'answer_check'");
     }
 }

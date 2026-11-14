@@ -104,6 +104,51 @@ Nhận xét:
 - `temperature` đã bằng 0 ở mọi lần đo, nên khác biệt giữa 2 lần (câu 52, 53 của v4; câu 32 của v3) là do Gemini vẫn không
   tất định ở `temperature = 0`, không phải do cấu hình.
 
+## Đo ngày 14/11/2026: khối thêm vào đầu vào làm Solver bắt kém đi
+
+Cùng 29 câu, cùng model `gemini-3.5-flash-lite`, `temperature = 0`, mỗi cấu hình 1 lần.
+
+| Cấu hình | Bắt được trên 9 câu lỗi | Báo nhầm trên 20 câu tốt | Câu lỗi bắt được |
+|---|---|---|---|
+| v4, không chip (31/10, 2 lần, để so) | 7/9, 5/9 | 0/19, 0/20 | 7, 8, 37, 39, 52, 53, 15 / 7, 8, 37, 39, 15 |
+| v5 (PR B, một lượt) + chip `common_trap` ở mọi câu | **4/9** | **0/20** | 7, 37, 39, 53 |
+| PA1 một lượt (nhánh PA1, `solver-v6-distractor-check`): kèm lỗi sai của 3 phương án sai | **3/9** | **0/20** | 8, 37, 39 |
+
+- **v5 + `common_trap`** (`tn1_20261114_solver-v5-chip-common_trap*.{csv,jsonl}`): đo trên `main` (`304a782`) với BẢN SAO
+  TẠM của `datn_mcq_e2e`, trong đó 29 câu được gắn `request_codes = {common_trap}` (DB thật không đổi). Công cụ đo không ghi
+  `request_check` ra CSV nên phản hồi đầy đủ của Gemini được ghi qua một proxy cục bộ (chỉ phần chữ trả về, không có khóa) vào
+  `*_responses.jsonl` (dòng thứ k là câu thứ k của `ids.txt`). Câu 29 lần đầu Gemini trả 503 (dòng `error` trong CSV), đã chạy
+  lại riêng (`*_rerun-q29*`): consistent, nên báo nhầm 0/20. `request_check` cả 29 câu đều `met`; lý do đều xoay quanh "phương án
+  nhiễu ứng với lỗi học sinh hay mắc". Tổng 30 lượt gọi.
+- **PA1 một lượt** (`tn1_20261114_pa1-onepass-errors_solver-v6-distractor-check.csv`): đo trên nhánh
+  `feature/misconception-distractors` với `docs/experiments/tn1/distractor-errors.json` của nhánh đó; cột cuối `error_checks` là
+  kết quả ghép lỗi theo chữ người soạn gán (39D: `match`, 53D: `mismatch`). Không ghi phản hồi đầy đủ. 29 lượt gọi. Tên phiên
+  bản này thuộc nhánh PA1 (chưa merge); trên `main`, `solver-v6` là bản hai lượt (dưới).
+- So với v4: v5 + chip sót thêm 8, 52, 15; PA1 một lượt sót 7, 52, 53, 15. Ở các câu phân tích nhân tử, Solver có xu hướng coi
+  phương án "chưa triệt để" là phương án nhiễu khi đầu vào nói về "bẫy / lỗi học sinh". Đặt `request_check`/`error_checks` ở
+  cuối schema không ngăn được, vì khối nằm trong ĐẦU VÀO. Mẫu nhỏ, mỗi cấu hình 1 lần.
+- Hệ quả: tách Solver thành hai lượt (`solver-v6-two-pass`, hotfix 14/11; `docs/design/kiem-soat-do-kho.md` mục 4.3a): lượt 1
+  giữ đúng v4, lượt 2 mới thấy yêu cầu (và về sau lỗi phương án của PA1).
+
+### Hotfix `solver-v6-two-pass` (14/11, 3 lần)
+
+Đo trên nhánh `fix/solver-two-pass` với bản sao tạm của `datn_mcq_e2e`. Lượt 1 của v6 giống hệt v4 từng byte cho mọi câu, nên
+kết luận đáp án ở đây là ba mẫu v4 nữa. Gemini trả 503 nhiều trong buổi đo; câu lỗi được chạy lại riêng một lần. File:
+`tn1_20261114_hotfix-solver-v6-two-pass_{nochip,chip1,chip2}[_rerun].csv` và `*_responses.jsonl` (mỗi dòng một lượt gọi, cột
+`kind`: `solve_pass` là lượt giải, `request_pass` là lượt kiểm yêu cầu; `question` là 80 ký tự đầu của đề để ghép với câu).
+Tổng 145 lượt gọi cho ba lần đo, kể cả chạy lại.
+
+| Lần | Bắt được | Báo nhầm | Câu lỗi bắt được | Ghi chú |
+|---|---|---|---|---|
+| Không chip | 5/8 | 0/20 | 7, 8, 15, 37, 39 | câu 61 vẫn 503 sau khi chạy lại (mẫu số 8) |
+| Chip `common_trap`, lần 1 | 5/9 | 0/19 | 7, 8, 37, 39, 52 | câu 62 vẫn 503 (mẫu số 19); `request_check`: 21 met, 2 not_met |
+| Chip `common_trap`, lần 2 | 4/9 | 0/20 | 7, 8, 37, 39 | `request_check`: 19 met, 1 not_met, 5 lượt kiểm yêu cầu trả 503 (thành `unchecked`) |
+
+- **Hệ quả cho cách đọc số liệu:** cùng prompt v4 mà hôm nay có lần chỉ được 4/9, nên khoảng dao động của v4 là ít nhất
+  4/9–7/9. Hai cấu hình một lượt ở trên (4/9 và 3/9) nằm ở đáy hoặc ngay dưới khoảng này: bằng chứng về hiệu ứng neo yếu hơn
+  nhận định ban đầu. Cách hai lượt vẫn giữ được: lượt giải không thấy yêu cầu theo cấu trúc, không phụ thuộc vào số đo.
+- Các câu không ổn định là 15, 52, 53 (và 37 ở một lần); 61, 25 chưa lần nào bắt được.
+
 ## Hạn chế
 
 - Nhãn "câu lỗi"/"câu tốt" do AI gán trong buổi thẩm định nội dung 31/10, CHƯA được người xác nhận; câu 61 và 25 còn tranh

@@ -35,7 +35,7 @@ Java: đặt tên hằng kiểu `ZERO_SHOT`, `FEW_SHOT_STRUCTURED`... và có b�
 | `ImportBatchStatus` (V26) | `import_batch.status` (chưa có enum Java, hằng ở `ImportBatch.STATUS_*`) |
 | `ExamChallenge` (V27, 12/11) | `exam.challenge` |
 | `TeacherRequest` (V28, PR B 12/11) | phần tử của mảng `request_codes TEXT[]` ở `exam_generation_context`, `exam_slot_action`, `generation_job`, `generated_question` |
-| `RequestVerdict` (V28, PR B 12/11) | `quality_check_result.request_verdict` (chỉ dòng `answer_check`) |
+| `RequestVerdict` (V28, PR B 12/11; V29 thêm `unchecked`) | `quality_check_result.request_verdict` (chỉ dòng `answer_check`) |
 
 ## 2. Giá trị của từng enum
 
@@ -284,8 +284,10 @@ API nhận không phân biệt hoa thường, gộp mã trùng; lưu theo thứ 
 | `met` | Solver kết luận câu đáp ứng đủ mọi yêu cầu (không cờ) |
 | `partial` | Chỉ đáp ứng một phần: cờ thông tin `request_partial: <lý do>` |
 | `not_met` | Không đáp ứng: cờ thông tin `request_not_met: <lý do>` |
+| `unchecked` | (V29, 14/11, Solver hai lượt) câu có yêu cầu nhưng KHÔNG được kiểm: lượt giải gắn cờ đáp án nên không gọi lượt kiểm yêu cầu, hoặc lượt đó lỗi / trả kết quả hỏng. Do backend đặt (Solver trả `unchecked` coi là hỏng); lý do ở `request_reason`; không có cờ thông tin |
 
-NULL: câu không có yêu cầu, hoặc Solver không trả `request_check` hợp lệ (thiếu, hỏng, verdict lạ; không coi là lỗi Solver).
+NULL: câu không có yêu cầu. Với Solver v5 (một lượt), NULL cả khi Solver không trả `request_check` hợp lệ; từ v6 trường hợp đó
+là `unchecked`.
 
 ## 3. Quy tắc đi kèm (cần nhớ khi code, DB không tự đảm bảo hết)
 
@@ -432,7 +434,7 @@ NULL: câu không có yêu cầu, hoặc Solver không trả `request_check` h�
   - `matrix-sa-v10-draft` (08/11): thêm khối phạm vi kiến thức theo lớp. Run cũ giữ `matrix-sa-v9-draft` trở về trước.
   - `matrix-tf-v10-draft` (08/11): thêm khối phạm vi kiến thức theo lớp. Run cũ giữ `matrix-tf-v9-draft` trở về trước.
     - Nội dung khối (cả 3 dạng, sau dòng mức độ mục tiêu): chỉ dùng kiến thức của lớp đến hết bài trong ô; mức Vận dụng chỉ phối hợp nhiều bước của chính bài (từ 12/11 thay bằng dòng mới, xem dưới); câu hỏi giá trị lớn nhất, nhỏ nhất, giá trị nguyên chỉ ra khi giá trị đó tồn tại và tìm được trong phạm vi. Môn Toán lớp 8 và lớp 9 có thêm một dòng liệt kê kiến thức cấm của lớp đó. Ô không có lớp (`gradeLevel` null) thì không có khối.
-  - **Độ sâu + yêu cầu giáo viên (12/11)**, phần A (độ sâu; góp ý dùng thử 11/11 "đề theo ma trận đơn giản, chưa có chiều sâu kiến thức", "chưa thấy câu nâng cao"): prompt ma trận `matrix-mcq-v9-draft`, `matrix-sa-v11-draft`, `matrix-tf-v11-draft`. Run cũ giữ `matrix-mcq-v8-draft`, `matrix-sa-v10-draft`, `matrix-tf-v10-draft` trở về trước. Solver không đổi ở phần A. Phần B (yêu cầu giáo viên, PR sau) sẽ dùng Solver `solver-v5-request-check`; phương án nhiễu (PA1) dùng `solver-v6`.
+  - **Độ sâu + yêu cầu giáo viên (12/11)**, phần A (độ sâu; góp ý dùng thử 11/11 "đề theo ma trận đơn giản, chưa có chiều sâu kiến thức", "chưa thấy câu nâng cao"): prompt ma trận `matrix-mcq-v9-draft`, `matrix-sa-v11-draft`, `matrix-tf-v11-draft`. Run cũ giữ `matrix-mcq-v8-draft`, `matrix-sa-v10-draft`, `matrix-tf-v10-draft` trở về trước. Solver không đổi ở phần A. Phần B (yêu cầu giáo viên, PR sau) sẽ dùng Solver `solver-v5-request-check` (từ 14/11 thay bằng `solver-v6-two-pass`); phương án nhiễu (PA1) dùng `solver-v7`.
     - Khối phạm vi: dòng mức Vận dụng thành "Ở mức Vận dụng, được kết hợp kiến thức các bài ĐÃ HỌC trước đó cùng lớp (vẫn trong PHẠM VI KIẾN THỨC này), không đưa kiến thức chưa học" (`MatrixPromptDraftV0.APPLY_SCOPE_LINE`).
     - Khối "YÊU CẦU MỨC VẬN DỤNG" (`APPLY_LEVEL_HEADER`, `APPLY_LEVEL_RULES`; ngay sau khối phạm vi), chỉ khi ô mcq/sa mức `hard` hoặc ô tf có ít nhất một ý `hard`: kết hợp kiến thức các bài đã học trước đó cùng lớp; lời giải ≥ 2 bước biến đổi có ý nghĩa, không thay số trực tiếp vào một công thức; ưu tiên bối cảnh thực tế, giá trị lớn nhất/nhỏ nhất bằng kiến thức trong lớp, nhận định cần suy luận. Ô Biết/Hiểu không có khối này.
     - Đề nâng cao (`exam.challenge = advanced`): thêm một dòng "Mức NÂNG CAO…" (`ADVANCED_RULE`) ngay sau khối Vận dụng, cùng điều kiện ô.
@@ -641,7 +643,9 @@ Solver chỉ thấy đề dẫn và 4 ý, không thấy nhãn và lời giải c
 ### 4.6. Solver câu `mcq` (4 trường, `solver-v4-literal-reading` và `solver-v3-option-check`, thẩm định 31/10)
 
 Từ 12/11 (PR B) mặc định là `solver-v5-request-check`: câu không có yêu cầu của giáo viên dùng đúng prompt và JSON v4 dưới
-đây (từng ký tự); câu có yêu cầu xem mục 4.7. Bản kế tiếp (PA1, phương án nhiễu kèm lỗi sai) sẽ là `solver-v6`.
+đây (từng ký tự); câu có yêu cầu xem mục 4.7. Từ 14/11 (hotfix) mặc định là `solver-v6-two-pass`: lượt giải của MỌI câu dùng
+đúng prompt và JSON v4 dưới đây, yêu cầu được kiểm ở lượt thứ hai (mục 4.7). Bản kế tiếp (PA1, phương án nhiễu kèm lỗi sai) là
+`solver-v7`.
 
 Solver chỉ thấy đề và 4 phương án, không thấy đáp án và lời giải của câu. Solver giải bài rồi xét **từng** phương án A–D,
 không dừng ở phương án đầu tiên khớp. Thứ tự: `reasoning`, `options_verdict`, `correct_count`, `judge_answer`.
@@ -670,8 +674,20 @@ log và vẫn theo `options_verdict`.
 
 ### 4.7. Solver kèm yêu cầu của giáo viên (`solver-v5-request-check`, PR B 12/11)
 
+**Từ 14/11 mặc định là `solver-v6-two-pass` (hai lượt gọi).** Đo TN1 với chip `common_trap`: v5 (khối yêu cầu trong cùng
+lượt) chỉ bắt 4/9 câu nhiều đáp án đúng, so với 7/9 và 5/9 của v4 (`docs/design/kiem-soat-do-kho.md` mục 4.3a).
+- Lượt 1 (mọi câu, cả 3 dạng): prompt và schema y như v4 (mcq) và bản cũ (tf, sa), từng byte. Kết luận đạt/lệch chỉ từ lượt này.
+- Lượt 2: chỉ khi câu có yêu cầu VÀ lượt 1 đạt. Prompt `TeacherRequestPrompt.secondPassPrompt`: đề và phương án/ý (khối
+  `CÂU_HỎI_CẦN_XÉT`), lời giải của lượt 1 (khối `LỜI_GIẢI`, cắt 3000 ký tự), khối yêu cầu như dưới, "KHÔNG giải lại, KHÔNG chọn
+  đáp án"; không gửi đáp án người soạn. Schema `TeacherRequestPrompt.SECOND_PASS_SCHEMA`: chỉ `request_check`.
+- Lượt 1 có cờ: không gọi lượt 2, `request_verdict = unchecked` ("Không kiểm yêu cầu: Solver gắn cờ đáp án ở lượt giải"). Lượt 2
+  lỗi hoặc phản hồi hỏng: `unchecked` ("Không kiểm yêu cầu: lượt kiểm yêu cầu lỗi (…)") + cảnh báo log; kết luận lượt 1 giữ nguyên.
+- `token_count`/`latency_ms` của dòng `answer_check` là tổng hai lượt; bộ đếm hạn mức ngày tính thêm 1 cho dòng có lượt 2.
+
+Phần dưới mô tả `solver-v5-request-check` (một lượt), giữ để đo lại.
+
 Áp cho cả 3 dạng câu khi câu có yêu cầu (`generated_question.request_codes` hoặc `request_text`) và phiên bản Solver là v5
-(mặc định; cấu hình v2, v3, v4 thì không kiểm yêu cầu). Vẫn MỘT lượt gọi Gemini.
+(cấu hình v2, v3, v4 thì không kiểm yêu cầu). Vẫn MỘT lượt gọi Gemini.
 
 - Prompt: khối sau đề bài, phương án/ý và các bước giải, ngay trước dòng "Trả về DUY NHẤT …" (dòng đó thêm `"request_check"`
   vào cuối danh sách trường và tăng số trường thêm 1):

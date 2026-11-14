@@ -257,6 +257,33 @@ nếu sửa chữ thì sửa ở hằng và ở test, không viết rải rác.
 - **Truyền yêu cầu vào Solver:** `QuestionQcInput` có thêm các trường yêu cầu, đọc từ `generated_question`.
   `QcOrchestrator.callSolver`, `QcRerunService` và `SolverProbeRunner` truyền theo. Câu cũ (NULL) đi đường không có yêu cầu.
 
+### 4.3a Solver `solver-v6-two-pass` (hotfix 14/11, thay 4.3)
+
+**Lý do tách.** Đo TN1 (29 câu mcq của `datn_mcq_e2e`, 9 câu có từ 2 phương án đúng, 20 câu tốt) với mỗi câu kèm chip
+`common_trap`, Solver v5 (khối yêu cầu trong CÙNG lượt gọi) chỉ bắt **4/9** câu lỗi (7, 37, 39, 53), báo nhầm 0/20; v4 không
+chip đã đo 31/10 bắt 7/9 và 5/9, báo nhầm 0. Câu 8, 52, 15 bị sót. Lý do Solver ghi ở `request_check` đều xoay quanh "phương án
+nhiễu ứng với lỗi học sinh hay mắc": khối yêu cầu nằm trong ĐẦU VÀO nên đổi cách Solver nhìn các phương án (coi phương án "chưa
+triệt để" là phương án nhiễu), dù `request_check` đứng cuối schema. Cùng hiện tượng với PA1 một lượt (lỗi kèm phương án: 3/9).
+Số liệu: `docs/experiments/tn1/` (tệp ngày 20261114). Lưu ý (đo sau khi code hotfix): ba lần đo v6, với lượt giải giống hệt
+v4, được 5/8, 5/9 và 4/9, nên v4 tự dao động tới 4/9. Con số 4/9 của v5 kèm chip vì vậy chỉ là chỉ báo yếu; lý do chính để tách
+lượt là về cấu trúc: lượt giải không thấy yêu cầu thì không thể bị yêu cầu ảnh hưởng.
+
+**Cách làm (An chốt 14/11):**
+- **Lượt 1 (mọi câu, có chip hay không):** prompt và schema **giống hệt v4** (mcq) và bản cũ (tf, sa), từng byte (test khóa
+  `SolverTwoPassTest`). Kết luận đạt/lệch chỉ từ lượt này.
+- **Lượt 2:** chỉ khi câu có yêu cầu (mã hoặc văn bản) **và** lượt 1 không gắn cờ đáp án (`passed`). Prompt
+  (`TeacherRequestPrompt.secondPassPrompt`): đề, phương án/ý trong khối `CÂU_HỎI_CẦN_XÉT`, lời giải của lượt 1 trong khối
+  `LỜI_GIẢI` (cắt 3000 ký tự), khối yêu cầu như 4.3, dặn "KHÔNG giải lại, KHÔNG chọn đáp án". Không gửi đáp án của người soạn.
+  Schema chỉ có `request_check` (`TeacherRequestPrompt.SECOND_PASS_SCHEMA`).
+- **Lượt 1 có cờ:** không gọi lượt 2, `request_verdict = 'unchecked'`, lý do "Không kiểm yêu cầu: Solver gắn cờ đáp án ở lượt giải".
+- **Lượt 2 lỗi** (mạng, HTTP 5xx, hết hạn mức) **hoặc phản hồi hỏng** (thiếu/hỏng `request_check`, verdict lạ, kể cả
+  `unchecked` do model trả): kết luận lượt 1 giữ nguyên, `request_verdict = 'unchecked'`, lý do "Không kiểm yêu cầu: lượt kiểm yêu
+  cầu lỗi (…)", cảnh báo ở log. Không ném lỗi.
+- `unchecked` (V29) không có cờ thông tin; thống kê 10 tách thành cột `chua_kiem`, không tính vào tỉ lệ.
+- Chi phí: +1 lượt Gemini cho mỗi câu có yêu cầu mà lượt 1 đạt; token và độ trễ của dòng `answer_check` là tổng hai lượt; bộ
+  đếm hạn mức ngày (`countSolverCallsSince`) tính thêm 1 cho dòng có lượt 2.
+- v5 giữ để đo lại (`app.llm.solver-prompt-version`). PA1 (phương án nhiễu) sẽ dùng `solver-v7`: lượt 2 thêm `error_checks`.
+
 ### 4.4 `infoReasons`: cờ thông tin
 
 - `ExamItemDto` thêm `List<String> infoReasons`, **luôn có** (`[]` khi không có), như `reviewReasons`. Vì vậy

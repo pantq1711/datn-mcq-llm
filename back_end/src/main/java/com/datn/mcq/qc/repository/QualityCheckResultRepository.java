@@ -25,10 +25,14 @@ public interface QualityCheckResultRepository extends JpaRepository<QualityCheck
 
     /**
      * W2-4b (C): đếm số lượt gọi Solver thành công (V21: {@code check_type = 'answer_check'} và có {@code token_count};
-     * dòng chép từ bản trước có {@code token_count IS NULL} nên không tính) từ mốc {@code since}.
+     * dòng chép từ bản trước có {@code token_count IS NULL} nên không tính) từ mốc {@code since}. Hotfix 14/11 (Solver hai
+     * lượt): dòng có lượt kiểm yêu cầu (kết luận met/partial/not_met, hoặc unchecked vì lượt đó lỗi) tính thêm 1 lượt. Dòng của
+     * Solver v5 (một lượt) ghi trước khi đổi phiên bản bị tính dư, chỉ ảnh hưởng ngày đổi phiên bản.
      */
     @Query(value = """
-            SELECT count(*) FROM quality_check_result
+            SELECT count(*) + count(*) FILTER (WHERE request_verdict IN ('met', 'partial', 'not_met')
+                OR (request_verdict = 'unchecked' AND request_reason LIKE 'Không kiểm yêu cầu: lượt kiểm yêu cầu lỗi%'))
+            FROM quality_check_result
             WHERE check_type = 'answer_check' AND token_count IS NOT NULL AND checked_at >= :since
             """, nativeQuery = true)
     int countSolverCallsSince(@Param("since") LocalDateTime since);
