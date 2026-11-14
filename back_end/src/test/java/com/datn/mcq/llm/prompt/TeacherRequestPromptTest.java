@@ -145,7 +145,7 @@ class TeacherRequestPromptTest {
             for (String text : java.util.Arrays.asList(null, "", "   ")) {
                 CaptureLlm llm = new CaptureLlm(MCQ_BODY + "}");
                 AnswerSolverChecker checker = new AnswerSolverChecker(llm, builder, "m");
-                assertEquals(PromptBuilder.SOLVER_PROMPT_VERSION_V5, checker.promptVersion(), "v5 là mặc định");
+                assertEquals(PromptBuilder.SOLVER_PROMPT_VERSION_V6, checker.promptVersion(), "v6 là mặc định (14/11)");
                 checker.check("Câu $x$?", "$1$", "$2$", "$3$", "$4$", Option.B, codes, text);
                 assertEquals(builder.buildSolverPrompt(PromptBuilder.SOLVER_PROMPT_VERSION_V4, "Câu $x$?", "$1$", "$2$",
                         "$3$", "$4$"), llm.prompts.get(0), "mcq: y như v4");
@@ -171,7 +171,9 @@ class TeacherRequestPromptTest {
     @Test
     void cauCoYeuCauKhoiDungSauDeVaTruocDongDinhDang() {
         CaptureLlm llm = new CaptureLlm(MCQ_BODY + ", \"request_check\": {\"verdict\": \"partial\", \"reason\": \"thiếu bối cảnh\"}}");
-        AnswerSolverChecker checker = new AnswerSolverChecker(llm, new PromptBuilder(), "m");
+        // v5 (một lượt) giữ để đo lại; v6 hai lượt kiểm ở SolverTwoPassTest.
+        AnswerSolverChecker checker = new AnswerSolverChecker(llm, new PromptBuilder(), "m",
+                PromptBuilder.SOLVER_PROMPT_VERSION_V5);
         AnswerSolverChecker.SolverCheckOutcome out = checker.check("Câu $x$?", "$1$", "$2$", "$3$", "$4$", Option.B,
                 List.of("real_context", "multi_step"), "Dùng tiền Việt Nam");
         assertEquals(1, llm.prompts.size(), "một lượt gọi");
@@ -245,7 +247,8 @@ class TeacherRequestPromptTest {
     @Test
     void requestCheckThieuHoacHongThiKhongKetLuanKhongNemLoi() {
         CaptureLlm llm = new CaptureLlm(MCQ_BODY + "}");
-        AnswerSolverChecker checker = new AnswerSolverChecker(llm, new PromptBuilder(), "m");
+        AnswerSolverChecker checker = new AnswerSolverChecker(llm, new PromptBuilder(), "m",
+                PromptBuilder.SOLVER_PROMPT_VERSION_V5);
         List<String> codes = List.of("real_context");
         for (String tail : List.of("}", ", \"request_check\": \"met\"}", ", \"request_check\": {\"verdict\": \"good\"}}",
                 ", \"request_check\": null}", ", \"request_check\": {\"reason\": \"x\"}}")) {

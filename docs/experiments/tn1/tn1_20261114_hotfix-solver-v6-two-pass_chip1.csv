@@ -1,0 +1,30 @@
+﻿question_id,prompt_version,question_type,question_answer,solver_answer,verdict,multiple_correct_flag,solver_correct_count,options_verdict,token_count,latency_ms,solver_model,error
+7,solver-v6-two-pass,mcq,A,multiple,inconsistent,1,2,A:1|B:1|C:0|D:0,1567,12085,gemini-3.5-flash-lite,
+8,solver-v6-two-pass,mcq,A,multiple,inconsistent,1,3,A:1|B:1|C:1|D:0,1797,9660,gemini-3.5-flash-lite,
+37,solver-v6-two-pass,mcq,B,,error,,,,,,,UpstreamServiceException: Gemini tạm thời quá tải hoặc bảo trì (HTTP 503). Hãy thử lại sau ít phút.
+39,solver-v6-two-pass,mcq,B,multiple,inconsistent,1,4,A:1|B:1|C:1|D:1,1639,7275,gemini-3.5-flash-lite,
+52,solver-v6-two-pass,mcq,A,multiple,inconsistent,1,2,A:1|B:1|C:0|D:0,1722,10028,gemini-3.5-flash-lite,
+53,solver-v6-two-pass,mcq,A,,error,,,,,,,UpstreamServiceException: Gemini tạm thời quá tải hoặc bảo trì (HTTP 503). Hãy thử lại sau ít phút.
+15,solver-v6-two-pass,mcq,B,,error,,,,,,,UpstreamServiceException: Gemini tạm thời quá tải hoặc bảo trì (HTTP 503). Hãy thử lại sau ít phút.
+61,solver-v6-two-pass,mcq,B,B,consistent,0,1,A:0|B:1|C:0|D:0,2247,3256,gemini-3.5-flash-lite,
+25,solver-v6-two-pass,mcq,B,B,consistent,0,1,A:0|B:1|C:0|D:0,2397,5868,gemini-3.5-flash-lite,
+24,solver-v6-two-pass,mcq,C,C,consistent,0,1,A:0|B:0|C:1|D:0,2511,3151,gemini-3.5-flash-lite,
+4,solver-v6-two-pass,mcq,C,C,consistent,0,1,A:0|B:0|C:1|D:0,2415,2716,gemini-3.5-flash-lite,
+6,solver-v6-two-pass,mcq,B,B,consistent,0,1,A:0|B:1|C:0|D:0,2499,2635,gemini-3.5-flash-lite,
+5,solver-v6-two-pass,mcq,C,C,consistent,0,1,A:0|B:0|C:1|D:0,2351,2530,gemini-3.5-flash-lite,
+32,solver-v6-two-pass,mcq,B,B,consistent,0,1,A:0|B:1|C:0|D:0,2319,2506,gemini-3.5-flash-lite,
+27,solver-v6-two-pass,mcq,C,C,consistent,0,1,A:0|B:0|C:1|D:0,2629,2993,gemini-3.5-flash-lite,
+28,solver-v6-two-pass,mcq,C,C,consistent,0,1,A:0|B:0|C:1|D:0,2364,2383,gemini-3.5-flash-lite,
+30,solver-v6-two-pass,mcq,B,B,consistent,0,1,A:0|B:1|C:0|D:0,2507,3354,gemini-3.5-flash-lite,
+31,solver-v6-two-pass,mcq,A,A,consistent,0,1,A:1|B:0|C:0|D:0,2392,3006,gemini-3.5-flash-lite,
+33,solver-v6-two-pass,mcq,D,D,consistent,0,1,A:0|B:0|C:0|D:1,2566,3147,gemini-3.5-flash-lite,
+35,solver-v6-two-pass,mcq,C,C,consistent,0,1,A:0|B:0|C:1|D:0,2510,3265,gemini-3.5-flash-lite,
+38,solver-v6-two-pass,mcq,B,B,consistent,0,1,A:0|B:1|C:0|D:0,2627,2921,gemini-3.5-flash-lite,
+41,solver-v6-two-pass,mcq,A,A,consistent,0,1,A:1|B:0|C:0|D:0,2507,2906,gemini-3.5-flash-lite,
+48,solver-v6-two-pass,mcq,B,B,consistent,0,1,A:0|B:1|C:0|D:0,2487,3086,gemini-3.5-flash-lite,
+50,solver-v6-two-pass,mcq,B,B,consistent,0,1,A:0|B:1|C:0|D:0,2427,3265,gemini-3.5-flash-lite,
+62,solver-v6-two-pass,mcq,C,,error,,,,,,,UpstreamServiceException: Gemini tạm thời quá tải hoặc bảo trì (HTTP 503). Hãy thử lại sau ít phút.
+29,solver-v6-two-pass,mcq,A,A,consistent,0,1,A:1|B:0|C:0|D:0,2407,3580,gemini-3.5-flash-lite,
+34,solver-v6-two-pass,mcq,B,B,consistent,0,1,A:0|B:1|C:0|D:0,2495,3094,gemini-3.5-flash-lite,
+49,solver-v6-two-pass,mcq,C,C,consistent,0,1,A:0|B:0|C:1|D:0,2400,2766,gemini-3.5-flash-lite,
+60,solver-v6-two-pass,mcq,A,A,consistent,0,1,A:1|B:0|C:0|D:0,2511,2856,gemini-3.5-flash-lite,

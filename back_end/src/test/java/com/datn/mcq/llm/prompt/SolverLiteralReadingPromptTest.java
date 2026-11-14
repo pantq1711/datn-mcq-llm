@@ -22,8 +22,8 @@ class SolverLiteralReadingPromptTest {
 
     @Test
     void v5MacDinhKhongYeuCauBangV4() {
-        // 12/11 (PR B): mặc định là v5; câu không có yêu cầu dùng đúng prompt v4.
-        assertEquals("solver-v5-request-check", PromptBuilder.SOLVER_PROMPT_VERSION);
+        // 12/11 (PR B): mặc định là v5; câu không có yêu cầu dùng đúng prompt v4. 14/11: mặc định v6, lượt 1 luôn là v4.
+        assertEquals("solver-v6-two-pass", PromptBuilder.SOLVER_PROMPT_VERSION);
         assertEquals(PromptBuilder.SOLVER_PROMPT_VERSION, AnswerSolverChecker.SOLVER_PROMPT_VERSION);
         assertEquals(v4Prompt(), builder.buildSolverPrompt("solver-v4-literal-reading",
                 "Phân tích $2x^3 - 6x^2$ thành nhân tử", "$2x(x^2 - 3x)$", "$2x^2(x - 3)$", "$x^2(2x - 6)$",
