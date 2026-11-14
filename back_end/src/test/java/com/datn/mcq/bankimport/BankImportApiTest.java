@@ -89,6 +89,10 @@ class BankImportApiTest {
     private LlmClient llmClient;
     @MockitoSpyBean
     private BankService bankService;
+    @MockitoSpyBean
+    private com.datn.mcq.questionimage.service.EmfConverter emfConverter;
+    @MockitoSpyBean
+    private com.datn.mcq.questionimage.service.ImageNormalizer imageNormalizer;
 
     /** Đoạn ASCII có trong nội dung câu 1 của FixtureDoc.full() (log console có thể làm hỏng chữ tiếng Việt). */
     private static final String CONTENT_ASCII = "\\frac{3}{4}";
@@ -180,13 +184,14 @@ class BankImportApiTest {
         assertEquals(8, p.path("gradeLevel").asInt());
         assertEquals(FixtureDoc.TOPIC, p.path("topic").asText());
         assertEquals(22, p.path("questionCount").asInt());
-        assertEquals(18, p.path("items").size());
-        assertEquals(3, p.path("skipped").path("has_image").asInt());
+        assertEquals(19, p.path("items").size());
+        assertEquals(2, p.path("skipped").path("has_image").asInt());
         assertEquals(1, p.path("skipped").path("formula_unsupported").asInt());
-        assertEquals(4, p.path("skippedItems").size());
+        // PR I3: câu chỉ có hình vẽ thật không còn bị bỏ (3 câu bỏ, 19 câu xem trước)
+        assertEquals(3, p.path("skippedItems").size());
         // NV-51 (16/11): câu 9 không ghi mức nhận mức mặc định, không còn bị chặn (trước đây >= 5)
         assertTrue(p.path("blockedCount").asInt() >= 4, p.toString());
-        assertEquals(18 - p.path("blockedCount").asInt(), p.path("importableCount").asInt());
+        assertEquals(19 - p.path("blockedCount").asInt(), p.path("importableCount").asInt());
         assertNotNull(p.path("expiresAt").asText(null));
         assertFalse(p.has("ownerId"), "không lộ chủ sở hữu");
         for (String bad : FixtureDoc.FORBIDDEN) {
@@ -575,5 +580,320 @@ class BankImportApiTest {
         assertFalse(output.getAll().contains(CONTENT_ASCII), "nội dung câu không vào log (so chuỗi ASCII)");
         assertFalse(output.getAll().contains("NGUYỄN VĂN GIẢ"));
         assertFalse(output.getAll().contains(FixtureDoc.FILE_NAME));
+    }
+
+    // ---------- tính năng câu có hình (PR I3) ----------
+
+    private static final byte[] VALID_PNG_1X1 = {
+            (byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 'I', 'H', 'D', 'R',
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, (byte) 0xC4, (byte) 0x89,
+            0x00, 0x00, 0x00, 0x0A, 'I', 'D', 'A', 'T',
+            0x78, (byte) 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01,
+            0x0D, 0x0A, 0x2D, (byte) 0xB4,
+            0x00, 0x00, 0x00, 0x00, 'I', 'E', 'N', 'D',
+            (byte) 0xAE, 0x42, 0x60, (byte) 0x82
+    };
+
+    @Test
+    void taiFileCoHinhThatTraVeImagesVaSignedUrl() throws Exception {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Cho hình vẽ bên: "));
+        d.p(d.drawing("png", VALID_PNG_1X1, 5.0, 4.0));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+        JsonNode p = previewOk(teacher, d.bytes());
+        assertEquals(1, p.path("items").size());
+        JsonNode item = p.path("items").get(0);
+        assertTrue(item.path("flags").toString().contains("has_figure"));
+        assertTrue(item.path("stem").asText().contains("⟦img:"));
+
+        JsonNode images = item.path("images");
+        assertEquals(1, images.size());
+        JsonNode img = images.get(0);
+        long imgId = img.path("id").asLong();
+        assertTrue(imgId > 0);
+        assertEquals("stem", img.path("role").asText());
+        assertEquals("image/png", img.path("mime").asText());
+        String url = img.path("url").asText();
+        assertTrue(url.startsWith("/api/question-images/" + imgId), "URL phải trỏ tới /api/question-images/{id}");
+        assertTrue(url.contains("exp=") && url.contains("sig=") && url.contains("u=" + teacher));
+
+        // Tải ảnh từ URL có chữ ký qua MockMvc mà không cần Bearer token
+        mockMvc.perform(get(url))
+                .andExpect(status().isOk());
+
+        verifyNoInteractions(llmClient);
+    }
+
+    @Test
+    void xacNhanLuuCauCoHinhGanGeneratedQuestionIdVaXoaAnhCauKhongChon() throws Exception {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Câu 1 có hình: "));
+        d.p(d.drawing("png", VALID_PNG_1X1, 5.0, 4.0));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Câu 2 có hình: "));
+        d.p(d.drawing("png", VALID_PNG_1X1, 3.0, 3.0));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("5")).p("B. 6").p("C. 7").p("D. 8");
+
+        JsonNode p = previewOk(teacher, d.bytes());
+        int batchId = p.path("id").asInt();
+        assertEquals(2, p.path("items").size());
+        assertEquals(2, rows("SELECT count(*) FROM question_image WHERE import_batch_id = ?", batchId));
+        assertEquals(2, rows("SELECT count(*) FROM question_image WHERE import_batch_id = ? AND generated_question_id IS NULL", batchId));
+
+        // Chỉ xác nhận câu 1 ("mcq-001")
+        confirm(teacher, batchId, List.of("mcq-001")).andExpect(status().isOk());
+
+        // Ảnh câu 1 được gán generated_question_id != null
+        assertEquals(1, rows("SELECT count(*) FROM question_image WHERE import_batch_id = ? AND item_key = 'mcq-001' AND generated_question_id IS NOT NULL", batchId));
+        // Ảnh câu 2 không được chọn bị xóa hoàn toàn khỏi DB
+        assertEquals(0, rows("SELECT count(*) FROM question_image WHERE import_batch_id = ? AND item_key = 'mcq-002'", batchId));
+        assertEquals(1, rows("SELECT count(*) FROM question_image WHERE import_batch_id = ?", batchId));
+
+        verifyNoInteractions(llmClient);
+    }
+
+    @Test
+    void purgeExpiredXoaAnhMoCoiCuaLoQuaHan() throws Exception {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Câu có hình hết hạn: "));
+        d.p(d.drawing("png", VALID_PNG_1X1, 4.0, 4.0));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+        JsonNode p = previewOk(teacher, d.bytes());
+        int batchId = p.path("id").asInt();
+        assertEquals(1, rows("SELECT count(*) FROM question_image WHERE import_batch_id = ?", batchId));
+
+        // Giả lập lô quá hạn
+        expire("id = ?", batchId);
+
+        // Chạy purgeExpired
+        service.purgeExpired();
+
+        // Lô chuyển sang status expired và ảnh mồ côi bị xóa
+        assertEquals("expired", jdbc.queryForObject("SELECT status FROM import_batch WHERE id = ?", String.class, batchId));
+        assertEquals(0, rows("SELECT count(*) FROM question_image WHERE import_batch_id = ?", batchId));
+
+        verifyNoInteractions(llmClient);
+    }
+
+    @Test
+    void anhDuoiEmfNhungNoiDungKhongPhaiEmfKhongDuocDuaChoConverter() throws Exception {
+        reset(emfConverter);
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Cho hình vẽ bên: "));
+        d.p(d.drawing("emf", "Not an EMF, chi la mot doan chu".getBytes(StandardCharsets.UTF_8), 5.0, 4.0));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+        JsonNode p = previewOk(teacher, d.bytes());
+
+        // File giả không bao giờ tới LibreOffice (nếu tới, soffice sẽ mở nó như tài liệu văn bản và xuất ra ảnh chữ).
+        org.mockito.Mockito.verify(emfConverter, org.mockito.Mockito.never()).convertBatch(any());
+        assertEquals(0, p.path("items").size());
+        assertEquals(1, p.path("skipped").path("image_convert_failed").asInt());
+        assertEquals(0, rows("SELECT count(*) FROM question_image"));
+    }
+
+    // ---------- giới hạn ảnh, EMF, ảnh lời giải, rollback (mục 3 của rà soát I3) ----------
+
+    private static byte[] fakeEmf() {
+        byte[] b = new byte[88];
+        b[0] = 1;
+        b[40] = 0x20;
+        b[41] = 0x45;
+        b[42] = 0x4D;
+        b[43] = 0x46;
+        return b;
+    }
+
+    /** Câu trắc nghiệm có {@code images} hình PNG nằm sau đề; đáp án A đánh dấu vàng. */
+    private static void mcqWithFigures(DocxBuilder d, int images) {
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Cho hình vẽ bên: "));
+        for (int i = 0; i < images; i++) {
+            d.p(d.drawing("png", VALID_PNG_1X1, 5.0, 4.0));
+        }
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+    }
+
+    @Test
+    void cauCoBayAnhBiBoImageLimit() throws Exception {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        mcqWithFigures(d, 7);
+
+        JsonNode p = previewOk(teacher, d.bytes());
+
+        assertEquals(0, p.path("items").size());
+        assertEquals(1, p.path("skipped").path("image_limit").asInt());
+        assertEquals(0, rows("SELECT count(*) FROM question_image"));
+    }
+
+    @Test
+    void quaMotTramAnhTrenLoThiBoCacCauCoAnhImageLimit() throws Exception {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        for (int q = 0; q < 17; q++) { // 17 câu x 6 ảnh = 102 ảnh > 100
+            mcqWithFigures(d, 6);
+        }
+
+        JsonNode p = previewOk(teacher, d.bytes());
+
+        assertEquals(0, p.path("items").size());
+        assertEquals(17, p.path("skipped").path("image_limit").asInt());
+        assertEquals(0, rows("SELECT count(*) FROM question_image"));
+    }
+
+    @Test
+    void quaHaiMuoiMbSauChuanHoaThiBoCacCauCoAnhImageLimit() throws Exception {
+        String sha = "a".repeat(64);
+        org.mockito.Mockito.doReturn(new com.datn.mcq.questionimage.service.NormalizedImage(
+                VALID_PNG_1X1, "image/png", "png", 1, 1, 11 * 1024 * 1024, sha))
+                .when(imageNormalizer).normalize(any());
+        try {
+            DocxBuilder d = new DocxBuilder();
+            d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+            mcqWithFigures(d, 1);
+            mcqWithFigures(d, 1); // 2 ảnh x 11 MB = 22 MB > 20 MB
+
+            JsonNode p = previewOk(teacher, d.bytes());
+
+            assertEquals(0, p.path("items").size());
+            assertEquals(2, p.path("skipped").path("image_limit").asInt());
+            assertEquals(0, rows("SELECT count(*) FROM question_image"));
+        } finally {
+            reset(imageNormalizer);
+        }
+    }
+
+    @Test
+    void emfChuyenDoiThatBaiThiBoCauImageConvertFailed() throws Exception {
+        reset(emfConverter);
+        org.mockito.Mockito.doAnswer(inv -> {
+            Map<String, byte[]> in = inv.getArgument(0);
+            Map<String, com.datn.mcq.questionimage.service.EmfConvertResult> out = new java.util.LinkedHashMap<>();
+            in.keySet().forEach(k -> out.put(k,
+                    com.datn.mcq.questionimage.service.EmfConvertResult.failure("CONVERTER_FAILED", "giả lập")));
+            return out;
+        }).when(emfConverter).convertBatch(any());
+        try {
+            DocxBuilder d = new DocxBuilder();
+            d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+            d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Cho hình vẽ bên: "));
+            d.p(d.drawing("emf", fakeEmf(), 5.0, 4.0));
+            d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+            JsonNode p = previewOk(teacher, d.bytes());
+
+            org.mockito.Mockito.verify(emfConverter).convertBatch(any());
+            assertEquals(0, p.path("items").size());
+            assertEquals(1, p.path("skipped").path("image_convert_failed").asInt());
+            assertEquals(0, rows("SELECT count(*) FROM question_image"));
+        } finally {
+            reset(emfConverter);
+        }
+    }
+
+    @Test
+    void emfChuyenDoiThanhCongThiGiuCauVaLuuAnhPng() throws Exception {
+        reset(emfConverter);
+        org.mockito.Mockito.doAnswer(inv -> {
+            Map<String, byte[]> in = inv.getArgument(0);
+            Map<String, com.datn.mcq.questionimage.service.EmfConvertResult> out = new java.util.LinkedHashMap<>();
+            in.keySet().forEach(k -> out.put(k, com.datn.mcq.questionimage.service.EmfConvertResult.ok(VALID_PNG_1X1)));
+            return out;
+        }).when(emfConverter).convertBatch(any());
+        try {
+            DocxBuilder d = new DocxBuilder();
+            d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+            d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Cho hình vẽ bên: "));
+            d.p(d.drawing("emf", fakeEmf(), 5.0, 4.0));
+            d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+            JsonNode p = previewOk(teacher, d.bytes());
+
+            assertEquals(1, p.path("items").size());
+            JsonNode item = p.path("items").get(0);
+            assertTrue(item.path("flags").toString().contains("has_figure"));
+            assertEquals(1, item.path("images").size());
+            assertEquals(1, rows("SELECT count(*) FROM question_image WHERE source_format = 'png' AND mime = 'image/png'"));
+        } finally {
+            reset(emfConverter);
+        }
+    }
+
+    @Test
+    void anhTrongLoiGiaiDuocLuuVoiRoleSolution() throws Exception {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Một câu không có hình trong đề: "));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+        d.p(DocxBuilder.t("Lời giải: "), d.drawing("png", VALID_PNG_1X1, 5.0, 4.0));
+
+        JsonNode p = previewOk(teacher, d.bytes());
+
+        assertEquals(1, p.path("items").size());
+        JsonNode item = p.path("items").get(0);
+        assertTrue(item.path("flags").toString().contains("has_figure"));
+        assertEquals(1, item.path("images").size());
+        assertEquals("solution", item.path("images").get(0).path("role").asText());
+        assertTrue(item.path("explanation").asText().contains("⟦img:"), "lời giải phải mang token ảnh thật");
+        assertEquals(1, rows("SELECT count(*) FROM question_image WHERE role = 'solution'"));
+    }
+
+    @Test
+    void loiKhiXacNhanThiKhongXoaVaKhongGanAnhRoiThanhCongLanSau() throws Exception {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        mcqWithFigures(d, 1);
+        mcqWithFigures(d, 1);
+        JsonNode p = previewOk(teacher, d.bytes());
+        int id = p.path("id").asInt();
+        List<String> all = keys(p, false);
+        assertEquals(2, all.size());
+        List<String> chosen = List.of(all.get(0));
+
+        doThrow(new RuntimeException("lỗi giả khi ghi ngân hàng"))
+                .when(bankService).createOrUpdateFromReview(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+        confirm(teacher, id, chosen).andExpect(status().is5xxServerError());
+
+        // Rollback toàn bộ: không ảnh nào bị xóa (câu không chọn vẫn còn) và không ảnh nào được gán câu hỏi.
+        assertEquals(2, rows("SELECT count(*) FROM question_image WHERE import_batch_id = ?", id));
+        assertEquals(0, rows("SELECT count(*) FROM question_image WHERE generated_question_id IS NOT NULL"));
+        assertEquals(0, rows("SELECT count(*) FROM generated_question"));
+
+        reset(bankService);
+        confirm(teacher, id, chosen).andExpect(status().isOk());
+        assertEquals(1, rows("SELECT count(*) FROM question_image WHERE import_batch_id = ?", id));
+        assertEquals(1, rows("SELECT count(*) FROM question_image WHERE generated_question_id IS NOT NULL"));
+    }
+
+    @Test
+    void thieuImageNormalizerThiKhongLuuAnhChuaKiemTra() throws Exception {
+        Object target = org.springframework.test.util.AopTestUtils.getUltimateTargetObject(service);
+        Object original = org.springframework.test.util.ReflectionTestUtils.getField(target, "imageNormalizer");
+        org.springframework.test.util.ReflectionTestUtils.setField(target, "imageNormalizer", null);
+        try {
+            DocxBuilder d = new DocxBuilder();
+            d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+            d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Cho hình vẽ bên: "));
+            d.p(d.drawing("png", VALID_PNG_1X1, 5.0, 4.0));
+            d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+            JsonNode p = previewOk(teacher, d.bytes());
+
+            // Không có bộ chuẩn hóa thì không được lưu ảnh thô với kích thước giả: câu bị bỏ, không còn dòng ảnh nào.
+            assertEquals(0, p.path("items").size());
+            assertEquals(1, p.path("skipped").path("image_convert_failed").asInt());
+            assertEquals(0, rows("SELECT count(*) FROM question_image"));
+        } finally {
+            org.springframework.test.util.ReflectionTestUtils.setField(target, "imageNormalizer", original);
+        }
     }
 }

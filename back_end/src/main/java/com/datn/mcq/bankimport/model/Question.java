@@ -84,10 +84,11 @@ public class Question {
     public static final class ImageRef {
         public String id;
         public String kind;           // figure | formula_image | ole_drawing
-        public String role;           // stem | option_A | statement_a | answer | solution
+        public String role;           // stem | option_a..d | statement_a..d | answer | solution
         public String sourceExt;
         public Double widthCm;
         public Double heightCm;
         public String sourceRef;
+        public byte[] rawData;
     }
 }

@@ -70,6 +70,7 @@ class DedupCheckerTest {
         assertEquals(DedupStatus.NO_DUPLICATE, outcome.status());
     }
 
+
     @Test
     void negatedQuestionWithSameOptionsIsNotDuplicate() {
         DedupCandidate subject = q(10,
@@ -80,6 +81,25 @@ class DedupCheckerTest {
                 "$2x - 3 > 0$", "$x^2 + 1 \\ge 0$", "$0x + 5 < 0$", "$\\frac{1}{x} - 2 \\le 0$");
         DedupOutcome outcome = DedupChecker.check(subject, List.of(existing), TAU);
         assertEquals(DedupStatus.NO_DUPLICATE, outcome.status());
+    }
+
+
+    @Test
+    void cungVanBanKhacHinhKhongBaoGioTrung() {
+        DedupCandidate subject = new DedupCandidate(10, "Cho hình vẽ bên. Tính BC.", "$3$", "$4$", "$5$", "$6$", "sha256_hinh_A");
+        DedupCandidate existing = new DedupCandidate(4, "Cho hình vẽ bên. Tính BC.", "$3$", "$4$", "$5$", "$6$", "sha256_hinh_B");
+        DedupOutcome outcome = DedupChecker.check(subject, List.of(existing), TAU);
+        assertEquals(DedupStatus.NO_DUPLICATE, outcome.status(), "Khác imageKey thì không bao giờ trùng");
+        assertNull(outcome.comparedToQuestionId());
+    }
+
+    @Test
+    void cungVanBanCungHinhTokenKhacNhauLaTrungLieu() {
+        DedupCandidate subject = new DedupCandidate(10, "Cho hình vẽ bên.\n⟦img:812⟧ Tính BC.", "$3$", "$4$", "$5$", "$6$", "sha256_hinh_A");
+        DedupCandidate existing = new DedupCandidate(4, "Cho hình vẽ bên.\n⟦img1⟧ Tính BC.", "$3$", "$4$", "$5$", "$6$", "sha256_hinh_A");
+        DedupOutcome outcome = DedupChecker.check(subject, List.of(existing), TAU);
+        assertEquals(DedupStatus.DUPLICATE, outcome.status(), "Cùng imageKey và sau khi strip token giống nhau thì phải trùng");
+        assertEquals(4, outcome.comparedToQuestionId());
     }
 
     @Test

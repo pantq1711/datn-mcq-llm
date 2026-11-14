@@ -63,7 +63,7 @@ com.datn.mcq
 exam        ──► matrix, generation, qc, review, bank, catalog, user, material, mathtype   (V7: tạo đề theo ma trận; W2-3: material; 30/10: mathtype)
 matrix      ──► catalog
 material    ──► (chỉ common; passage/PassageSelector là hàm thuần)   (W2-3 bước 4: exam ──► material qua MaterialService; material khai báo MaterialUsageLookup, exam cài đặt)
-bankimport  ──► bank, catalog, generation, review, material.extract (chỉ DocxInputGuard), mtef, qc (DedupChecker/DedupCandidate thuần, không gọi mạng)   (V26, quyết định 3/11; không bao giờ ──► llm)
+bankimport  ──► bank, catalog, generation, review, material.extract (chỉ DocxInputGuard), mtef, qc (DedupChecker/DedupCandidate thuần, không gọi mạng), questionimage   (V26, quyết định 3/11; 11/11: questionimage; không bao giờ ──► llm)
 review      ──► generation, bank, catalog, experiment, user   (25/10: chỉ còn AssistedKeepService)
 generation  ──► qc, llm
 experiment  ──► generation, catalog

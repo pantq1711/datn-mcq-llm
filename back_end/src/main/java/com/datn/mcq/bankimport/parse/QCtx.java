@@ -25,11 +25,17 @@ final class QCtx {
 
     private final Question q;
     private final FormulaService formulas;
+    private final Map<String, byte[]> media;
     private final Map<Obj, String> tokens = new IdentityHashMap<>();
 
     QCtx(Question q, FormulaService formulas) {
+        this(q, formulas, Map.of());
+    }
+
+    QCtx(Question q, FormulaService formulas, Map<String, byte[]> media) {
         this.q = q;
         this.formulas = formulas;
+        this.media = media != null ? media : Map.of();
     }
 
     String render(RichText rt, String role) {
@@ -70,7 +76,13 @@ final class QCtx {
                     q.addFlag("plain_math_vertalign");
                 }
             } else {
-                sb.append(ch);
+                if (ch == '⟦') {
+                    sb.append('[');
+                } else if (ch == '⟧') {
+                    sb.append(']');
+                } else {
+                    sb.append(ch);
+                }
                 i++;
             }
         }
@@ -155,17 +167,23 @@ final class QCtx {
         int n = q.images.size() + 1;
         im.id = "img" + n;
         im.kind = classify(o);
-        im.role = role;
+        String normalizedRole = role != null ? role.toLowerCase(Locale.ROOT) : "stem";
+        im.role = normalizedRole;
         im.sourceExt = o.ext();
         im.widthCm = round(o.widthCm());
         im.heightCm = round(o.heightCm());
         im.sourceRef = o.ref();
+        im.rawData = o.ref() != null ? media.get(o.ref()) : null;
         q.images.add(im);
         q.hasImage = true;
+        if ("answer".equals(normalizedRole)) {
+            im.kind = "formula_image";
+            q.addFlag("image_in_answer");
+        }
         if (!im.kind.equals("figure")) {
             q.addFlag(im.kind);
         }
-        return "⟦" + im.id + "⟧";
+        return "\n⟦" + im.id + "⟧\n";
     }
 
     static String classify(Obj o) {

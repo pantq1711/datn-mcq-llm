@@ -444,7 +444,7 @@ public final class DocParser {
     /** moveOut: hình nổi bỏ khỏi câu này; moveIn: hình nổi của câu trước được gán làm hình của đề câu này. */
     private Question mcq(List<Block> qb, int ordinal, List<Obj> moveOut, List<Obj> moveIn) {
         Question q = newQuestion("mcq", "I", ordinal);
-        QCtx c = new QCtx(q, formulas);
+        QCtx c = new QCtx(q, formulas, pkg.media());
         moveOut.forEach(c::skip);
         List<Tbl> tables = new ArrayList<>();
         List<FP> fps = flatten(qb, tables);
@@ -514,7 +514,7 @@ public final class DocParser {
                 }
                 spanEnd[k] = Math.min(next, paraEnd);
                 String key = String.valueOf((char) ('A' + k));
-                q.options.add(new Option(key, c.render(w.rt().slice(lab[k][1], spanEnd[k]), "option_" + key)));
+                q.options.add(new Option(key, c.render(w.rt().slice(lab[k][1], spanEnd[k]), "option_" + key.toLowerCase(Locale.ROOT))));
                 if (w.rt().hasYellow(lab[k][0], spanEnd[k])) {
                     hit.add(key);
                 }
@@ -652,7 +652,7 @@ public final class DocParser {
 
     private Question tf(Group g, int ordinal) {
         Question q = newQuestion("tf", "II", ordinal);
-        QCtx c = new QCtx(q, formulas);
+        QCtx c = new QCtx(q, formulas, pkg.media());
         List<Para> stem = new ArrayList<>(g.stem.stream().filter(p -> !p.text().isBlank() || !p.text().objs.isEmpty()).toList());
         Head head = stem.isEmpty() ? null : head(stem.get(0).text());
         setLevel(q, head);
@@ -700,7 +700,7 @@ public final class DocParser {
             Matcher lm = STATEMENT_LABEL.matcher(rt.s);
             int omit = lm.find() ? lm.end() : 0;
             String key = String.valueOf((char) ('a' + k));
-            Statement st = new Statement(key, c.render(rt, "statement_" + key, 0, omit).replace("\n", " "));
+            Statement st = new Statement(key, c.render(rt, "statement_" + key.toLowerCase(Locale.ROOT), 0, omit).replace("\n", " "));
             q.statements.add(st);
             boolean y = rt.hasYellow(0, rt.length());
             yellow.add(y);
@@ -828,7 +828,7 @@ public final class DocParser {
 
     private Question sa(List<Block> qb, int ordinal, List<Block> context) {
         Question q = newQuestion("sa", "III", ordinal);
-        QCtx c = new QCtx(q, formulas);
+        QCtx c = new QCtx(q, formulas, pkg.media());
         List<Tbl> tables = new ArrayList<>();
         List<FP> fps = flatten(qb, tables);
         Head head = head(fps.get(0).para().text());

@@ -59,7 +59,9 @@ public final class DedupChecker {
         if (candidates != null) {
             for (DedupCandidate c : candidates) {
                 // V4: chỉ so với câu cùng dạng (quyết định 11 ngày 22/10).
+                // H7: chỉ so các câu CÙNG imageKey (ảnh stem/options/statements). Khác hình không bao giờ trùng.
                 if (c != null && c.questionType() == subject.questionType() && c.hasContent()
+                        && Objects.equals(c.imageKey(), subject.imageKey())
                         && !Objects.equals(c.questionId(), subject.questionId())) {
                     ordered.add(c);
                 }
@@ -244,40 +246,49 @@ public final class DedupChecker {
         }
     }
 
+    private static String stripImg(String text) {
+        if (text == null) {
+            return null;
+        }
+        return text.replaceAll("⟦img(?::?\\d+)?⟧", "").trim();
+    }
+
     /**
      * Đề dẫn dùng để so: câu tf bỏ câu chỉ dẫn chung (quyết định 4 ngày 22/10, {@link
-     * McqTextNormalizer#stripTfInstruction}); mcq/sa giữ nguyên thân câu.
+     * McqTextNormalizer#stripTfInstruction}); mcq/sa giữ nguyên thân câu (đã bỏ token ảnh).
      */
     static String stemOf(DedupCandidate c) {
+        String text = stripImg(c.questionText());
         return c.questionType() == QuestionType.TF
-                ? McqTextNormalizer.stripTfInstruction(c.questionText())
-                : c.questionText();
+                ? McqTextNormalizer.stripTfInstruction(text)
+                : text;
     }
 
     private static String canonical(DedupCandidate c) {
         if (c.questionType() == QuestionType.SA) {
-            return McqTextNormalizer.normalize(c.questionText()) + SA_ANSWER_SEPARATOR + answerKey(c.saAnswer());
+            return McqTextNormalizer.normalize(stripImg(c.questionText())) + SA_ANSWER_SEPARATOR + answerKey(c.saAnswer());
         }
         if (c.questionType() == QuestionType.TF) {
             // Đề dẫn + 4 ý đã chuẩn hóa và sắp xếp: đảo thứ tự ý vẫn trùng. Nhãn Đúng/Sai không tham gia.
             List<String> statements = new ArrayList<>();
             for (String s : c.statements()) {
-                statements.add(McqTextNormalizer.normalize(s));
+                statements.add(McqTextNormalizer.normalize(stripImg(s)));
             }
             statements.sort(null);
             return McqTextNormalizer.normalize(stemOf(c)) + SA_ANSWER_SEPARATOR + String.join(" | ", statements);
         }
-        return McqTextNormalizer.canonicalText(c.questionText(), c.optionA(), c.optionB(), c.optionC(), c.optionD());
+        return McqTextNormalizer.canonicalText(stripImg(c.questionText()), stripImg(c.optionA()),
+                stripImg(c.optionB()), stripImg(c.optionC()), stripImg(c.optionD()));
     }
 
     /** Chốt chặn số liệu: mcq/sa xét thân câu; tf gộp số liệu và công thức của đề dẫn và 4 ý (đã sắp xếp). */
     private static List<String> signature(DedupCandidate c) {
         if (c.questionType() != QuestionType.TF) {
-            return McqTextNormalizer.stemSignature(c.questionText());
+            return McqTextNormalizer.stemSignature(stripImg(c.questionText()));
         }
         List<String> all = new ArrayList<>(McqTextNormalizer.stemSignature(stemOf(c)));
         for (String s : c.statements()) {
-            all.addAll(McqTextNormalizer.stemSignature(s));
+            all.addAll(McqTextNormalizer.stemSignature(stripImg(s)));
         }
         all.sort(null);
         return all;
@@ -294,7 +305,7 @@ public final class DedupChecker {
         }
         List<Boolean> perStatement = new ArrayList<>();
         for (String s : c.statements()) {
-            perStatement.add(McqTextNormalizer.hasNegation(s));
+            perStatement.add(McqTextNormalizer.hasNegation(stripImg(s)));
         }
         perStatement.sort(null);
         return stem + ":" + perStatement;

@@ -283,6 +283,8 @@ Xác nhận: không chạy lệnh thuộc M-27 / không gọi API tính phí / k
   thêm Q-4b, F-6, F-13, F-14, F-20; gỡ entity `LabelAssignment` (bảng `label_assignment` giữ nguyên).
 - 2026-11-03: thêm "Quyết định ngày 3/11/2026 – nhập ngân hàng câu từ Word"; M-9 thêm đường thứ hai (xác nhận câu nhập),
   M-10 thêm ngoại lệ câu nhập ở `in_bank`. Không đổi số phiên bản tài liệu.
+- 2026-11-15: quyết định 3/11 mục 7 thêm ngoại lệ nhập câu có hình vẽ thật; thêm mục 9 (phụ thuộc `questionimage`). Không
+  đổi số phiên bản tài liệu.
 - v3 (2026-11-10): quyết định 22/10 mục 4 thêm một dòng: câu có cờ "cần xem kỹ" khi Giữ vẫn được nhưng chỉ vào ngân hàng
   riêng của người Giữ (`visible_to_user_id`); câu không cờ giữ nguyên (dùng chung, trừ đề có tài liệu).
 - 2026-11-16: thêm "Quyết định ngày 16/11/2026 – logic nghiệp vụ sau rà soát 05"; Q-4c chốt một phần (gỡ khỏi ngân hàng).
@@ -405,9 +407,14 @@ Chủ dự án chốt sau khảo sát thiết kế (V26, module `com.datn.mcq.ba
 5. **Bộ đề thương mại** chỉ dùng làm dữ liệu kiểm thử thủ công; không đưa vào fixture, log, seed. Fixture tự dựng bằng
    `DocxBuilder`; đối tượng MathType mẫu của test lấy từ file tự soạn `spikes/mathtype-ole/KIEM_TRA_mo_rong.docx`.
 6. **Câu không lời giải:** cho nhập, cờ thông tin `no_solution`, `explanation` NULL; xuất Word: câu không có lời giải vẫn có dòng nhãn (Câu k. Chọn X. / Đáp án: …) trong phần lời giải chi tiết, không có đoạn lời giải.
-7. **Phạm vi bản đầu:** chỉ nhập câu không cần ảnh (câu có ảnh, công thức chưa chuyển được, bảng dữ liệu bị bỏ và đếm theo
-   lý do). Không có sửa câu trong bản xem trước; câu có cờ chặn không chọn được khi xác nhận (422 `IMPORT_ITEM_BLOCKED`).
+7. **Phạm vi bản đầu:** công thức chưa chuyển được và bảng dữ liệu bị bỏ và đếm theo lý do. Câu có ảnh: **ngoại lệ ngày
+   11/11/2026 (thiết kế PR #61, cài đặt I1-I3 ngày 15/11)**: câu chỉ có hình vẽ thật (`figure`) được nhập, hình lưu ở
+   `question_image` (cờ thông tin `has_figure`); vẫn bỏ câu có ảnh công thức, đối tượng vẽ OLE, ảnh trong "Đáp số" của câu sa
+   (`has_image`), và câu vượt giới hạn hình hoặc hình không chuyển được (`image_limit`, `image_convert_failed`). Không có sửa câu trong bản xem trước; câu có cờ chặn không chọn được khi xác nhận (422 `IMPORT_ITEM_BLOCKED`).
 8. **Duyệt bổ sung sau review (3/11):** `bankimport` được phụ thuộc thêm `qc` (chỉ `DedupChecker`/`DedupCandidate`, hàm thuần,
    không gọi mạng). Duyệt các phần thêm ngoài yêu cầu ban đầu: tham số tùy chọn `gradeLevel`/`topic` khi tải lên; lý do bỏ câu
    `has_table`; cờ chặn `leak_suspect` và `structure_empty_field`; nhận diện ảnh rộng hơn bản tool (ảnh trong
    `mc:AlternateContent`, hình vẽ không có ảnh nhúng, đối tượng OLE không phải công thức).
+9. **Phụ thuộc thêm (11/11):** `bankimport` được phụ thuộc thêm module lá `questionimage` (lưu hình, bộ ký URL, chuẩn hóa
+   ảnh, đổi EMF). `questionimage` chỉ phụ thuộc `common`, `config`, `user`. Việc nhập hình vẫn không gọi `LlmClient` (khóa
+   bằng `BankImportApiTest`).

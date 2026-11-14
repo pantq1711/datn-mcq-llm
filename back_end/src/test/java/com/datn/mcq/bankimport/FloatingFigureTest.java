@@ -115,7 +115,7 @@ class FloatingFigureTest {
 
     @Test
     void doiChungHinhCungDongKhongChuyen() {
-        assertEquals(List.of("option_B"), roles(q("mcq", 5)));
+        assertEquals(List.of("option_b"), roles(q("mcq", 5)));
         Question y = q("mcq", 6);
         assertTrue(y.images.isEmpty(), y.images.toString());
         assertFalse(y.flags.contains("figure_from_previous_question"), y.flags.toString());

@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
@@ -47,11 +48,25 @@ public interface QuestionImageRepository extends JpaRepository<QuestionImage, Lo
            "FROM QuestionImage q WHERE q.generatedQuestionId IN :questionIds ORDER BY q.generatedQuestionId ASC, q.ordinal ASC")
     List<MetadataProjection> findMetadataByGeneratedQuestionIdIn(@Param("questionIds") Collection<Integer> questionIds);
 
+    @Transactional
     @Modifying
     @Query("DELETE FROM QuestionImage q WHERE q.importBatchId = :batchId AND q.itemKey NOT IN :keptKeys")
     int deleteUnselectedImages(@Param("batchId") Integer batchId, @Param("keptKeys") Collection<String> keptKeys);
 
+    @Transactional
     @Modifying
     @Query("DELETE FROM QuestionImage q WHERE q.importBatchId IN :batchIds AND q.generatedQuestionId IS NULL")
     int deleteOrphanImagesByBatchIds(@Param("batchIds") Collection<Integer> batchIds);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE QuestionImage q SET q.generatedQuestionId = :gqId WHERE q.importBatchId = :batchId AND q.itemKey = :itemKey")
+    int assignGeneratedQuestionId(@Param("batchId") Integer batchId, @Param("itemKey") String itemKey, @Param("gqId") Integer gqId);
+
+    @Transactional
+    @Modifying
+    @Query("DELETE FROM QuestionImage q WHERE q.importBatchId IN (SELECT b.id FROM ImportBatch b WHERE b.status = 'expired') AND q.generatedQuestionId IS NULL")
+    int deleteExpiredOrphanImages();
+
+    List<QuestionImage> findByImportBatchId(Integer importBatchId);
 }

@@ -91,9 +91,10 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | POST | `/api/materials` | Tải tài liệu bài học (.docx, .pdf, .txt; multipart, tối đa 10 MB). Chỉ lưu văn bản đã trích (mục 9) |
 | GET | `/api/materials` | Tài liệu của tôi, mới nhất trước, có phân trang, không kèm văn bản (mục 9) |
 | GET, DELETE | `/api/materials/{id}` | Chi tiết kèm 500 ký tự đầu của văn bản / xóa tài liệu của tôi (mục 9) |
-| POST | `/api/bank-imports` | Nhập ngân hàng câu từ Word: tải bộ câu hỏi .docx → bản xem trước kèm cờ (mục 10). Không gọi AI |
+| POST | `/api/bank-imports` | Nhập ngân hàng câu từ Word: tải bộ câu hỏi .docx → bản xem trước kèm cờ (mục 10). Không gọi AI. Câu có hình vẽ được nhập kèm hình (mục 10.3) |
 | GET, DELETE | `/api/bank-imports/{id}` | Xem lại / hủy một lần nhập của tôi (mục 10) |
 | POST | `/api/bank-imports/{id}/confirm` | Đưa các câu chọn vào ngân hàng RIÊNG TƯ của tôi (mục 10) |
+| GET | `/api/question-images/{id}?exp=&u=&sig=` | Tải một hình của câu nhập bằng URL có chữ ký, không cần JWT (mục 10.3) |
 | GET | `/api/exams/{id}/progress` | Tiến độ theo ô |
 | GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
@@ -1569,16 +1570,18 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
 - Khối, chủ đề lấy từ tên file mẫu "KHỐI 8 - CHƯƠNG 1 - BÀI 2 - Tên bài - GV ..." (phần "GV ..." bị bỏ); `gradeLevel`, `topic`
   ghi đè. Môn là Toán.
 - 201 → lô: `{id, displayName, status: "preview", subjectId, gradeLevel, topic, createdAt, expiresAt (24 giờ), confirmedAt,
-  questionCount, importableCount, blockedCount, importedCount, skipped: {has_image: 3, ...}, skippedItems: [{locator, type,
+  questionCount, importableCount, blockedCount, importedCount, skipped: {has_image: 3, image_limit: 1, ...}, skippedItems: [{locator, type,
   reason}], items: [...]}`. Mỗi `items[]`: `{key ("mcq-007"), type, locator ("Phần I, câu thứ 7"), levelRaw, level, stem,
   options [{key, text}], correctOption, statements [{key, text, label}], saAnswer, explanation, flags [...], blocking,
-  blockReasons [...]}`.
+  blockReasons [...], images [...]}`; `images` chỉ có khi câu có hình (mục 10.3).
 - `blockReasons` (16/11, NV-51): lý do bằng lời của từng cờ chặn, để giáo viên biết sửa gì trong file, ví dụ "Chưa thấy đáp án:
   tô vàng (highlight màu vàng) phương án đúng." (`answer_missing` của câu mcq), "Có nhiều hơn một phương án được tô vàng; chỉ
   tô vàng một phương án đúng." (`answer_ambiguous`). `[]` khi không chặn. Quy tắc đáp án giữ nguyên (mcq phải tô vàng). Lô lưu
   trước 16/11 có thể không có trường này.
-- Bản đầu bỏ (và đếm) câu có ảnh, câu có công thức chưa chuyển được, câu có bảng dữ liệu. Không có sửa câu trong bản xem
-  trước: câu có `blocking = true` phải sửa trong file Word rồi tải lại.
+- Câu có công thức chưa chuyển được và câu có bảng dữ liệu bị bỏ và đếm. Câu có hình vẽ thật được nhập kèm hình (mục 10.3);
+  câu có ảnh công thức, đối tượng vẽ OLE hoặc ảnh trong "Đáp số" bị bỏ (`has_image`); câu vượt giới hạn hình hoặc hình không
+  chuyển được bị bỏ (`image_limit`, `image_convert_failed`). Không có sửa câu trong bản xem trước: câu có `blocking = true`
+  phải sửa trong file Word rồi tải lại.
 - Lỗi: 400 `EMPTY_FILE`, `MISSING_FILE`, `IMPORT_TOPIC_INVALID`, `IMPORT_LEVEL_INVALID`, `IMPORT_LEVEL_DEFAULT_REQUIRED`; 409
   `IMPORT_PENDING_LIMIT` (đã có 3 lô chờ xác nhận); 413
   `FILE_TOO_LARGE`; 415 `UNSUPPORTED_FILE_TYPE`; 422 `INVALID_FILE`, `IMPORT_LESSON_UNKNOWN`, `IMPORT_GRADE_INVALID`,
@@ -1601,6 +1604,29 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
 - Trong ngân hàng: `origin.type = "import"`, lọc bằng `GET /api/bank-items?origin=import`. Câu không có lời giải có
   `explanation = null`; khi xuất đề ra Word, phần LỜI GIẢI bỏ câu đó.
 - Hạn chế: câu tf nhận chung một mức cho cả 4 ý (file chỉ ghi một mức cho câu).
+
+### 10.3. Hình của câu nhập (V30, 11/11)
+
+- Mỗi phần tử `images[]`: `{id, role, ordinal, mime, widthPx, heightPx, displayWidthMm, url}`. `role`: `stem`,
+  `option_a`..`option_d`, `statement_a`..`statement_d`, `solution`. Văn bản câu (`stem`, `options[].text`,
+  `statements[].text`, `explanation`) chứa token `⟦img:<id>⟧` đứng riêng một dòng; frontend thay token bằng thẻ ảnh có `url`.
+- `url` do máy chủ dựng mỗi lần trả lô, không lưu trong DB: `/api/question-images/{id}?exp=<epoch giây>&u=<userId>&sig=<hex>`.
+  `sig = HMAC-SHA256(khóa, "<id>|<exp>|<userId>")` viết thường; `exp` là hết giờ tròn kế tiếp cộng 1 giờ (URL ổn định trong
+  một giờ nên trình duyệt dùng cache). Khóa là biến môi trường `QUESTION_IMAGE_URL_KEY` (base64 từ 32 byte, thiếu thì app
+  không khởi động).
+- `GET /api/question-images/{id}?exp=&u=&sig=`: không cần JWT (thẻ `<img>` không gửi được header). 200 là byte ảnh với
+  `Content-Type` PNG/JPEG, `Cache-Control: private, max-age=<giây còn lại>`, `ETag: "<sha256>"`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`; có `If-None-Match` khớp thì 304.
+- Mọi lỗi đều là 404 `IMAGE_NOT_FOUND`, không phân biệt: thiếu hoặc sai kiểu tham số, `sig` sai, hết hạn, ảnh không có,
+  tài khoản `u` bị khóa, `u` không còn quyền xem (ảnh xem trước chỉ chủ lô xem được khi lô còn `preview` và chưa quá hạn; ảnh
+  của câu đã vào ngân hàng xem được khi có `bank_item` dùng chung hoặc riêng cho `u`). Chữ ký không được ghi vào nhật ký truy cập.
+- Giới hạn: tối đa 6 hình mỗi câu, 100 hình và 20 MB (sau chuẩn hóa) mỗi lô; ảnh nguồn tối đa 2 MB, 4000 px mỗi cạnh,
+  12 megapixel; sau chuẩn hóa tối đa 1600 px cạnh dài và 500 KB. Vượt thì câu bị bỏ (`image_limit`, `image_convert_failed`);
+  vượt ngưỡng của cả lô (100 hình hoặc 20 MB) thì mọi câu có hình của lô bị bỏ, hãy tách file nhỏ hơn.
+- Hình WMF lớn (không phải ảnh công thức) không đổi được nên câu bị bỏ với `image_convert_failed`; `has_image` chỉ dành cho
+  ảnh công thức WMF, hình vẽ OLE và ảnh trong "Đáp số".
+- Xác nhận: hình của câu được chọn gắn vào câu trong ngân hàng, hình của câu không chọn bị xóa trong cùng transaction.
+  Hủy lô hoặc lô quá hạn thì hình chưa gắn bị xóa.
 
 ## 11. Bài giao trực tuyến (V32, thiết kế `docs/design/lam-bai-truc-tuyen.md`, quyết định 14/11 và 16/11)
 

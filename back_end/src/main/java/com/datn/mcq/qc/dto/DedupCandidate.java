@@ -15,6 +15,7 @@ import java.util.List;
  * @param questionType dạng câu; null được coi là mcq. Chỉ so trùng giữa các câu cùng dạng.
  * @param saAnswer     đáp số câu sa đúng như đã lưu; null với mcq và tf
  * @param statements   4 ý của câu tf theo thứ tự a-d; rỗng với mcq và sa
+ * @param imageKey     khóa nhận diện hình ảnh (sha256 sắp theo role, ordinal; H7); rỗng khi không có ảnh
  */
 public record DedupCandidate(
         Integer questionId,
@@ -25,12 +26,27 @@ public record DedupCandidate(
         String optionD,
         QuestionType questionType,
         String saAnswer,
-        List<String> statements
+        List<String> statements,
+        String imageKey
 ) {
     public DedupCandidate {
         questionType = questionType != null ? questionType : QuestionType.MCQ;
         statements = statements == null ? List.of()
                 : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(statements));
+        imageKey = imageKey != null ? imageKey : "";
+    }
+
+    public DedupCandidate(
+            Integer questionId,
+            String questionText,
+            String optionA,
+            String optionB,
+            String optionC,
+            String optionD,
+            QuestionType questionType,
+            String saAnswer,
+            List<String> statements) {
+        this(questionId, questionText, optionA, optionB, optionC, optionD, questionType, saAnswer, statements, "");
     }
 
     /** Câu trắc nghiệm 4 phương án (chữ ký trước V4). */
@@ -41,17 +57,36 @@ public record DedupCandidate(
             String optionB,
             String optionC,
             String optionD) {
-        this(questionId, questionText, optionA, optionB, optionC, optionD, QuestionType.MCQ, null, null);
+        this(questionId, questionText, optionA, optionB, optionC, optionD, QuestionType.MCQ, null, null, "");
+    }
+
+    public DedupCandidate(
+            Integer questionId,
+            String questionText,
+            String optionA,
+            String optionB,
+            String optionC,
+            String optionD,
+            String imageKey) {
+        this(questionId, questionText, optionA, optionB, optionC, optionD, QuestionType.MCQ, null, null, imageKey);
     }
 
     /** Câu Trả lời ngắn (V4). */
     public static DedupCandidate shortAnswer(Integer questionId, String questionText, String saAnswer) {
-        return new DedupCandidate(questionId, questionText, null, null, null, null, QuestionType.SA, saAnswer, null);
+        return shortAnswer(questionId, questionText, saAnswer, "");
+    }
+
+    public static DedupCandidate shortAnswer(Integer questionId, String questionText, String saAnswer, String imageKey) {
+        return new DedupCandidate(questionId, questionText, null, null, null, null, QuestionType.SA, saAnswer, null, imageKey);
     }
 
     /** Câu Đúng/Sai (V4, GĐ3). */
     public static DedupCandidate trueFalse(Integer questionId, String questionText, List<String> statements) {
-        return new DedupCandidate(questionId, questionText, null, null, null, null, QuestionType.TF, null, statements);
+        return trueFalse(questionId, questionText, statements, "");
+    }
+
+    public static DedupCandidate trueFalse(Integer questionId, String questionText, List<String> statements, String imageKey) {
+        return new DedupCandidate(questionId, questionText, null, null, null, null, QuestionType.TF, null, statements, imageKey);
     }
 
     public boolean hasContent() {
