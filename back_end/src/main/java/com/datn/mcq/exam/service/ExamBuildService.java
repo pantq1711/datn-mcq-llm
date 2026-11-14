@@ -593,10 +593,20 @@ public class ExamBuildService {
      * hẳn mã và văn bản của ô và đề. Không thì thừa hưởng yêu cầu của ô, không có thì của đề.
      */
     void enqueueReplace(ExamSlot slot, String instruction, String reason, String oldQuestion, List<String> requestCodes) {
+        enqueueReplace(slot, instruction, reason, oldQuestion, null, requestCodes);
+    }
+
+    /**
+     * Như trên, kèm (14/11) đáp số của câu sa bị đổi {@code oldSaAnswer} (null: không biết hoặc không phải câu sa): khối lý do
+     * của câu sa và tf đòi dạng bài khác, câu sa còn đòi đáp số khác ({@link MatrixPromptDraftV0#replaceReasonBlock}).
+     */
+    void enqueueReplace(ExamSlot slot, String instruction, String reason, String oldQuestion, String oldSaAnswer,
+                        List<String> requestCodes) {
         GenerationService.JobRequest request = requestCodes != null || instruction != null
                 ? new GenerationService.JobRequest(requestCodes, instruction, GenerationJob.REQUEST_SCOPE_REPLACE)
                 : inheritedRequest(slot);
-        enqueue(slot, instruction, MatrixPromptDraftV0.replaceReasonBlock(reason, oldQuestion), request);
+        enqueue(slot, instruction, MatrixPromptDraftV0.replaceReasonBlock(reason, oldQuestion, slot.getQuestionType(),
+                oldSaAnswer), request);
     }
 
     /**

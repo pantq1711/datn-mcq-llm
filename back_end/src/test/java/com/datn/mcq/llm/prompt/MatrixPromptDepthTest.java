@@ -227,8 +227,8 @@ class MatrixPromptDepthTest {
     @Test
     void phienBanPromptMoi() {
         assertEquals("matrix-mcq-v9-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
-        assertEquals("matrix-tf-v11-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
-        assertEquals("matrix-sa-v11-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
+        assertEquals("matrix-tf-v12-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
+        assertEquals("matrix-sa-v12-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
     }
 
     // ---------- bước 4: Đổi câu theo lý do ----------

@@ -179,6 +179,71 @@ class ExamDepthControlTest extends ExamFlowTestBase {
         }
     }
 
+    private static String saHard(String topic) {
+        return "{\"part\": \"III\", \"questionType\": \"sa\", \"difficulty\": \"hard\", \"questionCount\": 1, \"topic\": \""
+                + topic + "\", \"learningOutcomes\": {\"hard\": \"Vận dụng.\"}}";
+    }
+
+    private static String tfCell(String topic) {
+        return "{\"part\": \"II\", \"questionType\": \"tf\", \"statementDifficulties\": [\"easy\", \"medium\", \"medium\","
+                + " \"hard\"], \"questionCount\": 1, \"topic\": \"" + topic + "\", \"learningOutcomes\": {\"easy\":"
+                + " \"Nhận biết.\", \"medium\": \"Hiểu.\", \"hard\": \"Vận dụng.\"}}";
+    }
+
+    @Test
+    void deNangCaoCauSaNhacDapSoToiDa4KyTuTrongPromptGuiModel() throws Exception {
+        int matrixId = createMatrix(saHard("Hằng đẳng thức"));
+        int examId = buildWith(matrixId, "advanced").get("examId").asInt();
+        assertTrue(runPrompt(examId, cellId(matrixId, 1)).contains(MatrixPromptDraftV0.SA_ADVANCED_ANSWER_RULE));
+        settle(examId);
+        assertTrue(generator.prompts.stream().anyMatch(p -> p.contains(MatrixPromptDraftV0.SA_ADVANCED_ANSWER_RULE)),
+                "prompt gửi model của ô sa Vận dụng nâng cao có nhắc đáp số");
+        int stdMatrix = createMatrix(saHard("Hằng đẳng thức"));
+        int stdExam = buildWith(stdMatrix, "standard").get("examId").asInt();
+        assertFalse(runPrompt(stdExam, cellId(stdMatrix, 1)).contains(MatrixPromptDraftV0.SA_ADVANCED_ANSWER_RULE),
+                "đề chuẩn giữ prompt cũ");
+    }
+
+    @Test
+    void doiCauSaQuaDeDoiDangBaiKhacDapSoKhacVaDuaDapSoCuVaoPrompt() throws Exception {
+        int matrixId = createMatrix(saHard("Hằng đẳng thức"));
+        int examId = buildWith(matrixId, "advanced").get("examId").asInt();
+        settle(examId);
+        int slot = slotId(examId, cellId(matrixId, 1), 1);
+        String oldText = jdbc.queryForObject("SELECT q.question_text FROM generated_question q JOIN exam_slot s"
+                + " ON s.generated_question_id = q.id WHERE s.id = ?", String.class, slot);
+        String oldAnswer = jdbc.queryForObject("SELECT q.sa_answer FROM generated_question q JOIN exam_slot s"
+                + " ON s.generated_question_id = q.id WHERE s.id = ?", String.class, slot);
+        generator.prompts.clear();
+        postJson("/api/exams/" + examId + "/slots/" + slot + "/replace", "{\"reason\": \"too_easy\"}")
+                .andExpect(status().isOk());
+        String expected = MatrixPromptDraftV0.replaceReasonBlock("too_easy", oldText,
+                com.datn.mcq.enums.QuestionType.SA, oldAnswer);
+        assertTrue(expected.contains("<<< " + oldAnswer + " >>>"), expected);
+        assertTrue(latestNote(slot).contains(expected), latestNote(slot));
+        assertTrue(latestNote(slot).contains("DẠNG BÀI hoặc cách giải KHÁC"), latestNote(slot));
+        assertTrue(latestNote(slot).contains("tối đa 4 ký tự"), latestNote(slot));
+        settle(examId);
+        assertFalse(generator.prompts.isEmpty());
+        assertTrue(generator.prompts.get(0).contains(expected), generator.prompts.get(0));
+        assertTrue(generator.prompts.get(0).contains(MatrixPromptDraftV0.SA_ADVANCED_ANSWER_RULE), "vẫn giữ mức nâng cao");
+    }
+
+    @Test
+    void doiCauTfQuaKhoDoiNguCanhKhacVaKhongCoDapSo() throws Exception {
+        int matrixId = createMatrix(tfCell("Hằng đẳng thức"));
+        int examId = buildWith(matrixId, null).get("examId").asInt();
+        settle(examId);
+        int slot = slotId(examId, cellId(matrixId, 1), 1);
+        postJson("/api/exams/" + examId + "/slots/" + slot + "/replace", "{\"reason\": \"too_hard\"}")
+                .andExpect(status().isOk());
+        String note = latestNote(slot);
+        assertTrue(note.contains("QUÁ KHÓ"), note);
+        assertTrue(note.contains("DẠNG BÀI hoặc cách giải KHÁC"), note);
+        assertTrue(note.contains("Ngữ cảnh và các khẳng định KHÁC câu bị đổi"), note);
+        assertFalse(note.contains("Đáp số"), note);
+    }
+
     @Test
     void cotChallengeCoMacDinhVaCheck() {
         int exam = insert("INSERT INTO exam (exam_code, title, subject_id, created_by) VALUES ('CH1', 'Đề', ?, ?)",
