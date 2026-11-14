@@ -1,0 +1,16 @@
+{
+  "name": "Ma trận thử",
+  "gradeLevel": 8,
+  "cells": [
+    {"part": "I", "questionType": "mcq", "difficulty": "easy", "questionCount": 1, "topic": "Đa thức", "content": "Đơn thức",
+     "learningOutcomes": {"easy": "Nhận biết đơn thức."}},
+    {"part": "I", "questionType": "mcq", "difficulty": "medium", "questionCount": 1, "topic": "Tứ giác", "content": "Hình thang cân",
+     "learningOutcomes": {"medium": "Tính góc."}},
+    {"part": "II", "questionType": "tf", "statementDifficulties": ["easy", "easy", "medium", "hard"], "questionCount": 1,
+     "topic": "Hằng đẳng thức", "content": "Bình phương của tổng",
+     "learningOutcomes": {"easy": "Nhận biết.", "medium": "Khai triển.", "hard": "Vận dụng."}},
+    {"part": "III", "questionType": "sa", "difficulty": "medium", "questionCount": 1, "topic": "Đa thức", "content": "Giá trị đa thức",
+     "learningOutcomes": {"medium": "Tính giá trị."}}
+  ],
+  "notes": ["Ghi chú thử."]
+}

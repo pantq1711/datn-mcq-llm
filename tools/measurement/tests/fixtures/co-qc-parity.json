@@ -1,0 +1,121 @@
+{
+  "ghi_chu": "Fixture chung giữ do_luong/co_qc.py khớp backend. ly_do_qc_summary: kết quả QcSummaryService.QcSummary.reviewReasons cộng ExamViewService.addGroundingJobReason (test Java QcFlagParityTest kiểm). ly_do: kết quả cuối như trang đề (thêm solver_pending/solver_failed của ExamViewService.toItem), test Python kiểm. co: hasContentFlag.",
+  "cases": [
+    {
+      "ten": "sach_canh_bao_tu_sua_khong_bat_co",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": true,
+             "format_warnings": ["json: đã sửa 2 escape LaTeX (\\frac, \\sqrt)", "question_text: đã tự đóng $",
+                                 "option_a: đã tự bọc $ quanh x^2 (LaTeX nằm ngoài $)", "statement_a: đã bỏ tiền tố \"a)\"",
+                                 "label: khác mẫu mục tiêu TFTF (model chọn TTFF)", "correct_option: khác chữ đã giao B (model chọn C)",
+                                 "option_b: wording_symbol_suggested (AB song song CD)"]},
+      "ly_do_qc_summary": [], "ly_do": [], "co": false
+    },
+    {
+      "ten": "trung_bo_qua_solver",
+      "qc": {"dedup_ran": true, "dedup_passed": false, "dedup_compared_to": 12, "answer_ran": true, "answer_passed": false,
+             "format_warnings": []},
+      "ly_do_qc_summary": ["duplicate: 12"], "ly_do": ["duplicate: 12"], "co": true
+    },
+    {
+      "ten": "solver_chua_chay",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": false, "format_warnings": []},
+      "ly_do_qc_summary": ["solver_not_run"], "ly_do": ["solver_not_run"], "co": true
+    },
+    {
+      "ten": "solver_dang_cho_job",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": false, "answer_job_status": "running", "format_warnings": []},
+      "ly_do_qc_summary": ["solver_not_run"], "ly_do": ["solver_pending"], "co": true
+    },
+    {
+      "ten": "solver_loi",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": false, "solver_error": true, "format_warnings": []},
+      "ly_do_qc_summary": ["solver_not_run"], "ly_do": ["solver_failed"], "co": true
+    },
+    {
+      "ten": "mcq_lech_solver_cu",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": false, "judge_answer": "multiple",
+             "solver_option_check": false, "format_warnings": []},
+      "ly_do_qc_summary": ["solver_inconsistent"], "ly_do": ["solver_inconsistent"], "co": true
+    },
+    {
+      "ten": "mcq_nhieu_dap_an_dung",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": false, "judge_answer": "multiple",
+             "solver_option_check": true, "format_warnings": []},
+      "ly_do_qc_summary": ["solver_multiple_correct"], "ly_do": ["solver_multiple_correct"], "co": true
+    },
+    {
+      "ten": "mcq_khong_co_dap_an_dung",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": false, "judge_answer": "none",
+             "solver_option_check": true, "format_warnings": []},
+      "ly_do_qc_summary": ["solver_no_correct"], "ly_do": ["solver_no_correct"], "co": true
+    },
+    {
+      "ten": "mcq_lech_mot_dap_an",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": false, "judge_answer": "C",
+             "solver_option_check": true, "format_warnings": []},
+      "ly_do_qc_summary": ["solver_inconsistent"], "ly_do": ["solver_inconsistent"], "co": true
+    },
+    {
+      "ten": "sa_mo_ho",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": false, "judge_sa_kind": "ambiguous",
+             "format_warnings": []},
+      "ly_do_qc_summary": ["solver_ambiguous"], "ly_do": ["solver_ambiguous"], "co": true
+    },
+    {
+      "ten": "sa_khong_doc_duoc",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": false, "judge_sa_kind": "unparseable",
+             "format_warnings": []},
+      "ly_do_qc_summary": ["solver_unparseable"], "ly_do": ["solver_unparseable"], "co": true
+    },
+    {
+      "ten": "tf_y_khong_quyet_duoc",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": true, "has_undecidable": true,
+             "format_warnings": []},
+      "ly_do_qc_summary": ["statement_undecidable"], "ly_do": ["statement_undecidable"], "co": true
+    },
+    {
+      "ten": "grounding_khong_bam",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": true,
+             "grounding_verdict": "not_supported", "grounding_job_status": "failed", "format_warnings": []},
+      "ly_do_qc_summary": ["grounding_not_supported"], "ly_do": ["grounding_not_supported"], "co": true
+    },
+    {
+      "ten": "grounding_khong_ro",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": true,
+             "grounding_verdict": "unknown", "format_warnings": []},
+      "ly_do_qc_summary": ["grounding_unknown"], "ly_do": ["grounding_unknown"], "co": true
+    },
+    {
+      "ten": "grounding_bam_khong_co",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": true,
+             "grounding_verdict": "supported", "format_warnings": []},
+      "ly_do_qc_summary": [], "ly_do": [], "co": false
+    },
+    {
+      "ten": "grounding_job_that_bai",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": true,
+             "grounding_job_status": "failed", "format_warnings": []},
+      "ly_do_qc_summary": ["grounding_failed"], "ly_do": ["grounding_failed"], "co": true
+    },
+    {
+      "ten": "grounding_job_dang_cho",
+      "qc": {"dedup_ran": true, "dedup_passed": true, "answer_ran": true, "answer_passed": true,
+             "grounding_job_status": "pending", "format_warnings": []},
+      "ly_do_qc_summary": ["grounding_pending"], "ly_do": ["grounding_pending"], "co": true
+    },
+    {
+      "ten": "dedup_chua_chay_va_canh_bao_bat_co",
+      "qc": {"dedup_ran": false, "answer_ran": true, "answer_passed": true,
+             "format_warnings": ["explanation: lời giải có thể còn phần nháp (tính lại, làm lại, sửa lại)",
+                                 "question_text: đã tự đóng $ khi chuỗi có 3 dấu $ (có thể đóng sai chỗ)",
+                                 "option_c: cảnh báo lạ chưa biết"]},
+      "ly_do_qc_summary": ["dedup_not_run", "explanation_draft_suspect",
+                           "warning: question_text: đã tự đóng $ khi chuỗi có 3 dấu $ (có thể đóng sai chỗ)",
+                           "warning: option_c: cảnh báo lạ chưa biết"],
+      "ly_do": ["dedup_not_run", "explanation_draft_suspect",
+                "warning: question_text: đã tự đóng $ khi chuỗi có 3 dấu $ (có thể đóng sai chỗ)",
+                "warning: option_c: cảnh báo lạ chưa biết"],
+      "co": true
+    }
+  ]
+}

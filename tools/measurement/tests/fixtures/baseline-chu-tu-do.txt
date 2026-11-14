@@ -1,0 +1,38 @@
+Dưới đây là đề kiểm tra theo ma trận của thầy/cô:
+
+## **ĐỀ KIỂM TRA GIỮA KÌ I – TOÁN 8**
+
+### PHẦN I. TRẮC NGHIỆM NHIỀU PHƯƠNG ÁN LỰA CHỌN (2 câu)
+
+**Câu 1.** Biểu thức nào sau đây là đơn thức?
+A. $x + 1$
+B. $3x^2y$
+C. $\frac{1}{x}$
+D. $x - y$
+
+**Câu 2:** Hình thang cân $ABCD$ có $\widehat{A} = 70^\circ$. Số đo góc $B$ là
+A. $70^\circ$    B. $110^\circ$    C. $90^\circ$    D. $20^\circ$
+
+### PHẦN II. TRẮC NGHIỆM ĐÚNG SAI
+
+**Câu 3.** Cho biểu thức $P = (x+2)^2$.
+a) $P = x^2 + 4x + 4$.
+b) $P = x^2 + 4$.
+c) Khi $x = 1$ thì $P = 9$.
+d) $P \ge 0$ với mọi $x$.
+
+### PHẦN III. TRẢ LỜI NGẮN
+
+**Câu 4.** Tính giá trị của $A = 2x - 3$ tại $x = 1{,}25$.
+
+---
+
+### **ĐÁP ÁN**
+
+| Câu | 1 | 2 |
+|---|---|---|
+| Đáp án | B | A |
+
+Câu 3: a) Đúng, b) Sai, c) Đúng, d) Đúng
+
+Câu 4: Đáp số: $-0,5$
