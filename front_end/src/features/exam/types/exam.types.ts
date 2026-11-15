@@ -103,6 +103,8 @@ export function describeInfoReason(reason: string): string {
     const detail = at < 0 ? "" : reason.slice(at + 2);
     if (code === "request_partial") return `Đúng một phần yêu cầu${detail ? `: ${detail}` : ""}`;
     if (code === "request_not_met") return `Chưa đúng yêu cầu${detail ? `: ${detail}` : ""}`;
+    // D-05: lượt kiểm yêu cầu của hệ thống bị lỗi, yêu cầu chưa được kiểm (không phải "cần xem kỹ")
+    if (code === "request_unchecked") return "Chưa kiểm được yêu cầu";
     return reason;
 }
 
@@ -134,7 +136,10 @@ export interface ChangeQuestionRequest {
     source?: "generate" | "bank";
     /** Lý do giáo viên chọn khi Đổi (tùy chọn); không chọn thì không gửi. */
     reason?: ReplaceReason;
-    /** Chip yêu cầu của lượt Đổi; khi soạn mới luôn gửi (kể cả []) để backend coi là tự đặt yêu cầu. */
+    /**
+     * Chip yêu cầu của lượt Đổi; chỉ có khi giáo viên đặt yêu cầu KHÁC yêu cầu thừa hưởng của ô/đề (kể cả [] khi bỏ hết chip),
+     * để backend coi là tự đặt yêu cầu. Không có thì câu mới theo yêu cầu thừa hưởng (D-08).
+     */
     requestCodes?: TeacherRequestCode[];
 }
 
@@ -207,7 +212,7 @@ export interface ExamItemDto {
     edited: boolean;
     originalQuestionId?: number;
     failureReason?: ExamSlotFailureReason;
-    /** Cờ thông tin (không phải "cần xem kỹ"), luôn có: request_partial: …, request_not_met: … */
+    /** Cờ thông tin (không phải "cần xem kỹ"), luôn có: request_partial: …, request_not_met: …, request_unchecked */
     infoReasons?: string[];
     requests?: TeacherRequests;
     inheritedRequests?: TeacherRequests;
@@ -270,6 +275,8 @@ export interface ExamProgress {
     generating: number;
     failed: number;
     fromBank: number;
+    /** Có khi các chỗ đang soạn bị hoãn vì AI hết lượt trong ngày: "Hết lượt AI hôm nay, hệ thống chạy tiếp lúc HH:mm". */
+    notice?: string;
 }
 
 export interface LessonCellInput {

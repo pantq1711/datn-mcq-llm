@@ -772,12 +772,14 @@ khác để sinh lại).
   hoặc đang chấm) và `grounding_failed` (chấm lỗi, không có kết quả). Đây chỉ là CẢNH BÁO: câu giữ nguyên trạng thái (vẫn
   `qc_passed` nếu đã qua QC), không bị loại, giáo viên vẫn Giữ được. Kết luận `SUPPORTED` không thêm lý do nào.
 - W1-2: câu hệ thống sinh chưa Giữ có `qcState`: `checking` (Solver đang kiểm lại bản sửa), `passed` (không còn lý do cần
-  xem kỹ), `needs_review` (có lý do). Chỗ khác không có trường này. Mọi câu có `edited` (câu hiện tại là bản giáo viên
+  xem kỹ), `needs_review` (có lý do). D-01 (15/11): job Solver đang **hoãn** vì AI hết lượt trong ngày (C-01, Giữ được) là
+  `needs_review` kèm lý do `solver_pending`, không phải `checking`. Chỗ khác không có trường này. Mọi câu có `edited` (câu hiện tại là bản giáo viên
   sửa, kể cả khi đã Giữ) và, khi `edited`, `originalQuestionId` (bản gốc LLM).
 - **PR B (12/11), yêu cầu của giáo viên:**
   - `infoReasons` (luôn có, `[]` khi không có): cờ THÔNG TIN, tách hẳn khỏi `reviewReasons`. Giá trị `request_partial: <lý do>`
     ("Đúng một phần yêu cầu: …") và `request_not_met: <lý do>` ("Chưa đúng yêu cầu: …"), do Solver kết luận cùng lượt kiểm đáp
-    án; `met` không có cờ. Không bật `needsReview`, không tính vào `needsReviewCount`/`needsReviewSlots`, không đổi `qcState`;
+    án; `met` không có cờ. D-05 (15/11): `request_unchecked` ("Chưa kiểm được yêu cầu") khi lượt kiểm yêu cầu (Solver lượt 2)
+    lỗi hoặc trả kết quả hỏng; không thử lại. Không bật `needsReview`, không tính vào `needsReviewCount`/`needsReviewSlots`, không đổi `qcState`;
     Giữ câu chỉ có `infoReasons` thì câu vào ngân hàng **dùng chung**. Mỗi giá trị có dạng `<mã>` hoặc `<mã>: <chi tiết>`
     (sau này thêm "Có hình", lỗi phương án nhiễu); frontend hiện giá trị lạ nguyên văn. Câu ngân hàng, câu đã Giữ: `[]`.
   - `requests` (vắng khi câu không có yêu cầu): `{"codes": [...], "text": "..." | null, "scope": "replace" | "cell" | "exam"}`
@@ -830,10 +832,15 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
   - có gửi (kể cả `[]`) hoặc có `instruction`: lượt Đổi **tự đặt** yêu cầu, chỉ dùng mã và `instruction` của lượt này, **bỏ
     hẳn** mã và văn bản của ô và đề. **Đổi hành vi:** trước PR B, `instruction` của Đổi câu được CỘNG vào yêu cầu thêm của ô;
     nay thay hẳn. Gửi `[]` mà không có `instruction` thì câu mới không có yêu cầu nào.
+  - D-08 (15/11): mã (không phân biệt thứ tự) và `instruction` (sau trim) gửi lên **bằng đúng** yêu cầu thừa hưởng của chỗ
+    (`inheritedRequests`) thì coi như không gửi: giữ mức `cell`/`exam`, nhật ký không ghi mã và `instruction`. Chỗ không có
+    yêu cầu thừa hưởng mà gửi `[]` không kèm `instruction` cũng vậy. Hộp Đổi câu chỉ gửi hai trường này khi khác yêu cầu
+    thừa hưởng.
   - 400 `INVALID_REQUEST`, kiểm trước mọi thay đổi (chỗ, nhật ký, job, lượt sinh giữ nguyên): mã lạ; mã khác rỗng với
     `source = bank`; mã không hợp dạng câu của chỗ, thông báo "Yêu cầu \"<nhãn chip>\" không áp dụng cho câu <Trắc nghiệm |
     Đúng/Sai | Trả lời ngắn>." (ví dụ "Yêu cầu \"Đúng/Sai cùng một tình huống\" không áp dụng cho câu Trắc nghiệm.").
-  - Lưu ở `exam_slot_action.request_codes` (NULL khi không gửi, mảng rỗng khi gửi `[]`). Lần sinh lại tự động của lượt Đổi giữ
+  - Lưu ở `exam_slot_action.request_codes` (NULL khi không gửi hoặc bằng yêu cầu thừa hưởng, mảng rỗng khi gửi `[]` khác
+    yêu cầu thừa hưởng). Lần sinh lại tự động của lượt Đổi giữ
     nguyên yêu cầu của lượt đó.
 - Chỗ không thuộc đề trong đường dẫn trả 404.
 - Mỗi thao tác ghi `exam_slot_action` (`keep`, `replace`, `edit`) để thống kê giữ/sửa/đổi. Đánh giá `assisted` bị loại

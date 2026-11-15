@@ -20,6 +20,7 @@ import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GeneratedQuestionStatement;
 import com.datn.mcq.generation.entity.GenerationJob;
 import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.generation.service.QuotaDeferral;
 import com.datn.mcq.matrix.entity.ExamMatrix;
 import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
@@ -32,6 +33,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -382,7 +384,10 @@ public class ExamViewService {
                 if (check.isPresent() && (check.get().getStatus() == JobStatus.PENDING
                         || check.get().getStatus() == JobStatus.RUNNING)) {
                     reasons.set(reasons.indexOf(QcSummaryService.SOLVER_NOT_RUN), SOLVER_PENDING);
-                    qcState = ExamItemDto.QC_CHECKING;
+                    // D-01 (rà soát 15/11): job đang HOÃN vì AI hết lượt trong ngày (có thể nhiều giờ) thì Giữ được
+                    // (ExamActionService.keep, C-01) nên không còn là "đang kiểm"; vẫn giữ lý do solver_pending (cờ).
+                    qcState = QuotaDeferral.isDeferred(check.get(), LocalDateTime.now())
+                            ? ExamItemDto.QC_NEEDS_REVIEW : ExamItemDto.QC_CHECKING;
                 } else if ((check.isPresent() && check.get().getStatus() == JobStatus.FAILED)
                         || q.getSolverError() != null) {
                     reasons.set(reasons.indexOf(QcSummaryService.SOLVER_NOT_RUN), SOLVER_FAILED);

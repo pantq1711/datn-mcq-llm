@@ -16,9 +16,10 @@
 -- dev_emails: email cần loại, cách nhau bằng dấu phẩy, truyền khi chạy (KHÔNG ghi email thật vào file):
 --   psql -v dev_emails='nhom1@truong.edu.vn,gv-thu@truong.edu.vn' -f queries.sql
 -- Không truyền thì rỗng (không loại ai). Chạy riêng một khối trong công cụ khác psql thì thay :'dev_emails' bằng chuỗi
--- email, ví dụ 'nhom1@truong.edu.vn,gv-thu@truong.edu.vn'. Xem docs/thong-ke/README.md.
+-- email, ví dụ 'nhom1@truong.edu.vn,gv-thu@truong.edu.vn'. Không truyền thì psql in cảnh báo. Xem docs/thong-ke/README.md.
 \if :{?dev_emails}
 \else
+\echo 'CANH BAO: chua truyen -v dev_emails, so lieu GOM CA tai khoan nhom phat trien va tai khoan dung thu'
 \set dev_emails ''
 \endif
 

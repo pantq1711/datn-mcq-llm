@@ -9,6 +9,7 @@ import com.datn.mcq.enums.SaJudgeKind;
 import com.datn.mcq.enums.TruthChoice;
 import com.datn.mcq.generation.parser.LlmOutputRepair;
 import com.datn.mcq.llm.prompt.McqAnswerPlan;
+import com.datn.mcq.llm.prompt.TeacherRequestPrompt;
 import com.datn.mcq.llm.prompt.TfLabelPattern;
 import com.datn.mcq.qc.checker.AnswerSolverChecker;
 import com.datn.mcq.qc.checker.ExplanationDraftLeak;
@@ -69,6 +70,11 @@ public class QcSummaryService {
     public static final String REQUEST_PARTIAL = "request_partial";
     /** PR B (12/11): cờ thông tin, Solver kết luận câu chưa đúng yêu cầu của giáo viên. */
     public static final String REQUEST_NOT_MET = "request_not_met";
+    /**
+     * D-05 (rà soát 15/11): cờ thông tin, câu có yêu cầu nhưng lượt kiểm yêu cầu (Solver lượt 2) lỗi hoặc trả kết quả hỏng,
+     * nên yêu cầu CHƯA được kiểm. Ca lượt giải gắn cờ đáp án (cũng {@code unchecked}) không có cờ này: câu đã có "cần xem kỹ".
+     */
+    public static final String REQUEST_UNCHECKED = "request_unchecked";
 
     /**
      * Nhóm cảnh báo format KHÔNG bật cờ "cần xem kỹ" (2/11, sau đo đề 11): hệ thống đã tự sửa và việc sửa chắc chắn không đổi
@@ -125,11 +131,19 @@ public class QcSummaryService {
 
         /**
          * Cờ THÔNG TIN (12/11, PR B, {@code ExamItemDto.infoReasons}): {@code request_partial: <lý do>} hoặc
-         * {@code request_not_met: <lý do>} (chỉ mã khi không có lý do); {@code met} hay không có kết luận thì rỗng. Tách hẳn
-         * khỏi {@link #reviewReasons()}: không bật "cần xem kỹ", không đổi trạng thái câu.
+         * {@code request_not_met: <lý do>} (chỉ mã khi không có lý do); D-05 (15/11): {@code request_unchecked} (chỉ mã) khi
+         * lượt kiểm yêu cầu lỗi; {@code met} hay không có kết luận thì rỗng. Tách hẳn khỏi {@link #reviewReasons()}: không bật
+         * "cần xem kỹ", không đổi trạng thái câu.
          */
         public List<String> infoReasons() {
             List<String> out = new ArrayList<>();
+            if (requestVerdict == RequestVerdict.UNCHECKED) {
+                // Lý do do backend đặt (TeacherRequestPrompt). Ca lượt giải gắn cờ đáp án đã có cờ "cần xem kỹ".
+                if (requestReason != null && requestReason.startsWith(TeacherRequestPrompt.UNCHECKED_FAILED_PREFIX)) {
+                    out.add(REQUEST_UNCHECKED);
+                }
+                return out;
+            }
             String code = requestVerdict == RequestVerdict.PARTIAL ? REQUEST_PARTIAL
                     : requestVerdict == RequestVerdict.NOT_MET ? REQUEST_NOT_MET : null;
             if (code != null) {

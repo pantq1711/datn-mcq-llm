@@ -30,6 +30,10 @@ class StatisticsSqlTest extends ExamFlowTestBase {
 
     private static final Path DIR = Path.of("..", "docs", "thong-ke");
 
+    /** D-09: dòng cảnh báo psql in khi chạy mà không truyền {@code -v dev_emails}. */
+    private static final String DEV_EMAILS_WARNING =
+            "'CANH BAO: chua truyen -v dev_emails, so lieu GOM CA tai khoan nhom phat trien va tai khoan dung thu'";
+
     /** Chạy file như psql với biến mặc định của file (N-10: dev_emails rỗng, không loại ai). */
     private List<Map<String, Object>> run(String file) throws IOException {
         return jdbc.queryForList(PsqlFile.load(DIR.resolve(file)));
@@ -206,6 +210,63 @@ class StatisticsSqlTest extends ExamFlowTestBase {
         assertEquals(4, rows.size(), rows.toString());
     }
 
+    /**
+     * D-09 (rà soát 15/11): (b) câu "chưa kiểm" (unchecked) không vào so_cau nhưng có tỉ lệ trên tổng gồm cả câu chưa kiểm;
+     * (c) câu not_met được giáo viên Sửa rồi mới Đổi vẫn được đếm ở doi_sau (gom theo chuỗi bản sửa như file 01).
+     * D-07: lọc dòng answer_check theo checked_at (biến psql solver_tu, solver_den).
+     */
+    @Test
+    void yeuCauGiaoVienTiLeKeCaChuaKiemDoiSauKhiSuaVaLocTheoCheckedAt() throws Exception {
+        SOLVER.requestCheck = "{\"verdict\": \"not_met\", \"reason\": \"thiếu\"}";
+        generator.sameMcq = false;
+        int matrix = createMatrix(mcqCell("Đa thức", "Đơn thức", 2));
+        int cell = cellId(matrix, 1);
+        int examId = json(postJson("/api/exams/build", "{\"matrixId\": " + matrix
+                + ", \"requestCodes\": [\"real_context\"]}").andExpect(status().isOk())).get("examId").asInt();
+        settle(examId);
+        int slot1 = slotId(examId, cell, 1);
+        int slot2 = slotId(examId, cell, 2);
+        jdbc.update("UPDATE quality_check_result SET request_verdict = 'unchecked' WHERE check_type = 'answer_check'"
+                + " AND question_id = (SELECT generated_question_id FROM exam_slot WHERE id = ?)", slot2);
+        // Sửa lời giải câu not_met rồi mới Đổi
+        int q1 = count("SELECT generated_question_id FROM exam_slot WHERE id = ?", slot1);
+        Map<String, Object> q = jdbc.queryForMap("SELECT * FROM generated_question WHERE id = ?", q1);
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("baseQuestionId", q1);
+        body.put("questionText", (String) q.get("question_text"));
+        body.put("optionA", (String) q.get("option_a"));
+        body.put("optionB", (String) q.get("option_b"));
+        body.put("optionC", (String) q.get("option_c"));
+        body.put("optionD", (String) q.get("option_d"));
+        body.put("correctOption", String.valueOf(q.get("correct_option")).strip());
+        body.put("explanation", "Lời giải đã sửa.");
+        perform(put("/api/exams/" + examId + "/slots/" + slot1 + "/question").contentType(MediaType.APPLICATION_JSON)
+                .content(body.toString())).andExpect(status().isOk());
+        assertTrue(count("SELECT generated_question_id FROM exam_slot WHERE id = ?", slot1) != q1, "có bản sửa");
+        SOLVER.requestCheck = "{\"verdict\": \"met\", \"reason\": \"ok\"}";
+        perform(post("/api/exams/" + examId + "/slots/" + slot1 + "/replace")).andExpect(status().isOk());
+        settle(examId);
+
+        List<Map<String, Object>> rows = run("10-yeu-cau-giao-vien.sql");
+        Map<String, Object> real = rows.stream().filter(r -> "ma".equals(r.get("bang")) && "real_context".equals(r.get("nhom")))
+                .findFirst().orElseThrow(() -> new AssertionError(rows.toString()));
+        assertEquals(2, count(real, "so_cau"), "not_met của câu gốc, met của câu sau Đổi: " + rows);
+        assertEquals(1, count(real, "chua_kiem"));
+        assertEquals(50.0, ((Number) real.get("ti_le_met_phan_tram")).doubleValue(), 0.05, "trên so_cau như cũ");
+        assertEquals(33.3, ((Number) real.get("ti_le_met_ke_ca_chua_kiem_phan_tram")).doubleValue(), 0.05,
+                "trên so_cau + chua_kiem");
+        assertEquals(33.3, ((Number) real.get("ti_le_chua_kiem_phan_tram")).doubleValue(), 0.05);
+        Map<String, Object> after = rows.stream().filter(r -> "doi_sau".equals(r.get("bang"))).findFirst()
+                .orElseThrow(() -> new AssertionError("câu Sửa rồi Đổi phải được đếm: " + rows));
+        assertEquals("not_met", after.get("nhom"));
+        assertEquals(1, count(after, "so_cau"));
+
+        // D-07: cửa sổ checked_at không chứa dòng nào thì không còn kết luận nào
+        String sql = PsqlFile.load(DIR.resolve("10-yeu-cau-giao-vien.sql"),
+                Map.of("solver_tu", "2000-01-01 00:00:00", "solver_den", "2000-01-02 00:00:00"));
+        assertEquals(List.of(), jdbc.queryForList(sql));
+    }
+
     @Test
     void loaiDeCuaTaiKhoanNhomPhatTrienBangDanhSachEmail() throws Exception {
         sampleData();
@@ -229,6 +290,10 @@ class StatisticsSqlTest extends ExamFlowTestBase {
         for (Path p : files) {
             String raw = Files.readString(p, StandardCharsets.UTF_8);
             assertTrue(raw.contains("\\set dev_emails ''"), p + ": khai báo mặc định rỗng");
+            // D-09 (rà soát 15/11): quên -v dev_emails thì psql in cảnh báo, không lặng lẽ tính cả tài khoản nhóm
+            assertTrue(raw.contains("\\else\n\\echo " + DEV_EMAILS_WARNING + "\n\\set dev_emails ''")
+                    || raw.contains("\\else\r\n\\echo " + DEV_EMAILS_WARNING + "\r\n\\set dev_emails ''"),
+                    p + ": cảnh báo khi chưa truyền dev_emails");
             assertTrue(raw.contains(":'dev_emails'"), p + ": dùng biến");
             assertTrue(!raw.contains("ARRAY[]::text[]"), p + ": không còn mảng email chép tay");
         }

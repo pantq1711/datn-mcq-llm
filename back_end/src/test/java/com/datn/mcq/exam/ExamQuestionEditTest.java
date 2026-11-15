@@ -636,6 +636,27 @@ class ExamQuestionEditTest {
                 "câu mang cờ solver_pending vào ngân hàng RIÊNG của người Giữ");
     }
 
+    /**
+     * D-01: job answer_check đang HOÃN vì hết lượt AI thì API xem đề không còn trả qcState "checking" (giao diện ẩn nút Lưu
+     * khi checking, trong khi backend cho Giữ); vẫn giữ lý do solver_pending và cờ "cần xem kỹ". Job pending thường vẫn
+     * "checking".
+     */
+    @Test
+    void jobAnswerCheckHoanViHetHanMucThiQcStateLaNeedsReviewVaGiuLyDoSolverPending() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int version = json(putQuestion(examId, slot, mcqBody(questionOf(slot))
+                .put("questionText", "Đơn thức $2x^1$ có bậc là")).andExpect(status().isOk())).get("questionId").asInt();
+        assertEquals("checking", viewItem(examId, slot).get("qcState").asText(), "job pending thường: đang kiểm");
+
+        deferByQuota("question_id = ? AND job_type = 'answer_check'", version);
+
+        JsonNode item = viewItem(examId, slot);
+        assertEquals("needs_review", item.get("qcState").asText(), item.toString());
+        assertTrue(item.get("needsReview").asBoolean(), item.toString());
+        assertTrue(texts(item.get("reviewReasons")).contains("solver_pending"), item.toString());
+    }
+
     @Test
     void giuDuocKhiChiCoNextRunAtXaMaKhongCoTienToQuota() throws Exception {
         int examId = readyExam();

@@ -354,23 +354,32 @@ class ExamTeacherRequestTest extends ExamFlowTestBase {
         assertEquals(full, inherited.get("text").asText(), "nguyên văn, không cắt");
         assertEquals(List.of("real_context"), texts(inherited.get("codes")));
 
-        // mô phỏng hộp Đổi câu điền sẵn, không sửa gì
+        // mô phỏng hộp Đổi câu điền sẵn, không sửa gì (client cũ vẫn gửi). D-08 (rà soát 15/11): bằng đúng yêu cầu thừa
+        // hưởng thì KHÔNG phải lượt Đổi tự đặt yêu cầu: giữ mức "cell", nhật ký không ghi instruction và mã.
         generator.mcqPrompts.clear();
         ObjectNode body = objectMapper.createObjectNode();
         body.set("requestCodes", inherited.get("codes"));
-        body.put("instruction", inherited.get("text").asText());
+        body.put("instruction", "  " + inherited.get("text").asText() + " ");
         replace(examId, slot, body.toString()).andExpect(status().isOk());
-        assertEquals(full, jdbc.queryForObject("SELECT instruction FROM exam_slot_action WHERE slot_id = ? ORDER BY id"
-                + " DESC LIMIT 1", String.class, slot));
-        assertEquals(List.of("real_context"), array("SELECT request_codes FROM exam_slot_action WHERE slot_id = ?"
-                + " ORDER BY id DESC LIMIT 1", slot));
+        assertNull(jdbc.queryForObject("SELECT instruction FROM exam_slot_action WHERE slot_id = ? ORDER BY id"
+                + " DESC LIMIT 1", String.class, slot), "không chép yêu cầu của ô vào nhật ký");
+        assertNull(array("SELECT request_codes FROM exam_slot_action WHERE slot_id = ? ORDER BY id DESC LIMIT 1", slot));
+        assertEquals("cell", latestJob(slot).get("request_scope"));
         settle(examId);
         String p = lastMcqPrompt();
         assertEquals(1, p.split("cuối ô!!!", -1).length - 1, "văn bản chỉ có một lần: " + p);
-        assertTrue(p.indexOf("cuối ô!!!") > p.indexOf(TEACHER_PREFIX), "trong khối yêu cầu của lượt Đổi");
-        assertFalse(p.contains(EXTRA_PREFIX), "không còn khối của ô");
+        assertTrue(p.contains(EXTRA_PREFIX), "vẫn là khối yêu cầu của ô");
+        assertFalse(p.contains(TEACHER_PREFIX), "không có khối yêu cầu của lượt Đổi");
         assertEquals(1, p.split(java.util.regex.Pattern.quote(TeacherRequest.REAL_CONTEXT.promptLine()), -1).length - 1);
-        assertEquals("replace", item(examId, slot).get("requests").get("scope").asText());
+        assertEquals("cell", item(examId, slot).get("requests").get("scope").asText());
+
+        // cùng mã nhưng sửa văn bản: lượt Đổi tự đặt yêu cầu
+        replace(examId, slot, "{\"requestCodes\": [\"real_context\"], \"instruction\": \"Dùng tiền Việt Nam\"}")
+                .andExpect(status().isOk());
+        assertEquals("Dùng tiền Việt Nam", jdbc.queryForObject("SELECT instruction FROM exam_slot_action WHERE"
+                + " slot_id = ? ORDER BY id DESC LIMIT 1", String.class, slot));
+        assertEquals("replace", latestJob(slot).get("request_scope"));
+        settle(examId);
 
         // gửi chip thừa hưởng nhưng xóa trống văn bản: câu mới chỉ có mã
         generator.mcqPrompts.clear();
@@ -384,6 +393,41 @@ class ExamTeacherRequestTest extends ExamFlowTestBase {
         assertTrue(requests.get("text").isNull());
         assertNull(jdbc.queryForObject("SELECT request_text FROM generated_question WHERE id = ?", String.class,
                 questionOf(slot)));
+    }
+
+    /**
+     * D-08 (rà soát 15/11): Đổi câu gửi lại đúng mã của ĐỀ (thứ tự khác, kèm mã không hợp dạng đã bị lọc ở hộp Đổi) giữ mức
+     * "exam"; đề không có yêu cầu mà gửi [] cũng không phải lượt Đổi tự đặt yêu cầu. Nhật ký không ghi mã.
+     */
+    @Test
+    void doiCauGuiLaiDungMaCuaDeGiuMucExamVaNhatKyKhongGhiMa() throws Exception {
+        int matrixId = createMatrix(mcqCell("Đa thức", null, 1));
+        int examId = buildExam(matrixId, codes("real_context", "multi_step", "tf_shared_context"), null);
+        settle(examId);
+        int slot = slotId(examId, cellId(matrixId, 1), 1);
+        replace(examId, slot, "{\"requestCodes\": [\"multi_step\", \"real_context\"], \"instruction\": \"\"}")
+                .andExpect(status().isOk());
+        assertNull(array("SELECT request_codes FROM exam_slot_action WHERE slot_id = ? ORDER BY id DESC LIMIT 1", slot));
+        assertNull(jdbc.queryForObject("SELECT instruction FROM exam_slot_action WHERE slot_id = ? ORDER BY id DESC"
+                + " LIMIT 1", String.class, slot));
+        assertEquals("exam", latestJob(slot).get("request_scope"));
+        assertEquals(List.of("real_context", "multi_step"), latestJobCodes(slot));
+        settle(examId);
+
+        // bớt một mã: tự đặt yêu cầu
+        replace(examId, slot, "{\"requestCodes\": [\"real_context\"]}").andExpect(status().isOk());
+        assertEquals(List.of("real_context"), array("SELECT request_codes FROM exam_slot_action WHERE slot_id = ?"
+                + " ORDER BY id DESC LIMIT 1", slot));
+        assertEquals("replace", latestJob(slot).get("request_scope"));
+        settle(examId);
+
+        int plain = buildExam(createMatrix(mcqCell("Phân thức", null, 1)), null, null);
+        settle(plain);
+        int plainSlot = count("SELECT id FROM exam_slot WHERE exam_id = ? ORDER BY id LIMIT 1", plain);
+        replace(plain, plainSlot, "{\"requestCodes\": []}").andExpect(status().isOk());
+        assertNull(array("SELECT request_codes FROM exam_slot_action WHERE slot_id = ? ORDER BY id DESC LIMIT 1",
+                plainSlot), "không có yêu cầu thừa hưởng thì [] là không có yêu cầu");
+        assertNull(latestJob(plainSlot).get("request_scope"));
     }
 
     // ---------- requests, inheritedRequests (test 10, 13) ----------
@@ -495,7 +539,12 @@ class ExamTeacherRequestTest extends ExamFlowTestBase {
         assertEquals(Boolean.TRUE, row.get("passed"), "kết luận lượt giải giữ nguyên");
         assertEquals("unchecked", row.get("request_verdict"), "lượt kiểm yêu cầu trả thiếu: chưa kiểm");
         assertTrue(String.valueOf(row.get("request_reason")).startsWith(TeacherRequestPrompt.UNCHECKED_FAILED_PREFIX));
-        assertEquals(0, item(examId, slot).get("infoReasons").size(), "chưa kiểm không có cờ thông tin");
+        // D-05: lượt kiểm yêu cầu lỗi thì có cờ THÔNG TIN riêng (giáo viên biết yêu cầu chưa được kiểm), không bật cờ
+        JsonNode it = item(examId, slot);
+        assertEquals(List.of("request_unchecked"), texts(it.get("infoReasons")), it.toString());
+        assertFalse(it.get("needsReview").asBoolean(), "không bật cần xem kỹ");
+        assertEquals(0, it.get("reviewReasons").size());
+        assertEquals("passed", it.get("qcState").asText());
         // hỏng
         SOLVER.requestCheck = "\"met\"";
         replace(examId, slot, "{}").andExpect(status().isOk());
@@ -519,6 +568,10 @@ class ExamTeacherRequestTest extends ExamFlowTestBase {
                 + " 'answer_check'", String.class)) {
             assertEquals("unchecked", v);
         }
+        // D-05: câu đã có cờ "cần xem kỹ" của lượt giải nên không thêm cờ request_unchecked
+        JsonNode it = item(examId, slotId(examId, cellId(matrixId, 1), 1));
+        assertTrue(it.get("needsReview").asBoolean(), it.toString());
+        assertEquals(0, it.get("infoReasons").size(), it.toString());
     }
 
     @Test
