@@ -33,6 +33,21 @@ class CoQcParityTest(unittest.TestCase):
         self.assertEqual("format", co_qc.buoc_cua("warning: x: lạ"))
         self.assertEqual("format", co_qc.buoc_cua("explanation_draft_suspect"))
 
+    def test_co_chinh_loai_co_trung_va_co_ha_tang(self):
+        """L10: cờ chính = phán đoán của bước Solver / format / grounding; cờ trùng và cờ hạ tầng báo riêng."""
+        for ly_do in (["duplicate: 6"], ["solver_pending"], ["solver_failed"], ["solver_not_run"], ["dedup_not_run"],
+                      ["grounding_pending"], ["grounding_failed"], ["duplicate: 6", "dedup_not_run"], []):
+            with self.subTest(ly_do):
+                self.assertFalse(co_qc.co_chinh(ly_do))
+                self.assertEqual([], co_qc.ly_do_chinh(ly_do))
+        for ly_do in (["solver_inconsistent"], ["solver_no_correct"], ["solver_multiple_correct"], ["solver_ambiguous"],
+                      ["solver_unparseable"], ["statement_undecidable"], ["warning: label: 4 ý cùng nhãn T"],
+                      ["explanation_draft_suspect"], ["grounding_not_supported"], ["grounding_unknown"]):
+            with self.subTest(ly_do):
+                self.assertTrue(co_qc.co_chinh(ly_do))
+        self.assertEqual(["statement_undecidable"], co_qc.ly_do_chinh(["solver_failed", "statement_undecidable",
+                                                                      "dedup_not_run"]))
+
 
 if __name__ == "__main__":
     unittest.main()

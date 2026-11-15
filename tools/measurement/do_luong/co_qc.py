@@ -125,6 +125,25 @@ def has_content_flag(reasons):
     return any(not r.startswith(SIMILAR_IN_EXAM_PREFIX) for r in reasons)
 
 
+# L10 (phản biện 15/11): cờ hạ tầng = job chưa chạy / đang chạy / thất bại, không phải phán đoán của QC về nội dung câu.
+HA_TANG = (SOLVER_NOT_RUN, SOLVER_PENDING, SOLVER_FAILED, DEDUP_NOT_RUN, GROUNDING_PENDING, GROUNDING_FAILED)
+
+
+def la_ly_do_chinh(reason):
+    """Lý do thuộc số chính của D2: phán đoán của bước Solver, format hoặc grounding. Loại cờ trùng (người chấm một câu
+    đơn lẻ không thấy được "trùng") và cờ hạ tầng; hai loại này báo riêng số lượng."""
+    return reason not in HA_TANG and buoc_cua(reason) in ("solver", "format", "grounding")
+
+
+def ly_do_chinh(reasons):
+    return [r for r in reasons or [] if la_ly_do_chinh(r)]
+
+
+def co_chinh(reasons):
+    """Cờ chính (L10): có ít nhất một lý do chính."""
+    return bool(ly_do_chinh(reasons))
+
+
 def buoc_cua(reason):
     """Bước QC sinh ra lý do: solver, grounding, dedup, format."""
     if reason.startswith(DUPLICATE_PREFIX):

@@ -10,7 +10,8 @@ Một câu (dict, một dòng JSONL):
   dap_an        mcq: "A"; tf: {"a": "Đ", "b": "S", ...}; sa: chuỗi đáp số
   loi_giai      giữ để tra cứu, KHÔNG hiển thị trên phiếu (Q3: bỏ lời giải ở mọi câu)
   khoi, chu_de, bai, muc_do (mcq/sa: easy|medium|hard; tf: danh sách 4 mức theo ý)
-  qc            chỉ câu hệ thống: {"co": bool, "ly_do": [...], "buoc": [...]} (đi vào file khóa, không vào phiếu)
+  qc            chỉ câu hệ thống: {"co": bool, "ly_do": [...], "buoc": [...], "co_chinh": bool, "ly_do_chinh": [...]}
+                (co = cờ giáo viên thấy; co_chinh = cờ chính của D2, bỏ cờ trùng và cờ hạ tầng, L10). Chỉ vào file khóa.
   prompt_version, ma_tran_mau, da_hien_cho_gv, de_thi_id: siêu dữ liệu cho file khóa
 """
 import json
@@ -63,7 +64,8 @@ def tu_dong_xuat(row):
         # mức ma trận yêu cầu (ô ma trận); baseline lấy cùng nguồn này nên phiếu không lộ nguồn qua cách ghi mức độ
         "muc_do": row.get("muc_do_o") or row.get("muc_do"),
         "qc": {"co": co_qc.has_content_flag(ly_do), "ly_do": ly_do,
-               "buoc": sorted({co_qc.buoc_cua(r) for r in ly_do})},
+               "buoc": sorted({co_qc.buoc_cua(r) for r in ly_do}),
+               "co_chinh": co_qc.co_chinh(ly_do), "ly_do_chinh": co_qc.ly_do_chinh(ly_do)},
         "prompt_version": row.get("prompt_version"),
         "ma_tran_mau": row.get("ma_tran_mau"),
         "da_hien_cho_gv": row.get("da_hien_cho_gv"),
@@ -183,9 +185,9 @@ def nhan_muc_do(muc_do):
     return MUC_DO_VI.get(muc_do, "—")
 
 
-def markdown_cau(stt, ma, cau):
+def markdown_cau(stt, ma, cau, hien_dap_an=True):
     """Khối Markdown của một câu trên phiếu: CHỈ đề, phương án/ý, đáp án và yêu cầu ma trận (khối, chủ đề, mức độ).
-    Không có lời giải, nguồn, cờ, phiên bản prompt (Q3)."""
+    Không có lời giải, nguồn, cờ, phiên bản prompt (Q3). hien_dap_an=False: pha 1 (tự giải, L6a), không in đáp án đã cho."""
     blocks = [f"## Câu {stt} — Mã {ma}"]
     meta = f"*Khối {cau.get('khoi') or '—'} · Chủ đề: {inline(cau.get('chu_de') or '—')}"
     if cau.get("bai"):
@@ -195,11 +197,13 @@ def markdown_cau(stt, ma, cau):
     blocks.extend(doan(cau.get("de")))
     if cau["dang"] == "mcq":
         blocks.append("\n\n".join(f"**{k}.** {mot_dong(cau['phuong_an'].get(k))}" for k in "ABCD"))
-        blocks.append(f"**Đáp án:** {cau['dap_an']}")
+        if hien_dap_an:
+            blocks.append(f"**Đáp án:** {cau['dap_an']}")
     elif cau["dang"] == "tf":
         blocks.append("\n\n".join(f"**{y['vi_tri']})** {mot_dong(y['noi_dung'])}" for y in cau["y"]))
         da = cau["dap_an"]
-        blocks.append("**Đáp án:** " + "; ".join(f"{k}) {'Đúng' if da.get(k) == 'Đ' else 'Sai'}" for k in "abcd"))
-    else:
+        if hien_dap_an:
+            blocks.append("**Đáp án:** " + "; ".join(f"{k}) {'Đúng' if da.get(k) == 'Đ' else 'Sai'}" for k in "abcd"))
+    elif hien_dap_an:
         blocks.append(f"**Đáp số:** {mot_dong(str(cau['dap_an']))}")
     return "\n\n".join(blocks)

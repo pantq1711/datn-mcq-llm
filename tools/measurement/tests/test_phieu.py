@@ -115,6 +115,62 @@ class PhieuKhongLoTest(unittest.TestCase):
             f = '"' + ",".join(want) + '"'
             self.assertIn(f"D{i}", lists[f].split())
 
+    def test_pha_1_khong_co_dap_an(self):
+        """L6a: pha 1 người chấm tự giải; đề không in đáp án đã cho, phiếu ghi đáp án của chính người chấm."""
+        md = phieu.markdown_de(self.ds, pha=1)
+        self.kiem(md, md, "markdown pha 1")
+        for s in ("Đáp án:", "Đáp số:", "a) Đúng; b) Sai", "-0,5"):
+            self.assertNotIn(s, md)
+        self.assertIn("$6x^2$", md)  # vẫn có phương án
+        path = os.path.join(self.tmp, "phieu-pha1-Quan.xlsx")
+        phieu.xlsx_phieu_pha1(path, self.ds)
+        text, xml = chu_trong_xlsx(path)
+        self.kiem(text, xml, "xlsx pha 1")
+        self.assertNotIn("-0,5", text)
+        from openpyxl import load_workbook
+        ws = load_workbook(path)[phieu.SHEET_PHA1]
+        self.assertEqual(phieu.COT_PHA1, [c.value for c in ws[1]])
+        lists = {dv.formula1: str(dv.sqref).split() for dv in ws.data_validations.dataValidation}
+        mcq = '"' + ",".join(phieu.TU_GIAI_MCQ) + '"'
+        tf = '"' + ",".join(phieu.TU_GIAI_TF) + '"'
+        for i, (_, _, c) in enumerate(self.ds, start=2):
+            if c["dang"] == "mcq":
+                self.assertIn(f"D{i}", lists[mcq])
+            if c["dang"] == "tf":
+                for col in "EFGH":
+                    self.assertIn(f"{col}{i}", lists[tf])
+
+    def test_pha_2_co_cot_doan_nguon_cuoi_phieu(self):
+        md = phieu.markdown_de(self.ds, pha=2)
+        self.assertIn("a) Đúng; b) Sai", md)
+        path = os.path.join(self.tmp, "phieu-pha2-Quan.xlsx")
+        phieu.xlsx_phieu_cham(path, self.ds)
+        self.kiem(*chu_trong_xlsx(path), "xlsx pha 2")
+        from openpyxl import load_workbook
+        ws = load_workbook(path)["Phiếu chấm"]
+        cot = [c.value for c in ws[1]]
+        self.assertEqual("Đoán nguồn", cot[-1])
+        self.assertEqual(phieu.COT_PHIEU[:9], cot[:9])  # các cột cũ giữ nguyên vị trí
+        lists = {dv.formula1: str(dv.sqref).split() for dv in ws.data_validations.dataValidation}
+        self.assertIn("J2", lists['"' + ",".join(phieu.DOAN_NGUON) + '"'])
+
+    @unittest.skipUnless(shutil.which("pandoc"), "cần pandoc")
+    def test_main_hai_pha_ra_file_rieng(self):
+        import json
+        bo = os.path.join(self.tmp, "bo-cham.jsonl")
+        with open(bo, "w", encoding="utf-8") as f:
+            for t, m, c in self.ds:
+                f.write(json.dumps({"thu_tu": t, "ma": m, **c}, ensure_ascii=False) + "\n")
+        out = os.path.join(self.tmp, "phieu")
+        phieu.main(["cham", "--pha", "1", "--bo-cham", bo, "--nguoi-cham", "Quan", "--out-dir", out])
+        self.assertEqual({"de-pha1.docx", "phieu-pha1-Quan.xlsx"}, set(os.listdir(out)))
+        text, xml = chu_trong_docx(os.path.join(out, "de-pha1.docx"))
+        self.kiem(text, xml, "docx pha 1")
+        self.assertNotIn("Đáp án:", text)
+        phieu.main(["cham", "--pha", "2", "--bo-cham", bo, "--nguoi-cham", "Quan", "--out-dir", out])
+        self.assertIn("phieu-pha2-Quan.xlsx", os.listdir(out))
+        self.assertIn("de-pha2.docx", os.listdir(out))
+
     @unittest.skipUnless(shutil.which("pandoc"), "cần pandoc")
     def test_docx_khong_lo_va_cong_thuc_la_equation(self):
         path = os.path.join(self.tmp, "de-cham.docx")

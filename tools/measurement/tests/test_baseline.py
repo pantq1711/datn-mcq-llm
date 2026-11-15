@@ -106,6 +106,117 @@ class ParseJsonTest(unittest.TestCase):
         self.assertEqual('["\\\\beta \\\\theta \\\\rho"]', baseline_parse.sua_json('["\\beta \\theta \\rho"]'))
 
 
+DE_4_CAU = ("PHẦN I\n**Câu 1:** Đơn thức nào?\nA. $x$\nB. $x+1$\nC. $1/x$\nD. $x-1$\n"
+            "**Câu 2:** Góc?\nA. 1\nB. 2\nC. 3\nD. 4\n"
+            "PHẦN II\n**Câu 1:** Cho $P$.\na) ý a\nb) ý b\nc) ý c\nd) ý d\n"
+            "PHẦN III\n**Câu 1:** Tính $A$.\n\n---\n\n")
+
+
+class ParseBaseline1DangThatTest(unittest.TestCase):
+    """Dạng đầu ra thật của prompt 1 (15/11): tiêu đề "HƯỚNG DẪN GIẢI VÀ ĐÁP ÁN", đánh số lại theo phần, gạch đầu dòng "*"."""
+
+    def test_tieu_de_huong_dan_giai_va_gach_dau_dong_sao(self):
+        raw = DE_4_CAU + ("# HƯỚNG DẪN GIẢI VÀ ĐÁP ÁN\n\n### PHẦN I.\n*   **Câu 1:** **A**\n*   **Câu 2:** **C** (vì 3).\n"
+                          "### PHẦN II.\n* **Câu 1:** a) Đúng | b) Sai | c) Đúng | d) Đúng\n"
+                          "### PHẦN III.\n* **Câu 1:** **12** (thay vào).\n")
+        tot, loi = baseline_parse.tu_van_ban(raw, "baseline_1", 1, MT_NHO)
+        self.assertEqual([], loi)
+        self.assertEqual(["A", "C"], [c["dap_an"] for c in tot if c["dang"] == "mcq"])
+        self.assertEqual({"a": "Đ", "b": "S", "c": "Đ", "d": "Đ"}, tot[2]["dap_an"])
+        self.assertEqual("12", tot[3]["dap_an"])
+
+    def test_y_dd_xuong_dong_co_gach_dau_dong_sao(self):
+        raw = DE_4_CAU + ("# HƯỚNG DẪN GIẢI VÀ ĐÁP ÁN\n### PHẦN I.\n* **Câu 1:** A\n* **Câu 2:** C\n### PHẦN II.\n"
+                          "* **Câu 1:**\n    *   a) Đúng.\n    *   b) Sai.\n    *   c) Đúng.\n    *   d) Sai.\n"
+                          "### PHẦN III.\n* **Câu 1:** 7\n")
+        tot, loi = baseline_parse.tu_van_ban(raw, "baseline_1", 1, MT_NHO)
+        self.assertEqual([], loi)
+        self.assertEqual({"a": "Đ", "b": "S", "c": "Đ", "d": "S"}, tot[2]["dap_an"])
+
+
+    def test_bang_dap_an_phan_i_khong_bi_cau_1_phan_ii_che(self):
+        raw = DE_4_CAU + ("# ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM\n### PHẦN I. Đáp án trắc nghiệm\n| Câu | 1 | 2 |\n| :-: |:-:|:-:|\n"
+                          "| **Đáp án** | **B** | **D** |\n### PHẦN II. Đáp án đúng sai\n"
+                          "* **Câu 1:** a) Đúng | b) Sai | c) Đúng | d) Đúng\n### PHẦN III.\n* **Câu 1:** **-5** (hệ số).\n")
+        tot, loi = baseline_parse.tu_van_ban(raw, "baseline_1", 1, MT_NHO)
+        self.assertEqual([], loi)
+        self.assertEqual(["B", "D"], [c["dap_an"] for c in tot if c["dang"] == "mcq"])
+        self.assertEqual("-5", tot[3]["dap_an"])
+
+
+class DapAnMauThuanTest(unittest.TestCase):
+    """An chốt 15/11: câu model tự sửa giữa chừng KHÔNG lấy đáp án cuối; xếp loại riêng "đáp án mâu thuẫn"."""
+
+    def parse(self, dap_an):
+        raw = DE_4_CAU + "# HƯỚNG DẪN GIẢI VÀ ĐÁP ÁN\n" + dap_an
+        return baseline_parse.tu_van_ban(raw, "baseline_1", 2, MT_NHO)
+
+    def loai(self, loi, cid):
+        return next(x for x in loi if x["id"] == cid).get("loai")
+
+    def test_mcq_doi_chu_giua_chung(self):
+        tot, loi = self.parse("### PHẦN I.\n*   **Câu 1:** **B** (bậc là 3? Xin lỗi, bậc 4. Chọn **A**).\n"
+                              "    *   *Correction Câu 1:* Chọn **A**.\n*   **Câu 2:** **C**\n"
+                              "### PHẦN II.\n* **Câu 1:** a) Đúng | b) Sai | c) Đúng | d) Đúng\n### PHẦN III.\n* **Câu 1:** 7\n")
+        self.assertEqual(["baseline_1-d2-c02"], [c["id"] for c in tot if c["dang"] == "mcq"])
+        self.assertEqual("dap_an_mau_thuan", self.loai(loi, "baseline_1-d2-c01"))
+        x = next(x for x in loi if x["id"] == "baseline_1-d2-c01")
+        self.assertTrue(any(m.startswith("đáp án mâu thuẫn") for m in x["loi"]), x["loi"])
+        self.assertIsNone(x["cau"]["dap_an"])  # không chọn đáp án cuối, cũng không giữ đáp án đầu
+
+    def test_tf_mot_y_vua_sai_vua_dung(self):
+        tot, loi = self.parse("### PHẦN I.\n* **Câu 1:** A\n* **Câu 2:** C\n### PHẦN II.\n* **Câu 1:**\n"
+                              "    *   a) Đúng.\n    *   b) Sai (bậc là 2? À bậc là 2. Vậy ý b là **Đúng**).\n"
+                              "    *   c) Đúng.\n    *   d) Sai.\n### PHẦN III.\n* **Câu 1:** 7\n")
+        self.assertEqual("dap_an_mau_thuan", self.loai(loi, "baseline_1-d2-c03"))
+        self.assertNotIn("tf", [c["dang"] for c in tot])
+
+    def test_sa_sua_de_trong_phan_dap_an(self):
+        tot, loi = self.parse("### PHẦN I.\n* **Câu 1:** A\n* **Câu 2:** C\n### PHẦN II.\n"
+                              "* **Câu 1:** a) Đúng | b) Sai | c) Đúng | d) Đúng\n### PHẦN III.\n* **Câu 1:** **-4**\n"
+                              "*(Hướng dẫn: vô nghiệm? *Kiểm tra lại đề:* ... Xin sửa lại đề câu 6 một chút.)*\n"
+                              "*Đáp án sửa lại cho đẹp:* **$1$ hoặc $-3$**\n")
+        self.assertEqual("dap_an_mau_thuan", self.loai(loi, "baseline_1-d2-c04"))
+        self.assertEqual(3, len(tot))
+
+    def test_loi_dinh_dang_thuong_co_loai_dinh_dang(self):
+        tot, loi = self.parse("### PHẦN I.\n* **Câu 1:** A\n### PHẦN II.\n"
+                              "* **Câu 1:** a) Đúng | b) Sai | c) Đúng | d) Đúng\n### PHẦN III.\n* **Câu 1:** 7\n")
+        self.assertEqual("dinh_dang", self.loai(loi, "baseline_1-d2-c02"))  # thiếu đáp án câu 2: lỗi định dạng
+
+    def test_main_dem_theo_loai(self):
+        with tempfile.TemporaryDirectory() as d:
+            tho = os.path.join(d, "tho")
+            os.makedirs(tho)
+            with open(os.path.join(tho, "baseline_1-d1.txt"), "w", encoding="utf-8") as f:
+                f.write(DE_4_CAU + "# HƯỚNG DẪN GIẢI VÀ ĐÁP ÁN\n### PHẦN I.\n* **Câu 1:** **B** (Khoan, chọn **A**)\n"
+                        "* **Câu 2:** C\n### PHẦN II.\n* **Câu 1:** a) Đúng | b) Sai | c) Đúng | d) Đúng\n"
+                        "### PHẦN III.\n* **Câu 1:** 7\n")
+            baseline_parse.main(["--tho-dir", tho, "--out-dir", os.path.join(d, "out"), "--ma-tran",
+                                 os.path.join(_duong_dan.FIXTURES, "ma-tran-nho.json")])
+            with open(os.path.join(d, "out", "parse-loi-dem.json"), encoding="utf-8") as f:
+                dem = json.load(f)
+        self.assertEqual({"baseline_1": {"dap_an_mau_thuan": 1}}, dem)
+
+    def test_khong_cho_sua_tay_cau_mau_thuan(self):
+        with tempfile.TemporaryDirectory() as d:
+            tho = os.path.join(d, "tho")
+            os.makedirs(tho)
+            with open(os.path.join(tho, "baseline_1-d1.txt"), "w", encoding="utf-8") as f:
+                f.write(DE_4_CAU + "# HƯỚNG DẪN GIẢI VÀ ĐÁP ÁN\n### PHẦN I.\n* **Câu 1:** **B** (Khoan, chọn **A**)\n"
+                        "* **Câu 2:** C\n### PHẦN II.\n* **Câu 1:** a) Đúng | b) Sai | c) Đúng | d) Đúng\n"
+                        "### PHẦN III.\n* **Câu 1:** 7\n")
+            mt = os.path.join(_duong_dan.FIXTURES, "ma-tran-nho.json")
+            out = os.path.join(d, "out")
+            baseline_parse.main(["--tho-dir", tho, "--out-dir", out, "--ma-tran", mt])
+            sua = dict(next(x for x in doc_jsonl(os.path.join(out, "parse-loi.jsonl")))["cau"], dap_an="A")
+            with open(os.path.join(d, "sua.jsonl"), "w", encoding="utf-8") as f:
+                f.write(json.dumps(sua, ensure_ascii=False) + "\n")
+            with self.assertRaises(ValueError):
+                baseline_parse.main(["--tho-dir", tho, "--out-dir", out, "--ma-tran", mt, "--sua-tay",
+                                     os.path.join(d, "sua.jsonl")])
+
+
 class ParseFileVaSuaTayTest(unittest.TestCase):
     def test_main_ghi_loi_va_nhan_sua_tay(self):
         with tempfile.TemporaryDirectory() as d:

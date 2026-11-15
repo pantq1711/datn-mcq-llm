@@ -22,7 +22,7 @@ cd tools/measurement
 python -m venv .venv
 .venv/Scripts/python -m pip install -r requirements.txt   # openpyxl; pandoc phải có sẵn trên PATH
 cd ../..
-tools/measurement/.venv/Scripts/python -m unittest discover tools/measurement/tests   # 56 test, không cần DB hay mạng
+tools/measurement/.venv/Scripts/python -m unittest discover tools/measurement/tests   # 87 test, không cần DB hay mạng
 ```
 
 Các lệnh bên dưới chạy từ `tools/measurement` với `PY=.venv/Scripts/python` và `D=../../data/private/do-luong`.
@@ -63,35 +63,44 @@ lỗi gốc, trường đã đổi trước/sau). Báo số câu phải sửa ta
 **3. Lấy mẫu + gán mã + file khóa.**
 
 ```bash
-$PY -m do_luong.lay_mau --he-thong $D/cau-he-thong.jsonl --baseline $D/baseline_1.jsonl $D/baseline_2.jsonl \
-    --n-he-thong 60 --n-baseline 20 --seed 20261113 --out-dir $D
+$PY -m do_luong.lay_mau --he-thong $D/cau-he-thong.jsonl --de-thi-id 1 2 3 4 --baseline-2 $D/baseline_2.jsonl \
+    --seed 20261115 --out-dir $D
 ```
 
-Hệ thống: 20 câu mỗi dạng, mỗi dạng 1/2 có cờ, ưu tiên câu của ma trận `giuaki1-toan8`; tầng thiếu thì bù và ghi vào
-`$D/lay-mau-log.json` (đọc file này trước khi chấm). Baseline: 20 câu mỗi prompt chia theo tỉ lệ dạng. Ra
-`$D/khoa.csv` (FILE KHÓA), `$D/bo-cham.jsonl`.
+CHỈ câu của các đề thực nghiệm (`--de-thi-id`, L4). Hệ thống chia ba tầng theo cờ: **cờ chính** (lý do bước Solver /
+format / grounding) lấy HẾT; **không cờ** rút 12 câu mỗi dạng (`--n-khong-co`); **chỉ cờ phụ** (cờ trùng, cờ hạ tầng) không
+vào phiếu, ghi riêng (L10). Không ưu tiên câu nào trong tầng. Baseline: CHỈ baseline 2, 12 câu mỗi dạng (`--n-baseline`)
+chia đều theo lượt. Ra `$D/khoa.csv` (FILE KHÓA, có cột `tang`, `co_chinh`, `ly_do_chinh`), `$D/bo-cham.jsonl`,
+`$D/lay-mau-log.json` (cỡ tầng `tong_the`, số câu mỗi tầng trong phiếu, câu chỉ có cờ phụ; đọc trước khi chấm).
 
-**4. Phiếu.**
+**4. Phiếu hai pha (L6).**
 
 ```bash
-$PY -m do_luong.phieu cham --bo-cham $D/bo-cham.jsonl --nguoi-cham Quan Dang --out-dir $D/phieu
+$PY -m do_luong.phieu cham --pha 1 --bo-cham $D/bo-cham.jsonl --nguoi-cham Quan Dang --out-dir $D/phieu
+# nhận lại phiếu pha 1 của cả hai rồi mới phát pha 2
+$PY -m do_luong.phieu cham --pha 2 --bo-cham $D/bo-cham.jsonl --nguoi-cham Quan Dang --out-dir $D/phieu
 ```
 
-Gửi `de-cham.docx` + `phieu-Quan.xlsx` cho Quân, `de-cham.docx` + `phieu-Dang.xlsx` cho Đang, kèm
-`docs/experiments/d2/huong-dan-cham.md`.
+Pha 1: `de-pha1.docx` (không có đáp án) + `phieu-pha1-<tên>.xlsx` (người chấm ghi đáp án của mình). Pha 2: `de-pha2.docx`
+(có đáp án) + `phieu-pha2-<tên>.xlsx` (năm tiêu chí, cột cuối "Đoán nguồn"). Kèm `docs/experiments/d2/huong-dan-cham.md`.
 
-**5. Phân xử rồi báo cáo.**
+**5. Phân xử rồi báo cáo.** `docs/experiments/d2/ke-hoach-phan-tich.md` phải được commit TRƯỚC bước này.
 
 ```bash
-$PY -m do_luong.phan_tich_d2 phan-xu --khoa $D/khoa.csv --phieu $D/phieu/phieu-Quan.xlsx $D/phieu/phieu-Dang.xlsx --out-dir $D/phieu
-# giáo viên điền cột "Kết luận" trong $D/phieu/phan-xu.xlsx
-$PY -m do_luong.phan_tich_d2 bao-cao --khoa $D/khoa.csv --phieu $D/phieu/phieu-Quan.xlsx $D/phieu/phieu-Dang.xlsx \
-    --phan-xu $D/phieu/phan-xu.xlsx --he-thong-xuat $D/cau-he-thong.jsonl --out-dir $D/ket-qua-d2
+P=$D/phieu
+$PY -m do_luong.phan_tich_d2 phan-xu --khoa $D/khoa.csv --phieu $P/phieu-pha2-Quan.xlsx $P/phieu-pha2-Dang.xlsx \
+    --pha1 $P/phieu-pha1-Quan.xlsx $P/phieu-pha1-Dang.xlsx --bo-cham $D/bo-cham.jsonl --out-dir $P
+# giáo viên điền cột "Kết luận" trong $P/phan-xu.xlsx
+$PY -m do_luong.phan_tich_d2 bao-cao --khoa $D/khoa.csv --phieu $P/phieu-pha2-Quan.xlsx $P/phieu-pha2-Dang.xlsx \
+    --pha1 $P/phieu-pha1-Quan.xlsx $P/phieu-pha1-Dang.xlsx --bo-cham $D/bo-cham.jsonl \
+    --phan-xu $P/phan-xu.xlsx --lay-mau-log $D/lay-mau-log.json --out-dir $D/ket-qua-d2
 ```
 
-Ra `ket-qua-d2.md` (dán vào chương 4) và CSV: kappa từng tiêu chí; cờ × nhãn theo dạng (precision, recall trong mẫu,
-recall ước lượng tổng thể, tỉ lệ lọt, KTC Wilson 95%) cho "lỗi đáp án" và "lỗi bất kỳ"; riêng bước Solver; D4 theo nhóm
-với Fisher exact và chênh lệch tỉ lệ (KTC Newcombe); `cau-lot.csv` (câu lọt, cột `loai_loi` để phân loại).
+`phan-xu.xlsx` gồm ô hai người khác nhau và ô Đáp án của câu mà pha 1 không nhất quán với pha 2 (cột "Lý do xem"). Ra
+`ket-qua-d2.md` và CSV: kappa; cờ chính × nhãn theo dạng (precision, recall trong mẫu, recall ước lượng tổng thể, tỉ lệ
+lọt, KTC Wilson 95%) cho "lỗi đáp án" (chính) và "lỗi bất kỳ"; riêng bước Solver; D4 theo nhóm (không cờ, cờ chính,
+baseline 2, trước QC có trọng số) và một so sánh chính có kiểm định (không cờ vs baseline 2: Fisher, Newcombe); mức độ tách
+tầng; pha 1 khớp khóa; đoán nguồn; `cau-lot.csv`.
 
 D4 đo thêm thời gian và số công thức sửa tay: điền `docs/experiments/d4/bang-do-thoi-gian.md`.
 

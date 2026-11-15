@@ -3,21 +3,38 @@
 Dành cho người chấm (Quân, Đang) và người phân xử. Đọc hết trước khi chấm; chấm 3 câu luyện ở mục 6 rồi so với đáp án
 mẫu để thống nhất cách hiểu (câu luyện không nằm trong bộ chấm).
 
-## 1. Bạn nhận được gì
+## 1. Bạn nhận được gì (hai pha)
 
-| File | Nội dung |
-|---|---|
-| `de-cham.docx` | ~100 câu Toán 8 (trắc nghiệm 4 phương án, Đúng/Sai, trả lời ngắn). Mỗi câu có **Thứ tự**, **Mã** (4 ký tự ngẫu nhiên), khối, chủ đề, nội dung, **mức độ yêu cầu**, đề, phương án/ý và **đáp án đã cho**. Không có lời giải. |
-| `phieu-<tên>.xlsx` | Phiếu của riêng bạn, mỗi dòng một câu theo đúng Thứ tự và Mã. Các ô có danh sách chọn sẵn. |
+Chấm **hai pha**, phát riêng. Pha 2 chỉ được gửi sau khi bạn đã nộp phiếu pha 1; không sửa phiếu pha 1 sau khi nộp.
 
-Phiếu không cho biết câu do ai hay công cụ nào soạn. **Không đoán nguồn, không bàn với người chấm khác** cho tới khi cả hai
-đã nộp phiếu. Tự giải từng câu (giấy nháp, máy tính cầm tay được); không dùng AI.
+| Pha | File | Nội dung |
+|---|---|---|
+| 1 | `de-pha1.docx` | 90 câu Toán 8 (trắc nghiệm 4 phương án, Đúng/Sai, trả lời ngắn). Mỗi câu có **Thứ tự**, **Mã** (4 ký tự ngẫu nhiên), khối, chủ đề, nội dung, **mức độ yêu cầu**, đề, phương án/ý. **Không có đáp án**, không có lời giải. |
+| 1 | `phieu-pha1-<tên>.xlsx` | Ghi đáp án **của bạn** cho từng câu (mục 1a). |
+| 2 | `de-pha2.docx` | Cùng 90 câu, cùng Thứ tự và Mã, có thêm **đáp án đã cho**. |
+| 2 | `phieu-pha2-<tên>.xlsx` | Chấm năm tiêu chí (mục 2) và cột cuối **Đoán nguồn** (mục 2.6). |
 
-## 2. Năm tiêu chí
+Phiếu không cho biết câu do ai hay công cụ nào soạn. **Không bàn với người chấm khác** cho tới khi cả hai đã nộp phiếu.
+Tự giải từng câu (giấy nháp, máy tính cầm tay được); không dùng AI.
+
+## 1a. Pha 1: tự giải
+
+Giải từng câu như học sinh giỏi, rồi ghi vào phiếu pha 1:
+
+| Dạng | Cột | Ghi |
+|---|---|---|
+| Trắc nghiệm | Trắc nghiệm: phương án đúng | `A`–`D`; `Nhiều phương án đúng` nếu từ hai phương án trở lên đúng theo chữ của đề; `Không có phương án đúng` nếu không phương án nào đúng |
+| Đúng/Sai | Ý a … Ý d | `Đ` hoặc `S` cho từng ý; `Không kết luận được` nếu ý đó thiếu dữ kiện hoặc hiểu được hai cách |
+| Trả lời ngắn | Trả lời ngắn: đáp số | Đáp số của bạn (số nguyên, số thập phân dùng dấu phẩy, hoặc phân số `a/b`) |
+
+Không cần ghi lời giải; Ghi chú tự do (nên ghi khi đề có vấn đề). Máy sẽ so đáp án của bạn với đáp án đã cho; câu nào bạn
+tự giải khác đáp án đã cho mà ở pha 2 lại chấm "Đúng" (hoặc ngược lại) sẽ được đưa cho người phân xử xem lại.
+
+## 2. Pha 2: năm tiêu chí
 
 ### 2.1 Đáp án (bắt buộc)
 
-So **đáp án đã cho** với lời giải của bạn.
+So **đáp án đã cho** với lời giải của bạn (lời giải ở pha 1; nếu nay thấy pha 1 nhầm thì chấm theo lời giải đúng và ghi chú).
 
 | Dạng | Giá trị | Chọn khi |
 |---|---|---|
@@ -65,19 +82,29 @@ hiểu thì chọn **Không**. Ghi lý do vào Ghi chú.
 Tự do. **Nên ghi** mỗi khi chọn Sai, Nhiều đáp án đúng, Không có đáp án đúng, Không đúng, Có: phương án/ý nào, kết quả
 đúng là gì. Người phân xử đọc cột này.
 
+### 2.6 Đoán nguồn (cột cuối, điền SAU KHI chấm xong mọi câu)
+
+Bộ chấm trộn câu do công cụ của nhóm soạn và câu do AI soạn khi được gọi thẳng. Khi đã chấm xong cả 90 câu, quay lại điền
+cột **Đoán nguồn** cho từng câu: `Công cụ của nhóm`, `AI gọi thẳng`, hoặc `Không đoán được` nếu không có căn cứ. Không sửa
+các cột khác sau khi bắt đầu đoán. Cột này chỉ dùng để đo xem người chấm có phân biệt được nguồn không (không ảnh hưởng
+nhãn).
+
 ## 3. Cách hệ thống dùng nhãn (để hiểu, không ảnh hưởng cách chấm)
 
-- **Lỗi đáp án** = Đáp án khác "Đúng". **Lỗi bất kỳ** = lỗi đáp án, hoặc Vượt lớp = Có, hoặc Mơ hồ = Có.
+- **Lỗi đáp án** = Đáp án (pha 2) khác "Đúng". **Lỗi bất kỳ** = lỗi đáp án, hoặc Vượt lớp = Có, hoặc Mơ hồ = Có.
 - Đúng mức độ báo riêng, không tính là lỗi.
-- Hai người chấm khác nhau ở ô nào thì người phân xử chỉ xem ô đó (`phan-xu.xlsx`), không biết nguồn câu.
+- Người phân xử chỉ xem các ô hai người chấm khác nhau, và ô Đáp án của câu mà pha 1 của một người không nhất quán với pha
+  2 (`phan-xu.xlsx`, cột "Lý do xem"); không biết nguồn câu.
+- Cách tính đã định trước trong [`ke-hoach-phan-tich.md`](ke-hoach-phan-tich.md).
 
 ## 4. Quy trình
 
 1. Chấm 3 câu luyện (mục 6), so đáp án mẫu; còn khác thì trao đổi với An **trước** khi mở bộ chấm.
-2. Chấm theo Thứ tự; mỗi câu điền đủ 4 cột chọn (Đáp án, Đúng mức độ, Vượt lớp, Mơ hồ). Ước lượng 2–3 phút/câu.
-3. Nộp phiếu cho An. Không sửa phiếu sau khi nộp.
-4. Phân xử (giáo viên): mở `phan-xu.xlsx`, mỗi dòng là một ô hai người chấm khác nhau; đọc câu theo Mã trong
-   `de-cham.docx`, chọn Kết luận, ghi lý do.
+2. **Pha 1:** tự giải theo Thứ tự, điền phiếu pha 1 (mục 1a). Ước lượng 2 phút/câu. Nộp cho An.
+3. **Pha 2:** nhận `de-pha2.docx` + phiếu pha 2; mỗi câu điền đủ 4 cột chọn (Đáp án, Đúng mức độ, Vượt lớp, Mơ hồ), cuối
+   cùng điền cột Đoán nguồn (mục 2.6). Ước lượng 1–2 phút/câu. Nộp cho An. Không sửa phiếu sau khi nộp.
+4. Phân xử (giáo viên): mở `phan-xu.xlsx`, mỗi dòng là một ô cần kết luận; đọc câu theo Mã trong `de-pha2.docx`, chọn Kết
+   luận, ghi lý do.
 
 ## 5. Ví dụ
 
