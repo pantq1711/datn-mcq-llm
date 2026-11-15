@@ -102,10 +102,18 @@ Không báo p-value cho dòng "cả mẫu" hệ thống (mẫu phân tầng khô
 
 ## 9. Hiện trạng công cụ (15/11)
 
-`do_luong.phan_tich_d2` đã có: cờ chính làm dương tính, so sánh chính, dòng trước QC (điểm ước lượng), pha 1, phân xử do pha 1,
-đoán nguồn, mức độ tách tầng. **Chưa có (viết trước khi chạy bao-cao, không đổi định nghĩa ở trên):** bootstrap phân tầng và
-theo cụm, bảng mục 6, bảng theo từng đề/lượt.
+`do_luong.phan_tich_d2` có đủ các phép trong kế hoạch: cờ chính làm dương tính, so sánh chính (Bảng 5), dòng trước QC, pha 1,
+phân xử do pha 1, đoán nguồn, mức độ tách tầng; bootstrap phân tầng cho trước QC, recall tổng thể, (i), (ii) (Bảng 9);
+bootstrap theo cụm cho 3.1 (Bảng 10); tỉ lệ theo từng đề/lượt (Bảng 11); bảng mục 6 (Bảng 12, hai dòng DB lấy từ
+`tools/measurement/sql/d2-truoc-sau.sql`). Recall tổng thể ở Bảng 2 dùng trọng số dạng × tầng như mục 2 và 5. B và seed
+bootstrap cố định trong code (`BOOTSTRAP_B`, `BOOTSTRAP_SEED`). Đã test trên dữ liệu giả; chưa chạy trên dữ liệu thật.
 
 ## Thay đổi sau khi commit
 
-(chưa có)
+- **15/11, trước khi mở khóa – cài đặt, không đổi định nghĩa, so sánh hay ngưỡng.** Viết phần công cụ còn thiếu ở mục 9.
+  Ba điểm cài đặt cần ghi:
+  1. Bản trước của Bảng 2 tính dòng "tất cả" của recall tổng thể bằng cách gộp ba dạng trong mỗi tầng. Đã sửa về trọng số dạng
+     × tầng theo mục 2 và 5. Từng dạng riêng không đổi.
+  2. Ở mục 6, "câu bị dedup loại" được hiểu là dedup kết luận trùng (`passed = false`, có câu bị so trùng). Dedup lỗi hoặc thiếu
+     phạm vi không tính là trùng và được báo số riêng.
+  3. Bootstrap: KTC lấy theo phân vị 2,5%/97,5%. Lần lặp nào cho chỉ số không xác định (mẫu số 0) thì bỏ ra và báo số lần.

@@ -196,10 +196,21 @@ class PhanTichD2Test(unittest.TestCase):
     def test_bao_cao_ghi_file(self):
         out = os.path.join(self.tmp, "kq")
         px = {(self.ma["sys-3"], "dap_an"): "Đúng", (self.ma["sys-5"], "muc_do"): "Không đúng"}
-        phan_tich_d2.bao_cao(self.khoa, self.p1, self.p2, px, out)
+        phan_tich_d2.bao_cao(self.khoa, self.p1, self.p2, px, out, b=100)
         for f in ("ket-qua-d2.md", "bang1-kappa.csv", "bang2a-co-x-nhan-loi_dap_an.csv", "bang4-nhom.csv",
-                  "bang5-so-sanh.csv", "bang8-doan-nguon.csv", "cau-lot.csv"):
+                  "bang5-so-sanh.csv", "bang8-doan-nguon.csv", "bang10-bootstrap-cum.csv", "bang11-theo-de-luot.csv",
+                  "bang12-truoc-sau.csv", "cau-lot.csv"):
             self.assertTrue(os.path.exists(os.path.join(out, f)), f)
+        self.assertFalse(os.path.exists(os.path.join(out, "bang9-bootstrap.csv")))  # cần cỡ tầng
+        out2 = os.path.join(self.tmp, "kq2")
+        qc = [{"de_thi_id": 1, "cau_sinh_ra": 31, "qua_format": 30, "trung": 0}]
+        phan_tich_d2.bao_cao(self.khoa, self.p1, self.p2, px, out2, {("mcq", True): 3, ("mcq", False): 27},
+                             qc_dem=qc, de_thi_ids=[1], n_quan_the=31, b=100)
+        self.assertTrue(os.path.exists(os.path.join(out2, "bang9-bootstrap.csv")))
+        with open(os.path.join(out2, "ket-qua-d2.md"), encoding="utf-8") as f:
+            md = f.read()
+        for s in ("Bảng 9.", "Bảng 10.", "Bảng 11.", "Bảng 12.", "B = 100", "không khớp"):
+            self.assertIn(s, md)
         with open(os.path.join(out, "cau-lot.csv"), encoding="utf-8-sig") as f:
             lot = list(csv.DictReader(f))
         self.assertEqual(["sys-6"], [r["id"] for r in lot])
@@ -269,6 +280,186 @@ class Pha1Test(unittest.TestCase):
         wb.save(self.paths[0])
         with self.assertRaises(ValueError):
             phan_tich_d2.doc_phieu(self.paths[0])
+
+
+CAU_GIA = [  # (nhóm, dạng, cụm = đề hoặc lượt baseline, lỗi đáp án)
+    ("co_chinh", "mcq", "1", 1), ("co_chinh", "mcq", "2", 1), ("co_chinh", "mcq", "3", 0), ("co_chinh", "mcq", "4", 0),
+    ("khong_co", "mcq", "1", 1), ("khong_co", "mcq", "2", 0), ("khong_co", "mcq", "3", 0), ("khong_co", "mcq", "4", 0),
+    ("co_chinh", "tf", "1", 1), ("co_chinh", "tf", "3", 1),
+    ("khong_co", "tf", "1", 0), ("khong_co", "tf", "2", 0), ("khong_co", "tf", "3", 0), ("khong_co", "tf", "4", 0),
+    ("baseline_2", "mcq", "1", 1), ("baseline_2", "mcq", "2", 1), ("baseline_2", "mcq", "3", 0),
+    ("baseline_2", "mcq", "4", 0),
+    ("baseline_2", "tf", "1", 1), ("baseline_2", "tf", "2", 0), ("baseline_2", "tf", "3", 0), ("baseline_2", "tf", "4", 0),
+]
+# Cỡ tầng: mcq cờ 4 / không cờ 20; tf cờ 2 / không cờ 12 (tầng cờ chính là tổng điều tra)
+N_TT_GIA = {("mcq", True): 4, ("mcq", False): 20, ("tf", True): 2, ("tf", False): 12}
+# Tính tay: p tầng = mcq cờ 2/4, mcq không 1/4, tf cờ 2/2, tf không 0/4
+#   trước QC = (4·0,5 + 20·0,25 + 2·1 + 12·0) / 38 = 9/38; recall = (2 + 2) / 9 = 4/9
+#   sau QC = 1/8; baseline 2 = 3/8; (i) = 9/38 − 3/8; (ii) = 9/38 − 1/8
+TRUOC_GIA, RECALL_GIA = 9 / 38, 4 / 9
+
+
+def khoa_gia(spec=CAU_GIA):
+    khoa, nhan = [], {}
+    for i, (g, d, c, loi) in enumerate(spec, 1):
+        he = g != "baseline_2"
+        ma = f"M{i:02d}"
+        khoa.append({"ma": ma, "thu_tu": str(i), "id": ma, "nguon": "he_thong" if he else "baseline_2", "dang": d,
+                     "tang": g, "co_chinh": ("1" if g == "co_chinh" else "0") if he else "", "ly_do_chinh": "",
+                     "de_thi_id": c if he else "", "de_baseline": "" if he else c})
+        nhan[ma] = {"dap_an": "Sai" if loi else "Đúng", "y_sai": "", "muc_do": "Đúng", "vuot_lop": "Không",
+                    "mo_ho": "Không"}
+    return khoa, nhan
+
+
+class UocLuongBootstrapTest(unittest.TestCase):
+    """Kế hoạch phân tích mục 3.2, 3.3, 5: ước lượng theo tầng dạng × tầng và bootstrap phân tầng / theo cụm."""
+
+    def setUp(self):
+        self.khoa, self.nhan = khoa_gia()
+        self.dv = phan_tich_d2.don_vi(self.khoa, self.nhan, "loi_dap_an")
+
+    def test_diem_uoc_luong_tinh_tay(self):
+        u = phan_tich_d2.uoc_luong(self.dv, N_TT_GIA)
+        self.assertAlmostEqual(TRUOC_GIA, u["truoc_qc"])
+        self.assertAlmostEqual(RECALL_GIA, u["recall"])
+        self.assertAlmostEqual(1 / 8, u["sau_qc"])
+        self.assertAlmostEqual(3 / 8, u["baseline_2"])
+        self.assertAlmostEqual(TRUOC_GIA - 3 / 8, u["i"])
+        self.assertAlmostEqual(TRUOC_GIA - 1 / 8, u["ii"])
+
+    def test_don_vi_lay_cum_theo_nguon(self):
+        cums = {(g, c) for g, _, c, _ in self.dv}
+        self.assertIn(("khong_co", "4"), cums)
+        self.assertIn(("baseline_2", "4"), cums)
+        # câu không có nhãn cuối không vào
+        nhan = dict(self.nhan)
+        del nhan["M01"]
+        self.assertEqual(len(self.dv) - 1, len(phan_tich_d2.don_vi(self.khoa, nhan, "loi_dap_an")))
+
+    def test_recall_tong_the_cua_bang2_dung_trong_so_dang_x_tang(self):
+        # gộp trong tầng (cách cũ) sẽ ra (6·4/6) / (6·4/6 + 32·1/8) = 50%; theo dạng × tầng là 4/9 = 44,4%
+        _, rows = phan_tich_d2.bang_co_nhan(self.khoa, self.nhan, "loi_dap_an", N_TT_GIA)
+        by = {r[0]: r for r in rows}
+        self.assertEqual("44,4%", by["tất cả"][6])
+        # một dạng: trùng công thức recall_trong_so: mcq = 4·0,5 / (4·0,5 + 20·0,25) = 2/7
+        self.assertEqual("28,6%", by["mcq"][6])
+
+    def test_bootstrap_phan_tang_lap_lai_duoc_va_chua_diem(self):
+        a = phan_tich_d2.bootstrap_phan_tang(self.dv, N_TT_GIA, b=500, seed=7)
+        b = phan_tich_d2.bootstrap_phan_tang(self.dv, N_TT_GIA, b=500, seed=7)
+        self.assertEqual(a, b)
+        diem, lo, hi, kxd = a["truoc_qc"]
+        self.assertAlmostEqual(TRUOC_GIA, diem)
+        self.assertLessEqual(lo, diem)
+        self.assertGreaterEqual(hi, diem)
+        self.assertEqual(0, kxd)
+        # recall: tầng cờ tf luôn có lỗi nên tử số > 0 ở mọi lần lặp, không có lần không xác định
+        self.assertEqual(0, a["recall"][3])
+        self.assertLess(a["i"][1], a["i"][2])
+
+    def test_bootstrap_rut_lai_trong_tang_khong_tron_tang(self):
+        """Mọi tầng đồng nhất (cả tầng cùng lỗi hoặc cùng không lỗi) thì rút lại trong tầng không đổi gì: KTC co về điểm.
+        Nếu rút lại trộn tầng thì KTC sẽ rộng ra."""
+        spec = [("co_chinh", "mcq", "1", 1), ("co_chinh", "mcq", "2", 1), ("khong_co", "mcq", "1", 0),
+                ("khong_co", "mcq", "2", 0), ("khong_co", "tf", "1", 1), ("baseline_2", "mcq", "1", 1),
+                ("baseline_2", "tf", "2", 0)]
+        khoa, nhan = khoa_gia(spec)
+        kq = phan_tich_d2.bootstrap_phan_tang(phan_tich_d2.don_vi(khoa, nhan, "loi_dap_an"),
+                                              {("mcq", True): 2, ("mcq", False): 8, ("tf", False): 10}, b=300, seed=1)
+        for k in ("truoc_qc", "recall", "i", "ii"):
+            diem, lo, hi, _ = kq[k]
+            self.assertAlmostEqual(diem, lo, msg=k)
+            self.assertAlmostEqual(diem, hi, msg=k)
+        # baseline 2 rút trong từng dạng: mcq toàn lỗi, tf toàn không lỗi -> luôn 1/2
+        self.assertEqual((0.5, 0.5, 0.5, 0), kq["baseline_2"])
+
+    def test_bootstrap_khong_xac_dinh_khi_khong_co_loi(self):
+        spec = [(g, d, c, 0) for g, d, c, _ in CAU_GIA]
+        khoa, nhan = khoa_gia(spec)
+        kq = phan_tich_d2.bootstrap_phan_tang(phan_tich_d2.don_vi(khoa, nhan, "loi_dap_an"), N_TT_GIA, b=50)
+        self.assertEqual((None, None, None, 50), kq["recall"])
+        self.assertEqual((0.0, 0.0, 0.0, 0), kq["truoc_qc"])
+
+    def test_bootstrap_cum_tinh_tay(self):
+        diem, lo, hi, kxd, n_he, n_ba = phan_tich_d2.bootstrap_cum(self.dv, b=500, seed=3)
+        self.assertAlmostEqual(1 / 8 - 3 / 8, diem)
+        self.assertEqual((4, 4, 0), (n_he, n_ba, kxd))
+        self.assertLessEqual(lo, diem)
+        self.assertGreaterEqual(hi, diem)
+        # hai đề hệ thống (đề 1: 1/1 lỗi, đề 2: 0/1), một lượt baseline 0/2: chênh lệch chỉ nhận 0; 0,5; 1
+        spec = [("khong_co", "mcq", "1", 1), ("khong_co", "mcq", "2", 0), ("co_chinh", "mcq", "1", 1),
+                ("baseline_2", "mcq", "1", 0), ("baseline_2", "tf", "1", 0)]
+        khoa, nhan = khoa_gia(spec)
+        kq = phan_tich_d2.bootstrap_cum(phan_tich_d2.don_vi(khoa, nhan, "loi_dap_an"), b=2000, seed=3)
+        self.assertEqual((0.5, 0.0, 1.0, 0, 2, 1), kq)  # câu cờ chính không vào
+
+    def test_bang_bootstrap_va_bang_cum(self):
+        _, rows = phan_tich_d2.bang_bootstrap(self.khoa, self.nhan, N_TT_GIA, b=200, seed=1)
+        self.assertEqual(2 * len(phan_tich_d2.TEN_CHI_SO), len(rows))
+        truoc = next(r for r in rows if r[0] == "loi_dap_an" and r[1] == phan_tich_d2.TEN_CHI_SO["truoc_qc"])
+        self.assertEqual("23,7%", truoc[2])
+        chenh_i = next(r for r in rows if r[0] == "loi_dap_an" and r[1] == phan_tich_d2.TEN_CHI_SO["i"])
+        self.assertEqual("-13,8 điểm %", chenh_i[2])
+        _, rows = phan_tich_d2.bang_bootstrap_cum(self.khoa, self.nhan, b=200, seed=1)
+        self.assertEqual(["-25,0 điểm %", "4 / 4"], [rows[0][1], rows[0][3]])
+
+    def test_bang_theo_de_va_luot(self):
+        _, rows = phan_tich_d2.bang_theo_cum(self.khoa, self.nhan)
+        by = {(r[0], r[1]): r[2:] for r in rows}
+        T = phan_tich_d2.TEN_NHOM
+        self.assertEqual(["1/1", "1/1", "0/0", "2/2", "100,0%"], by[(T["co_chinh"], "Đề 1")])
+        self.assertEqual(["0/1", "0/0", "0/0", "0/1", "0,0%"], by[(T["co_chinh"], "Đề 4")])
+        self.assertEqual(["1/1", "0/1", "0/0", "1/2", "50,0%"], by[(T["khong_co"], "Đề 1")])
+        self.assertEqual(["1/1", "0/1", "0/0", "1/2", "50,0%"], by[(T["baseline_2"], "Lượt 2")])
+        self.assertEqual(4 + 4 + 4, len(rows))  # cờ chính có câu ở 4 đề, không cờ 4 đề, baseline 4 lượt
+
+
+class TruocSauTest(unittest.TestCase):
+    """Kế hoạch phân tích mục 6: bảng trước/sau theo tiêu chí."""
+
+    QC_DEM = [{"de_thi_id": 1, "cau_sinh_ra": 22, "qua_format": 20, "trung": 1, "dedup_loi": 0, "dedup_chua_chay": 0},
+              {"de_thi_id": 2, "cau_sinh_ra": 18, "qua_format": 18, "trung": 1, "dedup_loi": 1, "dedup_chua_chay": 0},
+              {"de_thi_id": 9, "cau_sinh_ra": 99, "qua_format": 1, "trung": 50, "dedup_loi": 0, "dedup_chua_chay": 0}]
+
+    def setUp(self):
+        self.khoa, self.nhan = khoa_gia()
+        # một câu không cờ mcq "Không rõ" mức độ, một câu "Không đúng"; một câu không cờ tf mơ hồ
+        self.nhan["M05"]["muc_do"] = "Không rõ"
+        self.nhan["M06"]["muc_do"] = "Không đúng"
+        self.nhan["M11"]["mo_ho"] = "Có"
+
+    def test_dong_db_chi_lay_de_thuc_nghiem(self):
+        _, rows, cb = phan_tich_d2.bang_truoc_sau(self.khoa, self.nhan, N_TT_GIA, self.QC_DEM, [1, 2], 38)
+        by = {r[0]: r for r in rows}
+        self.assertEqual("38/40 = 95,0%", by["Định dạng hợp lệ"][1])
+        self.assertEqual("36/38 = 94,7%", by["Không trùng"][1])
+        self.assertIn("dedup lỗi/chưa kết luận: 1", by["Không trùng"][3])
+        self.assertEqual([], cb)
+
+    def test_canh_bao_khi_hai_nguon_khong_khop(self):
+        _, _, cb = phan_tich_d2.bang_truoc_sau(self.khoa, self.nhan, N_TT_GIA, self.QC_DEM, [1, 2, 3], 85)
+        self.assertEqual(2, len(cb))
+        self.assertIn("thiếu đề: [3]", cb[0])
+        self.assertIn("không khớp", cb[1])
+        _, rows, _ = phan_tich_d2.bang_truoc_sau(self.khoa, self.nhan, N_TT_GIA)
+        self.assertIn("--qc-dem", rows[0][1])
+
+    def test_dong_nhan_tinh_tay(self):
+        _, rows, _ = phan_tich_d2.bang_truoc_sau(self.khoa, self.nhan, N_TT_GIA, self.QC_DEM, [1, 2])
+        by = {r[0]: r for r in rows}
+        # đáp án đúng: trước = 1 − 9/38 = 76,3%; sau = 7/8
+        self.assertEqual("76,3%", by["Đáp án đúng"][1])
+        self.assertTrue(by["Đáp án đúng"][2].startswith("7/8 = 87,5%"))
+        # mơ hồ: tầng tf không cờ 1/4 mơ hồ -> trước = 1 − 12·0,25/38 = 35/38 = 92,1%; sau = 7/8
+        self.assertEqual("92,1%", by["Không mơ hồ"][1])
+        self.assertTrue(by["Không mơ hồ"][2].startswith("7/8"))
+        # mức độ: tầng mcq không cờ đạt 2/4, vào mẫu số 3/4; tầng khác đạt hết
+        #   trước = (4 + 20·0,5 + 2 + 12) / (4 + 20·0,75 + 2 + 12) = 28/33 = 84,8%; sau = 6/7 (bỏ "Không rõ")
+        self.assertEqual("84,8%", by["Đúng mức độ"][1])
+        self.assertTrue(by["Đúng mức độ"][2].startswith("6/7 = 85,7%"))
+        self.assertIn("'Không rõ': 1 câu", by["Đúng mức độ"][3])
+        self.assertEqual("100,0%", by["Không vượt lớp"][1])
 
 
 CAP = [  # cap, cosine, cùng số liệu, nhãn An, nhãn Quân

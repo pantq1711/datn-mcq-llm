@@ -22,7 +22,7 @@ cd tools/measurement
 python -m venv .venv
 .venv/Scripts/python -m pip install -r requirements.txt   # openpyxl; pandoc phải có sẵn trên PATH
 cd ../..
-tools/measurement/.venv/Scripts/python -m unittest discover tools/measurement/tests   # 87 test, không cần DB hay mạng
+tools/measurement/.venv/Scripts/python -m unittest discover tools/measurement/tests   # 102 test, không cần DB hay mạng
 ```
 
 Các lệnh bên dưới chạy từ `tools/measurement` với `PY=.venv/Scripts/python` và `D=../../data/private/do-luong`.
@@ -91,16 +91,22 @@ P=$D/phieu
 $PY -m do_luong.phan_tich_d2 phan-xu --khoa $D/khoa.csv --phieu $P/phieu-pha2-Quan.xlsx $P/phieu-pha2-Dang.xlsx \
     --pha1 $P/phieu-pha1-Quan.xlsx $P/phieu-pha1-Dang.xlsx --bo-cham $D/bo-cham.jsonl --out-dir $P
 # giáo viên điền cột "Kết luận" trong $P/phan-xu.xlsx
+# số câu sinh ra / qua format / trùng theo đề (bảng trước/sau, kế hoạch mục 6); chỉ đọc, chạy trên datn_mcq_d2:
+docker exec -i datn-mcq-db sh -c 'psql -X -A -t -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d datn_mcq_d2' \
+    < tools/measurement/sql/d2-truoc-sau.sql > $D/d2-qc-dem.jsonl
 $PY -m do_luong.phan_tich_d2 bao-cao --khoa $D/khoa.csv --phieu $P/phieu-pha2-Quan.xlsx $P/phieu-pha2-Dang.xlsx \
     --pha1 $P/phieu-pha1-Quan.xlsx $P/phieu-pha1-Dang.xlsx --bo-cham $D/bo-cham.jsonl \
-    --phan-xu $P/phan-xu.xlsx --lay-mau-log $D/lay-mau-log.json --out-dir $D/ket-qua-d2
+    --phan-xu $P/phan-xu.xlsx --lay-mau-log $D/lay-mau-log.json --qc-dem $D/d2-qc-dem.jsonl --out-dir $D/ket-qua-d2
 ```
 
 `phan-xu.xlsx` gồm ô hai người khác nhau và ô Đáp án của câu mà pha 1 không nhất quán với pha 2 (cột "Lý do xem"). Ra
 `ket-qua-d2.md` và CSV: kappa; cờ chính × nhãn theo dạng (precision, recall trong mẫu, recall ước lượng tổng thể, tỉ lệ
 lọt, KTC Wilson 95%) cho "lỗi đáp án" (chính) và "lỗi bất kỳ"; riêng bước Solver; D4 theo nhóm (không cờ, cờ chính,
 baseline 2, trước QC có trọng số) và một so sánh chính có kiểm định (không cờ vs baseline 2: Fisher, Newcombe); mức độ tách
-tầng; pha 1 khớp khóa; đoán nguồn; `cau-lot.csv`.
+tầng; pha 1 khớp khóa; đoán nguồn; `cau-lot.csv`. Thêm theo kế hoạch mục 5–6: Bảng 9 KTC bootstrap phân tầng (trước QC,
+recall tổng thể, so sánh L9 i–ii; cần `--lay-mau-log`), Bảng 10 bootstrap theo cụm đề/lượt cho so sánh chính (phân tích
+nhạy), Bảng 11 tỉ lệ lỗi theo từng đề/lượt, Bảng 12 trước/sau theo tiêu chí (hai dòng đầu cần `--qc-dem`; cảnh báo nếu số
+câu qua format khác `lay-mau-log`). B = 10 000 và seed 20261115 cố định trong code, không có tham số dòng lệnh.
 
 D4 đo thêm thời gian và số công thức sửa tay: điền `docs/experiments/d4/bang-do-thoi-gian.md`.
 
@@ -147,6 +153,7 @@ chốt chặn bỏ được bao nhiêu báo nhầm), `d6-cap-sai-090.csv` (cặp
 | Tệp | Vai trò |
 |---|---|
 | `sql/d2-xuat-cau.sql` | Một câu SELECT xuất câu LLM của đề giáo viên + dữ liệu QC thô |
+| `sql/d2-truoc-sau.sql` | Một câu SELECT: số câu sinh ra / qua format / trùng theo đề (bảng trước/sau QC) |
 | `do_luong/co_qc.py` | Lý do "cần xem kỹ" và cờ nội dung (bản chép QcSummaryService + ExamViewService + hasContentFlag) |
 | `do_luong/cau.py` | Định dạng câu thống nhất, Markdown giống ExamMarkdownBuilder (pandoc `markdown+tex_math_dollars`) |
 | `do_luong/lay_mau.py` | Lấy mẫu phân tầng có seed, gán mã ngẫu nhiên, file khóa |

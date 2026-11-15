@@ -14,18 +14,23 @@ Câu hệ thống: "dương tính" = CỜ CHÍNH (khoa.csv co_chinh = 1: lý do 
 hạ tầng không vào số chính (L10); câu chỉ có các cờ đó không nằm trong phiếu (lay_mau, tầng chi_co_phu).
   precision = lỗi ∩ cờ chính / cờ chính; recall (trong mẫu) = lỗi ∩ cờ chính / lỗi; tỉ lệ lọt = lỗi ∩ không cờ / không cờ.
   Tầng cờ chính là tổng điều tra, tầng không cờ là mẫu ngẫu nhiên: recall và tỉ lệ lỗi tổng thể ước lượng bằng trọng số
-  theo cỡ tầng (--lay-mau-log). Bootstrap phân tầng/theo cụm: xem kế hoạch phân tích.
+  theo cỡ tầng dạng × tầng (--lay-mau-log), KTC bootstrap phân tầng (Bảng 9). Bootstrap theo cụm (đề / lượt baseline) cho
+  so sánh chính là phân tích nhạy (Bảng 10); tỉ lệ theo từng đề/lượt ở Bảng 11; trước/sau theo tiêu chí ở Bảng 12
+  (--qc-dem từ sql/d2-truoc-sau.sql). B và seed bootstrap cố định theo kế hoạch (BOOTSTRAP_B, BOOTSTRAP_SEED).
 
 Chạy (đứng ở tools/measurement):
   python -m do_luong.phan_tich_d2 phan-xu --khoa <dir>/khoa.csv --phieu <pha2-Quan.xlsx> <pha2-Dang.xlsx> \
       --pha1 <pha1-Quan.xlsx> <pha1-Dang.xlsx> --bo-cham <dir>/bo-cham.jsonl --out-dir <dir>
   python -m do_luong.phan_tich_d2 bao-cao --khoa <dir>/khoa.csv --phieu <...> <...> --phan-xu <dir>/phan-xu.xlsx \
-      --pha1 <...> <...> --bo-cham <dir>/bo-cham.jsonl --lay-mau-log <dir>/lay-mau-log.json --out-dir <dir>/ket-qua-d2
+      --pha1 <...> <...> --bo-cham <dir>/bo-cham.jsonl --lay-mau-log <dir>/lay-mau-log.json \
+      --qc-dem <dir>/d2-qc-dem.jsonl --out-dir <dir>/ket-qua-d2
 """
 import argparse
 import json
 import os
+import random
 import re
+from collections import defaultdict
 from fractions import Fraction
 
 from . import cau as cau_mod
@@ -49,6 +54,15 @@ NHOM_PHIEU = ("khong_co", "co_chinh", "baseline_2")
 DOAN_DUNG = {"he_thong": "Công cụ của nhóm", "baseline_2": "AI gọi thẳng", "baseline_1": "AI gọi thẳng"}
 LY_DO_BAT_DONG = "hai người khác nhau"
 LY_DO_PHA1 = "tự giải ở pha 1 khác kết luận pha 2"
+# Kế hoạch phân tích mục 5 (định trước): số lần lặp và seed bootstrap. Không đưa ra CLI để không đổi được khi chạy.
+BOOTSTRAP_B = 10000
+BOOTSTRAP_SEED = 20261115
+TEN_CHI_SO = {"truoc_qc": "Tỉ lệ lỗi trước QC (trọng số dạng × tầng)",
+              "recall": "Recall ước lượng tổng thể của cờ chính",
+              "sau_qc": "Tỉ lệ lỗi sau QC (không cờ)",
+              "baseline_2": "Tỉ lệ lỗi baseline 2",
+              "i": "(i) Trước QC − baseline 2 (chiến lược sinh)",
+              "ii": "(ii) Trước QC − sau QC (kiểm soát)"}
 
 
 def chuan_y_sai(v):
@@ -288,9 +302,9 @@ def bang_co_nhan(khoa, nhan, dinh_nghia, n_tong_the=None, loc=None):
         lot = tk.wilson(fn, fn + tn)
         r_tt = None
         if n_tong_the and loc is None:
-            n_co = sum(v for (d, co), v in n_tong_the.items() if co and (dang == "tất cả" or d == dang))
-            n_khong = sum(v for (d, co), v in n_tong_the.items() if not co and (dang == "tất cả" or d == dang))
-            r_tt = tk.recall_trong_so(p[0], lot[0], n_co, n_khong)
+            # trọng số theo tầng dạng × tầng (kế hoạch mục 2, 5); một dạng thì trùng tk.recall_trong_so
+            n_tt = {key: v for key, v in n_tong_the.items() if dang == "tất cả" or key[0] == dang}
+            r_tt = uoc_luong(don_vi(khoa, nhan, dinh_nghia), n_tt)["recall"]
         rows.append([dang, len(ks), f"{tp}/{tp + fp}", f"{fn}/{fn + tn}", xb.phan_tram(*p), xb.phan_tram(*r),
                      xb.phan_tram(r_tt), xb.phan_tram(*lot)])
     return headers, rows
@@ -414,7 +428,235 @@ def tong_the_tu_log(path):
     return out
 
 
-def bao_cao(khoa, p1, p2, px, out_dir, n_tong_the=None, pha1=None, bo_cham=None):
+# ---------------------------------------------------------------- ước lượng tổng thể, bootstrap (kế hoạch mục 3.2, 3.3, 5)
+
+def don_vi(khoa, nhan, dinh_nghia):
+    """Câu có nhãn cuối trong ba nhóm của phiếu -> [(nhóm, dạng, cụm, lỗi)]. Cụm = đề (hệ thống) hoặc lượt gọi (baseline)."""
+    out = []
+    for k in khoa:
+        n, g = nhan.get(k["ma"]), _nhom_cua(k)
+        if n is None or g not in NHOM_PHIEU:
+            continue
+        cum = k.get("de_thi_id") if k["nguon"] == "he_thong" else k.get("de_baseline")
+        out.append((g, k["dang"], str(cum or ""), bool(_co_loi(n, dinh_nghia))))
+    return out
+
+
+def _gom(dv):
+    nhom = defaultdict(list)
+    for g, d, _, loi in dv:
+        nhom[(g, d)].append(loi)
+    return nhom
+
+
+def _ti_le(xs):
+    return sum(xs) / len(xs) if xs else None
+
+
+def _tru(a, b):
+    return None if a is None or b is None else a - b
+
+
+def _uoc_luong_nhom(nhom, n_tong_the):
+    """nhom {(nhóm, dạng): [lỗi]} -> các chỉ số của kế hoạch. Trước QC và recall trộn tầng dạng × tầng theo cỡ tầng N_h:
+    trước QC = Σ N_h·p_h / Σ N_h; recall = Σ_cờ N_h·p_h / Σ N_h·p_h. Tầng có N_h nhưng không có câu có nhãn bị bỏ khỏi cả tử
+    và mẫu (như dòng trước QC của Bảng 4). Sau QC và baseline 2 là tỉ lệ gộp của mẫu (như so sánh chính)."""
+    loi_co = loi_khong = mau = 0.0
+    for (d, co), n_tang in (n_tong_the or {}).items():
+        p = _ti_le(nhom.get(("co_chinh" if co else "khong_co", d), []))
+        if p is None or not n_tang:
+            continue
+        mau += n_tang
+        if co:
+            loi_co += n_tang * p
+        else:
+            loi_khong += n_tang * p
+    truoc = (loi_co + loi_khong) / mau if mau else None
+    recall = loi_co / (loi_co + loi_khong) if loi_co + loi_khong > 0 else None
+    sau = _ti_le([x for (g, _), v in nhom.items() if g == "khong_co" for x in v])
+    base = _ti_le([x for (g, _), v in nhom.items() if g == "baseline_2" for x in v])
+    return {"truoc_qc": truoc, "recall": recall, "sau_qc": sau, "baseline_2": base,
+            "i": _tru(truoc, base), "ii": _tru(truoc, sau)}
+
+
+def uoc_luong(dv, n_tong_the):
+    """Điểm ước lượng các chỉ số trong TEN_CHI_SO từ danh sách don_vi."""
+    return _uoc_luong_nhom(_gom(dv), n_tong_the)
+
+
+def bootstrap_phan_tang(dv, n_tong_the, b=BOOTSTRAP_B, seed=BOOTSTRAP_SEED):
+    """Bootstrap phân tầng (kế hoạch mục 5): mỗi lần lặp rút lại có hoàn lại, giữ nguyên cỡ, trong từng tầng dạng × tầng
+    (hệ thống) và trong từng dạng (baseline 2). Trả {chỉ số: (điểm, thấp, cao, số lần lặp không xác định)}; KTC phân vị 95%."""
+    nhom = _gom(dv)
+    keys = sorted(nhom)
+    rng = random.Random(seed)
+    lap = {k: [] for k in TEN_CHI_SO}
+    khong_xd = dict.fromkeys(TEN_CHI_SO, 0)
+    for _ in range(b):
+        mau = {key: rng.choices(nhom[key], k=len(nhom[key])) for key in keys}
+        u = _uoc_luong_nhom(mau, n_tong_the)
+        for k in TEN_CHI_SO:
+            if u[k] is None:
+                khong_xd[k] += 1
+            else:
+                lap[k].append(u[k])
+    diem = _uoc_luong_nhom(nhom, n_tong_the)
+    return {k: (diem[k], *tk.ktc_phan_vi(lap[k]), khong_xd[k]) for k in TEN_CHI_SO}
+
+
+def bootstrap_cum(dv, b=BOOTSTRAP_B, seed=BOOTSTRAP_SEED):
+    """Phân tích nhạy cho so sánh chính (kế hoạch mục 5, 8.3): rút lại có hoàn lại các ĐỀ (câu hệ thống không cờ) và các
+    LƯỢT gọi (baseline 2), giữ số cụm; chỉ số = tỉ lệ lỗi gộp không cờ − baseline 2.
+    Trả (điểm, thấp, cao, số lần lặp không xác định, số cụm hệ thống, số cụm baseline)."""
+    he, ba = defaultdict(list), defaultdict(list)
+    for g, _, cum, loi in dv:
+        if g == "khong_co":
+            he[cum].append(loi)
+        elif g == "baseline_2":
+            ba[cum].append(loi)
+    he_keys, ba_keys = sorted(he), sorted(ba)
+
+    def chenh(hk, bk):
+        return _tru(_ti_le([x for c in hk for x in he[c]]), _ti_le([x for c in bk for x in ba[c]]))
+
+    diem = chenh(he_keys, ba_keys)
+    if not he_keys or not ba_keys:
+        return diem, None, None, b, len(he_keys), len(ba_keys)
+    rng = random.Random(seed)
+    lap, khong_xd = [], 0
+    for _ in range(b):
+        d = chenh(rng.choices(he_keys, k=len(he_keys)), rng.choices(ba_keys, k=len(ba_keys)))
+        if d is None:
+            khong_xd += 1
+        else:
+            lap.append(d)
+    return (diem, *tk.ktc_phan_vi(lap), khong_xd, len(he_keys), len(ba_keys))
+
+
+def _diem_pct(x):
+    return "" if x is None else f"{100 * x:.1f} điểm %".replace(".", ",")
+
+
+def _khoang(lo, hi, la_chenh):
+    if lo is None or hi is None:
+        return ""
+    if la_chenh:
+        return f"[{100 * lo:.1f}; {100 * hi:.1f}]".replace(".", ",")
+    return f"[{xb.phan_tram(lo)}; {xb.phan_tram(hi)}]"
+
+
+def bang_bootstrap(khoa, nhan, n_tong_the, b=BOOTSTRAP_B, seed=BOOTSTRAP_SEED):
+    """Bảng 9: KTC bootstrap phân tầng cho trước QC, recall tổng thể, (i), (ii) – lỗi đáp án (chính) và lỗi bất kỳ (mô tả)."""
+    h = ["Định nghĩa lỗi", "Chỉ số", "Điểm ước lượng", "KTC 95% bootstrap phân tầng", "Lần lặp không xác định"]
+    rows = []
+    for dn in DINH_NGHIA_LOI:
+        kq = bootstrap_phan_tang(don_vi(khoa, nhan, dn), n_tong_the, b, seed)
+        for k, ten in TEN_CHI_SO.items():
+            diem, lo, hi, kxd = kq[k]
+            la_chenh = k in ("i", "ii")
+            rows.append([dn, ten, _diem_pct(diem) if la_chenh else xb.phan_tram(diem), _khoang(lo, hi, la_chenh), kxd])
+    return h, rows
+
+
+def bang_bootstrap_cum(khoa, nhan, b=BOOTSTRAP_B, seed=BOOTSTRAP_SEED):
+    """Bảng 10: bootstrap theo cụm cho so sánh chính (lỗi đáp án), phân tích nhạy."""
+    h = ["So sánh", "Chênh lệch", "KTC 95% bootstrap theo cụm", "Số cụm (đề / lượt)", "Lần lặp không xác định"]
+    diem, lo, hi, kxd, n_he, n_ba = bootstrap_cum(don_vi(khoa, nhan, "loi_dap_an"), b, seed)
+    return h, [[f"Hệ thống – không cờ vs {TEN_NHOM['baseline_2']}", _diem_pct(diem), _khoang(lo, hi, True),
+                f"{n_he} / {n_ba}", kxd]]
+
+
+def _khoa_cum(c):
+    return (0, int(c), "") if str(c).lstrip("-").isdigit() else (1, 0, str(c))
+
+
+def bang_theo_cum(khoa, nhan, dinh_nghia="loi_dap_an"):
+    """Bảng 11: tỉ lệ lỗi theo từng đề (hệ thống, tách tầng) và từng lượt gọi (baseline 2)."""
+    h = ["Nhóm", "Cụm"] + [f"{d}: lỗi/n" for d in cau_mod.DANG] + ["Tất cả: lỗi/n", "Tỉ lệ lỗi"]
+    dv = don_vi(khoa, nhan, dinh_nghia)
+    rows = []
+    for g in NHOM_PHIEU:
+        cums = sorted({c for gg, _, c, _ in dv if gg == g}, key=_khoa_cum)
+        for c in cums:
+            ten = ("Lượt " if g == "baseline_2" else "Đề ") + (c or "(không rõ)")
+            row = [TEN_NHOM[g], ten]
+            for d in cau_mod.DANG:
+                xs = [loi for gg, dd, cc, loi in dv if gg == g and dd == d and cc == c]
+                row.append(f"{sum(xs)}/{len(xs)}")
+            xs = [loi for gg, _, cc, loi in dv if gg == g and cc == c]
+            rows.append(row + [f"{sum(xs)}/{len(xs)}", xb.phan_tram(_ti_le(xs))])
+    return h, rows
+
+
+# ---------------------------------------------------------------- bảng trước/sau theo tiêu chí (kế hoạch mục 6)
+
+TIEU_CHI_NHAN = (  # (tên, đạt, có vào mẫu số)
+    ("Đáp án đúng", lambda n: n.get("dap_an") == "Đúng", lambda n: n.get("dap_an") is not None),
+    ("Không mơ hồ", lambda n: n.get("mo_ho") == "Không", lambda n: n.get("mo_ho") in phieu_mod.CO_KHONG),
+    ("Không vượt lớp", lambda n: n.get("vuot_lop") == "Không", lambda n: n.get("vuot_lop") in phieu_mod.CO_KHONG),
+    ("Đúng mức độ", lambda n: n.get("muc_do") == "Đúng", lambda n: n.get("muc_do") in ("Đúng", "Không đúng")),
+)
+
+
+def ti_le_trong_so(khoa, nhan, n_tong_the, dat, co_mau):
+    """Tỉ lệ đạt "trước QC" ước lượng theo tầng dạng × tầng: Σ N_h·(đạt_h/n_h) / Σ N_h·(mẫu_h/n_h), n_h = số câu có nhãn của
+    tầng (ước lượng tỉ số; với tiêu chí mọi câu đều vào mẫu số thì bằng Σ N_h·p_h / Σ N_h)."""
+    tu = mau = 0.0
+    for (d, co), n_tang in (n_tong_the or {}).items():
+        g = "co_chinh" if co else "khong_co"
+        ns = [nhan[k["ma"]] for k in khoa if _nhom_cua(k) == g and k["dang"] == d and k["ma"] in nhan]
+        if not ns or not n_tang:
+            continue
+        tu += n_tang * sum(1 for n in ns if co_mau(n) and dat(n)) / len(ns)
+        mau += n_tang * sum(1 for n in ns if co_mau(n)) / len(ns)
+    return tu / mau if mau else None
+
+
+def doc_qc_dem(path):
+    """JSONL của sql/d2-truoc-sau.sql: mỗi dòng một đề {de_thi_id, cau_sinh_ra, qua_format, trung, dedup_loi, ...}."""
+    return list(cau_mod.doc_jsonl(path))
+
+
+def bang_truoc_sau(khoa, nhan, n_tong_the, qc_dem=None, de_thi_ids=None, n_quan_the=None):
+    """Bảng 12 (kế hoạch mục 6). Trả (headers, rows, cảnh báo). Hai dòng đầu từ DB (qc_dem, giới hạn de_thi_ids); bốn dòng
+    sau từ nhãn: trước QC có trọng số (ti_le_trong_so), sau QC = tầng không cờ gộp (KTC Wilson).
+    n_quan_the = tổng câu qua format trong lay-mau-log (mọi tầng) để đối chiếu với qc_dem."""
+    h = ["Tiêu chí", "Trước QC", "Sau QC (không cờ)", "Nguồn số"]
+    rows, canh_bao = [], []
+    if qc_dem is not None:
+        ids = None if de_thi_ids is None else {int(x) for x in de_thi_ids}
+        ds = [r for r in qc_dem if ids is None or int(r["de_thi_id"]) in ids]
+        if ids is not None and {int(r["de_thi_id"]) for r in ds} != ids:
+            canh_bao.append(f"qc-dem thiếu đề: {sorted(ids - {int(r['de_thi_id']) for r in ds})}")
+        sinh = sum(int(r["cau_sinh_ra"]) for r in ds)
+        qua = sum(int(r["qua_format"]) for r in ds)
+        trung = sum(int(r["trung"]) for r in ds)
+        dedup_loi = sum(int(r.get("dedup_loi") or 0) for r in ds)
+        if n_quan_the is not None and qua != n_quan_the:
+            canh_bao.append(f"qc-dem: {qua} câu qua format, lay-mau-log có {n_quan_the} câu: hai nguồn không khớp")
+        rows.append(["Định dạng hợp lệ", f"{qua}/{sinh} = {xb.phan_tram(qua / sinh if sinh else None)}",
+                     "100% (câu trượt format không đến tay giáo viên)", "DB format (sql/d2-truoc-sau.sql), 4 đề"])
+        rows.append(["Không trùng", f"{qua - trung}/{qua} = {xb.phan_tram((qua - trung) / qua if qua else None)}",
+                     "100% (câu bị đánh dấu trùng có cờ, không thuộc nhóm không cờ)",
+                     f"DB dedup, 4 đề; dedup lỗi/chưa kết luận: {dedup_loi} câu (không tính là trùng)"])
+    else:
+        rows += [["Định dạng hợp lệ", "chưa có (--qc-dem)", "", ""], ["Không trùng", "chưa có (--qc-dem)", "", ""]]
+    sau_ns = [nhan[k["ma"]] for k in khoa if _nhom_cua(k) == "khong_co" and k["ma"] in nhan]
+    for ten, dat, co_mau in TIEU_CHI_NHAN:
+        truoc = ti_le_trong_so(khoa, nhan, n_tong_the, dat, co_mau) if n_tong_the else None
+        mau = [n for n in sau_ns if co_mau(n)]
+        k_ = sum(1 for n in mau if dat(n))
+        nguon = "Nhãn người chấm; trước QC: trọng số dạng × tầng" if n_tong_the else "Nhãn (thiếu --lay-mau-log)"
+        if ten == "Đúng mức độ":
+            ns_he = [nhan[k["ma"]] for k in khoa if _nhom_cua(k) in ("co_chinh", "khong_co") and k["ma"] in nhan]
+            nguon += (f"; 'Không rõ': {sum(1 for n in ns_he if n.get('muc_do') == 'Không rõ')} câu hệ thống trong mẫu "
+                      f"({sum(1 for n in sau_ns if n.get('muc_do') == 'Không rõ')} ở tầng không cờ), không vào mẫu số")
+        rows.append([ten, xb.phan_tram(truoc), f"{k_}/{len(mau)} = {xb.phan_tram(*tk.wilson(k_, len(mau)))}", nguon])
+    return h, rows, canh_bao
+
+
+def bao_cao(khoa, p1, p2, px, out_dir, n_tong_the=None, pha1=None, bo_cham=None, qc_dem=None, de_thi_ids=None,
+            n_quan_the=None, b=BOOTSTRAP_B, seed=BOOTSTRAP_SEED):
     os.makedirs(out_dir, exist_ok=True)
     nhan, thieu = nhan_cuoi(khoa, p1, p2, px)
     md = ["# Kết quả D2/D4 (tự sinh bởi do_luong.phan_tich_d2)", "",
@@ -422,6 +664,8 @@ def bao_cao(khoa, p1, p2, px, out_dir, n_tong_the=None, pha1=None, bo_cham=None)
     if thieu:
         md += [f"**Cảnh báo:** {len(thieu)} câu chưa đủ nhãn (chưa phân xử hoặc bỏ trống), không tính: "
                + ", ".join(thieu), ""]
+    h12, r12, canh_bao_12 = bang_truoc_sau(khoa, nhan, n_tong_the, qc_dem, de_thi_ids, n_quan_the)
+    md += [f"**Cảnh báo:** {c}" for c in canh_bao_12] + ([""] if canh_bao_12 else [])
 
     def them(ten, tep, headers, rows, ghi_chu=""):
         md.extend([f"## {ten}", ""] + ([ghi_chu, ""] if ghi_chu else []) + [xb.markdown(headers, rows), ""])
@@ -449,6 +693,19 @@ def bao_cao(khoa, p1, p2, px, out_dir, n_tong_the=None, pha1=None, bo_cham=None)
         them("Bảng 7. Pha 1: người chấm tự giải khớp khóa", "bang7-pha1.csv", *bang_pha1(khoa, bo_cham, pha1))
     them("Bảng 8. Đoán nguồn (cột cuối pha 2)", "bang8-doan-nguon.csv", *bang_doan_nguon(khoa, [p1, p2]),
          "Tỉ lệ đúng tính trên các câu có đoán; tỉ lệ gần 50% nghĩa là không phân biệt được nguồn.")
+    if n_tong_the:
+        them("Bảng 9. KTC bootstrap phân tầng (trước QC, recall tổng thể, so sánh L9 i–ii)", "bang9-bootstrap.csv",
+             *bang_bootstrap(khoa, nhan, n_tong_the, b, seed),
+             f"B = {b}, seed {seed}; rút lại có hoàn lại trong từng tầng dạng × tầng (hệ thống) và từng dạng (baseline 2); "
+             "KTC phân vị. Chỉ mô tả, không p-value. (iii) = so sánh chính, xem Bảng 5.")
+    them("Bảng 10. Phân tích nhạy: bootstrap theo cụm cho so sánh chính", "bang10-bootstrap-cum.csv",
+         *bang_bootstrap_cum(khoa, nhan, b, seed),
+         f"B = {b}, seed {seed}; rút lại đề (hệ thống) và lượt gọi (baseline 2). Chỉ 4 cụm mỗi bên nên KTC thô; "
+         "đọc kèm Bảng 11.")
+    them("Bảng 11. Tỉ lệ lỗi đáp án theo từng đề và từng lượt baseline", "bang11-theo-de-luot.csv",
+         *bang_theo_cum(khoa, nhan, "loi_dap_an"))
+    them("Bảng 12. Trước/sau QC theo tiêu chí", "bang12-truoc-sau.csv", h12, r12,
+         "Tỉ lệ ĐẠT. Trước QC: hai dòng đầu từ DB, bốn dòng sau ước lượng theo cỡ tầng; sau QC: tầng không cờ (mẫu).")
     h, rows = cau_lot(khoa, nhan)
     xb.ghi_csv(os.path.join(out_dir, "cau-lot.csv"), h, rows)
     md += [f"Danh sách {len(rows)} câu hệ thống lọt (không cờ nhưng có lỗi) ở cau-lot.csv, cột loai_loi để phân loại.", ""]
@@ -469,7 +726,8 @@ def main(argv=None):
         s.add_argument("--out-dir", required=True)
         if ten == "bao-cao":
             s.add_argument("--phan-xu", help="phan-xu.xlsx đã điền cột Kết luận")
-            s.add_argument("--lay-mau-log", help="lay-mau-log.json (cỡ tầng) để ước lượng tổng thể")
+            s.add_argument("--lay-mau-log", help="lay-mau-log.json (cỡ tầng, id đề) để ước lượng tổng thể")
+            s.add_argument("--qc-dem", help="JSONL của sql/d2-truoc-sau.sql (số câu sinh ra/qua format/trùng theo đề)")
     a = ap.parse_args(argv)
     if a.pha1 and not a.bo_cham:
         ap.error("--pha1 cần --bo-cham")
@@ -488,8 +746,15 @@ def main(argv=None):
               f"{os.path.join(a.out_dir, 'phan-xu.xlsx')}")
     else:
         px = doc_phan_xu(a.phan_xu) if a.phan_xu else {}
-        n_tt = tong_the_tu_log(a.lay_mau_log) if a.lay_mau_log else None
-        nhan, thieu = bao_cao(khoa, p1, p2, px, a.out_dir, n_tt, pha1, bo)
+        n_tt, de_ids, n_qt = None, None, None
+        if a.lay_mau_log:
+            n_tt = tong_the_tu_log(a.lay_mau_log)
+            with open(a.lay_mau_log, encoding="utf-8") as f:
+                log = json.load(f)
+            de_ids = log.get("de_thi_id")
+            n_qt = sum(n for tang in log["tong_the"].values() for n in tang.values())
+        qc = doc_qc_dem(a.qc_dem) if a.qc_dem else None
+        nhan, thieu = bao_cao(khoa, p1, p2, px, a.out_dir, n_tt, pha1, bo, qc, de_ids, n_qt)
         print(f"Đã ghi báo cáo vào {a.out_dir}: {len(nhan)} câu có nhãn cuối, {len(thieu)} câu thiếu nhãn.")
 
 
