@@ -1,21 +1,26 @@
 .dashboard-page {
     width: 100%;
-    padding: 32px 24px 48px;
+    padding: 24px 24px 48px;
 }
 
+/* Tiêu đề bên trái, nút "Tạo đề mới" ngoài cùng bên phải cùng hàng */
 .dashboard-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
     margin-bottom: 24px;
 }
 
 .dashboard-page-title {
-    margin: 0 0 4px !important;
+    margin: 0 !important;
 }
 
 /* Nút lớn, dễ thấy nhất trên trang */
 .dashboard-create-button {
     height: 64px;
     padding: 0 40px;
-    margin-bottom: 24px;
     font-size: 20px;
     font-weight: 600;
 }

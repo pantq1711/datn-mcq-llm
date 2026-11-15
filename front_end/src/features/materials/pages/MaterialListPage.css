@@ -1,6 +1,7 @@
 .material-list-page {
     width: 100%;
-    padding: 24px;
+    /* Cùng padding với các trang chính khác (Tổng quan, Ngân hàng, Ma trận, Đề thi) */
+    padding: 32px 24px 48px;
     box-sizing: border-box;
 }
 

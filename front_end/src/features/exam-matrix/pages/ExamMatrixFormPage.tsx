@@ -12,7 +12,7 @@ import type { CreateExamMatrixPayload, ExamMatrixCellInput } from '../types/exam
 import { createEmptyCell, normalizeCell, toCellInput, validateCells } from '../../../utils/matrixCell.utils';
 import './ExamMatrixFormPage.css';
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
 /**
  * Trang tạo/chỉnh sửa ma trận: thông tin chung + danh sách ô (docs/api mục 7.1, 7.1a).
@@ -157,19 +157,26 @@ export default function ExamMatrixFormPage() {
                 </div>
             ) : (
                 <>
+                    {/* Bố cục đầu trang như trang Tạo đề thi: nút quay lại một hàng riêng, dưới là tiêu đề + mô tả, nút lưu bên phải */}
+                    <div className="exam-matrix-form-page__header-top">
+                        <Button
+                            type="text"
+                            icon={<ArrowLeftOutlined />}
+                            className="exam-matrix-form-page__back-button"
+                            onClick={handleCancel}
+                        >
+                            Quay lại danh sách
+                        </Button>
+                    </div>
+
                     <header className="exam-matrix-form-page__header">
                         <div className="exam-matrix-form-page__heading">
-                            <Button
-                                type="text"
-                                icon={<ArrowLeftOutlined />}
-                                className="exam-matrix-form-page__back-button"
-                                onClick={handleCancel}
-                            >
-                                Quay lại danh sách
-                            </Button>
                             <Title level={2} className="exam-matrix-form-page__title">
                                 {pageTitle}
                             </Title>
+                            <Paragraph type="secondary" className="exam-matrix-form-page__subtitle">
+                                Khai báo môn, khối và các ô (dạng câu, mức độ, chủ đề, số câu) để dùng khi tạo đề theo ma trận.
+                            </Paragraph>
                         </div>
 
                         <Space className="exam-matrix-form-page__header-actions" wrap>

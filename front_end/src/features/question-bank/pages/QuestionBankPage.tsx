@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button, Card, message, Tooltip, Typography } from "antd";
-import { FileWordOutlined } from "@ant-design/icons";
+import { FileWordOutlined, ReadOutlined } from "@ant-design/icons";
 import QuestionDetail from "../components/QuestionDetail";
 import QuestionFilters from "../components/QuestionFilters";
 import QuestionTable from "../components/QuestionTable";
@@ -139,6 +139,7 @@ export default function QuestionBankPage() {
             <div className="question-bank-page-header">
                 <div>
                     <Title level={2} className="question-bank-page-title">
+                        <ReadOutlined style={{ marginRight: 10, color: "#1677ff" }} />
                         Ngân hàng câu hỏi
                     </Title>
                     {/* API không trả cờ riêng/chung từng câu (docs/api "Câu riêng tư"), nên chỉ giải thích chung */}

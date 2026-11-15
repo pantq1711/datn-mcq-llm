@@ -1,4 +1,4 @@
-import { Empty, Skeleton, Typography } from "antd";
+import { Empty, Skeleton } from "antd";
 
 import "./ExamPreview.css";
 import type { ExamPreviewData } from "../types/exam.types";
@@ -39,10 +39,8 @@ export default function ExamPreview({
 
     return (
         <div className="exam-preview">
+            {/* Tiêu đề "Ma trận cấu trúc đề thi" nằm ở tiêu đề Card bao ngoài (ExamDetailPage) */}
             <div className="exam-preview-matrix-section">
-                <Typography.Title level={5} className="exam-preview-section-title">
-                    Ma trận cấu trúc đề thi
-                </Typography.Title>
                 <table className="exam-preview-matrix-table">
                     <thead>
                         <tr>

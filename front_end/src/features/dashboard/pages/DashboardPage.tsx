@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Card, Empty, List, Spin, Tag, Typography } from "antd";
-import { PlusOutlined, WarningOutlined } from "@ant-design/icons";
+import { HomeOutlined, PlusOutlined, WarningOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 
@@ -47,19 +47,20 @@ export default function DashboardPage() {
         <div className="dashboard-page">
             <div className="dashboard-page-header">
                 <Title level={2} className="dashboard-page-title">
+                    <HomeOutlined style={{ marginRight: 10, color: "#1677ff" }} />
                     Tổng quan
                 </Title>
-            </div>
 
-            <Button
-                type="primary"
-                size="large"
-                icon={<PlusOutlined />}
-                className="dashboard-create-button"
-                onClick={() => navigate("/exams/generate")}
-            >
-                Tạo đề mới
-            </Button>
+                <Button
+                    type="primary"
+                    size="large"
+                    icon={<PlusOutlined />}
+                    className="dashboard-create-button"
+                    onClick={() => navigate("/exams/generate")}
+                >
+                    Tạo đề mới
+                </Button>
+            </div>
 
             <Card
                 title="Đề gần đây"

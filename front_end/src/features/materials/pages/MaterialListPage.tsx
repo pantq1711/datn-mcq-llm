@@ -169,7 +169,7 @@ export default function MaterialListPage() {
                         Tài liệu bài học
                     </Title>
                     <Paragraph type="secondary" className="material-list-page-subtitle">
-                        Tải lên SGK hoặc giáo án để câu hỏi bám nội dung bài.
+                        Tải lên SGK hoặc giáo án để câu hỏi bám sát nội dung bài học
                     </Paragraph>
                 </div>
                 <Space>

@@ -1,5 +1,5 @@
 import { Button, Card, Segmented, Typography, message } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { FileTextOutlined, PlusOutlined } from "@ant-design/icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 
@@ -101,6 +101,7 @@ export default function ExamListPage() {
                 <div className="exam-list-page-header-content">
                     <div>
                         <Title level={2} className="exam-list-page-title">
+                            <FileTextOutlined style={{ marginRight: 10, color: "#1677ff" }} />
                             Đề thi
                         </Title>
                     </div>

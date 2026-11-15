@@ -531,7 +531,7 @@ export default function ExamDetailPage() {
             )}
 
             <div className="exam-detail-page-overview">
-                <Card>
+                <Card title="Ma trận cấu trúc đề thi">
                     <ExamPreview exam={exam} />
                 </Card>
             </div>

@@ -8,6 +8,8 @@ import './ExamMatrixTemplateModal.css';
 
 const { Text, Paragraph } = Typography;
 
+const SAMPLES_PER_PAGE = 5;
+
 interface ExamMatrixTemplateModalProps {
     open: boolean;
     onCancel: () => void;
@@ -116,10 +118,14 @@ export function ExamMatrixTemplateModal({
                     </div>
                 ) : filteredSamples.length > 0 ? (
                     <List
+                        className="exam-matrix-template-modal__list"
+                        split={false}
                         dataSource={filteredSamples}
-                        pagination={{ pageSize: 5, hideOnSinglePage: true }}
+                        // Một trang thì tắt hẳn phân trang: hideOnSinglePage chỉ ẩn nút, List vẫn giữ khung bọc có margin trên
+                        pagination={filteredSamples.length > SAMPLES_PER_PAGE ? { pageSize: SAMPLES_PER_PAGE } : false}
                         renderItem={(item) => (
                             <List.Item
+                                className="exam-matrix-template-modal__item"
                                 actions={[
                                     <Button
                                         key="create"

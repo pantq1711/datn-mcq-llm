@@ -14,8 +14,9 @@
     gap: 16px;
 }
 
+/* Không có dòng mô tả dưới tiêu đề: bỏ margin dưới để khoảng cách tới card bằng trang Quản lý ma trận */
 .exam-list-page-title {
-    margin: 0 0 4px !important;
+    margin: 0 !important;
 }
 
 .exam-list-page-table {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button, Card, Input, Space, Spin, Typography, message } from 'antd';
-import { CopyOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
+import { CopyOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, TableOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 import { ExamMatrixTable } from '../components/ExamMatrixTable';
@@ -104,6 +104,7 @@ export default function ExamMatrixListPage() {
             <div className="exam-matrix-list-page-header">
                 <div>
                     <Title level={2} className="exam-matrix-list-page-title">
+                        <TableOutlined style={{ marginRight: 10, color: '#1677ff' }} />
                         Quản lý ma trận
                     </Title>
                 </div>

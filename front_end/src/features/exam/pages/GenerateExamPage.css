@@ -2,7 +2,6 @@
     width: 100%;
     padding: 24px 24px 48px;
     box-sizing: border-box;
-    max-width: 1200px;
     margin: 0 auto;
 }
 
@@ -14,17 +13,12 @@
     margin-bottom: 12px;
 }
 
+/* Cùng kiểu nút "Quay lại" của trang Tạo ma trận (.exam-matrix-form-page__back-button); hover dùng mặc định của nút text.
+   Khoảng cách dưới đã có ở .generate-exam-page-header-top nên không thêm margin. */
 .generate-exam-back-button {
     background-color: #ffffff;
-    border-radius: 12px;
-    border: 1px solid #d9d9d9;
-    font-weight: 500;
-}
-
-.generate-exam-back-button:hover {
-    background-color: #f0f7ff;
-    border-color: #91caff;
-    color: #1677ff;
+    border-radius: 15px;
+    border: 3px solid #f2f2f2;
 }
 
 .generate-exam-page-title {
@@ -41,14 +35,81 @@
     width: 100%;
 }
 
-.generate-exam-tabs-container .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab {
+/* Hai tab chia đều chiều ngang, không có khe giữa */
+.generate-exam-tabs-container .ant-tabs-card>.ant-tabs-nav .ant-tabs-nav-list {
+    flex: 1;
+}
+
+.generate-exam-tabs-container .ant-tabs-card>.ant-tabs-nav .ant-tabs-tab {
+    flex: 1 1 0;
+    justify-content: center;
+    margin: 0 !important;
     border-radius: 8px 8px 0 0;
     font-weight: 500;
     padding: 10px 20px;
+    /* Đổi tab: nền, viền chuyển dần thay vì đổi ngay */
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Chữ của tab chuyển màu dần khi đổi tab hoặc rê chuột */
+.generate-exam-tabs-container .ant-tabs-card>.ant-tabs-nav .ant-tabs-tab .ant-tabs-tab-btn {
+    transition: color 0.3s ease;
+}
+
+/* Tab không được chọn: sáng hơn nền trang (#ececec) một chút, tab đang chọn vẫn trắng */
+.generate-exam-tabs-container .ant-tabs-card>.ant-tabs-nav .ant-tabs-tab:not(.ant-tabs-tab-active) {
+    background: #f5f5f5;
+    border-color: #e4e4e4;
+}
+
+.generate-exam-tabs-container .ant-tabs-card>.ant-tabs-nav .ant-tabs-tab:not(.ant-tabs-tab-active) .ant-tabs-tab-btn {
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.generate-exam-tabs-container .ant-tabs-card>.ant-tabs-nav .ant-tabs-tab:not(.ant-tabs-tab-active):hover .ant-tabs-tab-btn {
+    color: #1677ff;
+}
+
+/* Card nội dung gắn liền với hàng tab: bỏ khoảng cách dưới hàng tab (antd mặc định 16px) và bo góc trên của card */
+.generate-exam-tabs-container .ant-tabs-card>.ant-tabs-nav {
+    margin-bottom: 0;
 }
 
 .generate-exam-tab-content {
-    margin-top: 8px;
+    margin-top: 0;
+}
+
+.generate-exam-tab-content>.ant-card {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+/* Viền các khung bên trong card nội dung dày 2px (thay 1px). Đặt ở đây, không sửa BuildByLessonForm.css
+   (#67/#70 đang sửa file đó); chỉ đổi độ dày, giữ màu và kiểu viền của từng khung. Ô nhập liệu giữ nguyên. */
+.generate-exam-tab-content .build-lesson-intro,
+.generate-exam-tab-content .build-lesson-section,
+.generate-exam-tab-content .build-lesson-matrix-table,
+.generate-exam-tab-content .build-lesson-summary-bar,
+.generate-exam-tab-content .generate-exam-summary-bar,
+.generate-exam-tab-content .selected-matrix-info-box,
+.generate-exam-tab-content .generate-exam-matrix-card .ant-card {
+    border-width: 2px;
+}
+
+.generate-exam-tab-content .build-lesson-section>.ant-card-head,
+.generate-exam-tab-content .generate-exam-matrix-card .ant-card>.ant-card-head,
+.generate-exam-tab-content .build-lesson-matrix-row {
+    border-bottom-width: 2px;
+}
+
+/* Nền tiêu đề từng phần (BuildByLessonForm.css đặt #fafafa) */
+.generate-exam-tab-content .build-lesson-section>.ant-card-head,
+.generate-exam-tab-content .generate-exam-matrix-card .ant-card>.ant-card-head {
+    background-color: #f5f5f5;
+}
+
+.generate-exam-tab-content .build-lesson-matrix-row:last-child {
+    border-bottom: none;
 }
 
 .generate-exam-matrix-card {
