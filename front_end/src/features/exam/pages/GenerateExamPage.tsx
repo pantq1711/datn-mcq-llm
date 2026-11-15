@@ -72,6 +72,8 @@ export default function GenerateExamPage() {
     );
     // Giáo viên đã tự bấm đổi tab thì không tự chuyển sang "Theo ma trận" nữa
     const tabPickedRef = useRef(false);
+    // Tab chỉ hiện khi đã biết tab mở sẵn: URL đã chỉ định ma trận, hoặc danh sách ma trận đã tải xong (kể cả lỗi)
+    const [tabReady, setTabReady] = useState<boolean>(() => activeTab === "by-matrix");
     // Chỉ tải danh sách ma trận một lần lúc mở trang (tránh gọi hai lần ở chế độ dev)
     const matricesRequestedRef = useRef(false);
     const [subjectOptions, setSubjectOptions] = useState<ExamSubjectOption[]>([]);
@@ -223,6 +225,7 @@ export default function GenerateExamPage() {
             message.error("Không thể tải danh sách ma trận");
         } finally {
             setLoadingMatrices(false);
+            setTabReady(true);
         }
     };
 
@@ -493,6 +496,12 @@ export default function GenerateExamPage() {
             </div>
 
             <div className="generate-exam-tabs-container">
+                {/* Chưa biết có ma trận hay không thì chưa hiện tab, tránh tab nhảy từ "Theo bài học" sang "Theo ma trận" */}
+                {!tabReady ? (
+                    <div style={{ textAlign: "center", padding: "40px 0" }}>
+                        <Spin tip="Đang tải..." />
+                    </div>
+                ) : (
                 <Tabs
                     activeKey={activeTab}
                     onChange={(key) => {
@@ -502,24 +511,6 @@ export default function GenerateExamPage() {
                     type="card"
                     size="large"
                     items={[
-                        {
-                            key: "by-lesson",
-                            label: (
-                                <Space size={8}>
-                                    <BookOutlined />
-                                    <span>Theo bài học (Kiểm tra thường xuyên, ôn tập)</span>
-                                </Space>
-                            ),
-                            children: (
-                                <div className="generate-exam-tab-content">
-                                    <BuildByLessonForm
-                                        subjects={subjectOptions}
-                                        loadingSubjects={loadingSubjects}
-                                        onSuccess={handleExamCreated}
-                                    />
-                                </div>
-                            ),
-                        },
                         {
                             key: "by-matrix",
                             label: (
@@ -802,8 +793,27 @@ export default function GenerateExamPage() {
                                 </div>
                             ),
                         },
+                        {
+                            key: "by-lesson",
+                            label: (
+                                <Space size={8}>
+                                    <BookOutlined />
+                                    <span>Theo bài học (Kiểm tra thường xuyên, ôn tập)</span>
+                                </Space>
+                            ),
+                            children: (
+                                <div className="generate-exam-tab-content">
+                                    <BuildByLessonForm
+                                        subjects={subjectOptions}
+                                        loadingSubjects={loadingSubjects}
+                                        onSuccess={handleExamCreated}
+                                    />
+                                </div>
+                            ),
+                        },
                     ]}
                 />
+                )}
             </div>
 
             {/* Modal chọn tài liệu chung cho ma trận */}

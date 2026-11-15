@@ -56,8 +56,10 @@
     margin-bottom: 0;
 }
 
+/* Bảng chỉ có 2 cột (Phần, Số câu): giới hạn chiều rộng để số câu không cách quá xa tên phần trên màn hình rộng */
 .exam-preview-matrix-section {
     width: 100%;
+    max-width: 480px;
     box-sizing: border-box;
     background: #f5f5f5;
     border: 1px solid #f0f0f0;

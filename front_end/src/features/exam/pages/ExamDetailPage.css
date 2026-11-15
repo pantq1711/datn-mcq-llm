@@ -88,7 +88,7 @@
     padding: 12px;
     background: rgba(255, 255, 255, 0.9);
     border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.2);
 }
 
 .question-group:last-child {
@@ -97,10 +97,12 @@
 
 /* --- Question group title --- */
 
-.question-group-title {
+/* antd Typography tự thêm margin-top (~1.2em) cho tiêu đề đứng sau một phần tử khác; tiêu đề nhóm đã có padding
+   của .question-group nên bỏ hẳn margin-top */
+.question-group .question-group-title.ant-typography {
+    margin-top: 0;
     margin-bottom: 12px;
     font-weight: 600;
-    color: #1890ff;
 }
 
 /* --- Tablet --- */
