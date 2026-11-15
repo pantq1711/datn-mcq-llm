@@ -124,22 +124,134 @@ class ParseFileVaSuaTayTest(unittest.TestCase):
             baseline_parse.main(["--tho-dir", tho, "--out-dir", out, "--sua-tay", os.path.join(d, "sua.jsonl")])
             ids = [x["id"] for x in doc_jsonl(os.path.join(out, "baseline_2.jsonl"))]
             loi2 = [x["id"] for x in doc_jsonl(os.path.join(out, "parse-loi.jsonl"))]
+            diff = doc_jsonl(os.path.join(out, "sua-tay-diff.jsonl"))
         self.assertIn("baseline_2-d1-c02", ids)
         self.assertNotIn("baseline_2-d1-c02", loi2)
+        # L6c: mỗi câu sửa tay có một dòng diff: lý do lỗi gốc + đúng các trường đã đổi (trước/sau)
+        self.assertEqual(["baseline_2-d1-c02"], [x["id"] for x in diff])
+        self.assertIn("thiếu phương án D", diff[0]["loi_goc"])
+        self.assertEqual(["phuong_an"], sorted(diff[0]["truong_doi"]))
+        self.assertEqual("", diff[0]["truong_doi"]["phuong_an"]["truoc"]["D"])
+        self.assertEqual("$4$", diff[0]["truong_doi"]["phuong_an"]["sau"]["D"])
+
+
+MA_TRAN_D2 = os.path.normpath(os.path.join(_duong_dan.GOC, "..", "..", "docs", "experiments", "d2", "ma-tran-6-6-6.json"))
+
+
+def tho_json_dung(mt):
+    """Đầu ra JSON prompt 2 hợp lệ, đúng số câu từng dạng của ma trận mt."""
+    out = []
+    for c in ma_tran.cac_cau(mt):
+        it = {"cau": c["stt"], "dang": c["dang"], "de": f"Đề câu {c['stt']}", "phuong_an": None, "y": None,
+              "dap_an": None, "loi_giai": "Giải."}
+        if c["dang"] == "mcq":
+            it["phuong_an"] = {k: f"${i}$" for i, k in enumerate("ABCD")}
+            it["dap_an"] = "B"
+        elif c["dang"] == "tf":
+            it["y"] = [{"vi_tri": v, "noi_dung": f"Ý {v}", "nhan": "Đ" if v in "ac" else "S"} for v in "abcd"]
+        else:
+            it["dap_an"] = "12"
+        out.append(it)
+    return json.dumps(out, ensure_ascii=False)
+
+
+class ParseTheoMaTranTest(unittest.TestCase):
+    """L2: baseline_parse phải gán dạng/chủ đề/mức theo đúng ma trận đã dùng khi gọi (ma trận thực nghiệm 6/6/6)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.tho = os.path.join(self.tmp, "tho")
+        os.makedirs(self.tho)
+        self.mt = ma_tran.doc(MA_TRAN_D2)
+        with open(os.path.join(self.tho, "baseline_2-d1.txt"), "w", encoding="utf-8") as f:
+            f.write(tho_json_dung(self.mt))
+        with open(os.path.join(self.tho, "baseline_2-d1.meta.json"), "w", encoding="utf-8") as f:
+            json.dump({"nguon": "baseline_2", "de": 1, "ma_tran_sha256": ma_tran.dau_van_tay(self.mt)}, f)
+        self.out = os.path.join(self.tmp, "out")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_ma_tran_6_6_6_khong_thua_thieu_va_gan_dung_o(self):
+        baseline_parse.main(["--tho-dir", self.tho, "--out-dir", self.out, "--ma-tran", MA_TRAN_D2])
+        cau = {c["id"]: c for c in doc_jsonl(os.path.join(self.out, "baseline_2.jsonl"))}
+        self.assertEqual([], doc_jsonl(os.path.join(self.out, "parse-loi.jsonl")))
+        self.assertEqual(18, len(cau))
+        self.assertEqual(("Hằng đẳng thức đáng nhớ và ứng dụng", "hard"),
+                         (cau["baseline_2-d1-c06"]["chu_de"], cau["baseline_2-d1-c06"]["muc_do"]))
+        self.assertEqual(["easy", "medium", "medium", "hard"], cau["baseline_2-d1-c12"]["muc_do"])
+        self.assertEqual(("Đa thức", "Đơn thức, đa thức", "easy"),
+                         (cau["baseline_2-d1-c13"]["chu_de"], cau["baseline_2-d1-c13"]["bai"],
+                          cau["baseline_2-d1-c13"]["muc_do"]))
+
+    def test_quen_ma_tran_thi_dung_khong_ghi_sai(self):
+        with self.assertRaises(SystemExit) as cm:
+            baseline_parse.main(["--tho-dir", self.tho, "--out-dir", self.out])  # ma trận mặc định 12/2/4
+        self.assertIn("ma trận", str(cm.exception))
+        self.assertFalse(os.path.exists(os.path.join(self.out, "baseline_2.jsonl")))
 
 
 class BaselineGoiTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.calls = []
+        self.temps = []
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
         os.environ.pop("GEMINI_API_KEY", None)
 
-    def goi_gia(self, model, key, prompt, mode):
+    def goi_gia(self, model, key, prompt, mode, temperature=None):
         self.calls.append((model, key, mode, prompt))
+        self.temps.append(temperature)
         return "[]", 10, 20, 0
+
+    def test_meta_ghi_temperature_va_dau_van_tay_ma_tran(self):
+        os.environ["GEMINI_API_KEY"] = "KHOA-GIA-0123456789"
+        baseline_goi.main(["--out-dir", self.tmp, "--prompt", "2", "--so-de", "1", "--ma-tran", MA_TRAN_D2,
+                           "--temperature", "0.7"], goi=self.goi_gia)
+        self.assertEqual([0.7], self.temps)
+        with open(os.path.join(self.tmp, "baseline_2-d1.meta.json"), encoding="utf-8") as f:
+            meta = json.load(f)
+        self.assertEqual(0.7, meta["temperature"])
+        self.assertEqual(ma_tran.dau_van_tay(ma_tran.doc(MA_TRAN_D2)), meta["ma_tran_sha256"])
+        self.assertEqual("Giữa kì I – Toán 8", meta["ma_tran_ten"])
+        self.assertNotEqual(ma_tran.dau_van_tay(ma_tran.doc()), meta["ma_tran_sha256"])  # cùng tên, khác mẫu 12/2/4
+
+    def test_khong_dat_temperature_thi_meta_ghi_null(self):
+        os.environ["GEMINI_API_KEY"] = "KHOA-GIA-0123456789"
+        baseline_goi.main(["--out-dir", self.tmp, "--prompt", "1", "--so-de", "1"], goi=self.goi_gia)
+        self.assertEqual([None], self.temps)
+        with open(os.path.join(self.tmp, "baseline_1-d1.meta.json"), encoding="utf-8") as f:
+            self.assertIsNone(json.load(f)["temperature"])
+
+    def test_temperature_vao_generation_config_cua_body(self):
+        import io
+        import sys
+        from unittest import mock
+        if baseline_goi.LLM_PROBE not in sys.path:
+            sys.path.insert(0, baseline_goi.LLM_PROBE)
+        import llm_formula_probe as p
+        bodies = []
+
+        def urlopen_gia(req, timeout=None):
+            bodies.append(json.loads(req.data.decode("utf-8")))
+            return io.BytesIO(json.dumps({"candidates": [{"content": {"parts": [{"text": "x"}]}}]}).encode("utf-8"))
+
+        with mock.patch.object(p.urllib.request, "urlopen", urlopen_gia):
+            p.call_gemini_with_retry("m", "k", "hỏi", "json", temperature=0.7)
+            p.call_gemini_with_retry("m", "k", "hỏi", "plain")
+            p.call_gemini_with_retry("m", "k", "hỏi", "plain", temperature=0.0)
+        self.assertEqual({"responseMimeType": "application/json", "temperature": 0.7}, bodies[0]["generationConfig"])
+        self.assertNotIn("generationConfig", bodies[1])  # không đặt: giữ nguyên body cũ
+        self.assertEqual({"temperature": 0.0}, bodies[2]["generationConfig"])
+
+    def test_so_cau_ghi_cung_trong_prompt_khac_ma_tran_thi_dung(self):
+        os.environ["GEMINI_API_KEY"] = "KHOA-GIA-0123456789"
+        with self.assertRaises(ValueError):  # prompt 2 ghi "ĐÚNG 18 câu", ma trận nhỏ có 4 câu
+            baseline_goi.main(["--out-dir", self.tmp, "--prompt", "2", "--ma-tran",
+                               os.path.join(_duong_dan.FIXTURES, "ma-tran-nho.json")], goi=self.goi_gia)
+        self.assertEqual([], self.calls)
 
     def test_doc_prompt_that_va_dung_ma_tran(self):
         mau = baseline_goi.doc_prompt_mau()

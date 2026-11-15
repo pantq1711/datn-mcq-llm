@@ -6,11 +6,14 @@ Hai kiểu đầu vào:
     ở phần "ĐÁP ÁN" cuối đề (dòng "Câu N: ...", "1.A 2.B", bảng số/chữ).
 Câu được gán khối/chủ đề/nội dung/mức độ theo thứ tự trong ma trận (câu mcq thứ k -> ô mcq thứ k).
 Câu thiếu phần nào thì KHÔNG bỏ im lặng: ghi vào parse-loi.jsonl kèm lý do và khối chữ gốc, để An sửa tay phần ĐỊNH DẠNG
-rồi đưa vào --sua-tay (cùng id thì bản sửa tay thay bản parse).
+rồi đưa vào --sua-tay (cùng id thì bản sửa tay thay bản parse). Mỗi câu sửa tay có một dòng trong sua-tay-diff.jsonl
+(lý do lỗi gốc + các trường đã đổi, trước/sau) để báo cáo và phân tích nhạy (L6c).
+--ma-tran phải là đúng file đã truyền cho baseline_goi; meta của file thô có dấu vân tay ma trận khác thì dừng, không ghi.
 
 Chạy (đứng ở tools/measurement):
-  python -m do_luong.baseline_parse --tho-dir <dir>/baseline-tho --out-dir <dir> [--sua-tay <dir>/baseline-sua-tay.jsonl]
-Ra: <dir>/baseline_1.jsonl, <dir>/baseline_2.jsonl, <dir>/parse-loi.jsonl
+  python -m do_luong.baseline_parse --tho-dir <dir>/baseline-tho --out-dir <dir> --ma-tran <ma-tran.json> \
+      [--sua-tay <dir>/baseline-sua-tay.jsonl]
+Ra: <dir>/baseline_1.jsonl, <dir>/baseline_2.jsonl, <dir>/parse-loi.jsonl [, <dir>/sua-tay-diff.jsonl]
 """
 import argparse
 import glob
@@ -350,8 +353,9 @@ def _hoan_thien(items, nguon, de, mt=None):
     return tot, loi
 
 
-def parse_file(path):
-    """<nguon>-d<k>.txt -> (câu, lỗi). nguon baseline_2 đọc JSON, còn lại đọc chữ (JSON hỏng thì thử chữ)."""
+def parse_file(path, mt=None):
+    """<nguon>-d<k>.txt -> (câu, lỗi). nguon baseline_2 đọc JSON, còn lại đọc chữ (JSON hỏng thì thử chữ).
+    mt: ma trận đã dùng khi gọi (mặc định ma trận mẫu)."""
     m = re.match(r"(baseline_\d+)-d(\d+)\.txt$", os.path.basename(path))
     if not m:
         raise ValueError(f"Tên file thô không đúng mẫu <nguon>-d<k>.txt: {path}")
@@ -360,41 +364,83 @@ def parse_file(path):
         raw = f.read()
     looks_json = raw.lstrip().startswith(("[", "{", "```json")) or nguon == "baseline_2"
     if looks_json:
-        tot, loi = tu_json(raw, nguon, de)
+        tot, loi = tu_json(raw, nguon, de, mt)
         if tot or not loi or not loi[0]["loi"][0].startswith("JSON"):
             return tot, loi
-    return tu_van_ban(raw, nguon, de)
+    return tu_van_ban(raw, nguon, de, mt)
+
+
+def kiem_ma_tran(path, mt):
+    """Lỗi (chuỗi) nếu meta của file thô ghi dấu vân tay ma trận khác mt; None nếu khớp hoặc meta cũ không ghi."""
+    meta_path = path[: -len(".txt")] + ".meta.json"
+    if not os.path.exists(meta_path):
+        return None
+    with open(meta_path, encoding="utf-8") as f:
+        meta = json.load(f)
+    sha = meta.get("ma_tran_sha256")
+    if sha and sha != ma_tran.dau_van_tay(mt):
+        return (f"{os.path.basename(path)} được gọi với ma trận \"{meta.get('ma_tran_ten')}\", khác ma trận đang dùng để "
+                f"parse \"{mt.get('name')}\": truyền đúng --ma-tran")
+    return None
+
+
+_TRUONG_DIFF = ("dang", "de", "phuong_an", "y", "dap_an", "loi_giai")
+
+
+def diff_sua_tay(c_sua, ban_truoc):
+    """L6c: một dòng cho một câu sửa tay. ban_truoc: mục parse-loi (có "loi", "cau"), câu đã parse được, hoặc None."""
+    la_loi = bool(ban_truoc) and "loi" in ban_truoc
+    cau_truoc = ban_truoc.get("cau") if la_loi else ban_truoc
+    doi = {}
+    for k in _TRUONG_DIFF:
+        truoc = (cau_truoc or {}).get(k)
+        if truoc != c_sua.get(k):
+            doi[k] = {"truoc": truoc, "sau": c_sua.get(k)}
+    return {"id": c_sua["id"], "loi_goc": ban_truoc["loi"] if la_loi else [], "co_ban_parse": cau_truoc is not None,
+            "truong_doi": doi}
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="D4: parse đầu ra thô baseline về định dạng câu thống nhất.")
     ap.add_argument("--tho-dir", required=True)
     ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--ma-tran", default=ma_tran.MAU_MAC_DINH,
+                    help="đúng file ma trận đã truyền cho baseline_goi (meta có dấu vân tay thì phải khớp)")
     ap.add_argument("--sua-tay", help="JSONL câu đã sửa tay (cùng id thay bản parse)")
     a = ap.parse_args(argv)
-    theo_nguon, loi_all = {}, []
-    for path in sorted(glob.glob(os.path.join(a.tho_dir, "baseline_*-d*.txt"))):
-        if path.endswith(".prompt.txt"):
-            continue
-        tot, loi = parse_file(path)
+    mt = ma_tran.doc(a.ma_tran)
+    paths = [p for p in sorted(glob.glob(os.path.join(a.tho_dir, "baseline_*-d*.txt"))) if not p.endswith(".prompt.txt")]
+    lech = [e for e in (kiem_ma_tran(p, mt) for p in paths) if e]
+    if lech:
+        raise SystemExit("Sai ma trận, không ghi gì:\n" + "\n".join(lech))
+    theo_nguon, loi_all, ban_truoc = {}, [], {}
+    for path in paths:
+        tot, loi = parse_file(path, mt)
         for c in tot:
             theo_nguon.setdefault(c["nguon"], {})[c["id"]] = c
+            ban_truoc[c["id"]] = c
+        for x in loi:
+            ban_truoc[x["id"]] = x
         loi_all.extend(loi)
     sua = cau_mod.doc_jsonl(a.sua_tay) if a.sua_tay else []
-    da_sua = set()
+    da_sua, diffs = set(), []
     for c in sua:
         e = cau_mod.kiem_tra(c)
         if e:
             raise ValueError(f"sửa tay {c.get('id')} vẫn lỗi: {e}")
         theo_nguon.setdefault(c["nguon"], {})[c["id"]] = c
         da_sua.add(c["id"])
+        diffs.append(diff_sua_tay(c, ban_truoc.get(c["id"])))
     loi_con = [x for x in loi_all if x["id"] not in da_sua]
     os.makedirs(a.out_dir, exist_ok=True)
     for nguon, d in sorted(theo_nguon.items()):
         cau_mod.ghi_jsonl(os.path.join(a.out_dir, f"{nguon}.jsonl"), [d[k] for k in sorted(d)])
         print(f"{nguon}: {len(d)} câu hợp lệ")
     cau_mod.ghi_jsonl(os.path.join(a.out_dir, "parse-loi.jsonl"), loi_con)
-    print(f"{len(loi_con)} mục lỗi chưa sửa -> parse-loi.jsonl ({len(da_sua)} câu đã sửa tay)")
+    if a.sua_tay:
+        cau_mod.ghi_jsonl(os.path.join(a.out_dir, "sua-tay-diff.jsonl"), diffs)
+    print(f"{len(loi_con)} mục lỗi chưa sửa -> parse-loi.jsonl ({len(da_sua)} câu đã sửa tay"
+          + (", diff -> sua-tay-diff.jsonl)" if a.sua_tay else ")"))
 
 
 if __name__ == "__main__":

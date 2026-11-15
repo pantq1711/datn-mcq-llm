@@ -54,13 +54,16 @@ SCHEMA = {
 }
 
 
-def call_gemini(model, key, prompt, mode):
+def call_gemini(model, key, prompt, mode, temperature=None):
+    """temperature None: không gửi (Gemini dùng mặc định của model)."""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     body = {"contents": [{"parts": [{"text": prompt}]}]}
     if mode == "json":
         body["generationConfig"] = {"responseMimeType": "application/json"}
     elif mode == "schema":
         body["generationConfig"] = {"responseMimeType": "application/json", "responseSchema": SCHEMA}
+    if temperature is not None:
+        body.setdefault("generationConfig", {})["temperature"] = temperature
     req = urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
@@ -78,11 +81,11 @@ def call_gemini(model, key, prompt, mode):
     return text, usage.get("promptTokenCount", 0), usage.get("candidatesTokenCount", 0), usage.get("thoughtsTokenCount", 0)
 
 
-def call_gemini_with_retry(model, key, prompt, mode, max_retries=3):
+def call_gemini_with_retry(model, key, prompt, mode, max_retries=3, temperature=None):
     """Tự động đợi khi gặp 503 (quá tải) hoặc 429 theo phút; dừng ngay nếu hết quota ngày."""
     for attempt in range(1, max_retries + 1):
         try:
-            return call_gemini(model, key, prompt, mode)
+            return call_gemini(model, key, prompt, mode, temperature=temperature)
         except RuntimeError as e:
             msg = str(e)
             # Kiểm tra hết quota theo ngày (ví dụ: Please retry in 14h48m...)

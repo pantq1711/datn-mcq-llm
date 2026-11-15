@@ -33,8 +33,8 @@ Các lệnh bên dưới chạy từ `tools/measurement` với `PY=.venv/Scripts
 
 ```bash
 psql -X -A -t -v ON_ERROR_STOP=1 -d <db> -f tools/measurement/sql/d2-xuat-cau.sql -o cau-he-thong.jsonl
-# mặc định chỉ lấy prompt hiện tại (matrix-mcq-v8-draft, matrix-tf-v10-draft, matrix-sa-v10-draft);
-# đổi bằng -v prompt_versions=a,b,c
+# mặc định chỉ lấy prompt hiện tại (matrix-mcq-v9-draft, matrix-tf-v12-draft, matrix-sa-v12-draft; test_sql_xuat giữ
+# khớp MatrixPromptDraftV0); đổi bằng -v prompt_versions=a,b,c
 ```
 
 Thử cục bộ trên `datn_mcq_e2e` (docker): `docker exec -i datn-mcq-db sh -c 'psql -X -A -t -U "$POSTGRES_USER" -d datn_mcq_e2e' < tools/measurement/sql/d2-xuat-cau.sql > $D/cau-he-thong.jsonl`.
@@ -45,15 +45,20 @@ Cờ được tính ở Python (`do_luong/co_qc.py`) đúng như trang đề: `n
 **2. Baseline (sau khi An duyệt `docs/experiments/d4/prompts.md`).**
 
 ```bash
-$PY -m do_luong.baseline_goi --dry-run --out-dir $D/baseline-tho          # xem prompt, không cần khóa
+MT=../../docs/experiments/d2/ma-tran-6-6-6.json                           # CÙNG ma trận với đề hệ thống (L2)
+$PY -m do_luong.baseline_goi --dry-run --ma-tran $MT --out-dir $D/baseline-tho   # xem prompt, không cần khóa
 export GEMINI_API_KEY=...                                                  # gõ trong terminal, không lưu file
-$PY -m do_luong.baseline_goi --model gemini-3.5-flash-lite --so-de 2 --out-dir $D/baseline-tho   # 4 lượt gọi
-$PY -m do_luong.baseline_parse --tho-dir $D/baseline-tho --out-dir $D
+$PY -m do_luong.baseline_goi --model gemini-3.5-flash-lite --so-de 4 --ma-tran $MT --temperature 0.7 \
+    --out-dir $D/baseline-tho                                              # 2 prompt x 4 đề = 8 lượt gọi
+$PY -m do_luong.baseline_parse --tho-dir $D/baseline-tho --ma-tran $MT --out-dir $D
 ```
 
+`--so-de` bằng số đề hệ thống (L3). `--temperature` bỏ trống thì không gửi (mặc định của model); meta ghi temperature,
+tên và dấu vân tay ma trận; `baseline_parse` dừng nếu `--ma-tran` khác ma trận lúc gọi.
 Câu không parse được nằm trong `$D/parse-loi.jsonl` (lý do + khối chữ gốc + bản parse dở). Sửa **phần định dạng** (không
 sửa nội dung toán), chép từng câu đã sửa (một dòng JSON, giữ `id`) vào `$D/baseline-sua-tay.jsonl`, chạy lại
-`baseline_parse ... --sua-tay $D/baseline-sua-tay.jsonl`. Báo số câu phải sửa tay trong chương 4.
+`baseline_parse ... --sua-tay $D/baseline-sua-tay.jsonl`: mỗi câu sửa tay có một dòng trong `$D/sua-tay-diff.jsonl` (lý do
+lỗi gốc, trường đã đổi trước/sau). Báo số câu phải sửa tay trong chương 4 và phân tích nhạy khi bỏ các câu đó (L6c).
 
 **3. Lấy mẫu + gán mã + file khóa.**
 

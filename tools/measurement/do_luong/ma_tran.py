@@ -1,5 +1,6 @@
 """Ma trận mẫu của app (back_end/src/main/resources/samples/*.json) -> danh sách câu theo thứ tự đề, và dạng chữ cho prompt
 baseline D4. Câu baseline nhận khối/chủ đề/nội dung/mức độ từ đúng chỗ này để phiếu chấm ghi giống câu hệ thống."""
+import hashlib
 import json
 import os
 
@@ -14,6 +15,12 @@ TEN_PHAN = {"I": "PHẦN I. Câu trắc nghiệm nhiều phương án lựa ch�
 def doc(path=MAU_MAC_DINH):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def dau_van_tay(mt):
+    """SHA-256 của nội dung ma trận (không phụ thuộc khoảng trắng/thứ tự khóa): baseline_goi ghi vào meta, baseline_parse
+    so lại để không gán chủ đề/mức theo nhầm ma trận (L2)."""
+    return hashlib.sha256(json.dumps(mt, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 def cac_cau(mt):
