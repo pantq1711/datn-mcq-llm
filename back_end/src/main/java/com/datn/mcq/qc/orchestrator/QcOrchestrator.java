@@ -1,6 +1,8 @@
 package com.datn.mcq.qc.orchestrator;
 
 import com.datn.mcq.common.util.JsonStringArray;
+import com.datn.mcq.common.util.LetterJson;
+import com.datn.mcq.enums.DistractorCheck;
 import com.datn.mcq.common.util.TextClip;
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.CheckType;
@@ -307,11 +309,13 @@ public class QcOrchestrator {
             return withRequestCheck(new SolverVerdict(QuestionType.SA, sa.passed(), sa.judgeModel(), sa.reasoning(),
                     null, sa.judgeKind(), sa.judgeAnswer(), null, sa.usage()), sa.requestCheck());
         }
+        // PA1 (13/11): lỗi sai kèm phương án (nếu có) được ghép mù trong CÙNG lượt gọi; câu không có lỗi gọi y như cũ.
         AnswerSolverChecker.SolverCheckOutcome mcq = answerSolverChecker.check(
                 input.questionText(), input.optionA(), input.optionB(), input.optionC(), input.optionD(),
-                input.correctOption(), input.requestCodes(), input.requestText());
+                input.correctOption(), input.requestCodes(), input.requestText(), input.distractorErrors());
         return withRequestCheck(new SolverVerdict(QuestionType.MCQ, mcq.passed(), mcq.judgeModel(), mcq.reasoning(),
-                mcq.judgeAnswer(), null, null, null, mcq.usage(), mcq.optionCorrect()), mcq.requestCheck());
+                mcq.judgeAnswer(), null, null, null, mcq.usage(), mcq.optionCorrect()), mcq.requestCheck())
+                .withDistractorChecks(mcq.distractorChecks());
     }
 
     private static SolverVerdict withRequestCheck(SolverVerdict verdict, TeacherRequestPrompt.RequestCheck check) {
@@ -359,8 +363,58 @@ public class QcOrchestrator {
             row.setLatencyMs(usage == null ? null : usage.latencyMs());
             row.setRequestVerdict(verdict.requestVerdict());
             row.setRequestReason(verdict.requestReason());
+            // PA1 (V29): kết quả ghép lỗi (chỉ mcq; NULL khi không kiểm), ghi đè kết quả cũ của dòng.
+            row.setDistractorChecks(writeDistractorChecks(verdict.distractorChecks()));
             qualityCheckResultRepository.save(row);
         });
+    }
+
+    /** {@code {"B": "match", ...}} theo thứ tự A-D, bỏ {@code unchecked}; null khi không có khóa nào. */
+    static String writeDistractorChecks(java.util.Map<String, DistractorCheck> checks) {
+        if (checks == null) {
+            return null;
+        }
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        checks.forEach((letter, check) -> {
+            if (check != null && check != DistractorCheck.UNCHECKED) {
+                out.put(letter, check.getDbValue());
+            }
+        });
+        return LetterJson.write(out);
+    }
+
+    /** Đọc {@code distractor_checks} đã lưu; null hoặc hỏng thì map rỗng. Giá trị lạ bị bỏ. */
+    public static java.util.Map<String, DistractorCheck> readDistractorChecks(String json) {
+        java.util.Map<String, DistractorCheck> out = new java.util.LinkedHashMap<>();
+        java.util.Map<String, String> raw = LetterJson.read(json);
+        if (raw != null) {
+            raw.forEach((letter, value) -> {
+                DistractorCheck c = DistractorCheck.parseOrNull(value);
+                if (c != null && c != DistractorCheck.UNCHECKED) {
+                    out.put(letter, c);
+                }
+            });
+        }
+        return out;
+    }
+
+    /**
+     * PA1: kết quả ghép lỗi đã lưu của các câu, CHỈ với câu có dòng answer_check (câu không có dòng không có khóa trong map;
+     * câu có dòng mà không kiểm lỗi có map rỗng). Một truy vấn.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<Integer, java.util.Map<String, DistractorCheck>> storedDistractorChecks(
+            java.util.Collection<Integer> questionIds) {
+        java.util.Map<Integer, java.util.Map<String, DistractorCheck>> out = new java.util.HashMap<>();
+        if (questionIds == null || questionIds.isEmpty()) {
+            return out;
+        }
+        for (QualityCheckResult r : qualityCheckResultRepository.findByQuestionIdIn(questionIds)) {
+            if (r.getCheckType() == CheckType.ANSWER_CHECK) {
+                out.put(r.getQuestionId(), readDistractorChecks(r.getDistractorChecks()));
+            }
+        }
+        return out;
     }
 
     /** V14 (W1-3): giới hạn độ dài lời giải thích của Solver khi lưu (khớp CHECK chk_qcr_solver_reasoning). */
@@ -389,7 +443,9 @@ public class QcOrchestrator {
         // PR B: bản sửa chép yêu cầu của bản trước, nên kết luận về yêu cầu cũng được chép.
         SolverVerdict copy = new SolverVerdict(r.getQuestionType(), Boolean.TRUE.equals(r.getPassed()),
                 r.getJudgeModel(), r.getSolverReasoning(), r.getJudgeAnswer(), r.getJudgeSaKind(),
-                r.getJudgeSaAnswer(), labels).withRequestCheck(r.getRequestVerdict(), r.getRequestReason());
+                r.getJudgeSaAnswer(), labels).withRequestCheck(r.getRequestVerdict(), r.getRequestReason())
+                // PA1: bản chỉ đổi lời giải giữ nguyên câu dẫn, phương án và lỗi, nên kết quả ghép lỗi cũng được chép.
+                .withDistractorChecks(r.getDistractorChecks() == null ? null : readDistractorChecks(r.getDistractorChecks()));
         recordSolver(toQuestionId, copy);
         return Optional.of(copy.status());
     }

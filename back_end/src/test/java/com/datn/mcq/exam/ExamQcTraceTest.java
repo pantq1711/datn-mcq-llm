@@ -165,7 +165,9 @@ class ExamQcTraceTest extends ExamFlowTestBase {
         assertEquals("qc_passed", llm.get("status").asText());
         assertTrue(llm.get("qc").get("format").get("passed").asBoolean());
         // 4/11: LLM giả viết câu dẫn kết thúc bằng "là:"; parser bỏ dấu hai chấm và ghi cảnh báo tự sửa (không bật cờ).
-        assertEquals(List.of("json: đã sửa dấu câu cuối question_text (bỏ : sau là)", "option_a: đã tự đóng $"),
+        // 13/11 (PA1): prompt mcq v10 yêu cầu distractor_errors mà LLM giả không trả: thêm cảnh báo tự sửa (không bật cờ).
+        assertEquals(List.of("json: đã sửa dấu câu cuối question_text (bỏ : sau là)", "option_a: đã tự đóng $",
+                "json: đã sửa thiếu distractor_errors (không có phân tích phương án nhiễu)"),
                 texts(llm.get("qc").get("format").get("autoRepairs")));
         // 3/11: LLM giả luôn trả B nên có thể lệch chữ đáp án đã giao; đó là cảnh báo duy nhất được phép (không bật cờ).
         assertTrue(texts(llm.get("qc").get("format").get("warnings")).stream()

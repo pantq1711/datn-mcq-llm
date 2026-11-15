@@ -9,7 +9,9 @@ import com.datn.mcq.llm.prompt.SaPromptDraftV0;
 import com.datn.mcq.llm.prompt.TfPromptDraftV0;
 import com.datn.mcq.enums.AnswerChoice;
 import com.datn.mcq.enums.DbEnum;
+import com.datn.mcq.enums.DistractorCheck;
 import com.datn.mcq.enums.Option;
+import com.datn.mcq.llm.prompt.DistractorCheckPrompt;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.datn.mcq.llm.dto.LlmUsage;
@@ -39,6 +41,11 @@ public class AnswerSolverChecker {
      * @param requestCheck (12/11, PR B) kết luận về yêu cầu của giáo viên; null khi câu không có yêu cầu hoặc phản hồi thiếu,
      *                     hỏng {@code request_check}
      */
+    /**
+     * @param distractorChecks (PA1, v7) kết quả ghép mù lỗi sai với phương án ở lượt 2, theo chữ người soạn đã gán; null khi
+     *                         không có kết quả (câu không có lỗi, Solver cũ, lượt 1 gắn cờ, lượt 2 lỗi hoặc phản hồi không
+     *                         đọc được): mọi lỗi "chưa kiểm"
+     */
     public record SolverCheckOutcome(
             boolean passed,
             AnswerChoice judgeAnswer,
@@ -46,10 +53,19 @@ public class AnswerSolverChecker {
             String reasoning,
             LlmUsage usage,
             List<Boolean> optionCorrect,
-            TeacherRequestPrompt.RequestCheck requestCheck
+            TeacherRequestPrompt.RequestCheck requestCheck,
+            Map<String, DistractorCheck> distractorChecks
     ) {
         public SolverCheckOutcome {
             optionCorrect = optionCorrect == null ? null : List.copyOf(optionCorrect);
+            distractorChecks = distractorChecks == null ? null
+                    : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(distractorChecks));
+        }
+
+        public SolverCheckOutcome(boolean passed, AnswerChoice judgeAnswer, String judgeModel, String reasoning,
+                                  LlmUsage usage, List<Boolean> optionCorrect,
+                                  TeacherRequestPrompt.RequestCheck requestCheck) {
+            this(passed, judgeAnswer, judgeModel, reasoning, usage, optionCorrect, requestCheck, null);
         }
 
         public SolverCheckOutcome(boolean passed, AnswerChoice judgeAnswer, String judgeModel, String reasoning,
@@ -73,11 +89,19 @@ public class AnswerSolverChecker {
 
         SolverCheckOutcome withUsage(LlmUsage newUsage) {
             return new SolverCheckOutcome(passed, judgeAnswer, judgeModel, reasoning, newUsage, optionCorrect,
-                    requestCheck);
+                    requestCheck, distractorChecks);
         }
 
         SolverCheckOutcome withRequestCheck(TeacherRequestPrompt.RequestCheck check) {
-            return new SolverCheckOutcome(passed, judgeAnswer, judgeModel, reasoning, usage, optionCorrect, check);
+            return new SolverCheckOutcome(passed, judgeAnswer, judgeModel, reasoning, usage, optionCorrect, check,
+                    distractorChecks);
+        }
+
+        /** Kèm kết quả ghép lỗi; ghi chú Solver thêm khối {@link DistractorCheckPrompt#NOTES_PREFIX} ở cuối. */
+        SolverCheckOutcome withDistractorChecks(Map<String, DistractorCheck> checks, String notes) {
+            String all = reasoning == null || reasoning.isEmpty() ? notes : reasoning + "\n\n" + notes;
+            return new SolverCheckOutcome(passed, judgeAnswer, judgeModel, all, usage, optionCorrect, requestCheck,
+                    checks);
         }
     }
 
@@ -188,21 +212,45 @@ public class AnswerSolverChecker {
             Option generatorCorrectOption,
             List<String> requestCodes,
             String requestText) {
+        return check(questionText, optionA, optionB, optionC, optionD, generatorCorrectOption, requestCodes, requestText,
+                null);
+    }
+
+    /**
+     * Như trên, kèm lỗi sai theo phương án (PA1, v7). Lượt 1 đúng prompt và schema v4 cho mọi câu. Lượt 2 dùng chung chỉ khi câu
+     * có yêu cầu HOẶC có ít nhất một lỗi ở phương án sai, VÀ lượt 1 không gắn cờ: khối lỗi đánh số (ghép mù H-1, không chữ cái,
+     * không gửi lỗi ở phương án đúng) rồi khối yêu cầu; trả {@code error_checks} rồi {@code request_check}. Lượt 1 có cờ hoặc
+     * lượt 2 lỗi / phản hồi không đọc được: lỗi giữ "chưa kiểm" ({@code distractorChecks} null), yêu cầu {@code unchecked}.
+     *
+     * @param distractorErrors lỗi theo phương án A-D (generated_question.distractor_errors); null là không có
+     */
+    public SolverCheckOutcome check(
+            String questionText,
+            String optionA,
+            String optionB,
+            String optionC,
+            String optionD,
+            Option generatorCorrectOption,
+            List<String> requestCodes,
+            String requestText,
+            Map<String, String> distractorErrors) {
         String prompt = promptBuilder.buildSolverPrompt(promptVersion, questionText, optionA, optionB, optionC, optionD);
         String block = requestBlock(requestCodes, requestText);
         String schema = optionCheckPrompt() ? SOLVER_RESPONSE_SCHEMA_JSON : SOLVER_RESPONSE_SCHEMA_JSON_V2;
         if (twoPass()) {
-            // v6 (14/11): lượt 1 đúng prompt và schema v4 cho mọi câu; yêu cầu (nếu có) kiểm ở lượt 2.
+            // v6 (14/11): lượt 1 đúng prompt và schema v4 cho mọi câu; yêu cầu (nếu có) kiểm ở lượt 2. v7 (PA1): lượt 2 kiểm cả
+            // lỗi kèm phương án.
             LlmCallResult result = llmClient.callJsonModeWithSchema(prompt, solverModel, 0.0, schema);
             SolverCheckOutcome outcome = parseAndCompare(result.rawText(), result.modelName(), generatorCorrectOption)
                     .withUsage(LlmUsage.of(result));
-            if (block == null) {
+            DistractorCheckPrompt.Sent sent = PromptBuilder.checksDistractors(promptVersion) && generatorCorrectOption != null
+                    ? DistractorCheckPrompt.sent(distractorErrors, generatorCorrectOption.getDbValue()) : null;
+            String errorBlock = DistractorCheckPrompt.solverBlock(sent);
+            if (block == null && errorBlock == null) {
                 return outcome;
             }
             List<String> choices = List.of("A. " + optionA, "B. " + optionB, "C. " + optionC, "D. " + optionD);
-            SecondPass second = secondPass(outcome.passed(), "trắc nghiệm", questionText, choices, outcome.reasoning(),
-                    block);
-            return outcome.withUsage(sum(outcome.usage(), second.usage())).withRequestCheck(second.check());
+            return secondPassMcq(outcome, questionText, choices, sent, errorBlock, block);
         }
         if (block != null) {
             prompt = TeacherRequestPrompt.withSolverBlock(prompt, block);
@@ -253,6 +301,53 @@ public class AnswerSolverChecker {
             check = TeacherRequestPrompt.unchecked(TeacherRequestPrompt.UNCHECKED_FAILED_PREFIX + " (phản hồi hỏng)");
         }
         return new SecondPass(check, LlmUsage.of(result));
+    }
+
+    /**
+     * Lượt 2 dùng chung của câu mcq (v7). Khối lỗi null thì đi đúng đường v6 ({@link #secondPass}). Lượt 1 có cờ: không gọi;
+     * yêu cầu (nếu có) {@code unchecked}, lỗi "chưa kiểm". Lượt 2 ném lỗi hoặc trả phản hồi không đọc được: như trên, kèm cảnh
+     * báo log. JSON đọc được: {@code error_checks} so theo H-1 (thiếu/hỏng thì {@code unknown}), {@code request_check} như v6.
+     * Kết luận của lượt 1 không bao giờ đổi.
+     */
+    private SolverCheckOutcome secondPassMcq(SolverCheckOutcome outcome, String questionText, List<String> choices,
+                                             DistractorCheckPrompt.Sent sent, String errorBlock, String requestBlock) {
+        if (errorBlock == null) {
+            SecondPass second = secondPass(outcome.passed(), "trắc nghiệm", questionText, choices, outcome.reasoning(),
+                    requestBlock);
+            return outcome.withUsage(sum(outcome.usage(), second.usage())).withRequestCheck(second.check());
+        }
+        if (!outcome.passed()) {
+            return requestBlock == null ? outcome
+                    : outcome.withRequestCheck(TeacherRequestPrompt.unchecked(TeacherRequestPrompt.UNCHECKED_FLAGGED));
+        }
+        String prompt = TeacherRequestPrompt.secondPassPrompt("trắc nghiệm", questionText, choices, outcome.reasoning(),
+                errorBlock, requestBlock);
+        String schema = requestBlock == null ? DistractorCheckPrompt.SECOND_PASS_SCHEMA_ERRORS
+                : DistractorCheckPrompt.SECOND_PASS_SCHEMA_ERRORS_REQUEST;
+        LlmCallResult result;
+        try {
+            result = llmClient.callJsonModeWithSchema(prompt, solverModel, 0.0, schema);
+        } catch (RuntimeException ex) {
+            log.warn("Solver lượt kiểm lỗi phương án/yêu cầu lỗi, lỗi giữ chưa kiểm: {}", ex.getMessage());
+            return requestBlock == null ? outcome
+                    : outcome.withRequestCheck(TeacherRequestPrompt.unchecked(TeacherRequestPrompt.UNCHECKED_FAILED_PREFIX
+                            + " (" + ex.getClass().getSimpleName() + ")"));
+        }
+        SolverCheckOutcome out = outcome.withUsage(sum(outcome.usage(), LlmUsage.of(result)));
+        if (requestBlock != null) {
+            TeacherRequestPrompt.RequestCheck check = TeacherRequestPrompt.parse(result.rawText());
+            if (check == null) {
+                log.warn("Solver lượt kiểm yêu cầu trả request_check thiếu hoặc hỏng, request_check = unchecked");
+                check = TeacherRequestPrompt.unchecked(TeacherRequestPrompt.UNCHECKED_FAILED_PREFIX + " (phản hồi hỏng)");
+            }
+            out = out.withRequestCheck(check);
+        }
+        DistractorCheckPrompt.Parsed parsed = DistractorCheckPrompt.parseOrNull(result.rawText(), sent);
+        if (parsed == null) {
+            log.warn("Solver lượt kiểm lỗi phương án trả phản hồi không đọc được, lỗi giữ chưa kiểm");
+            return out;
+        }
+        return out.withDistractorChecks(parsed.checks(), DistractorCheckPrompt.notes(sent, parsed));
     }
 
     /** Cộng số liệu hai lượt gọi (token, độ trễ); thiếu một bên thì lấy bên kia. */

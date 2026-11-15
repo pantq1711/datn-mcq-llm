@@ -80,8 +80,9 @@ class SolverTwoPassTest {
     }
 
     @Test
-    void v6LaMacDinhVaCoTrongDanhSachPhienBan() {
-        assertEquals(V6, PromptBuilder.SOLVER_PROMPT_VERSION);
+    void v6CoTrongDanhSachPhienBan() {
+        // PA1 (15/11): mặc định là v7 (lượt 2 thêm error_checks); v6 giữ để đo lại, các test dưới chỉ định rõ v6.
+        assertEquals("solver-v7-distractor-check", PromptBuilder.SOLVER_PROMPT_VERSION);
         assertTrue(PromptBuilder.SOLVER_PROMPT_VERSIONS.contains(V6));
         assertTrue(PromptBuilder.SOLVER_PROMPT_VERSIONS.contains("solver-v5-request-check"), "v5 giữ để đo lại");
     }

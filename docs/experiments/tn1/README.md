@@ -52,6 +52,13 @@ $env:SPRING_DATASOURCE_URL='jdbc:postgresql://localhost:5432/datn_mcq_e2e'
 | `solver-probe_solver-v4-literal-reading_20261031-203738.csv` | v4 | 1 |
 | `solver-probe_solver-v4-literal-reading_20261031-204020.csv` | v4 | 2 |
 
+`distractor-errors.json`: lỗi sai của học sinh cho từng phương án sai của 29 câu (cả 29 đều là `mcq`), dùng để đo hồi quy Solver v5 (`docs/design/phuong-an-nhieu-loi-sai.md` mục 8.2); agent soạn nháp ngày 11/11/2026 theo đáp án đã lưu của từng câu, An duyệt hướng xử lý ngày 11/11/2026. 83 lỗi trên 29 câu, ba nhóm ngoại lệ:
+
+- Câu 30 phương án A, câu 60 phương án B: lỗi kép (2 lỗi cùng lúc).
+- Câu 15 D, 25 D, 41 D, 61 D: không có lỗi tự nhiên, để trống (`null`).
+- Câu 39 D, 53 D: cố ý không khớp, dùng để kiểm Solver có báo không khớp; khi đo báo riêng `error_checks` của 2 mục này
+  (mong đợi: không khớp hoặc `none`).
+
 CSV có BOM UTF-8 (để Excel đọc đúng tiếng Việt), mỗi dòng một câu:
 
 | Cột | Ý nghĩa |

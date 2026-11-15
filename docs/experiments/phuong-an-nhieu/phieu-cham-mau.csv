@@ -1,0 +1,3 @@
+﻿ma_cau,cau_dan,phuong_an_dung,chu_phuong_an,noi_dung_phuong_an,loi_hoc_sinh,danh_gia,ghi_chu
+VD1,"Khai triển $(x+1)^2$ được",B,A,$x^2 + 1$,"Nhầm $(a+b)^2 = a^2 + b^2$",hop_ly,
+VD1,"Khai triển $(x+1)^2$ được",B,D,$x^2 + x + 1$,"Quên nhân đôi tích hai số hạng",khong_hop_ly,"(1) áp lỗi ra $x^2 + x + 1$ đúng; thiếu (2): ví dụ tự soạn"

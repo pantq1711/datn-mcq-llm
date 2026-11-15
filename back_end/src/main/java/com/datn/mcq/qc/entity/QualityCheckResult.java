@@ -83,6 +83,22 @@ public class QualityCheckResult {
     @Column(name = "request_reason", columnDefinition = "TEXT")
     private String requestReason;
 
+    /**
+     * V29 (13/11, PA1): kết quả Solver ghép mù lỗi sai với phương án, đối tượng JSON {@code {"B": "match", ...}} (chỉ dòng
+     * answer_check của câu mcq); chỉ có khóa của lỗi đã kiểm. NULL khi câu không có lỗi kèm theo hoặc Solver không kiểm.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "distractor_checks", columnDefinition = "jsonb")
+    private String distractorChecks;
+
+    public String getDistractorChecks() {
+        return distractorChecks;
+    }
+
+    public void setDistractorChecks(String distractorChecks) {
+        this.distractorChecks = distractorChecks;
+    }
+
     public RequestVerdict getRequestVerdict() {
         return requestVerdict;
     }

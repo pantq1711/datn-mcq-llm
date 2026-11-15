@@ -104,14 +104,20 @@ public class ExamController {
      *
      * <p>{@code durationMinutes} (tùy chọn): thời gian làm bài, số nguyên 5–180, in ở đầu đề; không truyền thì in "……"; giá
      * trị khác 400.
+     *
+     * <p>{@code includeDistractorNotes} (tùy chọn, 13/11, PA1): {@code true} (mặc định) in dòng "Phân tích phương án nhiễu"
+     * sau lời giải của câu mcq có lỗi sai kèm phương án (chỉ lỗi khớp hoặc chưa kiểm; chỉ ở phần lời giải chi tiết),
+     * {@code false} thì bỏ; giá trị khác 400.
      */
     @GetMapping("/{examId}/export/docx")
     public ResponseEntity<byte[]> exportDocx(CurrentUser user, @PathVariable Integer examId,
                                              @RequestParam(required = false) String equation,
-                                             @RequestParam(required = false) String durationMinutes) {
+                                             @RequestParam(required = false) String durationMinutes,
+                                             @RequestParam(required = false) String includeDistractorNotes) {
         EquationFormat format = EquationFormat.parse(equation);
         Integer minutes = ExamHeader.parseDuration(durationMinutes);
-        DocxFile file = examExportService.docx(examId, user.id(), format, minutes);
+        boolean notes = parseIncludeDistractorNotes(includeDistractorNotes);
+        DocxFile file = examExportService.docx(examId, user.id(), format, minutes, notes);
         ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(ExamExportService.DOCX_CONTENT_TYPE))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
@@ -217,5 +223,20 @@ public class ExamController {
     @GetMapping("/{examId}/cells/{cellId}")
     public List<SlotDto> cellSlots(CurrentUser user, @PathVariable Integer examId, @PathVariable Integer cellId) {
         return examBuildService.cellSlots(examId, cellId, user.id());
+    }
+
+    /** PA1: {@code includeDistractorNotes} trống là true; chỉ nhận true/false (không phân biệt hoa thường), khác thì 400. */
+    static boolean parseIncludeDistractorNotes(String value) {
+        if (value == null || value.isBlank()) {
+            return true;
+        }
+        String v = value.strip();
+        if (v.equalsIgnoreCase("true")) {
+            return true;
+        }
+        if (v.equalsIgnoreCase("false")) {
+            return false;
+        }
+        throw new IllegalArgumentException("Tham số includeDistractorNotes chỉ nhận true hoặc false");
     }
 }

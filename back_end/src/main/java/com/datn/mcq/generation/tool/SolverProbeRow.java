@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
  * @param solverCorrectCount mcq: số phương án Solver cho là đúng; Solver v3 đếm chính xác từ options_verdict, Solver cũ
  *                           (hoặc phản hồi thiếu options_verdict) chỉ biết "0", "1" hay "2+"; rỗng khi không có
  * @param optionsVerdict    mcq Solver v3: kết luận từng phương án dạng "A:1|B:0|C:1|D:0" (1 là đúng); rỗng khi không có
+ * @param errorChecks       (13/11, PA1) mcq Solver v6 có lỗi kèm theo: kết quả ghép lỗi theo chữ người soạn đã gán, dạng
+ *                          "B:match|C:mismatch|D:unknown"; rỗng khi không gửi lỗi nào
  */
 public record SolverProbeRow(
         Integer questionId,
@@ -31,12 +33,21 @@ public record SolverProbeRow(
         Integer tokenCount,
         Double latencyMs,
         String solverModel,
-        String error
+        String error,
+        String errorChecks
 ) {
 
     public static final String HEADER = "question_id,prompt_version,question_type,question_answer,solver_answer,"
             + "verdict,multiple_correct_flag,solver_correct_count,options_verdict,token_count,latency_ms,solver_model,"
-            + "error";
+            + "error,error_checks";
+
+    /** Dòng không có cột kết quả ghép lỗi (chữ ký trước 13/11). */
+    public SolverProbeRow(Integer questionId, String promptVersion, String questionType, String questionAnswer,
+                          String solverAnswer, String verdict, String multipleFlag, String solverCorrectCount,
+                          String optionsVerdict, Integer tokenCount, Double latencyMs, String solverModel, String error) {
+        this(questionId, promptVersion, questionType, questionAnswer, solverAnswer, verdict, multipleFlag,
+                solverCorrectCount, optionsVerdict, tokenCount, latencyMs, solverModel, error, "");
+    }
 
     private static final List<String> LETTERS = List.of("A", "B", "C", "D");
 
@@ -74,9 +85,11 @@ public record SolverProbeRow(
         }
         Integer tokens = v.usage() != null ? v.usage().tokenCount() : null;
         Double latency = v.usage() != null ? v.usage().latencyMs() : null;
+        String errorChecks = v.distractorChecks() == null ? "" : v.distractorChecks().entrySet().stream()
+                .map(e -> e.getKey() + ":" + e.getValue().getDbValue()).collect(Collectors.joining("|"));
         return new SolverProbeRow(input.questionId(), promptVersion, type.getDbValue(), questionAnswer(input),
                 solverAnswer, v.passed() ? "consistent" : "inconsistent", multiple, count, options, tokens, latency,
-                v.judgeModel(), "");
+                v.judgeModel(), "", errorChecks);
     }
 
     /**
@@ -103,7 +116,8 @@ public record SolverProbeRow(
         return List.of(
                 str(questionId), promptVersion, questionType, questionAnswer, solverAnswer, verdict, multipleFlag,
                 solverCorrectCount, optionsVerdict, str(tokenCount),
-                latencyMs == null ? "" : String.valueOf(Math.round(latencyMs)), solverModel, error
+                latencyMs == null ? "" : String.valueOf(Math.round(latencyMs)), solverModel, error,
+                errorChecks == null ? "" : errorChecks
         ).stream().map(SolverProbeRow::csv).collect(Collectors.joining(","));
     }
 

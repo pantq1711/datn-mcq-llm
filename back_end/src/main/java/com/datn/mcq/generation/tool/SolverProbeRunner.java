@@ -1,5 +1,7 @@
 package com.datn.mcq.generation.tool;
 
+import com.datn.mcq.common.util.LetterJson;
+import com.datn.mcq.common.util.SimpleJson;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.generation.service.StoredQcInput;
@@ -26,8 +28,10 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -69,14 +73,25 @@ public class SolverProbeRunner implements ApplicationRunner {
             ConfigurableApplicationContext context,
             @Value("${app.solver-probe.ids-file}") String idsFile,
             @Value("${app.solver-probe.prompt-version:}") String promptVersion,
-            @Value("${app.solver-probe.out-dir:}") String outDir) {
+            @Value("${app.solver-probe.out-dir:}") String outDir,
+            @Value("${app.solver-probe.distractor-errors-file:}") String distractorErrorsFile) {
         this.generationService = generationService;
         this.qcOrchestrator = qcOrchestrator;
         this.context = context;
         this.idsFile = idsFile;
         this.promptVersion = promptVersion == null ? "" : promptVersion.trim();
         this.outDir = outDir == null ? "" : outDir.trim();
+        this.distractorErrorsFile = distractorErrorsFile == null ? "" : distractorErrorsFile.trim();
     }
+
+    /**
+     * (13/11, PA1) tệp lỗi sai kèm phương án ({@code docs/experiments/tn1/distractor-errors.json}); trống là không gửi lỗi
+     * (Solver dùng lỗi đã lưu ở câu, nếu có).
+     */
+    private final String distractorErrorsFile;
+
+    /** Lỗi của một câu trong tệp lỗi: đáp án để đối chiếu với DB và lỗi theo phương án A-D. */
+    record ProbeErrors(String correctOption, Map<String, String> errors) {}
 
     @Override
     public void run(ApplicationArguments args) throws IOException {
@@ -86,6 +101,19 @@ public class SolverProbeRunner implements ApplicationRunner {
         List<Integer> ids = parseIds(Files.readString(Path.of(idsFile.trim()), StandardCharsets.UTF_8));
         if (ids.isEmpty()) {
             throw new IllegalStateException("Danh sách id câu rỗng: " + idsFile);
+        }
+        Map<Integer, ProbeErrors> probeErrors = Map.of();
+        if (!distractorErrorsFile.isEmpty()) {
+            if (!PromptBuilder.checksDistractors(promptVersion)) {
+                throw new IllegalStateException("Tệp lỗi kèm phương án chỉ dùng với prompt "
+                        + PromptBuilder.SOLVER_PROMPT_VERSION_V7 + " (đang đo " + promptVersion + ")");
+            }
+            probeErrors = parseDistractorErrors(Files.readString(Path.of(distractorErrorsFile), StandardCharsets.UTF_8));
+            for (Integer id : ids) {
+                GeneratedQuestion gq = generationService.getQuestionById(id);
+                checkProbeErrors(id, probeErrors.get(id),
+                        gq.getCorrectOption() == null ? null : gq.getCorrectOption().getDbValue());
+            }
         }
         if (!qcOrchestrator.solverAvailable()) {
             throw new IllegalStateException(QcOrchestrator.SOLVER_NOT_CONFIGURED);
@@ -108,6 +136,10 @@ public class SolverProbeRunner implements ApplicationRunner {
                 try {
                     GeneratedQuestion gq = generationService.getQuestionById(id);
                     input = StoredQcInput.of(gq, generationService.getStatements(id), false, true);
+                    ProbeErrors pe = probeErrors.get(id);
+                    if (pe != null) {
+                        input = input.withDistractorErrors(pe.errors());
+                    }
                     SolverVerdict verdict = qcOrchestrator.callSolver(input);
                     row = SolverProbeRow.of(promptVersion, input, verdict);
                 } catch (QuotaExhaustedException ex) {
@@ -182,6 +214,46 @@ public class SolverProbeRunner implements ApplicationRunner {
             throw new IllegalStateException("app.solver-probe.out-dir phải nằm ngoài repo (" + repo + "): " + out);
         }
         return out;
+    }
+
+    /**
+     * Đọc tệp lỗi kèm phương án (13/11, PA1): đối tượng JSON {@code {"<id>": {"correct_option": "C", "errors": {"A": "...",
+     * "C": null, ...}}}}. Khóa không phải số nguyên dương, thiếu {@code correct_option} hoặc {@code errors} thì ném lỗi.
+     */
+    static Map<Integer, ProbeErrors> parseDistractorErrors(String json) {
+        Map<String, Object> root = SimpleJson.parseObject(json.replace("﻿", ""));
+        Map<Integer, ProbeErrors> out = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : root.entrySet()) {
+            int id;
+            try {
+                id = Integer.parseInt(entry.getKey().strip());
+            } catch (NumberFormatException ex) {
+                throw new IllegalStateException("Id câu không hợp lệ trong tệp lỗi: '" + entry.getKey() + "'");
+            }
+            if (id <= 0 || !(entry.getValue() instanceof Map<?, ?> item)
+                    || !(item.get("correct_option") instanceof String correct)
+                    || !(item.get("errors") instanceof Map<?, ?> errors)) {
+                throw new IllegalStateException("Mục câu " + entry.getKey() + " của tệp lỗi thiếu correct_option hoặc errors");
+            }
+            Map<String, String> letters = new LinkedHashMap<>();
+            for (String letter : LetterJson.LETTERS) {
+                Object v = errors.get(letter);
+                letters.put(letter, v instanceof String s && !s.isBlank() ? s.strip() : null);
+            }
+            out.put(id, new ProbeErrors(correct.strip().toUpperCase(java.util.Locale.ROOT), letters));
+        }
+        return out;
+    }
+
+    /** Câu phải có mục trong tệp lỗi và {@code correct_option} trùng đáp án đã lưu; không thì dừng trước khi gọi lượt nào. */
+    static void checkProbeErrors(Integer id, ProbeErrors errors, String storedCorrect) {
+        if (errors == null) {
+            throw new IllegalStateException("Tệp lỗi không có câu " + id);
+        }
+        if (!errors.correctOption().equals(storedCorrect)) {
+            throw new IllegalStateException("Câu " + id + ": correct_option trong tệp lỗi là " + errors.correctOption()
+                    + " nhưng DB lưu " + storedCorrect);
+        }
     }
 
     /**

@@ -145,7 +145,7 @@ class TeacherRequestPromptTest {
             for (String text : java.util.Arrays.asList(null, "", "   ")) {
                 CaptureLlm llm = new CaptureLlm(MCQ_BODY + "}");
                 AnswerSolverChecker checker = new AnswerSolverChecker(llm, builder, "m");
-                assertEquals(PromptBuilder.SOLVER_PROMPT_VERSION_V6, checker.promptVersion(), "v6 là mặc định (14/11)");
+                assertEquals(PromptBuilder.SOLVER_PROMPT_VERSION_V7, checker.promptVersion(), "v7 là mặc định (PA1)");
                 checker.check("Câu $x$?", "$1$", "$2$", "$3$", "$4$", Option.B, codes, text);
                 assertEquals(builder.buildSolverPrompt(PromptBuilder.SOLVER_PROMPT_VERSION_V4, "Câu $x$?", "$1$", "$2$",
                         "$3$", "$4$"), llm.prompts.get(0), "mcq: y như v4");

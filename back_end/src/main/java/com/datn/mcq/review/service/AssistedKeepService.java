@@ -18,7 +18,9 @@ import com.datn.mcq.enums.TruthValue;
 import com.datn.mcq.experiment.service.ExperimentService;
 import com.datn.mcq.generation.entity.GeneratedQuestion;
 import com.datn.mcq.generation.entity.GeneratedQuestionStatement;
+import com.datn.mcq.generation.service.DistractorView;
 import com.datn.mcq.generation.service.GenerationService;
+import com.datn.mcq.common.util.LetterJson;
 import com.datn.mcq.review.entity.TeacherReview;
 import com.datn.mcq.review.entity.TeacherReviewStatement;
 import com.datn.mcq.review.repository.TeacherReviewRepository;
@@ -127,9 +129,23 @@ public class AssistedKeepService {
                 review.setFinalSaAnswer(null);
                 TeacherReview saved = teacherReviewRepository.saveAndFlush(review);
                 generationService.updateStatusAndDifficulty(gq.getId(), QuestionStatus.IN_BANK, gq.getLlmDifficulty());
+                // PA1 (13/11): chép lỗi sai của phương án nhiễu và kết quả kiểm ĐANG HIỂN THỊ (kể cả kết quả tạm của bản sửa
+                // đang chờ hoặc kiểm lại thất bại, H-4), cùng transaction. "Không khớp" chỉ là thông tin: không đổi ngân hàng
+                // riêng/chung.
+                java.util.Map<String, DistractorView.Item> shown = generationService
+                        .distractorViews(List.of(gq), java.util.Map.of(), java.util.Set.of())
+                        .getOrDefault(gq.getId(), java.util.Map.of());
+                java.util.Map<String, String> texts = new java.util.LinkedHashMap<>();
+                java.util.Map<String, String> checks = new java.util.LinkedHashMap<>();
+                shown.forEach((letter, item) -> {
+                    texts.put(letter, item.text());
+                    if (item.check() != com.datn.mcq.enums.DistractorCheck.UNCHECKED) {
+                        checks.put(letter, item.check().getDbValue());
+                    }
+                });
                 return bankService.createOrUpdateFromReview(gq.getId(), saved.getId(), gq.getQuestionText(),
                         gq.getOptionA(), gq.getOptionB(), gq.getOptionC(), gq.getOptionD(), gq.getCorrectOption(),
-                        explanation, gq.getLlmDifficulty()).getId();
+                        explanation, gq.getLlmDifficulty(), LetterJson.write(texts), LetterJson.write(checks)).getId();
             }
             case SA -> {
                 if (gq.getSaAnswer() == null || gq.getLlmDifficulty() == null) {

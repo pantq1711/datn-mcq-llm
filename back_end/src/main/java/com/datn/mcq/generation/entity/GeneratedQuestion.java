@@ -132,7 +132,24 @@ public class GeneratedQuestion {
     @Column(name = "request_text", columnDefinition = "TEXT")
     private String requestText;
 
+    /**
+     * V29 (13/11, PA1): lỗi sai của học sinh theo phương án, đối tượng JSON {@code {"A": "...", "B": null, ...}} (chỉ mcq);
+     * bản sửa chép từ bản trước. NULL khi không có phân tích.
+     */
+    @JsonIgnore
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "distractor_errors", columnDefinition = "jsonb")
+    private String distractorErrors;
+
     public GeneratedQuestion() {}
+
+    public String getDistractorErrors() {
+        return distractorErrors;
+    }
+
+    public void setDistractorErrors(String distractorErrors) {
+        this.distractorErrors = distractorErrors;
+    }
 
     /** Mã yêu cầu của câu; null khi không có. */
     public java.util.List<String> getRequestCodes() {

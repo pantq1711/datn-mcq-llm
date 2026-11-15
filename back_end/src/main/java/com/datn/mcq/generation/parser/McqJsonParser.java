@@ -11,7 +11,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Cắt rào ```json (nếu có) và giải mã 7 trường chuẩn của câu hỏi trắc nghiệm từ đầu ra LLM.
+ * Cắt rào ```json (nếu có) và giải mã 7 trường chuẩn của câu hỏi trắc nghiệm từ đầu ra LLM (13/11: kèm trường thứ 8
+ * {@code distractor_errors} nếu có, xem {@link DistractorErrorsParser}).
  */
 public final class McqJsonParser {
 
@@ -31,6 +32,15 @@ public final class McqJsonParser {
      *               ({@link LlmOutputRepair}), mỗi lần sửa ghi một cảnh báo vào parseWarnings
      */
     public static ParsedMcqDto parse(String rawLlmOutput, boolean repair) {
+        return parse(rawLlmOutput, repair, false);
+    }
+
+    /**
+     * @param expectDistractorErrors (13/11, PA1) prompt đã yêu cầu trường {@code distractor_errors} (prompt ma trận mcq từ
+     *                               v10): ở chế độ sửa, thiếu trường thì ghi cảnh báo tự sửa. Trường có mặt thì luôn được đọc
+     *                               ({@link DistractorErrorsParser}); không bao giờ làm câu hỏng.
+     */
+    public static ParsedMcqDto parse(String rawLlmOutput, boolean repair, boolean expectDistractorErrors) {
         if (rawLlmOutput == null || rawLlmOutput.isBlank()) {
             return new ParsedMcqDto(false, null, null, null, null, null, null, null, "Phản hồi LLM rỗng");
         }
@@ -63,6 +73,9 @@ public final class McqJsonParser {
             }
         }
 
+        Map<String, String> distractorErrors = DistractorErrorsParser.parse(obj.get(DistractorErrorsParser.FIELD),
+                correctOption, repair, expectDistractorErrors, warnings);
+
         return new ParsedMcqDto(
                 true,
                 questionText,
@@ -73,7 +86,8 @@ public final class McqJsonParser {
                 correctOption,
                 explanation,
                 null,
-                warnings
+                warnings,
+                distractorErrors
         );
     }
 

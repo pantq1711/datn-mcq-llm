@@ -1,6 +1,7 @@
 package com.datn.mcq.qc.dto;
 
 import com.datn.mcq.enums.AnswerChoice;
+import com.datn.mcq.enums.DistractorCheck;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.RequestVerdict;
 import com.datn.mcq.enums.SaJudgeKind;
@@ -10,6 +11,7 @@ import com.datn.mcq.llm.dto.LlmUsage;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Một kết quả Solver hợp lệ (W1-2: tách khỏi QcOrchestrator#evaluateAndSave để gọi Solver và ghi kết quả ở hai bước,
@@ -26,6 +28,8 @@ import java.util.List;
  * @param requestVerdict (12/11, PR B) kết luận về yêu cầu của giáo viên ({@code request_check}, cùng lượt gọi); null khi câu
  *                     không có yêu cầu hoặc Solver không trả kết luận hợp lệ. Không ảnh hưởng {@code passed}
  * @param requestReason (PR B) lý do ngắn của kết luận trên; null khi không có
+ * @param distractorChecks (13/11, PA1) mcq: kết quả ghép mù lỗi sai với phương án theo chữ người soạn đã gán; null khi không
+ *                     kiểm (câu không có lỗi kèm theo, Solver cũ). Không ảnh hưởng {@code passed}
  */
 public record SolverVerdict(
         QuestionType questionType,
@@ -39,12 +43,30 @@ public record SolverVerdict(
         LlmUsage usage,
         List<Boolean> mcqOptionCorrect,
         RequestVerdict requestVerdict,
-        String requestReason
+        String requestReason,
+        Map<String, DistractorCheck> distractorChecks
 ) {
     public SolverVerdict {
         tfLabels = tfLabels == null ? null : List.copyOf(tfLabels);
         mcqOptionCorrect = mcqOptionCorrect == null ? null : List.copyOf(mcqOptionCorrect);
         requestReason = requestVerdict == null ? null : requestReason;
+        distractorChecks = distractorChecks == null || questionType != QuestionType.MCQ ? null
+                : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(distractorChecks));
+    }
+
+    /** Chữ ký trước 13/11 (không có kết quả ghép lỗi). */
+    public SolverVerdict(QuestionType questionType, boolean passed, String judgeModel, String reasoning,
+                         AnswerChoice judgeAnswer, SaJudgeKind saJudgeKind, String saJudgeAnswer,
+                         List<TruthChoice> tfLabels, LlmUsage usage, List<Boolean> mcqOptionCorrect,
+                         RequestVerdict requestVerdict, String requestReason) {
+        this(questionType, passed, judgeModel, reasoning, judgeAnswer, saJudgeKind, saJudgeAnswer, tfLabels, usage,
+                mcqOptionCorrect, requestVerdict, requestReason, null);
+    }
+
+    /** Bản sao kèm kết quả ghép lỗi sai với phương án (PA1). */
+    public SolverVerdict withDistractorChecks(Map<String, DistractorCheck> checks) {
+        return new SolverVerdict(questionType, passed, judgeModel, reasoning, judgeAnswer, saJudgeKind, saJudgeAnswer,
+                tfLabels, usage, mcqOptionCorrect, requestVerdict, requestReason, checks);
     }
 
     public SolverVerdict(QuestionType questionType, boolean passed, String judgeModel, String reasoning,
@@ -57,7 +79,7 @@ public record SolverVerdict(
     /** Bản sao kèm kết luận về yêu cầu của giáo viên (PR B). */
     public SolverVerdict withRequestCheck(RequestVerdict verdict, String reason) {
         return new SolverVerdict(questionType, passed, judgeModel, reasoning, judgeAnswer, saJudgeKind, saJudgeAnswer,
-                tfLabels, usage, mcqOptionCorrect, verdict, reason);
+                tfLabels, usage, mcqOptionCorrect, verdict, reason, distractorChecks);
     }
 
     public SolverVerdict(QuestionType questionType, boolean passed, String judgeModel, String reasoning,

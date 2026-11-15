@@ -39,7 +39,7 @@ class MatrixPromptDraftV0Test {
         String p = MatrixPromptDraftV0.buildGenerationPrompt(spec(QuestionType.MCQ, "Đa thức", "Đơn thức, đa thức"));
         for (String part : List.of("TRẮC NGHIỆM 4 LỰA CHỌN", "Khối lớp: 8", "Chủ đề: Đa thức",
                 "Nội dung: Đơn thức, đa thức", "- Biết: Nhận biết được đơn thức.", "Mức độ nhận thức mục tiêu: Biết",
-                MatrixPromptDraftV0.NEW_PROBLEM_RULE, "đủ 7 trường", "\"correct_option\" (A/B/C/D)",
+                MatrixPromptDraftV0.NEW_PROBLEM_RULE, "đủ 8 trường", "\"correct_option\" (A/B/C/D)",
                 PromptBuilder.ESCAPE_HINT.strip())) {
             assertTrue(p.contains(part), "Prompt thiếu: " + part);
         }
@@ -107,7 +107,7 @@ class MatrixPromptDraftV0Test {
 
     @Test
     void phienBanVaThongSoOLuuDuoc() {
-        assertEquals("matrix-mcq-v9-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
+        assertEquals("matrix-mcq-v10-draft", MatrixPromptDraftV0.promptVersion(QuestionType.MCQ));
         assertEquals("matrix-tf-v12-draft", MatrixPromptDraftV0.promptVersion(QuestionType.TF));
         assertEquals("matrix-sa-v12-draft", MatrixPromptDraftV0.promptVersion(QuestionType.SA));
         assertTrue(MatrixPromptDraftV0.isMatrixVersion("matrix-sa-v0-draft"));
@@ -242,7 +242,7 @@ class MatrixPromptDraftV0Test {
         assertFalse(TfPromptDraftV0.buildSolverPrompt("Cho $x = 1$.", List.of("a", "b", "c", "d")).contains(unit));
         assertFalse(SaPromptDraftV0.buildGenerationPrompt("Toán", 8, null, null, "Giải $2x - 6 = 0$.",
                 Difficulty.EASY).contains(unit), "prompt sinh lẻ của công cụ thí nghiệm không đổi");
-        assertEquals("solver-v6-two-pass", PromptBuilder.SOLVER_PROMPT_VERSION);
+        assertEquals("solver-v7-distractor-check", PromptBuilder.SOLVER_PROMPT_VERSION);
         for (QuestionType type : QuestionType.values()) {
             assertTrue(MatrixPromptDraftV0.buildGenerationPrompt(spec(type, "Chuyển động", null)).contains(unit), type.name());
         }
@@ -513,7 +513,7 @@ class MatrixPromptDraftV0Test {
         String note = "Đây là câu thứ 2/4 của ô này.";
         String p = MatrixPromptDraftV0.buildGenerationPrompt(s, List.of(), note);
         assertTrue(p.contains("\n" + note + "\n"), p);
-        assertTrue(p.indexOf(note) < p.indexOf("đủ 7 trường"), "ghi chú đứng trước yêu cầu đầu ra");
+        assertTrue(p.indexOf(note) < p.indexOf("đủ 8 trường"), "ghi chú đứng trước yêu cầu đầu ra");
         assertEquals(MatrixPromptDraftV0.buildGenerationPrompt(s, List.of()),
                 MatrixPromptDraftV0.buildGenerationPrompt(s, List.of(), null));
         assertEquals("Đây là câu thứ 2/4 của ô này: dạng hỏi phải khác các câu còn lại của ô (không chỉ đổi số liệu);"

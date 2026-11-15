@@ -206,6 +206,57 @@ class StatisticsSqlTest extends ExamFlowTestBase {
         assertEquals(4, rows.size(), rows.toString());
     }
 
+    /**
+     * PA1 (13/11): 08-phuong-an-nhieu.sql. Đề 1: câu có 3 lỗi (2 khớp, 1 không khớp), Giữ. Đề 2: câu có 3 lỗi đều khớp, Đổi vì
+     * "phương án mơ hồ"; câu sinh lại không có lỗi (tính vào mẫu số "đủ lỗi").
+     */
+    @Test
+    void phuongAnNhieuDemDuLoiKetQuaVaGiuDoiTheoNhom() throws Exception {
+        generator.distractorErrors = "{\"A\": \"Lỗi A\", \"B\": null, \"C\": \"Lỗi C\", \"D\": \"Lỗi D\"}";
+        SOLVER.mcqOptions = "B";
+        SOLVER.errorChecks = "[{\"error\": 1, \"result\": \"A\", \"reason\": \"r\"}, {\"error\": 2, \"result\": \"none\","
+                + " \"reason\": \"r\"}, {\"error\": 3, \"result\": \"D\", \"reason\": \"r\"}]";
+        int m1 = createMatrix(mcqCell("Đa thức", "Đơn thức", 1));
+        int e1 = build(m1).get("examId").asInt();
+        settle(e1);
+        int s1 = slotId(e1, cellId(m1, 1), 1);
+        perform(post("/api/exams/" + e1 + "/slots/" + s1 + "/keep")).andExpect(status().isOk());
+
+        SOLVER.errorChecks = "[{\"error\": 1, \"result\": \"A\", \"reason\": \"r\"}, {\"error\": 2, \"result\": \"C\","
+                + " \"reason\": \"r\"}, {\"error\": 3, \"result\": \"D\", \"reason\": \"r\"}]";
+        int m2 = createMatrix(mcqCell("Phân thức", "Rút gọn", 1));
+        int e2 = build(m2).get("examId").asInt();
+        settle(e2);
+        int s2 = slotId(e2, cellId(m2, 1), 1);
+        generator.distractorErrors = null;
+        postJson("/api/exams/" + e2 + "/slots/" + s2 + "/replace", "{\"reason\": \"ambiguous_options\"}")
+                .andExpect(status().isOk());
+        settle(e2);
+
+        List<Map<String, Object>> rows = run("08-phuong-an-nhieu.sql");
+        java.util.function.BiFunction<String, String, Map<String, Object>> get = (chiSo, nhom) -> rows.stream()
+                .filter(r -> chiSo.equals(r.get("chi_so")) && nhom.equals(r.get("nhom"))).findFirst()
+                .orElseThrow(() -> new AssertionError(chiSo + "/" + nhom + " không có trong " + rows));
+        java.util.function.BiConsumer<Map<String, Object>, int[]> check = (r, expected) -> {
+            assertEquals(expected[0], count(r, "so_cau"), r.toString());
+            assertEquals(expected[1], count(r, "mau_so"), r.toString());
+        };
+        check.accept(get.apply("du_loi", "mcq"), new int[] {2, 3});
+        check.accept(get.apply("ket_qua_loi", "match"), new int[] {5, 6});
+        check.accept(get.apply("ket_qua_loi", "mismatch"), new int[] {1, 6});
+        check.accept(get.apply("ket_qua_loi", "unknown"), new int[] {0, 6});
+        check.accept(get.apply("ket_qua_loi", "unchecked"), new int[] {0, 6});
+        check.accept(get.apply("ca_3_khop", "mcq"), new int[] {1, 2});
+        check.accept(get.apply("giu", "co_mismatch"), new int[] {1, 1});
+        check.accept(get.apply("giu", "khong_mismatch"), new int[] {0, 1});
+        check.accept(get.apply("doi", "co_mismatch"), new int[] {0, 1});
+        check.accept(get.apply("doi", "khong_mismatch"), new int[] {1, 1});
+        check.accept(get.apply("doi_mo_ho", "khong_mismatch"), new int[] {1, 1});
+        check.accept(get.apply("doi_mo_ho", "co_mismatch"), new int[] {0, 0});
+        assertEquals(null, get.apply("doi_mo_ho", "co_mismatch").get("ti_le_phan_tram"), "mẫu số 0 thì không có tỉ lệ");
+        assertEquals(12, rows.size(), rows.toString());
+    }
+
     @Test
     void loaiDeCuaTaiKhoanNhomPhatTrienBangDanhSachEmail() throws Exception {
         sampleData();
@@ -225,7 +276,7 @@ class StatisticsSqlTest extends ExamFlowTestBase {
             list.filter(p -> p.toString().endsWith(".sql")).forEach(files::add);
         }
         files.add(Path.of("..", "docs", "experiments", "trial", "queries.sql"));
-        assertEquals(9, files.size());
+        assertEquals(10, files.size());
         for (Path p : files) {
             String raw = Files.readString(p, StandardCharsets.UTF_8);
             assertTrue(raw.contains("\\set dev_emails ''"), p + ": khai báo mặc định rỗng");
@@ -238,7 +289,7 @@ class StatisticsSqlTest extends ExamFlowTestBase {
     void coMotCauLenhSelectDocLapMoiFile() throws IOException {
         try (var files = Files.list(DIR)) {
             List<Path> sqlFiles = files.filter(p -> p.toString().endsWith(".sql")).sorted().toList();
-            assertEquals(8, sqlFiles.size());
+            assertEquals(9, sqlFiles.size());
             for (Path p : sqlFiles) {
                 // bỏ phần chú thích (-- ...) trước khi kiểm
                 String sql = Files.readString(p, StandardCharsets.UTF_8).lines()

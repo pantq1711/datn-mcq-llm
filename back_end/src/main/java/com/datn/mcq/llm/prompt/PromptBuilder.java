@@ -22,12 +22,20 @@ public class PromptBuilder {
      * Phiên bản prompt Solver mặc định từ 14/11 (hotfix): HAI lượt gọi. Lượt 1 cho MỌI câu dùng đúng prompt và schema của
      * {@link #SOLVER_PROMPT_VERSION_V4} (mcq) và bản cũ (tf, sa), từng ký tự, kể cả câu có yêu cầu. Lượt 2 chỉ khi câu có
      * yêu cầu của giáo viên VÀ lượt 1 không gắn cờ đáp án: nhận đề, phương án/ý và lời giải của lượt 1, chỉ trả
-     * {@code request_check} ({@link TeacherRequestPrompt#secondPassPrompt}). Bản kế tiếp (PA1) là {@code solver-v7}.
+     * {@code request_check} ({@link TeacherRequestPrompt#secondPassPrompt}). Mặc định 14/11 tới PA1; giữ để đo lại.
      */
     public static final String SOLVER_PROMPT_VERSION_V6 = "solver-v6-two-pass";
 
-    /** Phiên bản prompt Solver mặc định ({@link #SOLVER_PROMPT_VERSION_V6} từ 14/11). */
-    public static final String SOLVER_PROMPT_VERSION = SOLVER_PROMPT_VERSION_V6;
+    /**
+     * Phiên bản prompt Solver mặc định từ PA1 (15/11, docs/design/phuong-an-nhieu-loi-sai.md mục 5, 8.2): như
+     * {@link #SOLVER_PROMPT_VERSION_V6}; lượt 2 chạy khi câu có yêu cầu HOẶC có lỗi sai kèm phương án (mcq), VÀ lượt 1 không
+     * gắn cờ; lượt 2 dùng chung trả {@code error_checks} (ghép mù, {@link DistractorCheckPrompt}) rồi {@code request_check}.
+     * Lượt 1 vẫn đúng v4 từng byte. Bản một lượt của PA1 (lỗi trong lượt giải) chỉ bắt 3/9 câu TN1 nên đã bỏ.
+     */
+    public static final String SOLVER_PROMPT_VERSION_V7 = "solver-v7-distractor-check";
+
+    /** Phiên bản prompt Solver mặc định ({@link #SOLVER_PROMPT_VERSION_V7} từ PA1). */
+    public static final String SOLVER_PROMPT_VERSION = SOLVER_PROMPT_VERSION_V7;
 
     /**
      * Phiên bản prompt Solver mcq v4 (chốt 31/10 sau lần đo v3 được 0/9, mặc định tới 12/11): như v3, thêm quy tắc
@@ -52,16 +60,21 @@ public class PromptBuilder {
     /** Các phiên bản prompt Solver mcq có trong code. */
     public static final List<String> SOLVER_PROMPT_VERSIONS =
             List.of(SOLVER_PROMPT_VERSION_V2, SOLVER_PROMPT_VERSION_V3, SOLVER_PROMPT_VERSION_V4,
-                    SOLVER_PROMPT_VERSION_V5, SOLVER_PROMPT_VERSION_V6);
+                    SOLVER_PROMPT_VERSION_V5, SOLVER_PROMPT_VERSION_V6, SOLVER_PROMPT_VERSION_V7);
 
-    /** Phiên bản có kiểm yêu cầu của giáo viên ({@code request_check}): v5 (cùng lượt) và v6 (lượt 2). */
+    /** Phiên bản có kiểm yêu cầu của giáo viên ({@code request_check}): v5 (cùng lượt), v6 và v7 (lượt 2). */
     public static boolean checksRequests(String version) {
-        return SOLVER_PROMPT_VERSION_V5.equals(version) || SOLVER_PROMPT_VERSION_V6.equals(version);
+        return SOLVER_PROMPT_VERSION_V5.equals(version) || twoPass(version);
     }
 
-    /** Phiên bản kiểm yêu cầu ở lượt gọi thứ hai, riêng với lượt giải (v6). */
+    /** Phiên bản kiểm yêu cầu (và lỗi phương án) ở lượt gọi thứ hai, riêng với lượt giải (v6, v7). */
     public static boolean twoPass(String version) {
-        return SOLVER_PROMPT_VERSION_V6.equals(version);
+        return SOLVER_PROMPT_VERSION_V6.equals(version) || SOLVER_PROMPT_VERSION_V7.equals(version);
+    }
+
+    /** Phiên bản kiểm lỗi sai của phương án nhiễu ({@code error_checks}, chỉ mcq, ở lượt 2): v7. */
+    public static boolean checksDistractors(String version) {
+        return SOLVER_PROMPT_VERSION_V7.equals(version);
     }
 
     /** Trả phiên bản đã trim nếu có trong code; ngược lại ném IllegalArgumentException. */

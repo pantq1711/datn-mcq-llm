@@ -137,6 +137,15 @@
     word-break: break-word;
 }
 
+/* PA1: dòng "Lỗi sai: …" dưới phương án sai (chữ xám, nhỏ hơn nội dung) */
+.exam-question-option-error {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(0, 0, 0, 0.45);
+}
+
 /* Nhãn A, B, C, D, a), b) và các chữ kèm theo cùng cỡ 16px với nội dung câu */
 .exam-question-option-label,
 .exam-question-option-answer,

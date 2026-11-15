@@ -242,6 +242,11 @@ public class QuestionEditService {
         // PR B (12/11): bản sửa giữ yêu cầu của giáo viên của bản trước (Solver kiểm lại bản sửa vẫn kèm yêu cầu).
         v.setRequestCodes(base.getRequestCodes());
         v.setRequestText(base.getRequestText());
+        // PA1 (13/11, H-4): bản sửa chép nguyên chữ lỗi của bản trước (giáo viên không sửa chữ lỗi); kết quả kiểm là tạm cho tới
+        // khi job answer_check của bản sửa chạy xong (DistractorView).
+        if (type == QuestionType.MCQ) {
+            v.setDistractorErrors(base.getDistractorErrors());
+        }
         v.setQuestionText(c.questionText);
         v.setExplanation(c.explanation);
         if (type == QuestionType.MCQ) {

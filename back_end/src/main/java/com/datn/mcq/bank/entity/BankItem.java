@@ -9,6 +9,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -63,7 +65,33 @@ public class BankItem {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    /** V29 (13/11, PA1): lỗi sai của học sinh theo phương án, chép lúc Giữ (chỉ mcq); NULL khi không có. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "distractor_errors", columnDefinition = "jsonb")
+    private String distractorErrors;
+
+    /** V29: kết quả kiểm lỗi lúc Giữ ({@code {"B": "match", ...}}); phương án có lỗi mà không có khóa là chưa kiểm. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "distractor_checks", columnDefinition = "jsonb")
+    private String distractorChecks;
+
     public BankItem() {}
+
+    public String getDistractorErrors() {
+        return distractorErrors;
+    }
+
+    public void setDistractorErrors(String distractorErrors) {
+        this.distractorErrors = distractorErrors;
+    }
+
+    public String getDistractorChecks() {
+        return distractorChecks;
+    }
+
+    public void setDistractorChecks(String distractorChecks) {
+        this.distractorChecks = distractorChecks;
+    }
 
     public Integer getId() {
         return id;
