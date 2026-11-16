@@ -90,6 +90,13 @@ public class AnswerSolverChecker {
      */
     public static final String OPTIONS_VERDICT_PREFIX = "[Xét từng phương án]";
 
+    /**
+     * Dòng thứ hai của ghi chú Solver khi Solver ghi {@code judge_answer = multiple} mà mảng cờ có dưới 2 phương án đúng
+     * (17/11, TN1): câu vẫn được coi là có nhiều phương án đúng.
+     */
+    public static final String JUDGE_MULTIPLE_NOTE = "Solver kết luận có nhiều phương án đúng (judge_answer = multiple) dù"
+            + " cờ từng phương án không đủ 2 phương án đúng.";
+
     /** Cấu trúc JSON bắt buộc cho phản hồi Solver mcq v3 (Gemini responseSchema). Giữ đủ các trường của v2. */
     public static final String SOLVER_RESPONSE_SCHEMA_JSON = """
             {"type":"OBJECT","properties":{
@@ -486,10 +493,13 @@ public class AnswerSolverChecker {
      * So kết quả Solver mcq với đáp án của câu.
      * <ul>
      *   <li>Có {@code options_verdict} hợp lệ (v3, đủ 4 phương án A-D, mỗi phương án một lần, {@code correct} là boolean):
-     *       đếm số phương án đúng từ chính mảng này (không tin {@code correct_count} và {@code judge_answer} khi chúng
-     *       lệch, chỉ ghi cảnh báo). Từ 2 trở lên: {@code multiple}; 0: {@code none}; đều không qua (theo đường Q-2 của
-     *       INCONSISTENT). Đúng 1: qua khi trùng đáp án, không trùng là INCONSISTENT như cũ. Ghi chú Solver bắt đầu bằng
-     *       khối {@link #OPTIONS_VERDICT_PREFIX}.</li>
+     *       đếm số phương án đúng từ chính mảng này (không tin {@code correct_count}, và không tin {@code judge_answer} là
+     *       chữ cái hay {@code none} khi chúng lệch, chỉ ghi cảnh báo). Từ 2 trở lên: {@code multiple}; 0: {@code none}; đều
+     *       không qua (theo đường Q-2 của INCONSISTENT). Đúng 1: qua khi trùng đáp án, không trùng là INCONSISTENT như cũ.
+     *       Ngoại lệ một chiều (17/11, TN1): {@code judge_answer = multiple} mà mảng có dưới 2 phương án đúng thì vẫn là
+     *       {@code multiple}, không qua; cờ từng phương án giữ nguyên, ghi chú thêm dòng {@link #JUDGE_MULTIPLE_NOTE}. Quy
+     *       tắc này tìm ra trên tập TN1, chưa kiểm trên tập độc lập. Ghi chú Solver bắt đầu bằng khối
+     *       {@link #OPTIONS_VERDICT_PREFIX}.</li>
      *   <li>Thiếu hẳn {@code options_verdict}: như Solver cũ, so {@code judge_answer} với đáp án, ghi chú giữ nguyên (không
      *       có khối xét từng phương án, nên không gắn lý do mới). Prompt v3, v4 mà thiếu thì ghi cảnh báo.</li>
      *   <li>(F-03) Prompt xét từng phương án (v3, v4) mà {@code options_verdict} CÓ nhưng hỏng (không đủ 4 phần tử A-D hợp lệ):
@@ -555,8 +565,10 @@ public class AnswerSolverChecker {
         List<Boolean> correct = verdicts.stream().map(OptionVerdict::correct).toList();
         List<String> correctLetters = verdicts.stream().filter(OptionVerdict::correct).map(OptionVerdict::option).toList();
         int count = correctLetters.size();
-        AnswerChoice judge = count == 0 ? AnswerChoice.NONE
-                : count >= 2 ? AnswerChoice.MULTIPLE
+        // 17/11 (TN1): Solver tự kết luận "multiple" mà mảng cờ có dưới 2 phương án đúng thì vẫn là nhiều phương án đúng.
+        boolean judgeSaysMultiple = count < 2 && AnswerChoice.MULTIPLE.getDbValue().equalsIgnoreCase(judgeStr);
+        AnswerChoice judge = count >= 2 || judgeSaysMultiple ? AnswerChoice.MULTIPLE
+                : count == 0 ? AnswerChoice.NONE
                 : DbEnum.fromDbValue(AnswerChoice.class, correctLetters.get(0));
 
         Object declaredCount = map.get("correct_count");
@@ -564,13 +576,19 @@ public class AnswerSolverChecker {
             log.warn("Solver ghi correct_count = {} nhưng options_verdict có {} phương án đúng: dùng options_verdict",
                     declaredCount, count);
         }
-        if (!judge.getDbValue().equalsIgnoreCase(judgeStr)) {
+        if (judgeSaysMultiple) {
+            log.warn("Solver ghi judge_answer = 'multiple' nhưng options_verdict chỉ có {} phương án đúng: coi là nhiều"
+                    + " phương án đúng", count);
+        } else if (!judge.getDbValue().equalsIgnoreCase(judgeStr)) {
             log.warn("Solver ghi judge_answer = '{}' nhưng options_verdict cho '{}': dùng options_verdict",
                     judgeStr, judge.getDbValue());
         }
 
         StringBuilder notes = new StringBuilder(OPTIONS_VERDICT_PREFIX).append(' ')
                 .append(count).append("/4 phương án đúng");
+        if (judgeSaysMultiple) {
+            notes.append('\n').append(JUDGE_MULTIPLE_NOTE);
+        }
         for (OptionVerdict v : verdicts) {
             notes.append('\n').append(v.option()).append(v.correct() ? ": đúng" : ": sai");
             if (!v.reason().isEmpty()) {

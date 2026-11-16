@@ -67,7 +67,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-51 | Model viết đơn vị đo `\text{km/h}` ngoài `$...$`, cả ô mcq mức vừa bị loại 18/18 lượt sinh (bổ sung 27/10) | LLM & parse | Cao | Đã sửa |
 | L-52 | W2-4b: hàng đợi, bộ điều tiết Gemini, worker liên tục (bổ sung 28/10) | Hàng đợi/đồng thời | Cao | Đã sửa |
 | L-53 | Dedup: `similarity` null do chốt chặn số liệu; câu fallback của ô đang sinh lại không là ứng viên (bổ sung 31/10) | QC | Trung bình | Đã sửa |
-| L-54 | Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (thẩm định 31/10) | QC | Cao | Đã sửa (v4 bắt 7/9 và 5/9, không báo nhầm) |
+| L-54 | Solver mcq chỉ chọn một đáp án, bỏ sót câu có từ 2 phương án đúng (thẩm định 31/10) | QC | Cao | Đã sửa (v4 bắt 4–7/9 qua 5 lần chạy, không báo nhầm; soát lại 17/11, xem L-70) |
 | L-55 | Nhiều câu cùng khuôn (chỉ khác số, tên đỉnh) trong một đề; mcq lộ đáp án ý đúng/sai (thẩm định 31/10) | QC | Cao | Đã sửa (chờ đối chiếu dữ liệu thật) |
 | L-57 | Đáp án câu Trả lời ngắn bị đổi đơn vị cho vừa 4 ký tự: đề 10 Phần III câu 2 lưu 100, đúng là 10000 (bổ sung 2/11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
 | L-58 | Lệnh LaTeX nằm ngoài `$...$` trong lời giải và các trường khác: đề 10 Phần I câu 2 (bổ sung 2/11) | LLM & parse | Cao | Đã sửa (chờ đo trên đề mới) |
@@ -83,6 +83,7 @@ không chắc ghi "chưa xác minh". Bốn mục đánh dấu "(bổ sung từ r
 | L-67 | Xuất Word dạng MathType: kiểm bằng dữ liệu thật và MathType thật (bổ sung 02/11) | Xuất file | – | Đã kiểm (còn mục mở) |
 | L-68 | Góp ý giáo viên Toán trên đề 14: đáp án mcq dồn vào A; câu dẫn dài dòng, "cạnh biên", "(Nhập đáp án…)" (bổ sung 3/11) | LLM & parse | Cao | Đã sửa (đã đo 1 đề) |
 | L-69 | F-07: xem đề và danh sách đề truy vấn N+1 (đề 18 câu 117 câu SQL; danh sách 10 đề 774); số "cần xem lại" ở danh sách lệch trang chi tiết (bổ sung 4/11) | Hàng đợi/đồng thời | Trung bình | Đã sửa |
+| L-70 | Solver ghi `judge_answer = multiple` nhưng cờ từng phương án chỉ có một phương án đúng: backend đếm theo cờ nên cho qua (soát lại TN1, 17/11) | QC | Trung bình | Đã sửa (tính lại trên log TN1; chưa kiểm trên tập độc lập) |
 
 **Thống kê theo nhóm** (61 mục; bảng chưa có dòng cho L-56 nên con số này cộng thêm đúng 8 mục L-57…L-64 vào số cũ):
 
@@ -1166,7 +1167,8 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
     - Câu 52, 53: bắt được ở lần 1, bỏ sót ở lần 2. Lần 1 câu 52 cũng chỉ thấy A, B, bỏ qua D $x(7x - 14y)$ dù D nhân lại bằng
       đa thức đã cho.
     - Câu 61, 25: bỏ sót ở cả 2 lần. Đọc đề không thấy phương án thứ hai bảo vệ được ở câu 61; câu 25 Solver vẫn coi "$6$ km"
-      không phải đơn thức. Nếu chỉ tính 7 câu lỗi rõ ràng: 7/7 và 5/7.
+      không phải đơn thức. (Sửa 17/11: dòng cũ "nếu chỉ tính 7 câu lỗi rõ ràng: 7/7 và 5/7" xếp 15 khác nhóm với 61 nên
+      không dùng nữa; cách chia tập mới ở mục "Soát lại 17/11" bên dưới.)
   - Báo nhầm trên 20 câu tốt: 0/19 (câu 27 lỗi 429) và 0/20. Hai lần báo nhầm của v3 (câu 32, 35) không còn.
   - Token trung bình mỗi câu: 1622 và 1604 (khoảng 2,4 lần v2). Độ trễ trung bình: 1853 và 2133 ms.
   - Ổn định giữa 2 lần: 26/28 câu cùng kết luận (khác ở câu 52, 53; câu 27 không tính).
@@ -1184,6 +1186,14 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
     25 còn tranh cãi (vì vậy có cả cách tính trên 7 câu). Số liệu chỉ dùng làm kết quả chính thức sau khi người xác nhận nhãn.
   - Solver và mô hình sinh câu là cùng một model (`gemini-3.5-flash-lite`): mô hình tự kiểm tra đầu ra của chính nó; chưa thử
     Solver bằng model khác.
+- Soát lại 17/11 (chi tiết và bảng số ở `docs/experiments/tn1/README.md`, mục "Soát lại 16–17/11/2026"):
+  - Nhãn (An chốt 17/11): 7, 8, 37, 39, 52, 53 là lỗi nhiều phương án đúng (nghĩa hẹp, 6 câu); 15, 61 giữ nhãn lỗi, loại "mơ
+    hồ do diễn đạt"; 25 tách khỏi tập chính (bản người sửa, phương án D hỏng; Solver sót 5/5). Tập chính có 8 câu lỗi.
+  - Lượt giải dùng prompt v4 nay có 5 mẫu (2 lần 31/10, 3 lần v6 ngày 14/11): 4–7/9 theo nhãn gốc (26/44 lượt), 4–7/8 trên tập
+    chính (26/39), 4–6/6 theo nghĩa hẹp (23/30); báo nhầm 0/98. Không trích riêng "7/9". Câu 7, 8, 37, 39 bắt 5/5; 15 bắt 3/5;
+    52 bắt 2/5; 53 bắt 1/5; 61 và 25 không lần nào.
+  - 29 câu là tập phát triển của prompt v4: ví dụ 1 của prompt là câu 37, ví dụ 2 là phương án A của câu 15.
+  - Câu "đếm lại từ `options_verdict`, không tin `judge_answer` khi lệch" ở trên nay có ngoại lệ một chiều, xem L-70.
 - Trạng thái: Đã sửa. v4 là mặc định; đã đo trước/sau.
 
 ### L-55 Nhiều câu cùng khuôn (chỉ khác số hoặc tên đỉnh) trong một đề; câu mcq lộ đáp án của ý đúng/sai (bổ sung 31/10)
@@ -1260,6 +1270,16 @@ Theo mức độ: Cao 17, Trung bình 28, Thấp 15.
 - Frontend (đã làm lượt sau cùng ngày, `front_end/src/utils/exam.utils.ts`): `describeReviewReason` đọc `^(I{1,3})\.(\d+)$` và hiện "Gần giống câu {số} Phần {Phần} trong đề, nên đổi một trong hai câu"; dạng cũ `similar_in_exam: 14` vẫn đọc được. `describeFormatIssue` thêm "đã tự bọc $ …" ("Hệ thống đã tự sửa cách gõ công thức ở {chỗ}. Thầy/cô xem lại.") và "có từ tiếng Anh …" ("Câu có từ tiếng Anh lẫn vào, thầy/cô xem lại câu chữ."). `npm run build` đạt; chưa có test frontend (không có khung test), mới chạy thử tay các chuỗi qua node.
 - Chống tái phát: `ExamQuestionSimilarityTest` (chỉ câu sau có khóa, nhiều câu trước tăng dần, thứ tự quyết định bên bị gắn, `gianCoTheoPhanVaSoTrongPhanChiGanCauSau` qua nhiều Phần, `lyDoMangPhanVaSoTrongPhan`), `ExamSimilarInExamTest` (mức tích hợp: `I.1`, `I.1 + I.2`, câu ngân hàng làm câu trước).
 - Trạng thái: Đã sửa (frontend chưa cập nhật).
+
+### L-70 Solver ghi `judge_answer = multiple` nhưng cờ từng phương án chỉ có một phương án đúng (bổ sung 17/11)
+- Nhóm: QC
+- Triệu chứng: soát lại TN1 trên 114 phản hồi lượt giải còn lưu (v5 + chip và ba lần v6 ngày 14/11), có 2 lượt Solver ghi `correct_count` 3 và 2, `judge_answer = multiple`, nhưng mảng `options_verdict` chỉ có đáp án lưu là `correct = true`: câu 52 (lần không chip) và câu 53 (chip lần 1, lượt chạy lại). Backend kết luận "khớp đáp án", câu lỗi lọt qua.
+- Nguyên nhân gốc: schema bắt ghi `correct` trước `reason` trong từng phần tử. Model ghi `false` cho phương án chưa triệt để, rồi chính lý do lập luận ngược lại ("vẫn là một tích đúng", "do đó phương án này đúng") và các trường tổng ở cuối theo lập luận đó. `AnswerSolverChecker.fromOptionsVerdict` chỉ đếm theo cờ, `judge_answer` lệch thì chỉ ghi log (L-54).
+- Cách sửa (không đổi prompt, schema, migration, API): trong `fromOptionsVerdict`, từ 2 cờ đúng HOẶC `judge_answer = multiple` đều kết luận `multiple`, không qua. Cờ từng phương án giữ nguyên như Solver ghi; ghi chú thêm dòng thứ hai `AnswerSolverChecker.JUDGE_MULTIPLE_NOTE` để người xem không thấy mâu thuẫn với "1/4 phương án đúng". Không cờ nào đúng mà `judge_answer = multiple` cũng ghi `multiple` (An chốt 17/11). Chiều ngược lại không đổi: `judge_answer` là chữ cái hay `none` mà lệch cờ thì vẫn theo cờ. `correct_count` không nằm trong quy tắc (An chốt 17/11). Tiền tố `[Xét từng phương án]` giữ nguyên nên lý do hiển thị vẫn là `solver_multiple_correct`.
+- Chống tái phát: `McqSolverOptionCheckTest` (`judgeAnswerMultipleDuChiMotCoDungThiVanLaMultipleCorrect`, `judgeAnswerMultipleVoiMotCoDungKhacDapAnThiLaMultipleCorrect`, `judgeAnswerMultipleKhongCoNaoDungThiLaMultipleCorrect`, `judgeAnswerKhongPhaiMultipleThiVanTheoCo`), `SolverProbeToolTest.dongMcqKetLuanMultipleNhungChiMotCoDung`.
+- Ảnh hưởng tới TN1 (tính lại trên log, không gọi Gemini): v6 không chip 5/8 thành 6/8 (thêm câu 52); v6 chip lần 1 5/9 thành 6/9 (thêm câu 53); v6 chip lần 2 và v5 + chip không đổi; báo nhầm vẫn 0 (trên câu tốt: 0/79 lượt có `judge_answer = multiple`).
+- Hạn chế: **quy tắc tìm ra trên chính tập TN1, chưa kiểm trên tập độc lập.** Tác dụng nhỏ (2 lượt trên 114); bốn lượt sót khác của câu 52, 53 có `judge_answer` là chữ cái nên không được cứu. v3, v4 (31/10) và PA1 một lượt không lưu phản hồi gốc nên không tính lại được. Các dòng `answer_check` trước và sau thay đổi này cùng `prompt_version = solver-v6-two-pass` nhưng khác cách kết luận; số đo phải ghi rõ trước hay sau. Cột `solver_correct_count` của công cụ đo vẫn theo cờ, nên có thể là 1 trong khi `solver_answer = multiple`.
+- Trạng thái: Đã sửa.
 
 ## Hàng đợi/đồng thời
 
