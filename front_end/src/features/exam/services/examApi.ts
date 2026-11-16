@@ -1,4 +1,5 @@
 import axiosInstance from "../../../services/apiClient";
+import { getApiErrorMessage } from "../../../utils/apiError";
 import type { Subject, ExamItemDto, UpdateSlotQuestionPayload, ExamListResponse, GetMyExamsParams, ExamDetail, ExamProgress, BuildByLessonPayload, BuildResultDto, BuildExamRequest, ReplaceQuestionParams } from "../types/exam.types";
 import type { QcTraceResponse } from "../types/qcTrace.types";
 
@@ -59,9 +60,9 @@ export async function getMyExams(params?: GetMyExamsParams): Promise<ExamListRes
             params: cleanParams,
         });
         return response.data;
-    } catch (error: any) {
-        const errMsg = error.response?.data?.message || "Không thể tải danh sách đề thi";
-        throw new Error(errMsg);
+    } catch (error: unknown) {
+        // D-15: backend trả câu báo lỗi ở trường "error" (getApiErrorMessage đọc cả "error" lẫn "message")
+        throw new Error(getApiErrorMessage(error, "Không thể tải danh sách đề thi"));
     }
 }
 

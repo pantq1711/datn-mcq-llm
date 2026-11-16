@@ -49,6 +49,10 @@ function describeBuildProgress(
     const done = `${progress.ready}/${progress.total}`;
     const stayNote = "Thầy/cô có thể rời trang, đề vẫn tiếp tục được soạn.";
     if (progress.status === "generating") {
+        // D-01: AI hết lượt trong ngày thì backend báo giờ chạy tiếp; ước lượng "khoảng N phút" lúc này là sai
+        if (progress.notice) {
+            return { type: "warning", text: `Đang soạn ${done} câu · ${progress.notice}. ${stayNote}` };
+        }
         // Chưa xong câu nào thì chưa có cơ sở để ước lượng: không hiện thời gian
         if (progress.ready <= 0) {
             return { type: "info", text: `Đang soạn ${done} câu… ${stayNote}` };
@@ -335,7 +339,7 @@ export default function ExamDetailPage() {
             await replaceQuestion(examId, request.question.slotId, {
                 source,
                 ...(source === "generate" && request.instruction ? { instruction: request.instruction } : {}),
-                // PR B: soạn mới luôn gửi requestCodes (kể cả []) để backend coi là lượt Đổi tự đặt yêu cầu
+                // PR B / D-08: hộp Đổi chỉ đặt requestCodes (kể cả []) khi khác yêu cầu thừa hưởng: lượt Đổi tự đặt yêu cầu
                 ...(source === "generate" && request.requestCodes ? { requestCodes: request.requestCodes } : {}),
                 ...(request.reason ? { reason: request.reason } : {}),
             });
@@ -375,7 +379,8 @@ export default function ExamDetailPage() {
         } catch (e: any) {
             const code = e?.response?.data?.code;
             if (code === "QC_CHECKING") {
-                message.info("Hệ thống đang tự kiểm tra bản sửa. Thầy/cô thử lưu lại sau ít phút.");
+                // D-01: backend nói rõ lý do (kể cả giờ chạy tiếp khi AI hết lượt trong ngày); câu cố định chỉ để dự phòng
+                message.info(getApiErrorMessage(e, "Hệ thống đang tự kiểm tra bản sửa. Thầy/cô thử lưu lại sau ít phút."));
                 await loadDetail();
                 return;
             }

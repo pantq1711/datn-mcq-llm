@@ -14,7 +14,7 @@ câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên databa
 | [`05-grounding.sql`](05-grounding.sql) | Câu sinh có tài liệu bài học: tỉ lệ SUPPORTED / NOT_SUPPORTED / UNKNOWN, chưa chấm, lỗi; trích dẫn kiểm chứng được; câu bị hạ vì trích dẫn không có thật (theo dạng câu, có/không tài liệu) |
 | [`06-chi-phi.sql`](06-chi-phi.sql) | Chi phí trung bình mỗi câu LLM (token và thời gian gọi LLM) = sinh + Solver + grounding, theo dạng câu và có/không tài liệu; số câu thiếu số đo (V21) |
 | [`07-van-hanh.sql`](07-van-hanh.sql) | Vận hành hàng đợi theo ngày và loại job: số job đã kết thúc, tỉ lệ thất bại, thời gian chờ và xử lý (p50, p95), job bị stale reset |
-| [`10-yeu-cau-giao-vien.sql`](10-yeu-cau-giao-vien.sql) | Yêu cầu của giáo viên (chip, PR B): tỉ lệ `request_check` met / partial / not_met theo từng mã và theo mức lấy yêu cầu (replace, cell, exam); số lượt Đổi câu ngay sau câu not_met hay partial của cùng chỗ |
+| [`10-yeu-cau-giao-vien.sql`](10-yeu-cau-giao-vien.sql) | Yêu cầu của giáo viên (chip, PR B): tỉ lệ `request_check` met / partial / not_met theo từng mã và theo mức lấy yêu cầu (replace, cell, exam), kèm tỉ lệ tính cả câu chưa kiểm (cận dưới); số lượt Đổi câu ngay sau câu not_met hay partial của cùng chỗ (gom theo chuỗi bản sửa); lọc theo cửa sổ `checked_at` của Solver |
 
 ## Số liệu vận hành thời gian thực (Prometheus)
 
@@ -59,14 +59,68 @@ một câu sinh lại nhiều lần được đếm nhiều lần, khác với f
    done
    ```
 
-   Không truyền `-v dev_emails` thì không loại ai (in ra như cũ). Cần psql 10 trở lên (`\if`). Chạy trong công cụ khác psql
-   (không hiểu `\set`, `:'dev_emails'`): bỏ bốn dòng `\if … \endif` và thay `:'dev_emails'` bằng chuỗi email trong dấu
-   nháy đơn. Test (`StatisticsSqlTest`, `TrialQueriesSqlTest`, `GroundingPipelineTest`) đọc file qua `PsqlFile`, làm đúng
-   hai việc đó với giá trị mặc định.
+   Không truyền `-v dev_emails` thì không loại ai, và (D-09, 15/11) psql in dòng `CANH BAO: chua truyen -v dev_emails, …`
+   trước kết quả: thấy dòng này thì số liệu đang gồm cả tài khoản nhóm, chạy lại với `-v dev_emails`. Cần psql 10 trở lên
+   (`\if`). Chạy trong công cụ khác psql (không hiểu `\set`, `\echo`, `:'dev_emails'`): bỏ các dòng bắt đầu bằng `\` và
+   thay `:'dev_emails'` bằng chuỗi email trong dấu nháy đơn. Test (`StatisticsSqlTest`, `TrialQueriesSqlTest`,
+   `GroundingPipelineTest`) đọc file qua `PsqlFile`, làm đúng hai việc đó với giá trị mặc định.
 4. Các file 02 và 04 chỉ tính câu đã nằm (hoặc từng nằm) trong một chỗ của đề giáo viên, nên câu sinh ra nhưng chưa vào đề
    (ví dụ lần sinh bị lỗi định dạng rồi sinh lại) vẫn được tính ở file 02 qua `generation_job.exam_slot_id`.
 5. Dữ liệu trước V13 (chưa có chuỗi bản sửa) và trước V14 (chưa có `solver_error`, `solver_reasoning`) vẫn truy vấn được;
    phần "Solver lỗi" của dữ liệu trước V14 nằm chung trong "Solver không chạy hoặc lỗi".
+
+## Mốc phiên bản prompt và Solver (D-07, 15/11)
+
+DB **không** lưu phiên bản prompt thật của từng câu, cũng không lưu phiên bản Solver của từng dòng `answer_check`:
+
+- `experiment_run.prompt_version` là nhãn ghi **lúc tạo run** (lúc tạo đề). Đổi câu trên đề tạo trước một lần deploy, và
+  job còn `pending` lúc deploy, sinh câu bằng prompt **mới** nhưng vẫn thuộc run nhãn **cũ** (worker dựng lại prompt bằng code
+  đang chạy lúc nhận job). Lọc theo `prompt_version` vì vậy gán nhầm một phần câu.
+- `quality_check_result` (dòng `answer_check`) không có cột phiên bản Solver: kết quả v4, v5, v6 nằm chung bảng.
+
+Cách tách (bản rẻ, không migration): so **thời điểm** với mốc deploy ở bảng dưới.
+
+- Phiên bản **prompt sinh câu** của một câu: theo `generated_question.created_at` (lúc lưu câu, sau lời gọi sinh vài giây).
+- Phiên bản **Solver** của một kết luận: theo `quality_check_result.checked_at` của dòng `answer_check`. Dòng chép từ bản
+  trước khi giáo viên chỉ sửa lời giải (`token_count` NULL) mang kết luận của bản trước; loại bằng `token_count IS NOT NULL`
+  khi cần đúng phiên bản.
+- Cột thời gian là `TIMESTAMP` không múi giờ, ghi theo giờ VPS (Asia/Bangkok, `deploy/compose.prod.yaml`).
+
+**Giờ trong bảng là giờ merge vào `main`, tức mốc SỚM NHẤT**; giờ deploy thật trên VPS muộn hơn và chưa được ghi ở đâu
+trong repo. Xác nhận trên DB production rồi sửa bảng: các bản có migration đi kèm thì đọc
+`SELECT version, installed_on FROM flyway_schema_history ORDER BY installed_rank;` (cột "Migration"); bản không có migration
+(#75) thì lấy theo lần khởi động lại `app` gần nhất sau giờ merge (log `update.sh` / `docker compose logs app`).
+
+| Merge vào `main` (giờ +07) | PR | Migration | Prompt sinh câu (`matrix-<dạng>-vN-draft`) | Solver mặc định |
+|---|---|---|---|---|
+| 26/10 23:15:59 | #12 | | (xem Javadoc `MatrixPromptDraftV0.promptVersion`) | `solver-v2-delimited` |
+| 31/10 20:54:13 | #29 | | | `solver-v4-literal-reading` (v3 chỉ đo thử, không làm mặc định trên `main`) |
+| 03/11 17:52:58 | #40 | | mcq v5, sa v7, tf v7 | |
+| 04/11 14:15:01 | #45 | | mcq v6, sa v8, tf v8 | |
+| 06/11 14:50:15 | #50 | | mcq v7, sa v9, tf v9 | |
+| 11/11 19:00:23 | #55 | | mcq v8, sa v10, tf v10 | |
+| 13/11 21:09:02 | #67 | V27 | mcq v9, sa v11, tf v11 | |
+| 13/11 23:24:18 | #72 | V28 | | `solver-v5-request-check` (yêu cầu giáo viên kiểm cùng lượt giải) |
+| 14/11 19:16:43 | #75 | | mcq v9 (văn bản mcq không đổi), sa v12, tf v12 | |
+| 14/11 19:24:15 | #76 | V29 | | `solver-v6-two-pass` (lượt 1 = prompt v4, yêu cầu kiểm ở lượt 2) |
+
+Bảng giả định VPS không đặt `app.llm.solver-prompt-version` (mặc định theo code); nếu có đặt thì mốc Solver theo lần đổi cấu
+hình đó. Lọc theo mốc:
+
+```sql
+-- phiên bản Solver của từng kết luận (thay giờ merge bằng giờ deploy thật)
+CASE
+    WHEN a.checked_at >= TIMESTAMP '2026-11-14 19:24:15' THEN 'solver-v6-two-pass'
+    WHEN a.checked_at >= TIMESTAMP '2026-11-13 23:24:18' THEN 'solver-v5-request-check'
+    WHEN a.checked_at >= TIMESTAMP '2026-10-31 20:54:13' THEN 'solver-v4-literal-reading'
+    ELSE 'solver-v2-delimited'
+END
+```
+
+File `10-yeu-cau-giao-vien.sql` đã có sẵn cửa sổ `checked_at` (biến psql `solver_tu`, `solver_den`; mặc định từ mốc v6) để
+không trộn kết luận một lượt (v5) với hai lượt (v6). Các file 02 và 04 (Solver lệch) chưa lọc: thêm điều kiện `checked_at`
+như trên khi lấy số theo từng phiên bản. Bản đầy đủ (ghi `prompt_version` lên job và phiên bản Solver lên dòng
+`answer_check`) cần migration, chưa làm.
 
 ## Giới hạn phải ghi trong báo cáo
 

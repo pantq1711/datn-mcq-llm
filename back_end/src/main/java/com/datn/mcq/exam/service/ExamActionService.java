@@ -25,9 +25,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Thao tác trên từng câu của đề ở chế độ giáo viên (V7, phần C mục 4): Giữ (vào ngân hàng) và Đổi câu khác (sinh lại
@@ -177,7 +180,9 @@ public class ExamActionService {
     /**
      * @param requestCodes (12/11, PR B) mã chip yêu cầu của lượt Đổi; null là không gửi (thừa hưởng yêu cầu của ô, không có
      *                     thì của đề). Có gửi (kể cả rỗng) hoặc có {@code instruction}: lượt Đổi tự đặt yêu cầu, thay hẳn yêu
-     *                     cầu của ô và đề. 400 INVALID_REQUEST, kiểm TRƯỚC mọi thay đổi: mã lạ; mã khác rỗng với
+     *                     cầu của ô và đề; D-08 (15/11): trừ khi mã và văn bản gửi lên đúng bằng yêu cầu thừa hưởng (khi
+     *                     đó như không gửi, nhật ký không ghi mã và văn bản). 400 INVALID_REQUEST, kiểm TRƯỚC mọi thay
+     *                     đổi: mã lạ; mã khác rỗng với
      *                     {@code source = bank}; mã không hợp dạng câu của chỗ (thông báo tiếng Việt theo nhãn chip)
      */
     @Transactional
@@ -204,6 +209,13 @@ public class ExamActionService {
         ExamSlot slot = loadSlot(examId, slotId);
         if (ExamSlot.GENERATING.equals(slot.getState()) || ExamSlot.PENDING.equals(slot.getState())) {
             throw new IllegalStateException(waitingMessage(slot, GENERATING_MESSAGE));
+        }
+        // D-08 (rà soát 15/11): gửi lại ĐÚNG yêu cầu thừa hưởng (hộp Đổi điền sẵn, giáo viên không sửa gì) không phải lượt Đổi
+        // tự đặt yêu cầu: giữ mức của ô hoặc đề, nhật ký không chép yêu cầu của ô hoặc đề (thống kê 10, bảng "scope").
+        if (!ExamSlotAction.SOURCE_BANK.equals(replaceSource) && (cleanCodes != null || cleanInstruction != null)
+                && sameAsInherited(examId, slot, cleanCodes, cleanInstruction)) {
+            cleanCodes = null;
+            cleanInstruction = null;
         }
         // D1: Đổi bằng sinh mới tốn một lượt sinh nên phải qua trần theo giáo viên. Kiểm TRƯỚC mọi thay đổi chỗ (truy vấn
         // native ở đây tự ghi các thay đổi đang chờ); Đổi bằng câu ngân hàng không tính.
@@ -382,6 +394,22 @@ public class ExamActionService {
                         .map(s -> s == null ? null : new QuestionEditInput.StatementEdit(s.key(), s.text(), s.label()))
                         .toList(),
                 r.explanation());
+    }
+
+    /**
+     * D-08: mã (không phân biệt thứ tự; null như rỗng) và văn bản (đã trim; null như trống) gửi khi Đổi câu bằng đúng yêu cầu
+     * thừa hưởng của chỗ ({@link ExamContextService#requestFor}, mã đã lọc theo dạng câu). Chỗ không có yêu cầu thừa hưởng
+     * thì chỉ khi không gửi mã nào và không có văn bản.
+     */
+    private boolean sameAsInherited(Integer examId, ExamSlot slot, List<String> codes, String instruction) {
+        ExamContextService.RequestLevel level = contextService.requestFor(examId, slot.getCellId());
+        GenerationService.JobRequest inherited = level == null ? null : level.forType(slot.getQuestionType());
+        Set<String> sent = codes == null ? Set.of() : new HashSet<>(codes);
+        if (inherited == null) {
+            return sent.isEmpty() && instruction == null;
+        }
+        return sent.equals(new HashSet<>(inherited.codes()))
+                && Objects.equals(instruction, normalizeInstruction(inherited.text()));
     }
 
     /** Trim; trống thì null; dài hơn giới hạn thì 400. */

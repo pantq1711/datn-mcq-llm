@@ -257,6 +257,15 @@ public class GenerationJobPoller {
         return job;
     }
 
+    /** D-06: job gắn với một câu (answer_check, grounding_check) hỏng ngay, không thử lại, kèm log lý do. */
+    private ProcessedJobSummary failNonRetryable(GenerationJobProcessor.ClaimedJobContext ctx, String error) {
+        LOG.warn("Job {} ({}): lỗi không thể thử lại, hỏng ngay ở lượt {}: {}", ctx.jobId(), ctx.jobType(), ctx.attempt(),
+                error);
+        var failedJob = processor.failJobNow(ctx, error);
+        return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(), failedJob.getStatus().getDbValue(), null,
+                error);
+    }
+
     /**
      * F-09: lúc ứng dụng tắt, lời gọi Gemini bị ngắt (luồng bị interrupt, hoặc kết nối bị đóng khi cờ tắt đã bật). Lỗi đó
      * KHÔNG là lỗi của job: không ghi lỗi, không tăng attempt.
@@ -317,7 +326,8 @@ public class GenerationJobPoller {
      * W1-2: job answer_check của một bản giáo viên sửa. (1) transaction ngắn dựng đầu vào (bản đã bị thay thì bỏ, không
      * gọi LLM); (2) gọi Solver NGOÀI transaction; (3) transaction ngắn ghi kết quả, trạng thái câu và job done cùng lúc.
      * Lỗi Solver (mạng, hết thời gian chờ, phản hồi hỏng) đi đường thử lại có giới hạn ({@code max-attempts}, backoff)
-     * rồi failed; thiếu API key thì failed ngay. Không bao giờ coi lỗi là đạt.
+     * rồi failed; thiếu API key, HTTP 4xx khác 429 và phản hồi bị chặn an toàn thì failed ngay (D-06). Không bao giờ coi lỗi
+     * là đạt.
      */
     private ProcessedJobSummary processAnswerCheck(GenerationJobProcessor.ClaimedJobContext ctx) {
         Optional<QuestionQcInput> input;
@@ -347,6 +357,13 @@ public class GenerationJobPoller {
             var deferredJob = processor.deferJobOnQuotaExhausted(ctx, ex.getResetAt(), ex.getMessage());
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(),
                     deferredJob.getStatus().getDbValue(), null, ex.getMessage());
+        } catch (LlmNotConfiguredException | NonRetryableLlmException ex) {
+            // D-06 (rà soát 15/11): như C-04 của job sinh câu (4xx khác 429, sai tên model, bị chặn SAFETY/RECITATION):
+            // gọi lại chắc chắn lỗi như cũ, chỉ tốn thêm lượt hạn mức. Hỏng ngay; câu giữ cờ solver_failed như job thất bại.
+            if (interruptedByShutdown(ex)) {
+                return releaseForShutdown(ctx, ex);
+            }
+            return failNonRetryable(ctx, "Không hoàn tất answer_check: " + ex.getMessage());
         } catch (RuntimeException ex) {
             if (interruptedByShutdown(ex)) {
                 return releaseForShutdown(ctx, ex);
@@ -374,7 +391,8 @@ public class GenerationJobPoller {
      * W2-3: job grounding_check, QC "bám tài liệu" của một câu đã sinh. (1) transaction ngắn dựng đầu vào (câu đã bị thay thì
      * bỏ, không gọi LLM); (2) gọi judge NGOÀI transaction; (3) transaction ngắn ghi kết quả và job done cùng lúc. Lỗi judge
      * (mạng, hết thời gian chờ, phản hồi hỏng) đi đường thử lại có giới hạn ({@code max-attempts}, backoff) rồi failed; thiếu
-     * API key thì failed ngay. Không bao giờ đổi trạng thái câu: kết quả chỉ là cảnh báo.
+     * API key, HTTP 4xx khác 429 và phản hồi bị chặn an toàn thì failed ngay (D-06). Không bao giờ đổi trạng thái câu: kết quả
+     * chỉ là cảnh báo.
      */
     private ProcessedJobSummary processGrounding(GenerationJobProcessor.ClaimedJobContext ctx) {
         Optional<GenerationJobProcessor.GroundingJobInput> input;
@@ -404,6 +422,12 @@ public class GenerationJobPoller {
             var deferredJob = processor.deferJobOnQuotaExhausted(ctx, ex.getResetAt(), ex.getMessage());
             return new ProcessedJobSummary(true, ctx.jobId(), ctx.questionId(),
                     deferredJob.getStatus().getDbValue(), null, ex.getMessage());
+        } catch (LlmNotConfiguredException | NonRetryableLlmException ex) {
+            // D-06: lỗi không tạm thời của judge, hỏng ngay như answer_check ở trên.
+            if (interruptedByShutdown(ex)) {
+                return releaseForShutdown(ctx, ex);
+            }
+            return failNonRetryable(ctx, "Không hoàn tất grounding_check: " + ex.getMessage());
         } catch (RuntimeException ex) {
             if (interruptedByShutdown(ex)) {
                 return releaseForShutdown(ctx, ex);

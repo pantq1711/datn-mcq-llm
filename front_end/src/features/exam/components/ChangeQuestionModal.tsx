@@ -81,18 +81,32 @@ export default function ChangeQuestionModal({
     // Yêu cầu thừa hưởng (docs/api mục 7.4): Đổi câu THAY HẲN yêu cầu của ô và đề, nên chọn sẵn chip và điền sẵn văn bản
     const inherited = question?.inheritedRequests;
     const requestOptions = teacherRequestOptionsFor(qType);
+    // D-15: câu đang đổi do một lượt Đổi tự đặt yêu cầu sinh ra thì điền sẵn yêu cầu của chính lượt đó (Đổi lần hai không phải
+    // gõ lại); không thì yêu cầu thừa hưởng của ô hoặc đề
+    const prefill = question?.requests?.scope === "replace" ? question.requests : inherited;
+    const applicableCodes = (codes?: TeacherRequestCode[]) =>
+        (codes ?? []).filter(c => requestOptions.some(o => o.value === c));
 
     useEffect(() => {
         if (open) {
             form.resetFields();
-            form.setFieldsValue({ source: "generate", instruction: inherited?.text ?? "" });
+            form.setFieldsValue({ source: "generate", instruction: prefill?.text ?? "" });
             setSubmitting(false);
             setBankExhausted(false);
             setReason(undefined);
-            setRequestCodes((inherited?.codes ?? []).filter(c => requestOptions.some(o => o.value === c)));
+            setRequestCodes(applicableCodes(prefill?.codes));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, question?.id, form]);
+
+    /**
+     * D-08: chip và văn bản cuối có đúng bằng yêu cầu thừa hưởng (thứ tự chip không tính, văn bản đã trim)? Bằng thì không gửi,
+     * backend giữ mức của ô/đề; khác (kể cả bỏ hết chip, hoặc giữ yêu cầu của lần Đổi trước) mới là lượt Đổi tự đặt yêu cầu.
+     */
+    const sameAsInherited = (codes: TeacherRequestCode[], text: string) => {
+        const base = new Set(applicableCodes(inherited?.codes));
+        return codes.length === base.size && codes.every(c => base.has(c)) && text === (inherited?.text ?? "").trim();
+    };
 
     const handleSubmit = async () => {
         if (!question || isBusy) return;
@@ -106,7 +120,10 @@ export default function ChangeQuestionModal({
 
         const source = values.source || "generate";
         // Chỉ gửi instruction khi nguồn là sinh mới (generate)
-        const instruction = source === "generate" ? (values.instruction || "").trim() : "";
+        const typed = source === "generate" ? (values.instruction || "").trim() : "";
+        // D-08: giáo viên không đổi gì so với yêu cầu thừa hưởng thì không gửi chip lẫn văn bản
+        const ownRequest = source === "generate" && !sameAsInherited(requestCodes, typed);
+        const instruction = ownRequest ? typed : "";
         const finalReason = isFailed ? undefined : reason;
 
         setSubmitting(true);
@@ -116,8 +133,8 @@ export default function ChangeQuestionModal({
                 instruction,
                 source,
                 ...(finalReason ? { reason: finalReason } : {}),
-                // Soạn mới: luôn gửi chip (kể cả [] khi đã bỏ hết) để backend coi là tự đặt yêu cầu
-                ...(source === "generate" ? { requestCodes } : {}),
+                // Yêu cầu khác thừa hưởng: gửi chip (kể cả [] khi đã bỏ hết) để backend coi là tự đặt yêu cầu
+                ...(ownRequest ? { requestCodes } : {}),
             });
             if (result === "bank_exhausted") {
                 // Không tự soạn: chỉ chuyển sang "Soạn câu mới" để giáo viên tự bấm (mỗi lần soạn tốn lượt gọi AI)
@@ -354,9 +371,11 @@ export default function ChangeQuestionModal({
                                     </Tag.CheckableTag>
                                 ))}
                             </div>
-                            {inherited && (
+                            {prefill && (
                                 <Text type="secondary" className="change-question-reason-hint">
-                                    {inherited.scope === "cell" ? "Yêu cầu của ô" : "Yêu cầu của đề"} đã được chọn và điền sẵn;
+                                    {prefill.scope === "replace"
+                                        ? "Yêu cầu của lần đổi trước"
+                                        : prefill.scope === "cell" ? "Yêu cầu của ô" : "Yêu cầu của đề"} đã được chọn và điền sẵn;
                                     bỏ chọn hoặc sửa nếu không muốn giữ.
                                 </Text>
                             )}

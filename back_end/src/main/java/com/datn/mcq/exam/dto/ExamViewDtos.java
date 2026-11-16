@@ -36,11 +36,14 @@ public final class ExamViewDtos {
      *                      thống sinh cùng khuôn với câu đứng trước nó, Phần I/II/III và số "Câu k" trong Phần như trang đề;
      *                      mỗi cặp chỉ câu sau bị gắn; tính lúc xem đề, thẩm định 31/10, đổi dạng 2/11)
      * @param qcState       (W1-2) chỉ với câu hệ thống sinh chưa Giữ: "checking" (Solver đang kiểm lại), "passed" (không
-     *                      còn lý do cần xem kỹ), "needs_review" (có lý do); bỏ khỏi JSON với chỗ khác
+     *                      còn lý do cần xem kỹ), "needs_review" (có lý do); bỏ khỏi JSON với chỗ khác. D-01 (15/11): job
+     *                      Solver đang hoãn vì AI hết lượt trong ngày là "needs_review" (lý do solver_pending), không phải
+     *                      "checking", vì Giữ được
      * @param edited        (W1-2) câu hiện tại của chỗ là bản giáo viên sửa (kể cả khi đã Giữ)
      * @param originalQuestionId (W1-2) bản gốc LLM của bản sửa; bỏ khỏi JSON khi câu chưa sửa
      * @param infoReasons   (12/11, PR B) cờ THÔNG TIN, luôn có ({@code []} khi không có): {@code request_partial: <lý do>},
-     *                      {@code request_not_met: <lý do>}; về sau thêm cờ khác cùng dạng {@code <mã>} hoặc
+     *                      {@code request_not_met: <lý do>}, {@code request_unchecked} (D-05, 15/11: lượt kiểm yêu cầu
+     *                      lỗi hoặc trả kết quả hỏng); về sau thêm cờ khác cùng dạng {@code <mã>} hoặc
      *                      {@code <mã>: <chi tiết>}. Tách hẳn khỏi {@code reviewReasons}: không bật {@code needsReview},
      *                      không tính vào số câu cần xem kỹ, không đổi {@code qcState} hay ngân hàng riêng/chung khi Giữ
      * @param requests      (PR B) yêu cầu mà câu đang ở chỗ được sinh theo; vắng khi câu không có yêu cầu (câu ngân hàng,

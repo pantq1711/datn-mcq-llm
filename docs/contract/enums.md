@@ -284,7 +284,7 @@ API nhận không phân biệt hoa thường, gộp mã trùng; lưu theo thứ 
 | `met` | Solver kết luận câu đáp ứng đủ mọi yêu cầu (không cờ) |
 | `partial` | Chỉ đáp ứng một phần: cờ thông tin `request_partial: <lý do>` |
 | `not_met` | Không đáp ứng: cờ thông tin `request_not_met: <lý do>` |
-| `unchecked` | (V29, 14/11, Solver hai lượt) câu có yêu cầu nhưng KHÔNG được kiểm: lượt giải gắn cờ đáp án nên không gọi lượt kiểm yêu cầu, hoặc lượt đó lỗi / trả kết quả hỏng. Do backend đặt (Solver trả `unchecked` coi là hỏng); lý do ở `request_reason`; không có cờ thông tin |
+| `unchecked` | (V29, 14/11, Solver hai lượt) câu có yêu cầu nhưng KHÔNG được kiểm: lượt giải gắn cờ đáp án nên không gọi lượt kiểm yêu cầu, hoặc lượt đó lỗi / trả kết quả hỏng. Do backend đặt (Solver trả `unchecked` coi là hỏng); lý do ở `request_reason`. Cờ thông tin (D-05, 15/11): lượt kiểm yêu cầu lỗi hoặc hỏng (`request_reason` bắt đầu bằng "Không kiểm yêu cầu: lượt kiểm yêu cầu lỗi") có `request_unchecked` (không bật "cần xem kỹ", không thử lại); lượt giải gắn cờ đáp án thì không có cờ thông tin (câu đã có cờ "cần xem kỹ") |
 
 NULL: câu không có yêu cầu. Với Solver v5 (một lượt), NULL cả khi Solver không trả `request_check` hợp lệ; từ v6 trường hợp đó
 là `unchecked`.
@@ -461,7 +461,8 @@ là `unchecked`.
       câu); lần sinh lại tự động giữ yêu cầu của job trước. Worker chép mã và văn bản sang `generated_question`; bản giáo viên
       sửa chép từ bản trước. `experiment_run.hyperparams` có khóa `requestCodes` (chỉ khi có mã).
   - **`ExamItemDto.infoReasons`** (PR B): cờ THÔNG TIN, luôn có (`[]` khi không có), mỗi giá trị dạng `<mã>` hoặc `<mã>: <chi tiết>`:
-    `request_partial: <lý do>`, `request_not_met: <lý do>` (tính từ `request_verdict` của dòng answer_check). Không bật
+    `request_partial: <lý do>`, `request_not_met: <lý do>`, `request_unchecked` (D-05, 15/11: lượt kiểm yêu cầu lỗi) (tính từ
+    `request_verdict` và `request_reason` của dòng answer_check). Không bật
     `needsReview`, không vào `reviewReasons`, không tính vào `needsReviewCount`/`needsReviewSlots`, không đổi `qcState`, trạng thái
     câu hay ngân hàng riêng/chung khi Giữ. Về sau dùng thêm cho "Có hình" và lỗi phương án nhiễu (PA1). Frontend hiện giá trị lạ
     nguyên văn.

@@ -308,4 +308,85 @@ class GenerateJobNonRetryableTest {
         assertTrue(error(job).contains("content.parts"), error(job));
         assertFalse(error(job).contains("finishReason"), error(job));
     }
+
+    // ---------------------------------------------------------------- D-06: job answer_check và grounding_check
+
+    /** Câu mcq ở trạng thái generated (đang chờ Solver hoặc chấm bám tài liệu). */
+    private int generatedQuestion() {
+        return insert("INSERT INTO generated_question (template_id, run_id, question_text, option_a, option_b, option_c,"
+                + " option_d, correct_option, raw_llm_output, parse_success, status, llm_difficulty) VALUES (?, ?,"
+                + " 'Bậc của $2x^3$ là', '$1$', '$2$', '$3$', '$4$', 'C', '{}', TRUE, 'generated', 'easy')",
+                template, run);
+    }
+
+    private int questionJob(String jobType, int question) {
+        return insert("INSERT INTO generation_job (job_type, run_id, template_id, question_type, question_id,"
+                + " material_context, material_refs, status, attempt, next_run_at) VALUES (?, ?, ?, 'mcq', ?,"
+                + " 'Đoạn tài liệu', '[]'::jsonb, 'pending', 0, now() - interval '1 minute')",
+                jobType, run, template, question);
+    }
+
+    /** Một lượt xử lý job {@code jobType} của một câu với Gemini giả trả {@code status}/{@code body}. */
+    private Map<String, Object> runQuestionJob(String jobType, int status, String body) {
+        httpStatus.set(status);
+        httpBody.set(body);
+        int job = questionJob(jobType, generatedQuestion());
+        LlmClient client = new LlmClient("fake-key", "gemini-3.5-flash-lite", fakeBaseUrl(), limiter);
+        QcOrchestrator qc = new QcOrchestrator(formatChecker,
+                new AnswerSolverChecker(client, promptBuilder, "gemini-3.5-flash-lite"),
+                qualityCheckResultRepository, dedupService, answerCheckRecorder);
+        org.springframework.test.util.ReflectionTestUtils.setField(qc, "groundingChecker",
+                new com.datn.mcq.qc.checker.GroundingChecker(client, "gemini-3.5-flash-lite"));
+        GenerationJobPoller.ProcessedJobSummary summary =
+                new GenerationJobPoller(jobProcessor, client, qc, dedupScopeResolver, 3, limiter).processNextJob(true);
+        assertTrue(summary.processed());
+        return jdbc.queryForMap("SELECT * FROM generation_job WHERE id = ?", job);
+    }
+
+    @Test
+    void answerCheckGapHttp404SaiTenModelSolverHongNgayKhongThuLai() {
+        Map<String, Object> job = runQuestionJob("answer_check", 404,
+                "{\"error\":{\"code\":404,\"message\":\"model not found\"}}");
+
+        assertEquals("failed", job.get("status"), "lỗi 4xx của Solver: thử lại chắc chắn lỗi như cũ");
+        assertEquals(1, job.get("attempt"));
+        assertTrue(error(job).contains("HTTP 404"), error(job));
+        assertEquals(1, httpCalls.get());
+        assertEquals(1, limiter.getDailyUsed(), "chỉ tiêu một lượt hạn mức ngày");
+    }
+
+    @Test
+    void answerCheckBiChanSafetyHongNgay() {
+        Map<String, Object> job = runQuestionJob("answer_check", 200, "{\"candidates\":[{\"finishReason\":\"SAFETY\"}]}");
+
+        assertEquals("failed", job.get("status"));
+        assertTrue(error(job).contains("finishReason=SAFETY"), error(job));
+    }
+
+    @Test
+    void answerCheckGapHttp503VanThuLaiNhuCu() {
+        Map<String, Object> job = runQuestionJob("answer_check", 503, "{\"error\":{\"code\":503}}");
+
+        assertEquals("pending", job.get("status"), "503 là lỗi tạm thời");
+        assertEquals(1, job.get("attempt"));
+    }
+
+    @Test
+    void groundingCheckGapHttp400HongNgayKhongThuLai() {
+        Map<String, Object> job = runQuestionJob("grounding_check", 400,
+                "{\"error\":{\"code\":400,\"message\":\"Invalid JSON payload\"}}");
+
+        assertEquals("failed", job.get("status"));
+        assertEquals(1, job.get("attempt"));
+        assertTrue(error(job).contains("HTTP 400"), error(job));
+        assertEquals(1, limiter.getDailyUsed());
+    }
+
+    @Test
+    void groundingCheckGapHttp503VanThuLaiNhuCu() {
+        Map<String, Object> job = runQuestionJob("grounding_check", 503, "{\"error\":{\"code\":503}}");
+
+        assertEquals("pending", job.get("status"));
+        assertEquals(1, job.get("attempt"));
+    }
 }

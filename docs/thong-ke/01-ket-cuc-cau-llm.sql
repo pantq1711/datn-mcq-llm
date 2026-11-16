@@ -13,9 +13,10 @@
 -- dev_emails: email cần loại (nhóm phát triển, tài khoản dùng thử), cách nhau bằng dấu phẩy, truyền khi chạy
 -- (KHÔNG ghi email thật vào file):
 --   psql -v dev_emails='nhom1@truong.edu.vn,gv-thu@truong.edu.vn' -f 01-ket-cuc-cau-llm.sql
--- Không truyền thì rỗng (không loại ai). Xem docs/thong-ke/README.md.
+-- Không truyền thì rỗng (không loại ai) và psql in cảnh báo. Xem docs/thong-ke/README.md.
 \if :{?dev_emails}
 \else
+\echo 'CANH BAO: chua truyen -v dev_emails, so lieu GOM CA tai khoan nhom phat trien va tai khoan dung thu'
 \set dev_emails ''
 \endif
 WITH RECURSIVE
