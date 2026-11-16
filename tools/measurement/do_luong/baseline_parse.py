@@ -6,11 +6,14 @@ Hai kiểu đầu vào:
     ở phần "ĐÁP ÁN" cuối đề (dòng "Câu N: ...", "1.A 2.B", bảng số/chữ).
 Câu được gán khối/chủ đề/nội dung/mức độ theo thứ tự trong ma trận (câu mcq thứ k -> ô mcq thứ k).
 Câu thiếu phần nào thì KHÔNG bỏ im lặng: ghi vào parse-loi.jsonl kèm lý do và khối chữ gốc, để An sửa tay phần ĐỊNH DẠNG
-rồi đưa vào --sua-tay (cùng id thì bản sửa tay thay bản parse).
+rồi đưa vào --sua-tay (cùng id thì bản sửa tay thay bản parse). Mỗi câu sửa tay có một dòng trong sua-tay-diff.jsonl
+(lý do lỗi gốc + các trường đã đổi, trước/sau) để báo cáo và phân tích nhạy (L6c).
+--ma-tran phải là đúng file đã truyền cho baseline_goi; meta của file thô có dấu vân tay ma trận khác thì dừng, không ghi.
 
 Chạy (đứng ở tools/measurement):
-  python -m do_luong.baseline_parse --tho-dir <dir>/baseline-tho --out-dir <dir> [--sua-tay <dir>/baseline-sua-tay.jsonl]
-Ra: <dir>/baseline_1.jsonl, <dir>/baseline_2.jsonl, <dir>/parse-loi.jsonl
+  python -m do_luong.baseline_parse --tho-dir <dir>/baseline-tho --out-dir <dir> --ma-tran <ma-tran.json> \
+      [--sua-tay <dir>/baseline-sua-tay.jsonl]
+Ra: <dir>/baseline_1.jsonl, <dir>/baseline_2.jsonl, <dir>/parse-loi.jsonl [, <dir>/sua-tay-diff.jsonl]
 """
 import argparse
 import glob
@@ -90,6 +93,7 @@ def _nhan_tf(v):
 def _dap_an_sa(v):
     s = str(v or "").strip()
     s = re.sub(r"^(đáp số|đáp án|kết quả)\s*[:：]?\s*", "", s, flags=re.IGNORECASE)
+    s = re.split(r"\s+\(", s, maxsplit=1)[0]  # "12 (thay vào)." -> "12": bỏ phần giải thích trong ngoặc phía sau
     s = s.strip().strip("$").strip().rstrip(".")
     return s
 
@@ -99,7 +103,8 @@ def tu_json(raw, nguon, de, mt=None):
     try:
         data = json.loads(sua_json(raw))
     except json.JSONDecodeError as e:
-        return [], [{"id": f"{nguon}-d{de}", "loi": [f"JSON không đọc được: {e}"], "cau": None, "goc": raw[:4000]}]
+        return [], [{"id": f"{nguon}-d{de}", "loai": LOAI_DINH_DANG, "loi": [f"JSON không đọc được: {e}"], "cau": None,
+                     "goc": raw[:4000]}]
     if isinstance(data, dict):
         data = next((v for v in data.values() if isinstance(v, list)), [data])
     items = []
@@ -134,20 +139,50 @@ _RE_PA = re.compile(r"^([A-D])\s*[.)]\s*(.*)$")
 _RE_Y = re.compile(r"^([a-d])\s*[.)]\s*(.*)$")
 _RE_DAP_AN_DONG = re.compile(r"^(đáp án|đáp số|chọn|trả lời)\s*(?:đúng)?\s*[:：]\s*(.*)$", re.IGNORECASE)
 _RE_LOI_GIAI = re.compile(r"^(lời giải|hướng dẫn giải|giải)\s*[:：]?\s*(.*)$", re.IGNORECASE)
-_RE_TIEU_DE_DAP_AN = re.compile(r"^(đáp án|hướng dẫn chấm|đáp án và hướng dẫn|bảng đáp án|lời giải)\b", re.IGNORECASE)
+_RE_TIEU_DE_DAP_AN = re.compile(r"^(đáp án|hướng dẫn chấm|hướng dẫn giải|đáp án và hướng dẫn|bảng đáp án|lời giải)\b",
+                                re.IGNORECASE)
 _PHAN_SO = {"I": "I", "1": "I", "II": "II", "2": "II", "III": "III", "3": "III"}
 _PHAN_DANG = {"I": "mcq", "II": "tf", "III": "sa"}
 
+# Đáp án mâu thuẫn (An chốt 15/11): model tự sửa giữa chừng thì KHÔNG chọn đáp án nào, xếp loại riêng "dap_an_mau_thuan".
+LOAI_MAU_THUAN = "dap_an_mau_thuan"
+LOAI_DINH_DANG = "dinh_dang"
+_RE_TU_SUA = re.compile(r"xin lỗi|khoan|sửa lại|correction|nhầm|tính lại|đổi thành|kiểm tra lại đề|thử lại",
+                        re.IGNORECASE)
+_RE_CHON = re.compile(r"[Cc]họn\s*(?:đáp án\s*|phương án\s*)?([A-D])\b")
+_RE_Y_NHAN = re.compile(r"\b([a-d])\)\s*(Đúng|Sai)\b|\bý\s*([a-d])\s*(?:là\s*)?(Đúng|Sai)\b")
+
+
+def _mau_thuan(dang, lines, dap_an):
+    """Lý do (chuỗi) nếu phần đáp án của câu tự mâu thuẫn, None nếu không: có dấu hiệu tự sửa ("xin lỗi", "sửa lại",
+    "khoan"...), mcq có hơn một chữ được chọn, tf có ý vừa Đúng vừa Sai."""
+    text = "\n".join(lines)
+    m = _RE_TU_SUA.search(text)
+    if m:
+        return f"model tự sửa giữa chừng (\"{m.group(0)}\")"
+    if dang == "mcq":
+        chu = set(_RE_CHON.findall(text)) | ({dap_an} if dap_an else set())
+        if len(chu) > 1:
+            return "nhiều phương án được chọn: " + ", ".join(sorted(chu))
+    elif dang == "tf":
+        nhan = {}
+        for a, b, c, d in _RE_Y_NHAN.findall(text):
+            nhan.setdefault(a or c, set()).add(b or d)
+        lech = sorted(k for k, v in nhan.items() if len(v) > 1)
+        if lech:
+            return "ý vừa Đúng vừa Sai: " + ", ".join(lech)
+    return None
+
 
 def _sach(line):
-    """Bỏ dấu Markdown bao ngoài để nhận dạng: #, **, __, >, gạch đầu dòng."""
+    """Bỏ dấu Markdown bao ngoài để nhận dạng: #, **, __, >, gạch đầu dòng (-, •, *)."""
     s = line.strip()
     if re.fullmatch(r"[-*_=\s]{3,}", s):  # đường kẻ ngang Markdown
         return ""
     s = re.sub(r"^#+\s*", "", s)
     s = re.sub(r"^>\s*", "", s)
-    s = re.sub(r"^[-•]\s+(?=C[âa]u|[A-Da-d]\s*[.)])", "", s)
     s = s.replace("**", "").replace("__", "")
+    s = re.sub(r"^[-•*]\s+(?=C[âa]u|[A-Da-d]\s*[.)])", "", s.strip())
     return s.strip()
 
 
@@ -207,6 +242,7 @@ def tu_van_ban(raw, nguon, de, mt=None):
     phan, dap_an_mode = None, False
     cau_list, cur = [], None
     dap_an = {}  # (phan, so) và so -> dict
+    khoi = {}    # (phan, so) và so -> các dòng phần đáp án của câu đó (để phát hiện đáp án mâu thuẫn)
     vung_dap_an = []
     last_key = None
 
@@ -224,14 +260,16 @@ def tu_van_ban(raw, nguon, de, mt=None):
         if m:
             dong_cau()
             phan = _PHAN_SO[m.group(1).upper()]
+            last_key = None
             continue
         if _la_tieu_de_dap_an(line, s):
             dong_cau()
             dap_an_mode = True
             phan = None
+            last_key = None
             continue
         if dap_an_mode:
-            vung_dap_an.append(line)
+            vung_dap_an.append((phan, line))
             m = _RE_CAU.match(s)
             if m:
                 key = int(m.group(1))
@@ -239,7 +277,11 @@ def tu_van_ban(raw, nguon, de, mt=None):
                 dap_an[(phan, key)] = v
                 dap_an.setdefault(key, v)
                 last_key = (phan, key)
+                khoi[last_key] = [s]
+                khoi.setdefault(key, khoi[last_key])
                 continue
+            if last_key is not None:
+                khoi[last_key].append(s)
             pairs = re.findall(r"(\d+)\s*[.:\-–)]\s*([A-D])\b", s)
             if len(pairs) >= 2:
                 for n, v in pairs:
@@ -256,15 +298,18 @@ def tu_van_ban(raw, nguon, de, mt=None):
         if m:
             dong_cau()
             cur = {"so": int(m.group(1)), "phan": phan, "de": [m.group(2)] if m.group(2) else [], "pa": {}, "y": {},
-                   "dap_an": None, "loi_giai": [], "goc": [line], "che_do": "de"}
+                   "dap_an": None, "loi_giai": [], "goc": [line], "che_do": "de", "sau": []}
             continue
         if cur is None:
             continue
         cur["goc"].append(line)
+        if cur["che_do"] != "de":
+            cur["sau"].append(s)
         m = _RE_DAP_AN_DONG.match(s)
         if m:
             cur["dap_an"] = _dap_an_tu_chuoi(m.group(2))
             cur["che_do"] = "sau_dap_an"
+            cur["sau"].append(s)
             continue
         m = _RE_LOI_GIAI.match(s)
         if m and cur["che_do"] != "loi_giai" and (cur["pa"] or cur["y"] or cur["dap_an"]):
@@ -290,16 +335,20 @@ def tu_van_ban(raw, nguon, de, mt=None):
         if cur["che_do"] == "de" and not cur["pa"] and not cur["y"]:
             cur["de"].append(s)
     dong_cau()
-    for k, v in _doc_bang_dap_an(vung_dap_an).items():
-        dap_an.setdefault(k, v)
+    # Bảng đáp án đọc theo từng phần: "Câu 1" của bảng phần I không bị "Câu 1" của phần II (đánh số lại) che.
+    for p in dict.fromkeys(p for p, _ in vung_dap_an):
+        for k, v in _doc_bang_dap_an([ln for q, ln in vung_dap_an if q == p]).items():
+            dap_an.setdefault((p, k), v)
+            dap_an.setdefault(k, v)
 
     items = []
-    for c in cau_list:
+    for i, c in enumerate(cau_list, 1):
         dang = _PHAN_DANG.get(c["phan"])
         if dang is None:
             dang = "mcq" if len(c["pa"]) >= 2 else "tf" if len(c["y"]) >= 2 else "sa"
         da = c["dap_an"] or dap_an.get((c["phan"], c["so"])) or dap_an.get(c["so"]) or {}
-        out = {"stt": c["so"], "dang": dang, "de": "\n".join(c["de"]).strip(),
+        # stt theo thứ tự xuất hiện: đề chữ tự do hay đánh số lại "Câu 1" ở mỗi phần (trùng id nếu dùng số trong đề)
+        out = {"stt": i, "dang": dang, "de": "\n".join(c["de"]).strip(),
                "loi_giai": "\n".join(c["loi_giai"]).strip() or None}
         if dang == "mcq":
             out["phuong_an"] = {k: c["pa"].get(k, "") for k in "ABCD"}
@@ -309,7 +358,13 @@ def tu_van_ban(raw, nguon, de, mt=None):
             out["dap_an"] = da.get("tf") or {}
         else:
             out["dap_an"] = da.get("sa") or (da.get("mcq") if da.get("mcq") else None)
-        items.append((out, "\n".join(c["goc"])))
+        dong_da = (khoi.get((c["phan"], c["so"])) or (khoi.get(c["so"]) if c["phan"] is None else None) or []) \
+            + c["sau"]
+        ly_do = _mau_thuan(dang, dong_da, out["dap_an"] if dang == "mcq" else None)
+        if ly_do:
+            out["dap_an"] = {} if dang == "tf" else None  # không chọn đáp án đầu hay cuối
+            out["mau_thuan"] = ly_do
+        items.append((out, "\n".join(c["goc"] + (["--- phần đáp án ---"] + dong_da if dong_da else []))))
     return _hoan_thien(items, nguon, de, mt)
 
 
@@ -325,7 +380,8 @@ def _hoan_thien(items, nguon, de, mt=None):
         dang = c.get("dang")
         cid = f"{nguon}-d{de}-c{int(c.get('stt') or 0):02d}"
         if dang not in cau_mod.DANG:
-            loi.append({"id": cid, "loi": [f"không xác định được dạng câu: {dang}"], "cau": c, "goc": goc})
+            loi.append({"id": cid, "loai": LOAI_DINH_DANG, "loi": [f"không xác định được dạng câu: {dang}"], "cau": c,
+                        "goc": goc})
             continue
         dem[dang] += 1
         o = o_theo_dang[dang][dem[dang] - 1] if dem[dang] <= len(o_theo_dang[dang]) else None
@@ -339,19 +395,23 @@ def _hoan_thien(items, nguon, de, mt=None):
         e = cau_mod.kiem_tra(full)
         if o is None:
             e.append(f"thừa câu {dang} so với ma trận (câu {dang} thứ {dem[dang]})")
+        if c.get("mau_thuan"):
+            e.insert(0, f"đáp án mâu thuẫn: {c['mau_thuan']}")
         if e:
-            loi.append({"id": cid, "loi": e, "cau": full, "goc": goc})
+            loi.append({"id": cid, "loai": LOAI_MAU_THUAN if c.get("mau_thuan") else LOAI_DINH_DANG, "loi": e,
+                        "cau": full, "goc": goc})
         else:
             tot.append(full)
     for d in cau_mod.DANG:
         if dem[d] < len(o_theo_dang[d]):
-            loi.append({"id": f"{nguon}-d{de}-thieu-{d}", "loi": [f"thiếu {len(o_theo_dang[d]) - dem[d]} câu {d} so với ma trận"],
+            loi.append({"id": f"{nguon}-d{de}-thieu-{d}", "loai": LOAI_DINH_DANG, "loi": [f"thiếu {len(o_theo_dang[d]) - dem[d]} câu {d} so với ma trận"],
                         "cau": None, "goc": ""})
     return tot, loi
 
 
-def parse_file(path):
-    """<nguon>-d<k>.txt -> (câu, lỗi). nguon baseline_2 đọc JSON, còn lại đọc chữ (JSON hỏng thì thử chữ)."""
+def parse_file(path, mt=None):
+    """<nguon>-d<k>.txt -> (câu, lỗi). nguon baseline_2 đọc JSON, còn lại đọc chữ (JSON hỏng thì thử chữ).
+    mt: ma trận đã dùng khi gọi (mặc định ma trận mẫu)."""
     m = re.match(r"(baseline_\d+)-d(\d+)\.txt$", os.path.basename(path))
     if not m:
         raise ValueError(f"Tên file thô không đúng mẫu <nguon>-d<k>.txt: {path}")
@@ -360,41 +420,93 @@ def parse_file(path):
         raw = f.read()
     looks_json = raw.lstrip().startswith(("[", "{", "```json")) or nguon == "baseline_2"
     if looks_json:
-        tot, loi = tu_json(raw, nguon, de)
+        tot, loi = tu_json(raw, nguon, de, mt)
         if tot or not loi or not loi[0]["loi"][0].startswith("JSON"):
             return tot, loi
-    return tu_van_ban(raw, nguon, de)
+    return tu_van_ban(raw, nguon, de, mt)
+
+
+def kiem_ma_tran(path, mt):
+    """Lỗi (chuỗi) nếu meta của file thô ghi dấu vân tay ma trận khác mt; None nếu khớp hoặc meta cũ không ghi."""
+    meta_path = path[: -len(".txt")] + ".meta.json"
+    if not os.path.exists(meta_path):
+        return None
+    with open(meta_path, encoding="utf-8") as f:
+        meta = json.load(f)
+    sha = meta.get("ma_tran_sha256")
+    if sha and sha != ma_tran.dau_van_tay(mt):
+        return (f"{os.path.basename(path)} được gọi với ma trận \"{meta.get('ma_tran_ten')}\", khác ma trận đang dùng để "
+                f"parse \"{mt.get('name')}\": truyền đúng --ma-tran")
+    return None
+
+
+_TRUONG_DIFF = ("dang", "de", "phuong_an", "y", "dap_an", "loi_giai")
+
+
+def diff_sua_tay(c_sua, ban_truoc):
+    """L6c: một dòng cho một câu sửa tay. ban_truoc: mục parse-loi (có "loi", "cau"), câu đã parse được, hoặc None."""
+    la_loi = bool(ban_truoc) and "loi" in ban_truoc
+    cau_truoc = ban_truoc.get("cau") if la_loi else ban_truoc
+    doi = {}
+    for k in _TRUONG_DIFF:
+        truoc = (cau_truoc or {}).get(k)
+        if truoc != c_sua.get(k):
+            doi[k] = {"truoc": truoc, "sau": c_sua.get(k)}
+    return {"id": c_sua["id"], "loi_goc": ban_truoc["loi"] if la_loi else [], "co_ban_parse": cau_truoc is not None,
+            "truong_doi": doi}
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="D4: parse đầu ra thô baseline về định dạng câu thống nhất.")
     ap.add_argument("--tho-dir", required=True)
     ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--ma-tran", default=ma_tran.MAU_MAC_DINH,
+                    help="đúng file ma trận đã truyền cho baseline_goi (meta có dấu vân tay thì phải khớp)")
     ap.add_argument("--sua-tay", help="JSONL câu đã sửa tay (cùng id thay bản parse)")
     a = ap.parse_args(argv)
-    theo_nguon, loi_all = {}, []
-    for path in sorted(glob.glob(os.path.join(a.tho_dir, "baseline_*-d*.txt"))):
-        if path.endswith(".prompt.txt"):
-            continue
-        tot, loi = parse_file(path)
+    mt = ma_tran.doc(a.ma_tran)
+    paths = [p for p in sorted(glob.glob(os.path.join(a.tho_dir, "baseline_*-d*.txt"))) if not p.endswith(".prompt.txt")]
+    lech = [e for e in (kiem_ma_tran(p, mt) for p in paths) if e]
+    if lech:
+        raise SystemExit("Sai ma trận, không ghi gì:\n" + "\n".join(lech))
+    theo_nguon, loi_all, ban_truoc = {}, [], {}
+    for path in paths:
+        tot, loi = parse_file(path, mt)
         for c in tot:
             theo_nguon.setdefault(c["nguon"], {})[c["id"]] = c
+            ban_truoc[c["id"]] = c
+        for x in loi:
+            ban_truoc[x["id"]] = x
         loi_all.extend(loi)
     sua = cau_mod.doc_jsonl(a.sua_tay) if a.sua_tay else []
-    da_sua = set()
+    da_sua, diffs = set(), []
     for c in sua:
+        truoc = ban_truoc.get(c.get("id")) or {}
+        if truoc.get("loai") == LOAI_MAU_THUAN:
+            raise ValueError(f"{c.get('id')} là câu đáp án mâu thuẫn: không sửa tay (An chốt 15/11), chỉ đếm cho D4")
         e = cau_mod.kiem_tra(c)
         if e:
             raise ValueError(f"sửa tay {c.get('id')} vẫn lỗi: {e}")
         theo_nguon.setdefault(c["nguon"], {})[c["id"]] = c
         da_sua.add(c["id"])
+        diffs.append(diff_sua_tay(c, ban_truoc.get(c["id"])))
     loi_con = [x for x in loi_all if x["id"] not in da_sua]
     os.makedirs(a.out_dir, exist_ok=True)
     for nguon, d in sorted(theo_nguon.items()):
         cau_mod.ghi_jsonl(os.path.join(a.out_dir, f"{nguon}.jsonl"), [d[k] for k in sorted(d)])
         print(f"{nguon}: {len(d)} câu hợp lệ")
     cau_mod.ghi_jsonl(os.path.join(a.out_dir, "parse-loi.jsonl"), loi_con)
-    print(f"{len(loi_con)} mục lỗi chưa sửa -> parse-loi.jsonl ({len(da_sua)} câu đã sửa tay)")
+    dem = {}
+    for x in loi_con:
+        nguon = x["id"].split("-d")[0]
+        dem.setdefault(nguon, {})
+        dem[nguon][x.get("loai", LOAI_DINH_DANG)] = dem[nguon].get(x.get("loai", LOAI_DINH_DANG), 0) + 1
+    with open(os.path.join(a.out_dir, "parse-loi-dem.json"), "w", encoding="utf-8") as f:
+        json.dump(dem, f, ensure_ascii=False, indent=2)
+    if a.sua_tay:
+        cau_mod.ghi_jsonl(os.path.join(a.out_dir, "sua-tay-diff.jsonl"), diffs)
+    print(f"{len(loi_con)} mục lỗi chưa sửa -> parse-loi.jsonl ({len(da_sua)} câu đã sửa tay"
+          + (", diff -> sua-tay-diff.jsonl)" if a.sua_tay else ")"))
 
 
 if __name__ == "__main__":

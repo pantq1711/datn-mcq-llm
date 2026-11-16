@@ -1,9 +1,13 @@
-# D4 – Prompt đường cơ sở (gọi thẳng Gemini) · CHỜ AN DUYỆT
+# D4 – Prompt đường cơ sở (gọi thẳng Gemini) · ĐÃ DÙNG 15/11/2026
 
-> **Trạng thái: CHỜ AN DUYỆT.** Chưa gọi Gemini lần nào. Sửa chữ trong hai khối `text` bên dưới là đủ:
+> **Trạng thái: đã gọi 15/11/2026 16:30–16:31**, nguyên văn hai khối `text` bên dưới; KHÔNG sửa chữ trong hai khối này
+> nữa (SHA-256 prompt ghi trong từng `*.meta.json`, cấu hình ở [`../d2/cau-hinh.md`](../d2/cau-hinh.md)).
 > `tools/measurement/do_luong/baseline_goi.py` đọc đúng hai khối này (theo dấu `<!-- prompt-1 -->`, `<!-- prompt-2 -->`)
-> và thay `{MA_TRAN}` bằng ma trận mẫu `giuaki1-toan8`
-> (`back_end/src/main/resources/samples/matrix_giuaki1_toan8.json`: 12 câu trắc nghiệm, 2 câu Đúng/Sai, 4 câu trả lời ngắn).
+> và thay `{MA_TRAN}` bằng ma trận thực nghiệm [`../d2/ma-tran-6-6-6.json`](../d2/ma-tran-6-6-6.json) (`--ma-tran`: 6 câu
+> trắc nghiệm, 6 câu Đúng/Sai, 6 câu trả lời ngắn; cùng ma trận với đề hệ thống). Prompt 2 ghi cứng "ĐÚNG 18 câu";
+> `baseline_goi` dừng nếu ma trận không có đúng 18 câu.
+> Lần gọi: 4 lượt mỗi prompt (bằng số đề hệ thống), `temperature` 0,7 (bằng temperature sinh câu của app).
+> Chỉ baseline 2 vào bộ chấm mù; baseline 1 dùng cho phần định tính D4.
 
 ## Mục đích
 
@@ -15,10 +19,11 @@ nhận đề. Hai mức:
 | 1. Kiểu giáo viên hay dùng | Dán ma trận như chép từ Word, một câu yêu cầu ngắn | Một lượt, đầu ra chữ tự do |
 | 2. Prompt tốt nhất nhóm viết được | Ràng buộc rõ (một đáp án đúng, phạm vi lớp 8, mức độ từng câu, LaTeX), đầu ra JSON cùng các trường với câu hệ thống | Một lượt, `responseMimeType = application/json`, KHÔNG QC, KHÔNG sinh lại |
 
-Cả hai: cùng model sinh với app (`LLM_MODEL`, mặc định `gemini-3.5-flash-lite`), mỗi prompt chạy **2 đề** (2 lượt gọi), rồi
-lấy mẫu ~20 câu mỗi prompt theo dạng vào bộ chấm mù chung với câu hệ thống. Không có bước sửa hay chọn lọc nào trước khi
-lấy mẫu; câu không parse được ghi ra `parse-loi.jsonl` để sửa tay **phần định dạng** (không sửa nội dung toán), và được
-báo số lượng trong chương 4.
+Cả hai: cùng model sinh với app (`LLM_MODEL`, mặc định `gemini-3.5-flash-lite`), mỗi prompt chạy **4 đề** (4 lượt gọi).
+Baseline 2: lấy 36 câu (12 mỗi dạng, chia đều theo lượt) vào bộ chấm mù chung với câu hệ thống. Không có bước sửa hay chọn
+lọc nào trước khi lấy mẫu; câu không parse được ghi ra `parse-loi.jsonl` để sửa tay **phần định dạng** (không sửa nội dung
+toán, mỗi câu sửa có một dòng diff trong `sua-tay-diff.jsonl`), và được báo số lượng trong chương 4. Câu model tự sửa đáp
+án giữa chừng xếp loại riêng "đáp án mâu thuẫn": không chọn đáp án nào, không sửa tay, chỉ đếm (An chốt 15/11).
 
 `{MA_TRAN}` của prompt 1 là bảng chữ (giống chép từ bản đặc tả); của prompt 2 là danh sách đánh số từng câu kèm mức độ.
 

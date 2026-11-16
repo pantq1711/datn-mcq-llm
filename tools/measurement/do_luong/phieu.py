@@ -1,15 +1,19 @@
 """Sinh phiếu cho người chấm (D2+D4) và phiếu gán nhãn cặp (D6).
 
-Phiếu chấm câu:
-  de-cham.docx       đề hiển thị công thức (Markdown -> pandoc -> Word, cùng định dạng Markdown với đường xuất của app)
-  phieu-<ten>.xlsx   mỗi người chấm một bản, cùng thứ tự, có danh sách chọn sẵn (data validation)
-Phiếu CHỈ có: thứ tự, mã ngẫu nhiên, đề, phương án/ý, đáp án, khối/chủ đề/mức độ yêu cầu. KHÔNG có lời giải, nguồn, cờ QC,
-phiên bản prompt, id câu (test_phieu quét nội dung để giữ điều này).
+Phiếu chấm câu, HAI PHA (L6a, phản biện 15/11), phát riêng từng pha:
+  Pha 1 (tự giải, không có khóa): de-pha1.docx (đề + phương án/ý, KHÔNG in đáp án đã cho) và phieu-pha1-<ten>.xlsx (người
+         chấm ghi đáp án của mình: mcq A-D / nhiều / không có; tf Đ/S từng ý; sa đáp số). Máy so với khóa.
+  Pha 2 (sau khi đã nộp pha 1): de-pha2.docx (có đáp án đã cho) và phieu-pha2-<ten>.xlsx (Đáp án đúng/sai, Ý sai, mức độ,
+         vượt lớp, mơ hồ, ghi chú) và cột cuối "Đoán nguồn" (L6b), điền sau khi chấm xong mọi câu.
+Đề hiển thị công thức (Markdown -> pandoc -> Word, cùng định dạng Markdown với đường xuất của app). Phiếu CHỈ có: thứ tự, mã
+ngẫu nhiên, đề, phương án/ý, (pha 2) đáp án, khối/chủ đề/mức độ yêu cầu. KHÔNG có lời giải, nguồn, cờ QC, phiên bản prompt,
+id câu (test_phieu quét nội dung để giữ điều này).
 
 Phiếu gán nhãn cặp (D6): cap-gan-nhan.docx và cap-<ten>.xlsx, KHÔNG có điểm cosine, tầng lấy mẫu hay dự đoán của dedup.
 
 Chạy (đứng ở tools/measurement):
-  python -m do_luong.phieu cham --bo-cham <dir>/bo-cham.jsonl --nguoi-cham Quan Dang --out-dir <dir>
+  python -m do_luong.phieu cham --pha 1 --bo-cham <dir>/bo-cham.jsonl --nguoi-cham Quan Dang --out-dir <dir>
+  python -m do_luong.phieu cham --pha 2 --bo-cham <dir>/bo-cham.jsonl --nguoi-cham Quan Dang --out-dir <dir>
   python -m do_luong.phieu cap --cap <dir>/cap-vang-noi-dung.jsonl --nguoi-gan An Quan --out-dir <dir>
 """
 import argparse
@@ -31,7 +35,15 @@ MUC_DO = ["Đúng", "Không đúng", "Không rõ"]
 CO_KHONG = ["Không", "Có"]
 NHAN_CAP = ["Trùng", "Không trùng", "Không chắc"]
 
-COT_PHIEU = ["Thứ tự", "Mã", "Dạng", "Đáp án", "Ý sai (Đ/S)", "Đúng mức độ", "Vượt lớp", "Mơ hồ", "Ghi chú"]
+# Pha 2: cột "Đoán nguồn" ở CUỐI (L6b), các cột cũ giữ vị trí (phan_tich_d2.doc_phieu đọc theo vị trí).
+DOAN_NGUON = ["Công cụ của nhóm", "AI gọi thẳng", "Không đoán được"]
+COT_PHIEU = ["Thứ tự", "Mã", "Dạng", "Đáp án", "Ý sai (Đ/S)", "Đúng mức độ", "Vượt lớp", "Mơ hồ", "Ghi chú", "Đoán nguồn"]
+# Pha 1: người chấm tự giải, ghi đáp án của mình (phan_tich_d2.doc_pha1 đọc theo vị trí).
+SHEET_PHA1 = "Pha 1 - tự giải"
+TU_GIAI_MCQ = ["A", "B", "C", "D", "Nhiều phương án đúng", "Không có phương án đúng"]
+TU_GIAI_TF = ["Đ", "S", "Không kết luận được"]
+COT_PHA1 = ["Thứ tự", "Mã", "Dạng", "Trắc nghiệm: phương án đúng", "Ý a", "Ý b", "Ý c", "Ý d",
+            "Trả lời ngắn: đáp số", "Ghi chú"]
 COT_CAP = ["Cặp", "Dạng", "Câu thứ nhất", "Câu thứ hai", "Nhãn", "Ghi chú"]
 SHEET_CAP = "Gán nhãn cặp"      # phan_tich_d6.doc_nhan chỉ đọc sheet này
 SHEET_LUYEN = "Luyện tập"       # đứng đầu phiếu, KHÔNG tính vào kết quả
@@ -62,13 +74,23 @@ CAP_LUYEN = [
 ]
 
 
-def markdown_de(danh_sach, tieu_de="BỘ CÂU CHẤM ĐỘC LẬP"):
-    """danh_sach: (thu_tu, ma, cau) theo thứ tự phiếu."""
-    parts = [f"# {tieu_de}",
-             "Chấm theo docs/experiments/d2/huong-dan-cham.md. Ghi nhãn vào phiếu .xlsx theo Thứ tự và Mã. "
-             "Không trao đổi với người chấm khác cho tới khi nộp phiếu."]
+LOI_DAN = {
+    1: ("BỘ CÂU CHẤM ĐỘC LẬP – PHA 1: TỰ GIẢI",
+        "Pha 1 theo docs/experiments/d2/huong-dan-cham.md. Đề KHÔNG kèm đáp án: tự giải từng câu, ghi đáp án của bạn vào "
+        "phiếu pha 1 (.xlsx) theo Thứ tự và Mã. Nộp phiếu pha 1 rồi mới nhận đề và phiếu pha 2. Không trao đổi với người "
+        "chấm khác cho tới khi nộp phiếu."),
+    2: ("BỘ CÂU CHẤM ĐỘC LẬP – PHA 2: CHẤM",
+        "Pha 2 theo docs/experiments/d2/huong-dan-cham.md, chỉ mở sau khi đã nộp phiếu pha 1. Ghi nhãn vào phiếu pha 2 "
+        "(.xlsx) theo Thứ tự và Mã. Không trao đổi với người chấm khác cho tới khi nộp phiếu."),
+}
+
+
+def markdown_de(danh_sach, pha=2):
+    """danh_sach: (thu_tu, ma, cau) theo thứ tự phiếu. pha 1: không in đáp án đã cho."""
+    tieu_de, loi_dan = LOI_DAN[pha]
+    parts = [f"# {tieu_de}", loi_dan]
     for thu_tu, ma, c in danh_sach:
-        parts.append(cau_mod.markdown_cau(thu_tu, ma, c))
+        parts.append(cau_mod.markdown_cau(thu_tu, ma, c, hien_dap_an=pha != 1))
         parts.append("* * *")
     return "\n\n".join(parts) + "\n"
 
@@ -162,22 +184,46 @@ def _xlsx(path, sheet_title, headers, rows, validations, widths, huong_dan):
     wb.save(path)
 
 
-def xlsx_phieu_cham(path, danh_sach):
+def xlsx_phieu_pha1(path, danh_sach):
+    """Pha 1 (L6a): người chấm ghi đáp án của mình; không có đáp án đã cho ở bất kỳ đâu trong file."""
     rows, validations = [], []
     for i, (thu_tu, ma, c) in enumerate(danh_sach, start=2):
-        rows.append([thu_tu, ma, TEN_DANG[c["dang"]], None, None, None, None, None, None])
+        rows.append([thu_tu, ma, TEN_DANG[c["dang"]]] + [None] * (len(COT_PHA1) - 3))
+        if c["dang"] == "mcq":
+            validations.append((f"D{i}", TU_GIAI_MCQ))
+        elif c["dang"] == "tf":
+            validations += [(f"{col}{i}", TU_GIAI_TF) for col in "EFGH"]
+    _xlsx(path, SHEET_PHA1, COT_PHA1, rows, validations,
+          {"A": 8, "B": 8, "C": 22, "D": 24, "E": 8, "F": 8, "G": 8, "H": 8, "I": 18, "J": 50},
+          ["Pha 1: tự giải theo docs/experiments/d2/huong-dan-cham.md, mục Pha 1.",
+           "Mỗi dòng là một câu trong file de-pha1.docx, khớp theo Thứ tự và Mã. Đề không kèm đáp án.",
+           "Trắc nghiệm: chọn phương án đúng A-D; nếu từ hai phương án trở lên đúng chọn 'Nhiều phương án đúng'; nếu không "
+           "phương án nào đúng chọn 'Không có phương án đúng'.",
+           "Đúng/Sai: chọn Đ hoặc S cho từng ý a-d; ý không kết luận được chọn 'Không kết luận được'.",
+           "Trả lời ngắn: ghi đáp số của bạn (số nguyên, số thập phân dùng dấu phẩy, hoặc phân số dạng a/b).",
+           "Nộp phiếu pha 1 rồi mới nhận đề và phiếu pha 2. Không trao đổi với người chấm khác."])
+
+
+def xlsx_phieu_cham(path, danh_sach):
+    """Pha 2: phiếu chấm có cột cuối 'Đoán nguồn' (L6b)."""
+    rows, validations = [], []
+    for i, (thu_tu, ma, c) in enumerate(danh_sach, start=2):
+        rows.append([thu_tu, ma, TEN_DANG[c["dang"]]] + [None] * (len(COT_PHIEU) - 3))
         validations.append((f"D{i}", {"mcq": DAP_AN_MCQ, "tf": DAP_AN_TF, "sa": DAP_AN_SA}[c["dang"]]))
         validations.append((f"F{i}", MUC_DO))
         validations.append((f"G{i}", CO_KHONG))
         validations.append((f"H{i}", CO_KHONG))
+        validations.append((f"J{i}", DOAN_NGUON))
     _xlsx(path, "Phiếu chấm", COT_PHIEU, rows, validations,
-          {"A": 8, "B": 8, "C": 22, "D": 22, "E": 12, "F": 14, "G": 10, "H": 10, "I": 50},
-          ["Chấm theo docs/experiments/d2/huong-dan-cham.md (định nghĩa từng nhãn và ví dụ).",
-           "Mỗi dòng là một câu trong file de-cham.docx, khớp theo Thứ tự và Mã.",
+          {"A": 8, "B": 8, "C": 22, "D": 22, "E": 12, "F": 14, "G": 10, "H": 10, "I": 50, "J": 20},
+          ["Pha 2: chấm theo docs/experiments/d2/huong-dan-cham.md (định nghĩa từng nhãn và ví dụ).",
+           "Mỗi dòng là một câu trong file de-pha2.docx, khớp theo Thứ tự và Mã.",
            "Đáp án: chọn trong danh sách. Câu Đúng/Sai chọn 'Sai' khi có ít nhất một ý sai nhãn, rồi ghi các ý sai vào "
            "cột 'Ý sai (Đ/S)', ví dụ: b,d.",
            "Đúng mức độ, Vượt lớp, Mơ hồ: chọn trong danh sách. Ghi chú: tự do (nên ghi lý do khi chọn Sai / Có).",
-           "Tự giải từng câu; không trao đổi với người chấm khác cho tới khi nộp phiếu."])
+           "Đoán nguồn: CHỈ điền sau khi đã chấm xong mọi câu; đoán câu do công cụ của nhóm hay do AI gọi thẳng soạn, "
+           "không chắc thì chọn 'Không đoán được'.",
+           "Không trao đổi với người chấm khác cho tới khi nộp phiếu."])
 
 
 def xlsx_phieu_cap(path, cap_list):
@@ -239,6 +285,8 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="lenh", required=True)
     c = sub.add_parser("cham")
     c.add_argument("--bo-cham", required=True, help="bo-cham.jsonl do lay_mau ghi")
+    c.add_argument("--pha", type=int, choices=[1, 2], required=True,
+                   help="1: tự giải, không có khóa; 2: chấm, có khóa + đoán nguồn (phát sau khi nhận phiếu pha 1)")
     c.add_argument("--nguoi-cham", nargs="+", required=True)
     c.add_argument("--out-dir", required=True)
     c.add_argument("--khong-docx", action="store_true", help="bỏ bước pandoc")
@@ -253,10 +301,11 @@ def main(argv=None):
         rows = sorted(cau_mod.doc_jsonl(a.bo_cham), key=lambda r: r["thu_tu"])
         ds = [(r["thu_tu"], r["ma"], r) for r in rows]
         if not a.khong_docx:
-            pandoc_docx(markdown_de(ds), os.path.join(a.out_dir, "de-cham.docx"))
+            pandoc_docx(markdown_de(ds, pha=a.pha), os.path.join(a.out_dir, f"de-pha{a.pha}.docx"))
+        ghi = xlsx_phieu_pha1 if a.pha == 1 else xlsx_phieu_cham
         for ten in a.nguoi_cham:
-            xlsx_phieu_cham(os.path.join(a.out_dir, f"phieu-{ten_an_toan(ten)}.xlsx"), ds)
-        print(f"Đã sinh phiếu cho {len(a.nguoi_cham)} người chấm, {len(ds)} câu, tại {a.out_dir}")
+            ghi(os.path.join(a.out_dir, f"phieu-pha{a.pha}-{ten_an_toan(ten)}.xlsx"), ds)
+        print(f"Đã sinh phiếu pha {a.pha} cho {len(a.nguoi_cham)} người chấm, {len(ds)} câu, tại {a.out_dir}")
     else:
         caps = sorted(cau_mod.doc_jsonl(a.cap), key=lambda r: r["cap"])
         if not a.khong_docx:

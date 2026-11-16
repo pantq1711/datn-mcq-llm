@@ -92,5 +92,22 @@ class ChenhLechTest(unittest.TestCase):
         self.assertAlmostEqual(0.3339, hi, places=4)
 
 
+class PhanViTest(unittest.TestCase):
+    def test_noi_suy_tuyen_tinh(self):
+        # như numpy.percentile([4, 1, 3, 2], [0, 50, 25, 100]) = 1; 2,5; 1,75; 4
+        xs = [4, 1, 3, 2]
+        self.assertEqual(1, tk.phan_vi(xs, 0))
+        self.assertAlmostEqual(2.5, tk.phan_vi(xs, 0.5))
+        self.assertAlmostEqual(1.75, tk.phan_vi(xs, 0.25))
+        self.assertEqual(4, tk.phan_vi(xs, 1))
+        self.assertIsNone(tk.phan_vi([], 0.5))
+
+    def test_ktc_phan_vi(self):
+        lo, hi = tk.ktc_phan_vi([float(i) for i in range(101)])
+        self.assertAlmostEqual(2.5, lo)
+        self.assertAlmostEqual(97.5, hi)
+        self.assertEqual((None, None), tk.ktc_phan_vi([]))
+
+
 if __name__ == "__main__":
     unittest.main()

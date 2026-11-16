@@ -71,6 +71,23 @@ def recall_trong_so(p_loi_co_co, p_loi_khong_co, n_co, n_khong):
     return loi_co / (loi_co + loi_khong) if loi_co + loi_khong > 0 else None
 
 
+def phan_vi(xs, q):
+    """Phân vị q (0..1) của dãy số, nội suy tuyến tính giữa hai điểm gần nhất (như numpy.percentile mặc định).
+    Dãy rỗng -> None."""
+    if not xs:
+        return None
+    s = sorted(xs)
+    vt = (len(s) - 1) * q
+    lo = math.floor(vt)
+    hi = min(lo + 1, len(s) - 1)
+    return s[lo] + (s[hi] - s[lo]) * (vt - lo)
+
+
+def ktc_phan_vi(xs, muc=0.95):
+    """KTC bootstrap kiểu phân vị: (phân vị (1-muc)/2, phân vị (1+muc)/2); dãy rỗng -> (None, None)."""
+    return phan_vi(xs, (1 - muc) / 2), phan_vi(xs, (1 + muc) / 2)
+
+
 def chenh_lech(k1, n1, k2, n2):
     """Chênh lệch tỉ lệ p1 - p2 kèm khoảng Newcombe (hybrid Wilson, phương pháp 10) 95%."""
     p1, l1, u1 = wilson(k1, n1)

@@ -7,9 +7,10 @@
 --
 -- Biến psql (truyền bằng -v ten=gia_tri, không truyền thì dùng mặc định):
 --   prompt_versions  phiên bản prompt sinh câu cần lấy, cách nhau bằng dấu phẩy. Mặc định là phiên bản hiện tại của main
---                    (MatrixPromptDraftV0.promptVersion: mcq v8, tf v10, sa v10). Prompt Solver không lưu trong DB; các
---                    phiên bản sinh này ra đời sau solver-v4 (31/10) nên câu của chúng được Solver v4 kiểm, trừ khi máy
---                    chạy đặt LLM_SOLVER_PROMPT_VERSION khác.
+--                    (MatrixPromptDraftV0.promptVersion: mcq v9, tf v12, sa v12; test Python test_sql_xuat giữ khớp).
+--                    Prompt Solver KHÔNG lưu trong DB: mặc định của main là PromptBuilder.SOLVER_PROMPT_VERSION
+--                    (solver-v6-two-pass từ 14/11) trừ khi máy chạy đặt app.llm.solver-prompt-version khác; ghi phiên
+--                    bản thật của lần sinh vào docs/experiments/d2/cau-hinh.md.
 --
 -- Phạm vi: câu LLM gốc (origin = 'llm', edited_from_question_id IS NULL) do job 'generate' của đề chế độ giáo viên sinh ra,
 -- đã qua bước format (câu lỗi format không bao giờ đến tay giáo viên và không hiển thị được). KHÔNG loại tài khoản dùng thử
@@ -24,7 +25,7 @@
 -- Không dùng chuỗi có dấu "\" (một số DB tắt standard_conforming_strings).
 \if :{?prompt_versions}
 \else
-\set prompt_versions 'matrix-mcq-v8-draft,matrix-tf-v10-draft,matrix-sa-v10-draft'
+\set prompt_versions 'matrix-mcq-v9-draft,matrix-tf-v12-draft,matrix-sa-v12-draft'
 \endif
 WITH llm_jobs AS (
     SELECT j.question_id, min(s.id) AS slot_id

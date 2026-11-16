@@ -22,7 +22,7 @@ cd tools/measurement
 python -m venv .venv
 .venv/Scripts/python -m pip install -r requirements.txt   # openpyxl; pandoc phải có sẵn trên PATH
 cd ../..
-tools/measurement/.venv/Scripts/python -m unittest discover tools/measurement/tests   # 56 test, không cần DB hay mạng
+tools/measurement/.venv/Scripts/python -m unittest discover tools/measurement/tests   # 102 test, không cần DB hay mạng
 ```
 
 Các lệnh bên dưới chạy từ `tools/measurement` với `PY=.venv/Scripts/python` và `D=../../data/private/do-luong`.
@@ -33,8 +33,8 @@ Các lệnh bên dưới chạy từ `tools/measurement` với `PY=.venv/Scripts
 
 ```bash
 psql -X -A -t -v ON_ERROR_STOP=1 -d <db> -f tools/measurement/sql/d2-xuat-cau.sql -o cau-he-thong.jsonl
-# mặc định chỉ lấy prompt hiện tại (matrix-mcq-v8-draft, matrix-tf-v10-draft, matrix-sa-v10-draft);
-# đổi bằng -v prompt_versions=a,b,c
+# mặc định chỉ lấy prompt hiện tại (matrix-mcq-v9-draft, matrix-tf-v12-draft, matrix-sa-v12-draft; test_sql_xuat giữ
+# khớp MatrixPromptDraftV0); đổi bằng -v prompt_versions=a,b,c
 ```
 
 Thử cục bộ trên `datn_mcq_e2e` (docker): `docker exec -i datn-mcq-db sh -c 'psql -X -A -t -U "$POSTGRES_USER" -d datn_mcq_e2e' < tools/measurement/sql/d2-xuat-cau.sql > $D/cau-he-thong.jsonl`.
@@ -45,48 +45,68 @@ Cờ được tính ở Python (`do_luong/co_qc.py`) đúng như trang đề: `n
 **2. Baseline (sau khi An duyệt `docs/experiments/d4/prompts.md`).**
 
 ```bash
-$PY -m do_luong.baseline_goi --dry-run --out-dir $D/baseline-tho          # xem prompt, không cần khóa
+MT=../../docs/experiments/d2/ma-tran-6-6-6.json                           # CÙNG ma trận với đề hệ thống (L2)
+$PY -m do_luong.baseline_goi --dry-run --ma-tran $MT --out-dir $D/baseline-tho   # xem prompt, không cần khóa
 export GEMINI_API_KEY=...                                                  # gõ trong terminal, không lưu file
-$PY -m do_luong.baseline_goi --model gemini-3.5-flash-lite --so-de 2 --out-dir $D/baseline-tho   # 4 lượt gọi
-$PY -m do_luong.baseline_parse --tho-dir $D/baseline-tho --out-dir $D
+$PY -m do_luong.baseline_goi --model gemini-3.5-flash-lite --so-de 4 --ma-tran $MT --temperature 0.7 \
+    --out-dir $D/baseline-tho                                              # 2 prompt x 4 đề = 8 lượt gọi
+$PY -m do_luong.baseline_parse --tho-dir $D/baseline-tho --ma-tran $MT --out-dir $D
 ```
 
+`--so-de` bằng số đề hệ thống (L3). `--temperature` bỏ trống thì không gửi (mặc định của model); meta ghi temperature,
+tên và dấu vân tay ma trận; `baseline_parse` dừng nếu `--ma-tran` khác ma trận lúc gọi.
 Câu không parse được nằm trong `$D/parse-loi.jsonl` (lý do + khối chữ gốc + bản parse dở). Sửa **phần định dạng** (không
 sửa nội dung toán), chép từng câu đã sửa (một dòng JSON, giữ `id`) vào `$D/baseline-sua-tay.jsonl`, chạy lại
-`baseline_parse ... --sua-tay $D/baseline-sua-tay.jsonl`. Báo số câu phải sửa tay trong chương 4.
+`baseline_parse ... --sua-tay $D/baseline-sua-tay.jsonl`: mỗi câu sửa tay có một dòng trong `$D/sua-tay-diff.jsonl` (lý do
+lỗi gốc, trường đã đổi trước/sau). Báo số câu phải sửa tay trong chương 4 và phân tích nhạy khi bỏ các câu đó (L6c).
 
 **3. Lấy mẫu + gán mã + file khóa.**
 
 ```bash
-$PY -m do_luong.lay_mau --he-thong $D/cau-he-thong.jsonl --baseline $D/baseline_1.jsonl $D/baseline_2.jsonl \
-    --n-he-thong 60 --n-baseline 20 --seed 20261113 --out-dir $D
+$PY -m do_luong.lay_mau --he-thong $D/cau-he-thong.jsonl --de-thi-id 1 2 3 4 --baseline-2 $D/baseline_2.jsonl \
+    --seed 20261115 --out-dir $D
 ```
 
-Hệ thống: 20 câu mỗi dạng, mỗi dạng 1/2 có cờ, ưu tiên câu của ma trận `giuaki1-toan8`; tầng thiếu thì bù và ghi vào
-`$D/lay-mau-log.json` (đọc file này trước khi chấm). Baseline: 20 câu mỗi prompt chia theo tỉ lệ dạng. Ra
-`$D/khoa.csv` (FILE KHÓA), `$D/bo-cham.jsonl`.
+CHỈ câu của các đề thực nghiệm (`--de-thi-id`, L4). Hệ thống chia ba tầng theo cờ: **cờ chính** (lý do bước Solver /
+format / grounding) lấy HẾT; **không cờ** rút 12 câu mỗi dạng (`--n-khong-co`); **chỉ cờ phụ** (cờ trùng, cờ hạ tầng) không
+vào phiếu, ghi riêng (L10). Không ưu tiên câu nào trong tầng. Baseline: CHỈ baseline 2, 12 câu mỗi dạng (`--n-baseline`)
+chia đều theo lượt. Ra `$D/khoa.csv` (FILE KHÓA, có cột `tang`, `co_chinh`, `ly_do_chinh`), `$D/bo-cham.jsonl`,
+`$D/lay-mau-log.json` (cỡ tầng `tong_the`, số câu mỗi tầng trong phiếu, câu chỉ có cờ phụ; đọc trước khi chấm).
 
-**4. Phiếu.**
+**4. Phiếu hai pha (L6).**
 
 ```bash
-$PY -m do_luong.phieu cham --bo-cham $D/bo-cham.jsonl --nguoi-cham Quan Dang --out-dir $D/phieu
+$PY -m do_luong.phieu cham --pha 1 --bo-cham $D/bo-cham.jsonl --nguoi-cham Quan Dang --out-dir $D/phieu
+# nhận lại phiếu pha 1 của cả hai rồi mới phát pha 2
+$PY -m do_luong.phieu cham --pha 2 --bo-cham $D/bo-cham.jsonl --nguoi-cham Quan Dang --out-dir $D/phieu
 ```
 
-Gửi `de-cham.docx` + `phieu-Quan.xlsx` cho Quân, `de-cham.docx` + `phieu-Dang.xlsx` cho Đang, kèm
-`docs/experiments/d2/huong-dan-cham.md`.
+Pha 1: `de-pha1.docx` (không có đáp án) + `phieu-pha1-<tên>.xlsx` (người chấm ghi đáp án của mình). Pha 2: `de-pha2.docx`
+(có đáp án) + `phieu-pha2-<tên>.xlsx` (năm tiêu chí, cột cuối "Đoán nguồn"). Kèm `docs/experiments/d2/huong-dan-cham.md`.
 
-**5. Phân xử rồi báo cáo.**
+**5. Phân xử rồi báo cáo.** `docs/experiments/d2/ke-hoach-phan-tich.md` phải được commit TRƯỚC bước này.
 
 ```bash
-$PY -m do_luong.phan_tich_d2 phan-xu --khoa $D/khoa.csv --phieu $D/phieu/phieu-Quan.xlsx $D/phieu/phieu-Dang.xlsx --out-dir $D/phieu
-# giáo viên điền cột "Kết luận" trong $D/phieu/phan-xu.xlsx
-$PY -m do_luong.phan_tich_d2 bao-cao --khoa $D/khoa.csv --phieu $D/phieu/phieu-Quan.xlsx $D/phieu/phieu-Dang.xlsx \
-    --phan-xu $D/phieu/phan-xu.xlsx --he-thong-xuat $D/cau-he-thong.jsonl --out-dir $D/ket-qua-d2
+P=$D/phieu
+$PY -m do_luong.phan_tich_d2 phan-xu --khoa $D/khoa.csv --phieu $P/phieu-pha2-Quan.xlsx $P/phieu-pha2-Dang.xlsx \
+    --pha1 $P/phieu-pha1-Quan.xlsx $P/phieu-pha1-Dang.xlsx --bo-cham $D/bo-cham.jsonl --out-dir $P
+# giáo viên điền cột "Kết luận" trong $P/phan-xu.xlsx
+# số câu sinh ra / qua format / trùng theo đề (bảng trước/sau, kế hoạch mục 6); chỉ đọc, chạy trên datn_mcq_d2:
+docker exec -i datn-mcq-db sh -c 'psql -X -A -t -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d datn_mcq_d2' \
+    < tools/measurement/sql/d2-truoc-sau.sql > $D/d2-qc-dem.jsonl
+$PY -m do_luong.phan_tich_d2 bao-cao --khoa $D/khoa.csv --phieu $P/phieu-pha2-Quan.xlsx $P/phieu-pha2-Dang.xlsx \
+    --pha1 $P/phieu-pha1-Quan.xlsx $P/phieu-pha1-Dang.xlsx --bo-cham $D/bo-cham.jsonl \
+    --phan-xu $P/phan-xu.xlsx --lay-mau-log $D/lay-mau-log.json --qc-dem $D/d2-qc-dem.jsonl --out-dir $D/ket-qua-d2
 ```
 
-Ra `ket-qua-d2.md` (dán vào chương 4) và CSV: kappa từng tiêu chí; cờ × nhãn theo dạng (precision, recall trong mẫu,
-recall ước lượng tổng thể, tỉ lệ lọt, KTC Wilson 95%) cho "lỗi đáp án" và "lỗi bất kỳ"; riêng bước Solver; D4 theo nhóm
-với Fisher exact và chênh lệch tỉ lệ (KTC Newcombe); `cau-lot.csv` (câu lọt, cột `loai_loi` để phân loại).
+`phan-xu.xlsx` gồm ô hai người khác nhau và ô Đáp án của câu mà pha 1 không nhất quán với pha 2 (cột "Lý do xem"). Ra
+`ket-qua-d2.md` và CSV: kappa; cờ chính × nhãn theo dạng (precision, recall trong mẫu, recall ước lượng tổng thể, tỉ lệ
+lọt, KTC Wilson 95%) cho "lỗi đáp án" (chính) và "lỗi bất kỳ"; riêng bước Solver; D4 theo nhóm (không cờ, cờ chính,
+baseline 2, trước QC có trọng số) và một so sánh chính có kiểm định (không cờ vs baseline 2: Fisher, Newcombe); mức độ tách
+tầng; pha 1 khớp khóa; đoán nguồn; `cau-lot.csv`. Thêm theo kế hoạch mục 5–6: Bảng 9 KTC bootstrap phân tầng (trước QC,
+recall tổng thể, so sánh L9 i–ii; cần `--lay-mau-log`), Bảng 10 bootstrap theo cụm đề/lượt cho so sánh chính (phân tích
+nhạy), Bảng 11 tỉ lệ lỗi theo từng đề/lượt, Bảng 12 trước/sau theo tiêu chí (hai dòng đầu cần `--qc-dem`; cảnh báo nếu số
+câu qua format khác `lay-mau-log`). B = 10 000 và seed 20261115 cố định trong code, không có tham số dòng lệnh.
 
 D4 đo thêm thời gian và số công thức sửa tay: điền `docs/experiments/d4/bang-do-thoi-gian.md`.
 
@@ -133,6 +153,7 @@ chốt chặn bỏ được bao nhiêu báo nhầm), `d6-cap-sai-090.csv` (cặp
 | Tệp | Vai trò |
 |---|---|
 | `sql/d2-xuat-cau.sql` | Một câu SELECT xuất câu LLM của đề giáo viên + dữ liệu QC thô |
+| `sql/d2-truoc-sau.sql` | Một câu SELECT: số câu sinh ra / qua format / trùng theo đề (bảng trước/sau QC) |
 | `do_luong/co_qc.py` | Lý do "cần xem kỹ" và cờ nội dung (bản chép QcSummaryService + ExamViewService + hasContentFlag) |
 | `do_luong/cau.py` | Định dạng câu thống nhất, Markdown giống ExamMarkdownBuilder (pandoc `markdown+tex_math_dollars`) |
 | `do_luong/lay_mau.py` | Lấy mẫu phân tầng có seed, gán mã ngẫu nhiên, file khóa |
