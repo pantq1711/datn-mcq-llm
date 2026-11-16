@@ -16,13 +16,16 @@ import com.datn.mcq.exam.export.EquationFormat;
 import com.datn.mcq.exam.export.ExamHeader;
 import com.datn.mcq.exam.service.ExamActionService;
 import com.datn.mcq.exam.service.ExamBuildService;
+import com.datn.mcq.exam.service.ExamDeleteService;
 import com.datn.mcq.exam.service.ExamQcTraceService;
 import com.datn.mcq.exam.service.ExamViewService;
 import com.datn.mcq.matrix.dto.MatrixDtos.CreateLessonRequest;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,6 +33,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -58,11 +62,13 @@ public class ExamController {
     private final ExamActionService examActionService;
     private final ExamExportService examExportService;
     private final ExamQcTraceService examQcTraceService;
+    private final ExamDeleteService examDeleteService;
 
     public ExamController(ExamBuildService examBuildService, ExamViewService examViewService,
                           ExamActionService examActionService, ExamExportService examExportService,
-                          ExamQcTraceService examQcTraceService) {
+                          ExamQcTraceService examQcTraceService, ExamDeleteService examDeleteService) {
         this.examQcTraceService = examQcTraceService;
+        this.examDeleteService = examDeleteService;
         this.examBuildService = examBuildService;
         this.examViewService = examViewService;
         this.examActionService = examActionService;
@@ -129,6 +135,17 @@ public class ExamController {
             response.header(EQUATION_FAILED_AT_HEADER, String.join(",", file.equationsFailedAt()));
         }
         return response.body(file.content());
+    }
+
+    /**
+     * NV-01 (V31): xóa đề của mình (xóa mềm), 204. Đề của người khác, không có hoặc đã xóa: 404. Còn chỗ đang soạn (job sinh
+     * câu đang chạy hoặc chờ chạy, không tính job hoãn vì hết lượt AI): 409 EXAM_GENERATING. Câu đã lưu vào ngân hàng vẫn
+     * được giữ.
+     */
+    @DeleteMapping("/{examId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(CurrentUser user, @PathVariable Integer examId) {
+        examDeleteService.delete(examId, user.id());
     }
 
     /** Xem đề (chế độ giáo viên): câu theo phần I-III kèm đáp án, lời giải và cờ "cần xem kỹ". */

@@ -250,7 +250,7 @@ public class ExamViewService {
             throw new IllegalArgumentException("kind phải là lesson hoặc matrix");
         }
         PageRequest paging = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
-        Page<Exam> exams = kind == null ? examRepository.findByCreatedBy(actorId, paging)
+        Page<Exam> exams = kind == null ? examRepository.findByCreatedByAndDeletedAtIsNull(actorId, paging)
                 : examRepository.findByCreatedByAndMatrixKind(actorId, kind, paging);
         Map<Integer, String> kinds = matrixService.kindsByIds(exams.getContent().stream().map(Exam::getMatrixId)
                 .filter(java.util.Objects::nonNull).distinct().toList());

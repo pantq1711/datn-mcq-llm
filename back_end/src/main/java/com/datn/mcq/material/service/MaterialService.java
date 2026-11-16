@@ -72,12 +72,18 @@ public class MaterialService {
         checkRate(ownerId);
         String sha256 = sha256(content);
         Optional<LessonMaterial> existing = repository.findByOwnerIdAndSha256(ownerId, sha256);
-        if (existing.isPresent()) {
+        if (existing.isPresent() && existing.get().getDeletedAt() == null) {
             return new UploadResult(toDto(existing.get(), false), false);
         }
-        if (repository.countByOwnerId(ownerId) >= props.getMaxPerOwner()) {
+        if (repository.countByOwnerIdAndDeletedAtIsNull(ownerId) >= props.getMaxPerOwner()) {
             throw ApiErrorException.conflict("MATERIAL_QUOTA_EXCEEDED", "Mỗi giáo viên lưu tối đa "
                     + props.getMaxPerOwner() + " tài liệu. Hãy xóa bớt tài liệu không dùng rồi tải lại.");
+        }
+        if (existing.isPresent()) {
+            // V31: tải lại đúng file đã xóa mềm thì khôi phục bản cũ (UNIQUE owner_id, sha256), như tải mới (201)
+            LessonMaterial restored = existing.get();
+            restored.setDeletedAt(null);
+            return new UploadResult(toDto(repository.saveAndFlush(restored), false), true);
         }
         ExtractedText text = extractor.extract(content);
         LessonMaterial m = new LessonMaterial();
@@ -112,9 +118,9 @@ public class MaterialService {
         if (size < 1 || size > 50) {
             throw new IllegalArgumentException("size phải từ 1 đến 50");
         }
-        List<MaterialDto> items = repository.findByOwnerIdOrderByIdDesc(ownerId, PageRequest.of(page, size)).stream()
-                .map(m -> toDto(m, false)).toList();
-        long total = repository.countByOwnerId(ownerId);
+        List<MaterialDto> items = repository.findByOwnerIdAndDeletedAtIsNullOrderByIdDesc(ownerId,
+                PageRequest.of(page, size)).stream().map(m -> toDto(m, false)).toList();
+        long total = repository.countByOwnerIdAndDeletedAtIsNull(ownerId);
         return new MaterialPageDto(items, page, size, total, (int) ((total + size - 1) / size));
     }
 
@@ -126,14 +132,25 @@ public class MaterialService {
     /**
      * Xóa tài liệu của chính chủ sở hữu; đã gắn vào đề thì 409 {@value #MATERIAL_IN_USE} (quyết định G). Của người khác
      * hoặc không có: 404.
+     *
+     * <p>V31 (NV-55): đề đã xóa không tính là đang dùng. Tài liệu chỉ còn gắn với đề đã xóa thì xóa mềm
+     * ({@code deleted_at}; dòng gắn của đề đã xóa còn trỏ tới, khóa ngoại không xóa dây chuyền theo quyết định G); không
+     * gắn đề nào thì xóa vật lý như cũ. Khóa hàng trước khi đếm (xem {@link LessonMaterialRepository#lockOwnedForUpdate}).
      */
     @Transactional
     public void delete(Integer id, Integer ownerId) {
+        repository.lockOwnedForUpdate(id, ownerId)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy tài liệu id=" + id));
         LessonMaterial material = owned(id, ownerId);
         int exams = usage.examCount(id);
         if (exams > 0) {
             throw ApiErrorException.conflict(MATERIAL_IN_USE, "Tài liệu đã dùng cho " + exams
                     + " đề nên không xóa được.");
+        }
+        if (usage.everExamCount(id) > 0) {
+            material.setDeletedAt(LocalDateTime.now());
+            repository.save(material);
+            return;
         }
         repository.delete(material);
     }
@@ -159,7 +176,7 @@ public class MaterialService {
     }
 
     private LessonMaterial owned(Integer id, Integer ownerId) {
-        return repository.findByIdAndOwnerId(id, ownerId)
+        return repository.findByIdAndOwnerIdAndDeletedAtIsNull(id, ownerId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy tài liệu id=" + id));
     }
 

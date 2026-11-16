@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import ExamTable from "../components/ExamTable";
 import type { ExamListItem, ExamKind } from "../types/exam.types";
-import { getMyExams } from "../services/examApi";
+import { deleteExam, getMyExams } from "../services/examApi";
 import { examKindConfig } from "../../../utils/exam.utils";
 
 import "./ExamListPage.css";
@@ -79,6 +79,25 @@ export default function ExamListPage() {
         navigate(`/exams/${exam.examId}`);
     };
 
+    // NV-01: xóa đề (backend xóa mềm). Xóa hết đề của trang cuối thì lùi một trang, không thì tải lại trang hiện tại.
+    const [deletingId, setDeletingId] = useState<number | null>(null);
+    const handleDeleteExam = async (exam: ExamListItem) => {
+        setDeletingId(exam.examId);
+        try {
+            await deleteExam(exam.examId);
+            message.success(`Đã xóa đề "${exam.title}".`);
+            if (exams.length === 1 && page > 1) {
+                setPage(page - 1);
+            } else {
+                await fetchExams(page, pageSize, selectedKind);
+            }
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "Không thể xóa đề thi");
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
     const handlePageChange = (newPage: number, newPageSize: number) => {
         setPage(newPage);
         setPageSize(newPageSize);
@@ -136,6 +155,8 @@ export default function ExamListPage() {
                         page={page}
                         pageSize={pageSize}
                         onView={handleViewExam}
+                        onDelete={handleDeleteExam}
+                        deletingId={deletingId}
                         onCreate={() => navigate("/exams/generate")}
                         onPageChange={handlePageChange}
                     />

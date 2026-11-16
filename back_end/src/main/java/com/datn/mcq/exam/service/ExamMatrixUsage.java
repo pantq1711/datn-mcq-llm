@@ -22,6 +22,12 @@ public class ExamMatrixUsage implements MatrixUsageLookup {
     @Override
     @Transactional(readOnly = true)
     public int examCount(Integer matrixId) {
+        return (int) examRepository.countByMatrixIdAndDeletedAtIsNull(matrixId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public int everExamCount(Integer matrixId) {
         return (int) examRepository.countByMatrixId(matrixId);
     }
 

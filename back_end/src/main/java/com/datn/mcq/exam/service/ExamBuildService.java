@@ -409,6 +409,9 @@ public class ExamBuildService {
         if (!slotRepository.existsByExamIdAndState(examId, ExamSlot.GENERATING)) {
             return;
         }
+        // V31 (NV-01): đối soát có thể xếp job sinh lại; khóa chia sẻ hàng đề trước (lần xóa đề đang dở thì chờ rồi 404).
+        // Chỉ khóa khi có chỗ generating, nên xem đề không có chỗ đang sinh không thêm truy vấn nào.
+        lockLiveExam(examId);
         // Có chỗ generating: khóa như cũ rồi đọc lại state SAU khi khóa (có thể đã đổi giữa hai bước).
         for (ExamSlot slot : slotRepository.lockByExamId(examId)) {
             if (ExamSlot.GENERATING.equals(slot.getState())) {
@@ -836,10 +839,29 @@ public class ExamBuildService {
 
     /**
      * Đề thuộc {@code actorId} (W1-1). Không có hoặc của người khác đều NoSuchElementException cùng thông báo (404), để id
-     * đoán được không lộ đề nào có thật. Mọi thao tác trên đề gọi hàm này TRƯỚC khi đối soát (đối soát có ghi DB).
+     * đoán được không lộ đề nào có thật. Mọi thao tác trên đề gọi hàm này TRƯỚC khi đối soát (đối soát có ghi DB). V31
+     * (NV-01): đề đã xóa cũng 404 như không tồn tại.
      */
     Exam getOwnedExam(Integer examId, Integer actorId) {
-        return examRepository.findByIdAndCreatedBy(examId, actorId)
+        return examRepository.findByIdAndCreatedByAndDeletedAtIsNull(examId, actorId)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy đề id=" + examId));
+    }
+
+    /**
+     * Như {@link #getOwnedExam} nhưng trước đó khóa chia sẻ hàng đề tới hết transaction (V31, NV-01): dùng ở đầu mọi thao
+     * tác có thể ghi chỗ, ngân hàng hoặc xếp job (Giữ, Đổi/Soạn lại, Sửa, đối soát). Lần xóa đề đang dở thì chờ nó xong rồi
+     * thấy đề đã xóa (404), nên không còn khe để xếp job hay Giữ câu cho đề vừa bị xóa. Phải gọi trong transaction ghi được
+     * (FOR SHARE không chạy trong transaction chỉ đọc).
+     */
+    Exam getOwnedExamForWrite(Integer examId, Integer actorId) {
+        Exam exam = getOwnedExam(examId, actorId);
+        lockLiveExam(examId);
+        return exam;
+    }
+
+    /** V31: khóa chia sẻ hàng đề chưa xóa (xem {@link ExamRepository#lockLiveForShare}); đã xóa thì 404. */
+    private void lockLiveExam(Integer examId) {
+        examRepository.lockLiveForShare(examId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy đề id=" + examId));
     }
 

@@ -61,6 +61,8 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
      * <p>NV-10 (quyết định 16/11): chỉ nhận câu có template CÙNG khối {@code gradeLevel} với ma trận/bài; câu có khối trống
      * (câu cũ, template không khai khối) bị loại; {@code gradeLevel} null (ma trận cũ chưa có khối) thì không có ứng viên.
      * NV-21: câu đã gỡ khỏi ngân hàng ({@code removed_at}, V30) không là ứng viên.
+     *
+     * <p>NV-01 (V31): đề đã xóa ({@code exam.deleted_at}) không tính vào số đề đã dùng và lần dùng gần nhất của xếp hạng mềm.
      */
     @Query(value = """
             WITH RECURSIVE out_of_reach(id) AS (
@@ -80,7 +82,7 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
                        FROM (SELECT exam_id, bank_item_id FROM exam_slot WHERE bank_item_id IS NOT NULL
                              UNION
                              SELECT exam_id, bank_item_id FROM exam_question) u
-                       JOIN exam e ON e.id = u.exam_id
+                       JOIN exam e ON e.id = u.exam_id AND e.deleted_at IS NULL
                        WHERE u.exam_id <> :examId
                        GROUP BY u.bank_item_id) us ON us.bank_item_id = b.id
             WHERE b.question_type = :type

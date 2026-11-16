@@ -35,6 +35,18 @@ public interface GenerationJobRepository extends JpaRepository<GenerationJob, In
             """, nativeQuery = true)
     List<Object[]> findRequestScopes(@Param("ids") java.util.Collection<Integer> questionIds);
 
+    /**
+     * V31 (xóa đề): job sinh câu còn mở (pending, running) của các chỗ, khóa ghi (FOR UPDATE) tới hết transaction. Lần nhận
+     * job của worker ({@code UPDATE ... WHERE status = 'pending'}) phải chờ khóa này rồi thấy trạng thái mới.
+     */
+    @Query(value = """
+            SELECT * FROM generation_job
+            WHERE exam_slot_id IN (:slotIds) AND job_type = 'generate' AND status IN ('pending', 'running')
+            ORDER BY id
+            FOR UPDATE
+            """, nativeQuery = true)
+    List<GenerationJob> lockOpenGenerateJobs(@Param("slotIds") java.util.Collection<Integer> slotIds);
+
     /** W1-3: mọi job sinh câu của một chỗ trong đề, theo thứ tự tạo (vết QC). */
     List<GenerationJob> findByExamSlotIdAndJobTypeOrderByIdAsc(Integer examSlotId, String jobType);
 

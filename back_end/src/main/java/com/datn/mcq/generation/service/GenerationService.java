@@ -675,6 +675,37 @@ public class GenerationService {
                 now.plus(QuotaDeferral.FAR), QuotaDeferral.PREFIX + "%"));
     }
 
+    /** {@code last_error} của job sinh câu bị hủy vì đề bị xóa (V31, NV-01). */
+    public static final String EXAM_DELETED_ERROR = "exam_deleted";
+
+    /**
+     * NV-01 (xóa đề): khóa (FOR UPDATE) các job sinh câu còn mở ({@code generate}, pending hoặc running) của các chỗ
+     * {@code examSlotIds}. Còn job đang chạy, hoặc chờ chạy mà KHÔNG hoãn vì hạn mức ngày ({@link QuotaDeferral}): trả
+     * false, không đổi gì. Ngược lại chuyển mọi job đang hoãn sang {@code failed} với last_error {@value #EXAM_DELETED_ERROR}
+     * rồi trả true. Job answer_check/grounding_check không xét (để chạy nốt). Gọi trong transaction của nơi xóa đề; khóa giữ
+     * tới hết transaction đó nên worker không nhận được job đang bị hủy.
+     */
+    @Transactional
+    public boolean failDeferredGenerateJobsIfIdle(java.util.Collection<Integer> examSlotIds,
+                                                  java.time.LocalDateTime now) {
+        if (examSlotIds.isEmpty()) {
+            return true;
+        }
+        List<GenerationJob> open = generationJobRepository.lockOpenGenerateJobs(examSlotIds);
+        for (GenerationJob job : open) {
+            if (!QuotaDeferral.isDeferred(job, now)) {
+                return false;
+            }
+        }
+        for (GenerationJob job : open) {
+            job.setStatus(JobStatus.FAILED);
+            job.setLastError(EXAM_DELETED_ERROR);
+            job.setUpdatedAt(now);
+        }
+        generationJobRepository.saveAll(open);
+        return true;
+    }
+
     /** W1-2: job answer_check (chạy lại Solver) mới nhất của một bản giáo viên sửa; rỗng với câu LLM. */
     @Transactional(readOnly = true)
     public java.util.Optional<GenerationJob> latestAnswerCheckJob(Integer questionId) {

@@ -105,7 +105,7 @@ public class ExamActionService {
      */
     @Transactional
     public ExamItemDto keep(Integer examId, Integer slotId, Integer actorId) {
-        buildService.getOwnedExam(examId, actorId);
+        buildService.getOwnedExamForWrite(examId, actorId);
         buildService.reconcile(examId);
         ExamSlot slot = loadSlot(examId, slotId);
         if (ExamSlot.KEPT.equals(slot.getState()) || ExamSlot.EDITED.equals(slot.getState())) {
@@ -197,7 +197,7 @@ public class ExamActionService {
     @Transactional
     public ExamItemDto replace(Integer examId, Integer slotId, Integer actorId, String source, String instruction,
                                String reason, List<String> requestCodes) {
-        buildService.getOwnedExam(examId, actorId);
+        buildService.getOwnedExamForWrite(examId, actorId);
         String replaceSource = normalizeSource(source);
         String cleanInstruction = normalizeInstruction(instruction);
         String cleanReason = normalizeReason(reason);
@@ -362,7 +362,7 @@ public class ExamActionService {
      */
     @Transactional
     public ExamItemDto editQuestion(Integer examId, Integer slotId, Integer actorId, EditQuestionRequest request) {
-        buildService.getOwnedExam(examId, actorId);
+        buildService.getOwnedExamForWrite(examId, actorId);
         buildService.reconcile(examId);
         ExamSlot slot = loadSlot(examId, slotId);
         if (ExamSlot.KEPT.equals(slot.getState()) || ExamSlot.EDITED.equals(slot.getState())) {
