@@ -189,8 +189,9 @@ abstract class ExamFlowTestBase {
      */
     int bankMcq(Integer templateId, String topic, String difficulty, String sourceText, String bankText,
                 String[] bankOptions) {
+        // NV-10: câu ngân hàng chỉ khớp ô cùng khối; ma trận của test (createMatrix) là khối 8.
         int tpl = templateId != null ? templateId : insert("INSERT INTO question_template (subject_id, source_question,"
-                + " is_active, topic) VALUES (?, 'Mẫu', TRUE, ?)", subject, topic);
+                + " is_active, topic, grade_level) VALUES (?, 'Mẫu', TRUE, ?, 8)", subject, topic);
         int run = insert("INSERT INTO experiment_run (subject_id, strategy, model_name, temperature, prompt_text,"
                 + " purpose) VALUES (?, 'zero-shot', 'm', 0.7, 'p', 'production')", subject);
         int q = insert("INSERT INTO generated_question (template_id, run_id, question_text, option_a, option_b,"

@@ -57,6 +57,10 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
      *
      * <p>W1-4: {@code anyContent} = true (chỉ ô của ma trận ẩn sinh theo bài không nhập nội dung) bỏ điều kiện về nội dung
      * của ô nguồn; false giữ nguyên hành vi cũ.
+     *
+     * <p>NV-10 (quyết định 16/11): chỉ nhận câu có template CÙNG khối {@code gradeLevel} với ma trận/bài; câu có khối trống
+     * (câu cũ, template không khai khối) bị loại; {@code gradeLevel} null (ma trận cũ chưa có khối) thì không có ứng viên.
+     * NV-21: câu đã gỡ khỏi ngân hàng ({@code removed_at}, V30) không là ứng viên.
      */
     @Query(value = """
             WITH RECURSIVE out_of_reach(id) AS (
@@ -80,8 +84,10 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
                        WHERE u.exam_id <> :examId
                        GROUP BY u.bank_item_id) us ON us.bank_item_id = b.id
             WHERE b.question_type = :type
+              AND b.removed_at IS NULL
               AND (b.visible_to_user_id IS NULL OR b.visible_to_user_id = :ownerId)
               AND t.subject_id = :subjectId
+              AND t.grade_level = CAST(:gradeLevel AS integer)
               AND lower(btrim(coalesce(t.topic, ''))) = lower(btrim(:topic))
               AND (CAST(:anyContent AS boolean)
                    OR NOT EXISTS (SELECT 1 FROM exam_matrix_cell c WHERE c.template_id = t.id)
@@ -101,6 +107,7 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
     List<Integer> findBankCandidates(@Param("examId") Integer examId,
                                      @Param("ownerId") Integer ownerId,
                                      @Param("subjectId") Integer subjectId,
+                                     @Param("gradeLevel") Integer gradeLevel,
                                      @Param("type") String type,
                                      @Param("topic") String topic,
                                      @Param("content") String content,

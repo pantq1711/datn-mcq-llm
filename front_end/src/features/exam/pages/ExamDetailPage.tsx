@@ -25,6 +25,11 @@ function toFileName(title: string | undefined, fallback: string): string {
     return cleaned || fallback;
 }
 
+/** Điểm theo kiểu Việt Nam, ít nhất một chữ số thập phân: 7,0; 12,5; 2,25. */
+function formatScore(value: number): string {
+    return value.toLocaleString("vi-VN", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+}
+
 const POLL_INTERVAL_MS = 8000;
 const MAX_CONSECUTIVE_ERRORS = 3;
 
@@ -258,6 +263,44 @@ export default function ExamDetailPage() {
         [detail]
     );
 
+    /**
+     * NV-40/NV-41: trước khi xuất, nếu đề còn chỗ chưa soạn được, chỗ đang soạn, câu có cảnh báo chưa lưu, hoặc tổng điểm
+     * phần trắc nghiệm khác 10 thì hỏi lại (không chặn). Thang điểm không đổi; file Word tự ghi chú tổng điểm.
+     */
+    const requestExportWord = (equation: ExportEquationFormat = 'mathtype') => {
+        const items = (detail?.parts ?? []).flatMap((p) => p.items);
+        const failedCount = items.filter((i) => i.state === "failed").length;
+        const generatingCount = items.filter((i) => i.state === "pending" || i.state === "generating").length;
+        const flaggedCount = items.filter((i) => i.state === "ready" && i.needsReview).length;
+        const totalScore = detail?.totalScore;
+        const scoreOff = typeof totalScore === "number" && Math.abs(totalScore - 10) > 1e-9;
+        if (failedCount + generatingCount + flaggedCount === 0 && !scoreOff) {
+            void handleExportWord(equation);
+            return;
+        }
+        Modal.confirm({
+            title: "Xuất file Word khi đề chưa hoàn chỉnh?",
+            content: (
+                <div>
+                    <ul style={{ paddingLeft: 20, margin: 0 }}>
+                        {failedCount > 0 && <li>{failedCount} câu chưa soạn được (file ghi "Chưa có câu").</li>}
+                        {generatingCount > 0 && <li>{generatingCount} câu đang soạn (file ghi "Chưa có câu").</li>}
+                        {flaggedCount > 0 && <li>{flaggedCount} câu cần xem kỹ chưa được xử lý.</li>}
+                        {scoreOff && (
+                            <li>
+                                Tổng điểm phần trắc nghiệm là {formatScore(totalScore!)} điểm, khác 10 điểm.
+                                {totalScore! < 10 ? " File sẽ ghi chú phần tự luận (nếu có) do thầy/cô bổ sung." : ""}
+                            </li>
+                        )}
+                    </ul>
+                </div>
+            ),
+            okText: "Vẫn xuất",
+            cancelText: "Quay lại",
+            onOk: () => handleExportWord(equation),
+        });
+    };
+
     // === Hàm xử lý xuất file Word đã được tách riêng ===
     const handleExportWord = async (equation: ExportEquationFormat = 'mathtype') => {
         if (!examId) return;
@@ -373,8 +416,12 @@ export default function ExamDetailPage() {
 
     const doKeep = async (question: ExamQuestionItem, flagged: boolean) => {
         try {
-            await keepQuestion(Number(examId), question.slotId!);
-            message.success(flagged ? "Đã lưu vào ngân hàng riêng của thầy/cô." : "Đã lưu câu vào ngân hàng");
+            const kept = await keepQuestion(Number(examId), question.slotId!);
+            // NV-28: backend báo câu vừa lưu vào ngân hàng nào (cờ, tài liệu, hoặc cấu hình lưu riêng)
+            const isPrivate = kept?.bankVisibility ? kept.bankVisibility === "private" : flagged;
+            message.success(isPrivate
+                ? "Đã lưu vào ngân hàng riêng của thầy/cô (chỉ thầy/cô thấy và dùng lại)."
+                : "Đã lưu vào ngân hàng chung (các giáo viên khác cũng dùng lại được).");
             await loadDetail();
         } catch (e: any) {
             const code = e?.response?.data?.code;
@@ -481,8 +528,8 @@ export default function ExamDetailPage() {
                     </div>
 
                     <Space size={8} className="exam-detail-page-actions">
-                        <Tooltip title={isGenerating ? "Đề đang được soạn, chờ xong rồi xuất Word." : undefined}>
-                            {/* Nút bị khóa không nhận chuột nên bọc span để tooltip vẫn hiện */}
+                        {/* NV-40: còn câu đang soạn vẫn xuất được sau hộp xác nhận (file ghi "Chưa có câu" ở chỗ đó) */}
+                        <Tooltip title={isGenerating ? "Đề còn câu đang soạn; thầy/cô vẫn xuất được sau khi xác nhận." : undefined}>
                             <span>
                                 {/* Bấm nút chính: xuất công thức MathType (giáo viên Toán dùng MathType); mũi tên mở menu chọn cách ghi công thức */}
                                 <Space.Compact>
@@ -490,27 +537,26 @@ export default function ExamDetailPage() {
                                         type="primary"
                                         icon={<FileWordOutlined />}
                                         loading={exportLoading}
-                                        disabled={isGenerating}
-                                        onClick={() => handleExportWord('mathtype')}
+                                        onClick={() => requestExportWord('mathtype')}
                                     >
                                         Xuất file Word
                                     </Button>
                                     <Dropdown
                                         trigger={["click"]}
-                                        disabled={isGenerating || exportLoading}
+                                        disabled={exportLoading}
                                         menu={{
                                             items: [
                                                 { key: "mathtype", label: "Công thức MathType" },
                                                 { key: "omml", label: "Công thức Word (Equation)" },
                                             ],
                                             selectedKeys: ["mathtype"],
-                                            onClick: ({ key }) => handleExportWord(key === "mathtype" ? "mathtype" : "omml"),
+                                            onClick: ({ key }) => requestExportWord(key === "mathtype" ? "mathtype" : "omml"),
                                         }}
                                     >
                                         <Button
                                             type="primary"
                                             icon={<DownOutlined />}
-                                            disabled={isGenerating || exportLoading}
+                                            disabled={exportLoading}
                                             aria-label="Chọn cách ghi công thức khi xuất Word"
                                         />
                                     </Dropdown>
@@ -559,6 +605,7 @@ export default function ExamDetailPage() {
                                     setChangeQuestion(question);
                                 }}
                                 onKeep={handleKeep}
+                                bankKeepVisibility={detail.bankKeepVisibility}
                                 onEdit={(question) => setEditingQuestion(question)}
                                 onViewQcTrace={(question, index) => {
                                     if (question.slotId !== undefined) openQcTrace(question.slotId, index + 1);

@@ -2,6 +2,8 @@ package com.datn.mcq.exam.service;
 
 import com.datn.mcq.bank.dto.BankItemDto;
 import com.datn.mcq.bank.service.BankService;
+import com.datn.mcq.config.BankProperties;
+import com.datn.mcq.config.ExamScoringProperties;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.enums.QuestionType;
@@ -62,16 +64,21 @@ public class ExamViewService {
     private final ExamContextService contextService;
 
     private final double similarThreshold;
+    private final BankProperties bankProperties;
+    private final ExamScoringProperties scoring;
 
     public ExamViewService(ExamBuildService buildService, ExamRepository examRepository,
                            ExamSlotRepository slotRepository, MatrixService matrixService,
                            GenerationService generationService, BankService bankService,
                            QcSummaryService qcSummaryService, ExamContextService contextService,
-                           @Value("${app.exam.similar-threshold:0.82}") double similarThreshold) {
+                           @Value("${app.exam.similar-threshold:0.82}") double similarThreshold,
+                           BankProperties bankProperties, ExamScoringProperties scoring) {
         if (!(similarThreshold > 0.0 && similarThreshold <= 1.0)) {
             throw new IllegalArgumentException("app.exam.similar-threshold phải nằm trong (0, 1], nhận " + similarThreshold);
         }
         this.similarThreshold = similarThreshold;
+        this.bankProperties = bankProperties;
+        this.scoring = scoring;
         this.contextService = contextService;
         this.buildService = buildService;
         this.examRepository = examRepository;
@@ -300,9 +307,10 @@ public class ExamViewService {
         String buildStatus = generating > 0 ? "generating" : failed > 0 ? "partial" : "ready";
         String kind = kindOf(exam, exam.getMatrixId() == null ? Map.of()
                 : matrixService.kindsByIds(List.of(exam.getMatrixId())));
+        // 16/11: cấu hình nơi câu Giữ vào (NV-31) và tổng điểm phần trắc nghiệm (NV-41) cho giao diện
         return new ExamViewDto(exam.getId(), exam.getExamCode(), exam.getTitle(), exam.getMode(), exam.getStatus(),
                 publicMatrixId(exam, kind), exam.getCreatedAt(), buildStatus, needsReview, parts, kind,
-                exam.getChallenge().getDbValue());
+                exam.getChallenge().getDbValue(), bankProperties.keepVisibility(), ExamScore.total(parts, scoring));
     }
 
     /**

@@ -205,6 +205,9 @@ Biến đặt trong `deploy/.env` (mẫu: `deploy/.env.example`). Compose **đè
 - **Nhập ngân hàng từ Word:** `BANK_IMPORT_MAX_FILE_BYTES` (10 MB), `BANK_IMPORT_MAX_QUESTIONS` (200 câu/tệp),
   `BANK_IMPORT_MAX_PENDING` (3 lô chờ xác nhận mỗi giáo viên), `BANK_IMPORT_MAX_UPLOADS_PER_HOUR` (30),
   `BANK_IMPORT_PREVIEW_TTL` (24h). Không gọi Gemini nên không tính vào hạn mức sinh câu.
+- **Ngân hàng khi Giữ câu (16/11):** `BANK_KEEP_VISIBILITY` = `shared` (mặc định: câu không cờ vào ngân hàng chung) hoặc
+  `private` (mọi câu giáo viên Lưu vào ngân hàng chỉ người đó thấy và dùng lại). Đợt dùng thử nhiều trường đặt `private`.
+  Giá trị khác làm ứng dụng không khởi động.
 - **JVM:** heap = 55% bộ nhớ container (`mem_limit` của `app` mặc định 1536m, mục 2 "Cấu hình 4 GB"; máy 2 GB đặt `APP_MEM_LIMIT=1g`).
   Đo trong container ngày 04/11/2026: với giới hạn 1536m, `MaxHeapSize` = 846 MiB và JVM chọn Serial GC (dưới 1792 MiB bộ nhớ). Để chỉnh, đặt `JAVA_TOOL_OPTIONS` trong
   `deploy/.env` (thay **toàn bộ** cờ trong image, nhớ giữ `-Djava.awt.headless=true` và `-Duser.timezone=Asia/Bangkok`).

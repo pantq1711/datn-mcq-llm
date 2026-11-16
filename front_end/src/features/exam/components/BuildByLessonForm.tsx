@@ -37,6 +37,8 @@ interface FormValues {
     challenge: ExamChallenge;
     /** Chip yêu cầu cho cả lần sinh (PR B). */
     requestCodes?: TeacherRequestCode[];
+    /** NV-11: bỏ chọn thì mọi câu soạn mới, không lấy câu đã lưu trong ngân hàng. */
+    useBank: boolean;
     mcqEasy: number;
     mcqMedium: number;
     mcqHard: number;
@@ -78,6 +80,7 @@ export default function BuildByLessonForm({
     const watchedExtraInstruction = Form.useWatch("extraInstruction", form);
     const watchedChallenge = Form.useWatch("challenge", form);
     const watchedRequestCodes = Form.useWatch("requestCodes", form);
+    const watchedUseBank = Form.useWatch("useBank", form);
 
     const mcqEasy = Form.useWatch("mcqEasy", form) || 0;
     const mcqMedium = Form.useWatch("mcqMedium", form) || 0;
@@ -213,6 +216,14 @@ export default function BuildByLessonForm({
 
     // Thông báo trạng thái ngân hàng theo 4 mức ưu tiên (bankHint)
     const bankHint = useMemo(() => {
+        // NV-11: giáo viên bỏ chọn "Lấy câu đã lưu trong ngân hàng" -> mọi câu soạn mới, không cần tra ngân hàng
+        if (watchedUseBank === false) {
+            return (
+                <Text type="secondary" style={{ display: "block", marginTop: 4 }}>
+                    Đã bỏ chọn lấy câu từ ngân hàng: mọi câu sẽ được soạn mới.
+                </Text>
+            );
+        }
         // Mức 1: Có tài liệu hoặc extraInstruction khác rỗng -> Thắng tất cả
         const hasMaterials = selectedMaterials && selectedMaterials.length > 0;
         // PR B: chip yêu cầu cũng làm hệ thống soạn mới (gần đúng: chip chỉ cho Đúng/Sai không áp cho câu khác)
@@ -235,6 +246,15 @@ export default function BuildByLessonForm({
 
         // Mức 3 & 4: Tra cứu theo tên bài nhập vào
         const matchedTopic = topicMap.get(watchedLesson.trim().toLowerCase());
+        // NV-10: backend chỉ dùng lại câu CÙNG khối với đề; bài này chỉ có câu ở khối khác thì coi như chưa có câu
+        if (matchedTopic && watchedGradeLevel && !matchedTopic.grades.includes(watchedGradeLevel)) {
+            return (
+                <Text type="secondary" style={{ display: "block", marginTop: 4 }}>
+                    Ngân hàng chỉ có câu của bài này ở khối khác. Hệ thống chỉ dùng lại câu cùng khối {watchedGradeLevel},
+                    nên mọi câu sẽ được soạn mới.
+                </Text>
+            );
+        }
         if (matchedTopic) {
             const trimmedContent = watchedContent?.trim() ?? "";
             // Đề Nâng cao (docs/api mục 7.2): ô mức Vận dụng (mcq/sa mức Vận dụng; tf mặc định có ý d Vận dụng) luôn soạn mới
@@ -273,6 +293,8 @@ export default function BuildByLessonForm({
             </Text>
         );
     }, [
+        watchedUseBank,
+        watchedGradeLevel,
         watchedSubjectId,
         watchedLesson,
         watchedContent,
@@ -356,6 +378,7 @@ export default function BuildByLessonForm({
             extraInstruction: values.extraInstruction?.trim() || undefined,
             challenge: values.challenge,
             requestCodes: values.requestCodes && values.requestCodes.length > 0 ? values.requestCodes : undefined,
+            useBank: values.useBank !== false,
         };
 
         setSubmitting(true);
@@ -411,6 +434,7 @@ export default function BuildByLessonForm({
                 initialValues={{
                     gradeLevel: 8,
                     challenge: "standard",
+                    useBank: true,
                     mcqEasy: 4,
                     mcqMedium: 2,
                     mcqHard: 0,
@@ -463,7 +487,14 @@ export default function BuildByLessonForm({
                                     { required: true, message: "Vui lòng nhập tên bài học" },
                                     { max: 255, message: "Tên bài học tối đa 255 ký tự" },
                                 ]}
-                                extra={bankHint}
+                                extra={
+                                    <>
+                                        <Form.Item name="useBank" valuePropName="checked" noStyle>
+                                            <Checkbox style={{ marginTop: 4 }}>Lấy câu đã lưu trong ngân hàng</Checkbox>
+                                        </Form.Item>
+                                        {bankHint}
+                                    </>
+                                }
                             >
                                 <AutoComplete
                                     options={topicOptions}

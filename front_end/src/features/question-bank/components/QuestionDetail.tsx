@@ -1,4 +1,5 @@
-import { Card, Descriptions, Divider, Drawer, Space, Tag, Typography, Spin } from "antd";
+import { Button, Card, Descriptions, Divider, Drawer, Modal, Space, Tag, Typography, Spin } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import "./QuestionDetail.css";
 import QuestionContent from "../../exam/components/QuestionContent";
@@ -14,6 +15,8 @@ interface QuestionDetailProps {
     loading?: boolean;
     question: BankItemDetail | null;
     onClose: () => void;
+    /** NV-21: gỡ câu khỏi ngân hàng; chỉ hiện nút khi backend báo canRemove. Trả Promise để nút xác nhận hiện đang xử lý. */
+    onRemove?: (question: BankItemDetail) => Promise<void>;
 }
 
 const questionTypeMap: Record<QuestionType, { label: string; color: string }> = {
@@ -45,8 +48,27 @@ export default function QuestionDetail({
     loading = false,
     question,
     onClose,
+    onRemove,
 }: QuestionDetailProps) {
     const questionType = question?.questionType ? questionTypeMap[question.questionType] : null;
+
+    // NV-21: gỡ là ẩn mềm; đề cũ đã có câu vẫn giữ câu, chỉ đề mới không lấy câu này nữa
+    const confirmRemove = () => {
+        if (!question || !onRemove) return;
+        Modal.confirm({
+            title: "Gỡ câu này khỏi ngân hàng?",
+            content: (
+                <div>
+                    <p style={{ margin: 0 }}>Câu sẽ không còn trong ngân hàng và không được chọn cho các đề tạo sau.</p>
+                    <p style={{ margin: "8px 0 0" }}>Các đề đã có câu này vẫn giữ nguyên câu.</p>
+                </div>
+            ),
+            okText: "Gỡ khỏi ngân hàng",
+            okButtonProps: { danger: true },
+            cancelText: "Quay lại",
+            onOk: () => onRemove(question),
+        });
+    };
 
     return (
         <Drawer
@@ -55,6 +77,11 @@ export default function QuestionDetail({
             onClose={onClose}
             width={640}
             className="question-detail"
+            extra={question?.canRemove && onRemove ? (
+                <Button danger icon={<DeleteOutlined />} onClick={confirmRemove}>
+                    Gỡ khỏi ngân hàng
+                </Button>
+            ) : undefined}
         >
             {loading ? (
                 <div style={{ textAlign: "center", padding: "60px 0" }}>
@@ -78,6 +105,15 @@ export default function QuestionDetail({
 
                         <Descriptions.Item label="Môn học">
                             {question.subject}
+                        </Descriptions.Item>
+
+                        <Descriptions.Item label="Phạm vi" span={2}>
+                            {/* NV-30: câu riêng chỉ người lưu thấy và dùng lại */}
+                            {question.visibility === "private" ? (
+                                <Tag color="purple">Riêng: chỉ thầy/cô thấy và dùng lại</Tag>
+                            ) : question.visibility === "shared" ? (
+                                <Tag>Chung: mọi giáo viên thấy và dùng lại</Tag>
+                            ) : "—"}
                         </Descriptions.Item>
 
                         <Descriptions.Item label="Dạng câu">

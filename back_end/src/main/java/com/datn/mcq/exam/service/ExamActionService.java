@@ -3,6 +3,7 @@ package com.datn.mcq.exam.service;
 import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.common.exception.ApiErrorException;
 import com.datn.mcq.common.util.JsonStringArray;
+import com.datn.mcq.config.BankProperties;
 import com.datn.mcq.enums.JobStatus;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.TeacherRequest;
@@ -51,8 +52,8 @@ public class ExamActionService {
     public static final String QC_CHECKING = "QC_CHECKING";
     /** W1-4 (D5-B): Đổi bằng câu ngân hàng khi ngân hàng hết câu phù hợp (409; chỗ giữ nguyên). */
     public static final String BANK_EXHAUSTED = "BANK_EXHAUSTED";
-    static final String BANK_EXHAUSTED_MESSAGE = "Ngân hàng không còn câu phù hợp cho chỗ này (cùng môn, dạng, mức, chủ "
-            + "đề; đã loại câu có trong đề và câu đã đổi ra). Hãy sinh câu mới.";
+    static final String BANK_EXHAUSTED_MESSAGE = "Ngân hàng không còn câu phù hợp cho chỗ này (cùng môn, khối, dạng, mức, "
+            + "chủ đề; đã loại câu có trong đề và câu đã đổi ra). Hãy sinh câu mới.";
     static final String QC_CHECKING_MESSAGE =
             "Câu vừa sửa đang được kiểm tra lại (Solver), hãy chờ kiểm xong rồi Giữ.";
     static final String GROUNDING_CHECKING_MESSAGE =
@@ -73,14 +74,16 @@ public class ExamActionService {
     private final ExamContextService contextService;
     private final BankService bankService;
     private final GenerationQuotaService generationQuota;
+    private final BankProperties bankProperties;
 
     public ExamActionService(ExamSlotRepository slotRepository, ExamSlotActionRepository actionRepository,
                              ExamBuildService buildService, ExamViewService viewService, MatrixService matrixService,
                              AssistedKeepService assistedKeepService, QuestionEditService questionEditService,
                              GenerationService generationService, ExamSlotSiblings siblings,
                              ExamContextService contextService, BankService bankService,
-                             GenerationQuotaService generationQuota) {
+                             GenerationQuotaService generationQuota, BankProperties bankProperties) {
         this.generationQuota = generationQuota;
+        this.bankProperties = bankProperties;
         this.siblings = siblings;
         this.slotRepository = slotRepository;
         this.actionRepository = actionRepository;
@@ -97,7 +100,8 @@ public class ExamActionService {
     /**
      * Giữ câu: câu lấy từ ngân hàng thì chỉ đánh dấu; câu hệ thống sinh thì ghi teacher_review 'assisted' và bank_item
      * (AssistedKeepService#keepAssisted) trong cùng transaction. Câu đang có cờ "cần xem kỹ" (hoặc sinh từ tài liệu của giáo
-     * viên) vào ngân hàng riêng của người Giữ (visible_to_user_id), không dùng chung.
+     * viên) vào ngân hàng riêng của người Giữ (visible_to_user_id), không dùng chung; 16/11: cấu hình
+     * {@code app.bank.keep-visibility = private} thì mọi câu đều vào ngân hàng riêng. Kết quả có {@code bankVisibility}.
      */
     @Transactional
     public ExamItemDto keep(Integer examId, Integer slotId, Integer actorId) {
@@ -138,7 +142,10 @@ public class ExamActionService {
             Integer bankItemId = assistedKeepService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
             slot.setBankItemId(bankItemId);
             // W2-3 (quyết định E): câu sinh từ tài liệu của giáo viên vào ngân hàng nhưng chỉ chính họ thấy và dùng lại.
-            if (flagged || !contextService.materialsFor(examId, slot.getCellId()).isEmpty()) {
+            // NV-31 (16/11): cấu hình app.bank.keep-visibility = private thì mọi câu Giữ (kể cả câu không cờ) vào ngân hàng
+            // riêng của người Giữ.
+            if (flagged || bankProperties.keepPrivate()
+                    || !contextService.materialsFor(examId, slot.getCellId()).isEmpty()) {
                 bankService.restrictToUser(bankItemId, actorId);
             }
         }
@@ -147,7 +154,9 @@ public class ExamActionService {
         slotRepository.save(slot);
         actionRepository.save(new ExamSlotAction(slot.getId(), ExamSlotAction.KEEP, slot.getGeneratedQuestionId(),
                 slot.getBankItemId(), null, actorId));
-        return viewService.item(slot, matrixService.getCell(slot.getCellId()));
+        // NV-28: kết quả Giữ nói rõ câu nằm ở ngân hàng chung hay riêng (câu lấy từ ngân hàng giữ nguyên chỗ của nó).
+        return viewService.item(slot, matrixService.getCell(slot.getCellId()))
+                .withBankVisibility(bankService.visibility(slot.getBankItemId()));
     }
 
     /**

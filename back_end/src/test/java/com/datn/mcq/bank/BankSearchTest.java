@@ -477,16 +477,22 @@ class BankSearchTest {
         mockMvc.perform(get("/api/bank-items/topics")).andExpect(status().isUnauthorized());
     }
 
+    /**
+     * Không có đường sửa hay thêm câu ngân hàng (Q-4c). 16/11 (NV-21): DELETE là "gỡ khỏi ngân hàng", ẩn mềm, không xóa
+     * dòng bank_item nào (kiểm kỹ ở BankRemoveTest).
+     */
     @Test
-    void khongCoDuongSuaHayXoaCauNganHang() throws Exception {
+    void khongCoDuongSuaCauNganHangVaGoChiLaAnMem() throws Exception {
         for (MockHttpServletRequestBuilder r : List.of(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/bank-items/" + m1),
                 org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/bank-items/" + m1),
                 org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/bank-items"))) {
             int code = as(teacher1, false, r).andReturn().getResponse().getStatus();
             assertTrue(code == 403 || code == 404 || code == 405, "HTTP " + code);
         }
-        assertEquals(8, jdbc.queryForObject("SELECT count(*) FROM bank_item", Integer.class));
+        int code = as(teacher1, false, org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .delete("/api/bank-items/" + m1)).andReturn().getResponse().getStatus();
+        assertTrue(code == 204 || code == 403 || code == 404, "HTTP " + code);
+        assertEquals(8, jdbc.queryForObject("SELECT count(*) FROM bank_item", Integer.class), "không xóa vật lý");
     }
 
     // ---------- danh sách chủ đề ----------

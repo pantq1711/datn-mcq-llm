@@ -76,6 +76,8 @@ public final class MatrixDtos {
      *                         400 INVALID_REQUEST trước mọi ghi
      * @param requestCodes     (12/11, PR B) mã chip yêu cầu của giáo viên cho cả lần sinh (TeacherRequest); tùy chọn. Mã lạ
      *                         là 400 INVALID_REQUEST trước mọi ghi; mã không hợp dạng của một câu không áp cho câu đó
+     * @param useBank          (16/11, NV-11) lấy câu đã lưu trong ngân hàng (mặc định true khi bỏ trống); false thì mọi câu
+     *                         soạn mới
      */
     public record CreateLessonRequest(
             Integer subjectId,
@@ -88,8 +90,18 @@ public final class MatrixDtos {
             List<Integer> materialIds,
             String extraInstruction,
             String challenge,
-            List<String> requestCodes
+            List<String> requestCodes,
+            Boolean useBank
     ) {
+        /** Chữ ký trước NV-11 (luôn lấy ngân hàng). */
+        public CreateLessonRequest(Integer subjectId, Integer gradeLevel, String lesson, String content, String title,
+                                   Map<String, String> learningOutcomes, List<LessonCellInput> cells,
+                                   List<Integer> materialIds, String extraInstruction, String challenge,
+                                   List<String> requestCodes) {
+            this(subjectId, gradeLevel, lesson, content, title, learningOutcomes, cells, materialIds, extraInstruction,
+                    challenge, requestCodes, null);
+        }
+
         /** Chữ ký trước PR B (không có mã yêu cầu). */
         public CreateLessonRequest(Integer subjectId, Integer gradeLevel, String lesson, String content, String title,
                                    Map<String, String> learningOutcomes, List<LessonCellInput> cells,

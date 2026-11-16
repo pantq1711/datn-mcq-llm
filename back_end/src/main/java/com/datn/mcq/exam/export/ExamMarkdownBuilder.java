@@ -14,6 +14,7 @@ import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ItemStatementDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.PartDto;
 import com.datn.mcq.exam.entity.ExamSlot;
+import com.datn.mcq.exam.service.ExamScore;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -127,6 +128,7 @@ public final class ExamMarkdownBuilder {
                 + "</w:p>"));
 
         blocks.add(raw(paragraph("Heading1", ANSWER_TITLE, false)));
+        scoreNote(blocks, parts, scoring);
         for (PartDto part : parts) {
             answers(blocks, part, scoring);
         }
@@ -185,15 +187,26 @@ public final class ExamMarkdownBuilder {
 
     // ---------------------------------------------------------------- dòng hướng dẫn, câu hỏi
 
+    static final String SCORE_NOTE_PREFIX = "Tổng điểm phần trắc nghiệm: ";
+    static final String ESSAY_NOTE = "Phần tự luận (nếu có) do giáo viên bổ sung.";
+    private static final BigDecimal FULL_SCORE = BigDecimal.TEN;
+
+    /**
+     * NV-41 (16/11): ghi chú thang điểm đầu phần đáp án (không in trên đề của học sinh): "Tổng điểm phần trắc nghiệm: X điểm.";
+     * X &lt; 10 thì thêm "Phần tự luận (nếu có) do giáo viên bổ sung." Thang điểm không đổi ({@link ExamScore}).
+     */
+    private static void scoreNote(List<String> blocks, List<PartDto> parts, ExamScoringProperties scoring) {
+        BigDecimal total = ExamScore.total(parts, scoring);
+        blocks.add(raw(paragraph("ExamNote", SCORE_NOTE_PREFIX + totalPoints(total) + " điểm.", false)));
+        if (total.compareTo(FULL_SCORE) < 0) {
+            blocks.add(raw(paragraph("ExamNote", ESSAY_NOTE, false)));
+        }
+    }
+
     /** "PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN (3,0 điểm)": tổng điểm = điểm một câu × số câu (phần lạ không ghi điểm). */
     private static String partHeading(PartDto part, ExamScoringProperties scoring) {
         int n = part.items().size();
-        BigDecimal perQuestion = switch (part.part()) {
-            case "I" -> scoring.mcqPerQuestion();
-            case "II" -> scoring.tfScore(4);
-            case "III" -> scoring.saPerQuestion();
-            default -> null;
-        };
+        BigDecimal perQuestion = ExamScore.perQuestion(part.part(), scoring);
         String name = PART_NAMES.getOrDefault(part.part(), "PHẦN " + part.part());
         return perQuestion == null ? name : name + " (" + totalPoints(perQuestion.multiply(BigDecimal.valueOf(n)))
                 + " điểm)";

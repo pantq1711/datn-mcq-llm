@@ -87,6 +87,8 @@ export default function GenerateExamPage() {
     const [loadingMatrixDetail, setLoadingMatrixDetail] = useState<boolean>(false);
     const [matrixExamTitle, setMatrixExamTitle] = useState<string>("");
     const [matrixChallenge, setMatrixChallenge] = useState<ExamChallenge>("standard");
+    // NV-11: bỏ chọn thì mọi câu soạn mới (đề thứ hai từ cùng ma trận không lặp lại câu đã lưu)
+    const [matrixUseBank, setMatrixUseBank] = useState<boolean>(true);
     // Chip yêu cầu cho cả đề (PR B)
     const [matrixRequestCodes, setMatrixRequestCodes] = useState<TeacherRequestCode[]>([]);
     const [buildingMatrixExam, setBuildingMatrixExam] = useState<boolean>(false);
@@ -307,6 +309,7 @@ export default function GenerateExamPage() {
             cells: cellsPayload.length > 0 ? cellsPayload : undefined,
             challenge: matrixChallenge,
             requestCodes: matrixRequestCodes.length > 0 ? matrixRequestCodes : undefined,
+            useBank: matrixUseBank,
         };
 
         setBuildingMatrixExam(true);
@@ -738,6 +741,22 @@ export default function GenerateExamPage() {
                                                         onChange={(vals) => setMatrixRequestCodes(vals as TeacherRequestCode[])}
                                                         options={TEACHER_REQUEST_OPTIONS.map((o) => ({ label: o.label, value: o.value }))}
                                                     />
+                                                </Form.Item>
+                                                <Form.Item
+                                                    tooltip="Bỏ chọn khi muốn mọi câu được soạn mới, ví dụ đề thứ hai tạo từ cùng ma trận cho lớp khác."
+                                                    label="Câu từ ngân hàng"
+                                                >
+                                                    <Checkbox
+                                                        checked={matrixUseBank}
+                                                        onChange={(e) => setMatrixUseBank(e.target.checked)}
+                                                    >
+                                                        Lấy câu đã lưu trong ngân hàng
+                                                    </Checkbox>
+                                                    {!matrixUseBank && (
+                                                        <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+                                                            Mọi câu sẽ được soạn mới và tính vào số câu soạn trong ngày.
+                                                        </Text>
+                                                    )}
                                                 </Form.Item>
 
                                                 {/* Chỉ phần "Gắn cho ô này" (tài liệu, ghi chú theo ô) nằm trong mục nâng cao, mặc định đóng */}

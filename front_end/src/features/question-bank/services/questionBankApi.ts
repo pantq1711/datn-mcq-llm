@@ -59,6 +59,14 @@ export async function getBankItemDetail(id: number | string): Promise<BankItemDe
     };
 }
 
+/**
+ * NV-21: gỡ câu khỏi ngân hàng (ẩn mềm, docs/api "Gỡ khỏi ngân hàng"): câu không còn được chọn cho đề mới, đề cũ vẫn giữ câu.
+ * 204 khi gỡ xong; 403 BANK_ITEM_NOT_OWNER khi không phải câu của người gọi; 404 khi câu không còn trong ngân hàng.
+ */
+export async function removeBankItem(id: number | string): Promise<void> {
+    await axiosInstance.delete(`/api/bank-items/${id}`);
+}
+
 export async function getBankTopics(subjectId?: number): Promise<BankTopic[]> {
     const response = await axiosInstance.get<BankTopic[]>("/api/bank-items/topics", {
         params: subjectId !== undefined ? { subjectId } : undefined,

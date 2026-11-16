@@ -23,9 +23,18 @@ public final class ExamBuildDtos {
      *                    không có. Không phân biệt hoa thường, mã trùng gộp lại; mã lạ là 400 INVALID_REQUEST trước mọi ghi.
      *                    Mã không hợp dạng của một câu (ví dụ tf_shared_context với câu mcq) được nhận nhưng không áp cho câu
      *                    đó. Ô có yêu cầu riêng (mã hoặc văn bản) thì THAY HẲN yêu cầu của đề
+     * @param useBank     (16/11, NV-11) lấy câu đã lưu trong ngân hàng cho các ô (mặc định true khi bỏ trống); false thì mọi
+     *                    chỗ soạn mới (tính vào hạn mức ngày)
      */
     public record BuildExamRequest(Integer matrixId, String title, List<Integer> materialIds,
-                                   List<CellContextInput> cells, String challenge, List<String> requestCodes) {
+                                   List<CellContextInput> cells, String challenge, List<String> requestCodes,
+                                   Boolean useBank) {
+        /** Chữ ký trước NV-11 (luôn lấy ngân hàng). */
+        public BuildExamRequest(Integer matrixId, String title, List<Integer> materialIds, List<CellContextInput> cells,
+                                String challenge, List<String> requestCodes) {
+            this(matrixId, title, materialIds, cells, challenge, requestCodes, null);
+        }
+
         /** Chữ ký trước PR B (không có mã yêu cầu). */
         public BuildExamRequest(Integer matrixId, String title, List<Integer> materialIds, List<CellContextInput> cells,
                                 String challenge) {

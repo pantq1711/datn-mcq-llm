@@ -6,7 +6,8 @@ import QuestionFilters from "../components/QuestionFilters";
 import QuestionTable from "../components/QuestionTable";
 import "./QuestionBankPage.css";
 import type { SubjectOption, BankItemDetail, BankSort, QuestionTableItem, QuestionFilterValues } from "../types/questionBank.types";
-import { getCatalogSubjects, getBankItems, getBankItemDetail } from "../services/questionBankApi";
+import { getCatalogSubjects, getBankItems, getBankItemDetail, removeBankItem } from "../services/questionBankApi";
+import { getApiErrorMessage } from "../../../utils/apiError";
 
 const { Title, Paragraph } = Typography;
 
@@ -113,6 +114,18 @@ export default function QuestionBankPage() {
         setSelectedQuestion(null);
     };
 
+    // NV-21: gỡ câu khỏi ngân hàng rồi đóng ngăn chi tiết và tải lại danh sách (câu đã gỡ không còn trong danh sách)
+    const handleRemoveQuestion = async (question: BankItemDetail) => {
+        try {
+            await removeBankItem(question.id);
+            message.success("Đã gỡ câu khỏi ngân hàng. Các đề đã có câu này vẫn giữ nguyên.");
+            handleCloseDetail();
+            await fetchQuestions(page, pageSize, filters, sort);
+        } catch (error: unknown) {
+            message.error(getApiErrorMessage(error, "Không gỡ được câu khỏi ngân hàng."));
+        }
+    };
+
     const handlePageChange = (newPage: number, newPageSize: number) => {
         setPage(newPage);
         setPageSize(newPageSize);
@@ -142,10 +155,10 @@ export default function QuestionBankPage() {
                         <ReadOutlined style={{ marginRight: 10, color: "#1677ff" }} />
                         Ngân hàng câu hỏi
                     </Title>
-                    {/* API không trả cờ riêng/chung từng câu (docs/api "Câu riêng tư"), nên chỉ giải thích chung */}
+                    {/* NV-30: cột "Phạm vi" cho biết từng câu là Chung hay Riêng */}
                     <Paragraph type="secondary" className="question-bank-page-note">
-                        Danh sách gồm câu dùng chung và câu riêng của thầy/cô (câu soạn từ tài liệu bài học hoặc câu
-                        lưu khi đang có cảnh báo). Câu riêng chỉ thầy/cô thấy.
+                        Danh sách gồm câu dùng chung và câu riêng của thầy/cô (cột "Phạm vi"). Câu riêng chỉ thầy/cô
+                        thấy và dùng lại.
                     </Paragraph>
                 </div>
                 <Tooltip title="Chưa hỗ trợ: cần API nhập câu vào ngân hàng ở backend.">
@@ -187,6 +200,7 @@ export default function QuestionBankPage() {
                 loading={loadingDetail}
                 question={selectedQuestion}
                 onClose={handleCloseDetail}
+                onRemove={handleRemoveQuestion}
             />
         </div>
     );

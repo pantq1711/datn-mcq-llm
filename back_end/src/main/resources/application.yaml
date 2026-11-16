@@ -149,6 +149,10 @@ app:
     max-pending-batches: ${BANK_IMPORT_MAX_PENDING:3}          # lô chờ xác nhận mỗi giáo viên (409 IMPORT_PENDING_LIMIT)
     max-uploads-per-hour: ${BANK_IMPORT_MAX_UPLOADS_PER_HOUR:30}
     preview-ttl: ${BANK_IMPORT_PREVIEW_TTL:24h}                # quá hạn: 410 IMPORT_EXPIRED, nội dung bị xóa
+  # NV-31 (16/11): nơi câu được Giữ vào. shared (mặc định, hành vi cũ): câu không cờ vào ngân hàng chung; private: mọi câu
+  # Giữ vào ngân hàng riêng của người Giữ (đợt dùng thử nhiều trường đặt BANK_KEEP_VISIBILITY=private). Xem BankProperties.
+  bank:
+    keep-visibility: ${BANK_KEEP_VISIBILITY:shared}
   # Bảng điểm cho phần tạo đề sau này (V4); luồng sinh câu không dùng. Giá trị mặc định nằm ở ExamScoringProperties.
   exam:
     # Thẩm định 31/10: độ giống 3-gram (sau khi che số và tên điểm) từ mức này thì xem đề gắn lý do similar_in_exam. Trong (0, 1].

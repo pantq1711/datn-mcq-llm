@@ -148,6 +148,8 @@ public class SecurityConfig {
                                 "/api/reviews/**").hasRole("TEACHER")
                         .requestMatchers(HttpMethod.GET, "/api/bank-items", "/api/bank-items/**", "/api/catalog/**")
                         .hasAnyRole("TEACHER", "ADMIN")
+                        // NV-21: gỡ câu khỏi ngân hàng (service kiểm người Giữ câu hoặc admin).
+                        .requestMatchers(HttpMethod.DELETE, "/api/bank-items/*").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers("/api/auth/**").authenticated()
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(o -> o

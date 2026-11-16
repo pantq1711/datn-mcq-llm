@@ -167,6 +167,27 @@ public class BankItem {
         this.visibleToUserId = visibleToUserId;
     }
 
+    /** V30 (NV-21): thời điểm và người gỡ câu khỏi ngân hàng (ẩn mềm); cùng null khi câu còn trong ngân hàng. */
+    @Column(name = "removed_at")
+    private LocalDateTime removedAt;
+
+    @Column(name = "removed_by")
+    private Integer removedBy;
+
+    public LocalDateTime getRemovedAt() {
+        return removedAt;
+    }
+
+    public Integer getRemovedBy() {
+        return removedBy;
+    }
+
+    /** Gỡ câu khỏi ngân hàng: đặt cùng lúc thời điểm và người gỡ (CHECK chk_bi_removed). */
+    public void markRemoved(LocalDateTime at, Integer by) {
+        this.removedAt = at;
+        this.removedBy = by;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }

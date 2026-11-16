@@ -1165,8 +1165,9 @@ class ExamQuestionEditTest {
 
     @Test
     void choLayTuNganHangKhongSuaDuoc() throws Exception {
-        int tpl = insert("INSERT INTO question_template (subject_id, source_question, is_active, topic)"
-                + " VALUES (?, 'Mẫu', TRUE, 'Đa thức')", subject);
+        // NV-10 (16/11): câu ngân hàng chỉ khớp ô cùng khối (ma trận của test là khối 8)
+        int tpl = insert("INSERT INTO question_template (subject_id, source_question, is_active, topic, grade_level)"
+                + " VALUES (?, 'Mẫu', TRUE, 'Đa thức', 8)", subject);
         int run = insert("INSERT INTO experiment_run (subject_id, strategy, model_name, temperature, prompt_text,"
                 + " purpose) VALUES (?, 'zero-shot', 'm', 0.7, 'p', 'production')", subject);
         int q = insert("INSERT INTO generated_question (template_id, run_id, question_text, option_a, option_b,"
