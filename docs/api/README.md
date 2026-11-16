@@ -1009,15 +1009,25 @@ PUT /api/exams/12/slots/101/question
 GET /api/exams/12/export/docx                    → 200, file MT2610231200001.docx (Content-Disposition: attachment)
 GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đối tượng MathType; header X-Equation-Kept-Omml: 0, X-Equation-Scaled: 0
 GET /api/exams/12/export/docx?equation=abc       → 400
+GET /api/exams/12/export/docx?examCode=205&durationMinutes=45  → 200, mã đề 205, thời gian 45 phút
+GET /api/exams/12/export/docx?content=exam       → 200, chỉ đề (dừng ở dòng HẾT)
+GET /api/exams/12/export/docx?examCode=99        → 400
 ```
 
-- **Khuôn đề kiểm tra THCS (4/11, theo mẫu của một trường):** tham số tùy chọn `durationMinutes` (số nguyên 5–180, ngoài khoảng
-  hoặc không phải số là 400) điền "(Thời gian làm bài N phút không kể thời gian giao đề)"; không truyền thì "……". File khổ A4
+- **Tham số tùy chọn mới (16/11, NV-43/NV-44):** không truyền thì file như trước.
+  - `examCode`: mã đề, số nguyên 100–999 (chữ số ASCII; ngoài khoảng hoặc không phải số là 400, thông báo nêu khoảng
+    100–999); không truyền hoặc trống là `101`. In ở ô mã đề của đầu đề, tiêu đề "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ <mã>" và
+    chân trang hai section ("Mã đề <mã>", "Đáp án mã đề <mã>"). Tên file (`Content-Disposition`) vẫn theo mã hệ thống `MT…`.
+  - `content`: `all` (mặc định: đề, rồi section đáp án và lời giải) hoặc `exam` (không phân biệt hoa thường; giá trị khác
+    400). `exam`: file dừng ở dòng "------ HẾT ------", không có trang đáp án, ghi chú thang điểm và lời giải; một section
+    duy nhất (cùng khổ, lề như section đề), chân trang "Mã đề <mã>", số trang từ 1, không đánh số lại.
+- **Khuôn đề kiểm tra THCS (4/11, theo mẫu của một trường):** tham số tùy chọn `durationMinutes` (số nguyên 5–180, chỉ chữ số
+  ASCII từ 16/11; ngoài khoảng hoặc không phải số là 400) điền "(Thời gian làm bài N phút không kể thời gian giao đề)"; không truyền thì "……". File khổ A4
   (lề trái 2 cm = 1134 twips, phải/trên/dưới 1 cm = 567, đầu trang 283, chân trang 567; hằng số ở `ExamPage`), Times New Roman 12
   cho mọi kiểu kể cả tiêu đề (đậm, đen), giãn dòng 1,15, cách đoạn ≤ 3 pt. Hai section A4 cùng lề (bề rộng chữ 10205 twips =
   510,25 pt, bộ ngắt dòng MathType đọc đúng số này): section đề và section đáp án (ngắt section trước "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM",
   đánh số trang lại từ 1). Chân trang cả hai section: đường kẻ trên, chữ trái "Mã đề 101" (section đáp án: "Đáp án mã đề
-  101"), tab phải tại lề phải rồi "Trang x/y" (trường PAGE/SECTIONPAGES, y chỉ tính trang của section). Không còn dòng "(Đề có N
+  101"; mã theo `examCode`), tab phải tại lề phải rồi "Trang x/y" (trường PAGE/SECTIONPAGES, y chỉ tính trang của section). Không còn dòng "(Đề có N
   trang)". Đầu mỗi phần là tiêu đề đậm in hoa kèm tổng điểm = điểm một câu × số câu theo `app.exam.scoring` (phần II: điểm đúng cả
   4 ý), ví dụ "PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN (3,0 điểm)", rồi một dòng hướng dẫn nghiêng ("Học sinh chọn một đáp án đúng duy
   nhất từ câu 1 đến câu N." / "Học sinh trả lời Đúng (Đ) hoặc Sai (S) cho từng ý a), b), c), d) trong mỗi câu." / "Học sinh viết
@@ -1033,25 +1043,30 @@ GET /api/exams/12/export/docx?equation=abc       → 400
 - **Ghi chú thang điểm (16/11, NV-41):** ngay dưới "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM" (không in trên đề của học sinh) có dòng "Tổng điểm
   phần trắc nghiệm: X điểm." (X như `totalScore` của mục 7.4, ví dụ "7,0"); X nhỏ hơn 10 thì thêm dòng "Phần tự luận (nếu
   có) do giáo viên bổ sung." Thang điểm không đổi.
-- **Xác nhận trước khi xuất (giao diện, 16/11, NV-40/NV-41):** đề còn chỗ chưa soạn được, chỗ đang soạn, câu "cần xem kỹ"
-  chưa lưu, hoặc `totalScore` khác 10 thì giao diện hỏi lại (liệt kê số lượng và tổng điểm, nút "Vẫn xuất" / "Quay lại");
-  không chặn. Còn chỗ đang soạn vẫn xuất được sau khi xác nhận (file ghi "[Chưa có câu – đang sinh]" ở chỗ đó). Backend không
-  đổi: API xuất không kiểm các điều kiện này.
+- **Cảnh báo trước khi xuất (giao diện, 16/11, NV-40/NV-41):** đề còn chỗ chưa soạn được, chỗ đang soạn, câu "cần xem kỹ"
+  chưa lưu, hoặc `totalScore` khác 10 thì hộp xuất Word (mục Frontend dưới) hiện khung cảnh báo "Xuất file Word khi đề
+  chưa hoàn chỉnh?" liệt kê số lượng và tổng điểm; không chặn. Còn chỗ đang soạn vẫn xuất được (file ghi "[Chưa có câu –
+  đang sinh]" ở chỗ đó). Backend không đổi: API xuất không kiểm các điều kiện này.
 - **Đầu đề (theo mẫu trường, 4/11):** bảng 2 cột không viền (cột 4194 : 6011 twips). Cột trái, đậm, căn giữa: "UBND PHƯỜNG
   ……………" và "TRƯỜNG THCS ……………". Cột phải, căn giữa: "Thứ..... ngày........ tháng..... năm <năm hiện tại>" (nghiêng), "ĐỀ KIỂM
-  TRA <tên kì in hoa>" (đậm; tên ma trận của đề, bỏ phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8" thành "GIỮA KÌ I"; đề sinh
-  theo bài hoặc đề cũ không có ma trận dùng tên đề), "NĂM HỌC <y> - <y+1>" (đậm; y = năm hiện tại nếu tháng ≥ 8, ngược lại năm
+  TRA <tên kì in hoa>" (đậm; từ 16/11 (NV-42) là tên đề giáo viên nhập cho mọi loại đề, trước đó đề theo ma trận dùng tên ma
+  trận; tên đề bỏ trống lúc tạo thì bằng tên ma trận nên đề cũ in như cũ. Bỏ hậu tố "(bản sao)" (kể cả lặp, không phân biệt
+  hoa thường) rồi phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8 (bản sao)" thành "GIỮA KÌ I"; bỏ hết thì giữ nguyên tên.
+  Tên đã mở đầu bằng "Kiểm tra" hoặc "Đề kiểm tra" (không phân biệt hoa thường) thì không lặp chữ: "Kiểm tra giữa kì I" in
+  "ĐỀ KIỂM TRA GIỮA KÌ I"),
+  "NĂM HỌC <y> - <y+1>" (đậm; y = năm hiện tại nếu tháng ≥ 8, ngược lại năm
   trước), "Môn: <môn>, Lớp: <khối>." (đậm; thiếu thì "……") và "(Thời gian làm bài <N> phút không kể thời gian giao đề)" (nghiêng).
   Dưới đó là bảng có viền 3 cột bằng nhau, toàn chiều rộng: hàng tiêu đề đậm căn giữa "Mã đề | Điểm bài thi | Mã phách", hàng 2
   cao 1440 twips (như mẫu) với mã đề đậm căn giữa ở ô 1, hai ô còn lại để trống. Không còn dòng "Họ và tên/Lớp" và "(Đề có N
-  trang)". Mã đề in ra là số 3 chữ số, 101 cho đề gốc (chưa có chức năng trộn mã đề); **mã hệ thống `MT…` không in ra nội dung
-  file**, chỉ còn ở tên
+  trang)". Mã đề in ra là số 3 chữ số, mặc định 101 cho đề gốc, đổi bằng `examCode` (chưa có chức năng trộn mã đề); **mã hệ
+  thống `MT…` không in ra nội dung file**, chỉ còn ở tên
   file tải về (`Content-Disposition`). Đầu đề viết bằng khối openxml thô do `ExamMarkdownBuilder` chèn (như ngắt trang) vì
   Markdown của pandoc không bỏ được viền bảng; chữ trong đó được thoát XML.
 - Bản cơ bản: PHẦN I/II/III (PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN, PHẦN II. TRẮC NGHIỆM ĐÚNG/SAI,
   PHẦN III. TRẮC NGHIỆM TRẢ LỜI NGẮN); "Câu k." đánh số lại từ 1 trong từng
   phần; `mcq` các phương án "A. ..." xếp cột bằng tab; `tf` các ý "a) ..."; `sa` chỉ có đề. Sau một ngắt section là "ĐÁP ÁN"
-  (`mcq` chữ cái, `tf` chuỗi Đ/S theo thứ tự a–d như `ĐSĐS`, `sa` đáp số) rồi "LỜI GIẢI" từng câu.
+  (bảng từng phần như mô tả ở trên: `mcq` chữ cái, `tf` bảng "Câu | Ý | Đáp án" từng ý, `sa` đáp số) rồi "LỜI GIẢI" từng
+  câu; `content=exam` thì không có hai phần này.
 - Đáp án đúng trong phần đề CHƯA đánh dấu (tùy chọn gạch chân cho phần mềm trộn đề làm sau).
 - Chỉ xuất nội dung các chỗ đã có câu (`ready`, `kept`, `edited`); chỗ `failed` ghi "[Chưa có câu – cần sinh lại]",
   chỗ đang sinh ghi "[Chưa có câu – đang sinh]"; ở ĐÁP ÁN và LỜI GIẢI các chỗ này ghi "—". Xuất đề cũng đối soát như
@@ -1107,9 +1122,13 @@ GET /api/exams/12/export/docx?equation=abc       → 400
     trong cùng thư mục tạm và cùng lượt giữ Semaphore của pandoc.
   - Chi phí (đo 01/11 trên 4 bộ đề thật khoảng 40 câu): file nặng khoảng 1,5–2 MB (Equation khoảng 20 KB) do ảnh xem trước
     600 dpi; thời gian xuất tăng khoảng 2–3 giây với đề nhiều công thức, trong thời gian đó vẫn giữ Semaphore.
-  - Frontend (trang đề): nút "Xuất file Word" có mũi tên mở menu hai mục: "Công thức Word (Equation)" (mặc định, bấm nút
-    chính cũng xuất mục này) và "Công thức MathType (thử nghiệm)" (gọi `?equation=mathtype`, tên file tải về
-    `<tên đề>-mathtype.docx`). Nút khóa khi đề đang soạn. Sau khi tải: `X-Equation-Kept-Omml > 0` hiện "N công thức không
+  - Frontend (trang đề, 16/11, `ExportWordDialog`): bấm "Xuất file Word" luôn mở hộp (không còn menu mũi tên): thời gian
+    làm bài (chọn sẵn 90; nút 45 / 60 / 90 hoặc nhập 5–180; xóa trống thì không gửi, file in "……"), mã đề (mặc định 101, gửi `examCode` khi
+    khác 101), tên file (mặc định "<tên đề> – <dd-mm-yyyy>", đuôi `.docx` tự thêm), công thức "MathType (mặc định)" (gửi
+    `?equation=mathtype`) / "Công thức Word (Equation)", ô "Chỉ đề (không kèm đáp án)" (gửi `content=exam`), khung cảnh báo
+    đề chưa hoàn chỉnh (mục trên); nút "Tải về" / "Quay lại". Trong lúc tạo, nút chính ghi "Đang tạo file Word… (khoảng 10
+    giây)"; xong báo "Đã tải file Word về máy." và đóng hộp. Đề còn câu đang soạn: cạnh nút có dòng chữ thường trực (không
+    khóa nút). Sau khi tải: `X-Equation-Kept-Omml > 0` hiện "N công thức không
     chuyển được sang MathType, vẫn ở dạng công thức Word"; `X-Equation-Scaled > 0` hiện "N công thức dài đã được thu nhỏ
     cho vừa trang"; `X-Equation-Failed > 0` hiện "N công thức không chuyển được, ở câu 8 (phần I), …". Nên ghi rõ "Chỉ
     chọn MathType nếu máy đã cài MathType" khi hướng dẫn giáo viên.

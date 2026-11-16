@@ -146,6 +146,15 @@ public class PandocRunner {
      * ({@link Docx#equationsFailed()}).
      */
     public Docx markdownToDocx(String markdown, EquationFormat format) {
+        return markdownToDocx(markdown, format, ExamDocxOptions.DEFAULT);
+    }
+
+    /**
+     * Như {@link #markdownToDocx(String, EquationFormat)}; {@code options} (16/11) quyết định mã đề ở chân trang và section
+     * cuối khi chỉ xuất đề. Phải khớp Markdown ({@link ExamMarkdownBuilder} cùng mã đề và cùng {@link ExportContent}).
+     */
+    public Docx markdownToDocx(String markdown, EquationFormat format, ExamDocxOptions options) {
+        ExamDocxOptions o = options == null ? ExamDocxOptions.DEFAULT : options;
         boolean acquired = false;
         if (limiter != null) {
             long waitSeconds = Math.max(1, limiter.getTimeout().toSeconds());
@@ -161,7 +170,7 @@ public class PandocRunner {
             }
         }
         try {
-            return doMarkdownToDocx(markdown, format);
+            return doMarkdownToDocx(markdown, format, o);
         } finally {
             if (limiter != null && acquired) {
                 limiter.release();
@@ -169,7 +178,7 @@ public class PandocRunner {
         }
     }
 
-    private Docx doMarkdownToDocx(String markdown, EquationFormat format) {
+    private Docx doMarkdownToDocx(String markdown, EquationFormat format, ExamDocxOptions options) {
         Path dir;
         try {
             dir = Files.createTempDirectory(TEMP_PREFIX);
@@ -178,12 +187,13 @@ public class PandocRunner {
         }
         try {
             Files.writeString(dir.resolve("exam.md"), markdown, StandardCharsets.UTF_8);
-            copyReferenceDoc(dir.resolve("reference.docx"));
+            copyReferenceDoc(dir.resolve("reference.docx"), options);
             runPandoc(dir, "exam.md", "-f", MARKDOWN_FORMAT, "-t", "docx",
                     "--reference-doc=reference.docx", "-o", "exam.docx");
             byte[] docx = Files.readAllBytes(dir.resolve("exam.docx"));
+            String code = options.examCode();
             if (format != EquationFormat.MATHTYPE) {
-                return new Docx(finish(docx), 0, null, null);
+                return new Docx(finish(docx, code), 0, null, null);
             }
             JsonNode ast;
             List<MathRef> refs;
@@ -194,7 +204,7 @@ public class PandocRunner {
             } catch (DocumentExportException | IOException | UncheckedIOException e) {
                 log.warn("Xuất MathType: không lấy được LaTeX bằng pandoc -t json ({}), trả file Equation",
                         e.getMessage());
-                return new Docx(finish(docx), 0, MathTypeDocxConverter.countEquations(docx), 0);
+                return new Docx(finish(docx, code), 0, MathTypeDocxConverter.countEquations(docx), 0);
             }
             List<String> latex = refs.stream().map(r -> squash(r.latex())).toList();
             List<String> failedLatex = List.of();
@@ -215,7 +225,7 @@ public class PandocRunner {
             }
             // Tab (mã giữ chỗ của ExamMarkdownBuilder) thay SAU bước MathType: bước đó có thể tách đoạn quanh công thức rộng.
             Docx converted = toMathType(docx, latex);
-            return new Docx(finish(converted.content()), converted.mathTypeObjects(),
+            return new Docx(finish(converted.content(), code), converted.mathTypeObjects(),
                     converted.equationsKeptOmml(), converted.equationsScaled(), failed, failedLatex);
         } catch (IOException e) {
             throw new UncheckedIOException("Lỗi đọc/ghi file khi xuất đề", e);
@@ -228,8 +238,8 @@ public class PandocRunner {
     }
 
     /** Bước hậu xử lý riêng của đề, sau pandoc và MathType: thay mã giữ chỗ tab, thêm chân trang section đề. */
-    private static byte[] finish(byte[] docx) {
-        return ExamSections.ensureExamFooter(ExamTabs.apply(docx));
+    private static byte[] finish(byte[] docx, String examCode) {
+        return ExamSections.ensureExamFooter(ExamTabs.apply(docx), examCode);
     }
 
     /** Chạy pandoc trong {@code dir} với giới hạn bộ nhớ và thời gian; lỗi thì ném {@link DocumentExportException}. */
@@ -423,17 +433,21 @@ public class PandocRunner {
      * chạy được) và font Normal Times New Roman 13. Cách tạo ghi ở docs/api/README.md mục 7.6. Mỗi lần xuất, file này được
      * vá thêm khổ A4, lề, kiểu của đề và chân trang ({@link ExamReferenceDoc}).
      */
-    private static void copyReferenceDoc(Path target) throws IOException {
-        Files.write(target, referenceDocBytes());
+    private static void copyReferenceDoc(Path target, ExamDocxOptions options) throws IOException {
+        Files.write(target, referenceDocBytes(options));
     }
 
     /** Nội dung file mẫu đưa cho pandoc: {@value #REFERENCE_DOC_RESOURCE} đã vá khổ trang, kiểu, chân trang. */
     static byte[] referenceDocBytes() throws IOException {
+        return referenceDocBytes(ExamDocxOptions.DEFAULT);
+    }
+
+    static byte[] referenceDocBytes(ExamDocxOptions options) throws IOException {
         try (var in = PandocRunner.class.getResourceAsStream(REFERENCE_DOC_RESOURCE)) {
             if (in == null) {
                 throw new IllegalStateException("Thiếu file mẫu " + REFERENCE_DOC_RESOURCE + " trong resources");
             }
-            return ExamReferenceDoc.build(in.readAllBytes());
+            return ExamReferenceDoc.build(in.readAllBytes(), options);
         }
     }
 

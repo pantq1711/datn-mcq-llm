@@ -38,8 +38,9 @@ import java.util.stream.Collectors;
  *       dẫn nghiêng; phần không có câu thì bỏ;</li>
  *   <li>"Câu k." đậm, không thụt lề treo; mcq xếp cột bằng tab ({@link OptionLayout}); ý đúng/sai "a)" "b)"... đi tới
  *       mốc tab 283 như phương án; cuối đề dòng "------ HẾT ------" đậm nghiêng;</li>
- *   <li>sang trang mới: "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101" với bảng đáp án từng phần và điểm (lấy từ
- *       {@link ExamScoringProperties}), rồi "LỜI GIẢI CHI TIẾT".</li>
+ *   <li>sang trang mới: "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101" (mã đề theo {@link ExamHeader#code()}) với bảng đáp án
+ *       từng phần và điểm (lấy từ {@link ExamScoringProperties}), rồi "LỜI GIẢI CHI TIẾT"; chỉ đề
+ *       ({@link ExportContent#EXAM}) thì dừng ở dòng HẾT.</li>
  * </ul>
  * Paragraph có kiểu riêng viết bằng khối {@code ::: {custom-style="..."}}; đầu đề, bảng và các dòng không có công thức viết
  * bằng khối openxml thô (Markdown của pandoc không bỏ được viền bảng, không có tab, không có ngắt trang trước đoạn). Chữ
@@ -62,7 +63,9 @@ public final class ExamMarkdownBuilder {
     static final String MISSING_GENERATING = "[Chưa có câu – đang sinh]";
     static final String NONE = "—";
     static final String END_OF_EXAM = "------ HẾT ------";
-    static final String ANSWER_TITLE = "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ " + ExamHeader.ORIGINAL_CODE;
+    static final String ANSWER_TITLE_PREFIX = "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ ";
+    /** Tiêu đề trang đáp án với mã đề mặc định; từ 16/11 mã đề theo đầu đề ({@link ExamHeader#code()}). */
+    static final String ANSWER_TITLE = ANSWER_TITLE_PREFIX + ExamHeader.ORIGINAL_CODE;
     static final String SOLUTION_TITLE = "LỜI GIẢI CHI TIẾT";
 
     /** Bảng điểm mặc định (cùng giá trị mặc định của cấu hình {@code app.exam.scoring}). */
@@ -106,6 +109,21 @@ public final class ExamMarkdownBuilder {
 
     /** @param today ngày xuất; cho phép cố định ngày khi kiểm thử */
     public static String build(ExamViewDto examView, ExamHeader header, ExamScoringProperties scoring, LocalDate today) {
+        return build(examView, header, scoring, today, ExportContent.ALL);
+    }
+
+    /** Ngày xuất là ngày hiện tại ở Việt Nam. */
+    public static String build(ExamViewDto exam, ExamHeader header, ExamScoringProperties scoring, ExportContent content) {
+        return build(exam, header, scoring, LocalDate.now(VIETNAM), content);
+    }
+
+    /**
+     * @param content {@link ExportContent#EXAM} (16/11, NV-44): dừng ở dòng HẾT, không có đáp án, ghi chú điểm và lời giải;
+     *                đoạn HẾT không mang sectPr nên file chỉ có một section (sectPr cuối từ file mẫu, xem
+     *                {@link ExamReferenceDoc#build(byte[], ExamDocxOptions)}); null là {@link ExportContent#ALL}
+     */
+    public static String build(ExamViewDto examView, ExamHeader header, ExamScoringProperties scoring, LocalDate today,
+                               ExportContent content) {
         // Câu đã lưu từ trước có thể còn "\n" chữ trong công thức, và độ viết ^{\circ} thành chỉ số trên cỡ nhỏ: sửa trong file
         // xuất (không sửa DB), cho cả Equation và MathType.
         ExamViewDto exam = withoutLiteralNewlines(examView);
@@ -121,13 +139,19 @@ public final class ExamMarkdownBuilder {
                 question(blocks, k++, item);
             }
         }
+        if (content == ExportContent.EXAM) {
+            // Chỉ đề: dòng HẾT là đoạn cuối; section duy nhất là sectPr cuối thân tài liệu (chân trang "Mã đề …").
+            blocks.add(raw("<w:p><w:pPr><w:pStyle w:val=\"ExamCenter\"/></w:pPr>" + run(END_OF_EXAM, true, true)
+                    + "</w:p>"));
+            return String.join("\n\n", blocks) + "\n";
+        }
         // Dòng HẾT (đậm nghiêng) kết thúc section đề (sectPr trong pPr của đoạn này); đáp án là section mới, sang trang mới,
         // số trang từ 1.
         blocks.add(raw("<w:p><w:pPr><w:pStyle w:val=\"ExamCenter\"/>"
                 + ExamPage.sectionProperties(ExamPage.EXAM_FOOTER_REL_ID, false) + "</w:pPr>" + run(END_OF_EXAM, true, true)
                 + "</w:p>"));
 
-        blocks.add(raw(paragraph("Heading1", ANSWER_TITLE, false)));
+        blocks.add(raw(paragraph("Heading1", ANSWER_TITLE_PREFIX + header.code(), false)));
         scoreNote(blocks, parts, scoring);
         for (PartDto part : parts) {
             answers(blocks, part, scoring);
