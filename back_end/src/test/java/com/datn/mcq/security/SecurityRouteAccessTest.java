@@ -97,6 +97,7 @@ class SecurityRouteAccessTest {
         RULES.put("GET /api/bank-items", Access.TEACHER_OR_ADMIN);
         RULES.put("GET /api/bank-items/{id}", Access.TEACHER_OR_ADMIN);
         RULES.put("GET /api/bank-items/topics", Access.TEACHER_OR_ADMIN);
+        RULES.put("DELETE /api/bank-items/{id}", Access.TEACHER_OR_ADMIN);
         RULES.put("GET /api/exams/{examId}/slots/{slotId}/qc-trace", Access.TEACHER);
         RULES.put("GET /api/catalog/subjects", Access.TEACHER_OR_ADMIN);
         RULES.put("GET /api/catalog/templates", Access.TEACHER_OR_ADMIN);

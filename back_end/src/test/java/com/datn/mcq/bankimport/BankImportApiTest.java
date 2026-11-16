@@ -130,8 +130,12 @@ class BankImportApiTest {
         return objectMapper.readTree(r.andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
     }
 
+    /**
+     * NV-51 (16/11): FixtureDoc.full() có câu không ghi mức nên phải gửi mức mặc định (gửi luôn, file đủ nhãn thì không ảnh
+     * hưởng); câu đó nhận mức easy kèm cờ thông tin level_default.
+     */
     private JsonNode previewOk(int owner, byte[] bytes) throws Exception {
-        return json(upload(owner, FixtureDoc.FILE_NAME, bytes).andExpect(status().isCreated()));
+        return json(upload(owner, FixtureDoc.FILE_NAME, bytes, "defaultLevel", "easy").andExpect(status().isCreated()));
     }
 
     private void assertError(ResultActions r, int status, String code) throws Exception {
@@ -180,7 +184,8 @@ class BankImportApiTest {
         assertEquals(3, p.path("skipped").path("has_image").asInt());
         assertEquals(1, p.path("skipped").path("formula_unsupported").asInt());
         assertEquals(4, p.path("skippedItems").size());
-        assertTrue(p.path("blockedCount").asInt() >= 5, p.toString());
+        // NV-51 (16/11): câu 9 không ghi mức nhận mức mặc định, không còn bị chặn (trước đây >= 5)
+        assertTrue(p.path("blockedCount").asInt() >= 4, p.toString());
         assertEquals(18 - p.path("blockedCount").asInt(), p.path("importableCount").asInt());
         assertNotNull(p.path("expiresAt").asText(null));
         assertFalse(p.has("ownerId"), "không lộ chủ sở hữu");
@@ -380,9 +385,10 @@ class BankImportApiTest {
 
         Integer subject = jdbc.queryForObject("SELECT subject_id FROM import_batch WHERE id = ?", Integer.class,
                 p.path("id").asInt());
-        assertFalse(examSlotRepository.findBankCandidates(-1, teacher, subject, "sa", FixtureDoc.TOPIC, "", "easy", "",
-                true, 10).isEmpty(), "chính người tải dùng lại được khi tạo đề");
-        assertTrue(examSlotRepository.findBankCandidates(-1, other, subject, "sa", FixtureDoc.TOPIC, "", "easy", "",
+        // NV-10: khối 8 là khối trong tên file FixtureDoc
+        assertFalse(examSlotRepository.findBankCandidates(-1, teacher, subject, 8, "sa", FixtureDoc.TOPIC, "", "easy",
+                "", true, 10).isEmpty(), "chính người tải dùng lại được khi tạo đề");
+        assertTrue(examSlotRepository.findBankCandidates(-1, other, subject, 8, "sa", FixtureDoc.TOPIC, "", "easy", "",
                 true, 10).isEmpty(), "không là ứng viên của người khác");
     }
 
@@ -505,7 +511,8 @@ class BankImportApiTest {
     @Test
     void viPhamCheckKhiLuuLoTra422VaLogKhongCoNoiDung(CapturedOutput output) throws Exception {
         props.setPreviewTtl(Duration.ZERO);           // expires_at = created_at → chk_ib_expiry
-        assertError(upload(teacher, FixtureDoc.FILE_NAME, FixtureDoc.full()), 422, "IMPORT_DATA_INVALID");
+        assertError(upload(teacher, FixtureDoc.FILE_NAME, FixtureDoc.full(), "defaultLevel", "easy"), 422,
+                "IMPORT_DATA_INVALID");
         String log = output.getAll();
         assertTrue(log.contains("chk_ib_expiry"), "log có tên ràng buộc");
         assertFalse(log.contains(CONTENT_ASCII), "log không chứa nội dung câu");

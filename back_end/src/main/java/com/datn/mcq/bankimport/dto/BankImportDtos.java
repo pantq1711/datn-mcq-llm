@@ -25,16 +25,21 @@ public final class BankImportDtos {
      * @param type          mcq, tf hoặc sa
      * @param locator       vị trí trong file Word ("Phần I, câu thứ 7"), để giáo viên tìm lại
      * @param levelRaw      nhãn mức trong file: NB, TH, VD, VDC hoặc null
-     * @param level         easy (NB), medium (TH), hard (VD, VDC) hoặc null (không có nhãn: cờ chặn level_missing)
+     * @param level         easy (NB), medium (TH), hard (VD, VDC); 16/11 (NV-51) câu không có nhãn nhận mức mặc định
+     *                      {@code defaultLevel} lúc tải lên (cờ thông tin level_default)
      * @param correctOption mcq: A-D hoặc null
      * @param saAnswer      sa: đáp số đã chuẩn hóa STRICT; khi không đạt STRICT là nguyên văn (kèm cờ chặn)
      * @param explanation   lời giải trong file; null khi không có (cờ thông tin no_solution)
      * @param flags         cờ của câu (cờ chặn và cờ thông tin), xem {@code ImportFlags}
      * @param blocking      có cờ chặn: không chọn được khi xác nhận
+     * @param blockReasons  (16/11, NV-51) lý do bằng lời của từng cờ chặn ({@code ImportFlags#describe}), ví dụ "Chưa thấy đáp
+     *                      án: tô vàng (highlight màu vàng) phương án đúng."; rỗng khi không chặn. Lô lưu trước 16/11 có thể
+     *                      thiếu trường này (null)
      */
     public record ImportItem(String key, String type, String locator, String levelRaw, String level, String stem,
                              List<ItemOption> options, String correctOption, List<ItemStatement> statements,
-                             String saAnswer, String explanation, List<String> flags, boolean blocking) {}
+                             String saAnswer, String explanation, List<String> flags, boolean blocking,
+                             List<String> blockReasons) {}
 
     /** Câu bị bỏ (không nhập được ở bản đầu): chỉ vị trí và lý do, không có nội dung. */
     public record SkippedItem(String locator, String type, String reason) {}

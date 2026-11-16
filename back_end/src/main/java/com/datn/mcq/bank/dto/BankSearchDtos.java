@@ -26,7 +26,17 @@ public final class BankSearchDtos {
      */
     public record OriginDto(String type, String reviewMode, boolean edited) {}
 
-    /** Một dòng của danh sách ngân hàng. */
+    /** Câu dùng chung (mọi giáo viên thấy và dùng lại) — giá trị của {@code visibility}. */
+    public static final String VISIBILITY_SHARED = "shared";
+    /** Câu riêng của người xem ({@code bank_item.visible_to_user_id}) — giá trị của {@code visibility}. */
+    public static final String VISIBILITY_PRIVATE = "private";
+
+    /**
+     * Một dòng của danh sách ngân hàng.
+     *
+     * @param visibility (16/11, NV-30) {@code shared} (câu dùng chung) hoặc {@code private} (câu riêng của người xem; câu
+     *                   riêng của người khác không bao giờ hiện)
+     */
     public record BankListItemDto(
             Integer id,
             Integer sourceQuestionId,
@@ -50,7 +60,8 @@ public final class BankSearchDtos {
             String content,
             OriginDto origin,
             long usageCount,
-            LocalDateTime lastUsedAt
+            LocalDateTime lastUsedAt,
+            String visibility
     ) {}
 
     public record BankPageDto(List<BankListItemDto> items, int page, int size, long totalItems, int totalPages) {}
@@ -79,7 +90,12 @@ public final class BankSearchDtos {
      */
     public record UsageDto(long usageCount, LocalDateTime lastUsedAt, List<ExamRef> myExams) {}
 
-    /** Chi tiết một câu ngân hàng: các trường của danh sách cộng nguồn gốc và mức dùng. */
+    /**
+     * Chi tiết một câu ngân hàng: các trường của danh sách cộng nguồn gốc và mức dùng.
+     *
+     * @param canRemove (16/11, NV-21) người xem gỡ được câu khỏi ngân hàng ({@code DELETE /api/bank-items/{id}}): người Giữ
+     *                  câu (teacher_review.reviewer_id; câu nhập từ Word là người tải) hoặc admin
+     */
     public record BankItemDetailDto(
             Integer id,
             Integer sourceQuestionId,
@@ -105,14 +121,17 @@ public final class BankSearchDtos {
             long usageCount,
             LocalDateTime lastUsedAt,
             ProvenanceDto provenance,
-            UsageDto usage
+            UsageDto usage,
+            String visibility,
+            boolean canRemove
     ) {
-        public static BankItemDetailDto of(BankListItemDto i, ProvenanceDto provenance, UsageDto usage) {
+        public static BankItemDetailDto of(BankListItemDto i, ProvenanceDto provenance, UsageDto usage,
+                                           boolean canRemove) {
             return new BankItemDetailDto(i.id(), i.sourceQuestionId(), i.reviewId(), i.questionText(), i.optionA(),
                     i.optionB(), i.optionC(), i.optionD(), i.correctOption(), i.explanation(), i.difficulty(),
                     i.createdAt(), i.questionType(), i.saAnswer(), i.statements(), i.subjectId(), i.subjectName(),
                     i.gradeLevel(), i.topic(), i.content(), i.origin(), i.usageCount(), i.lastUsedAt(), provenance,
-                    usage);
+                    usage, i.visibility(), canRemove);
         }
     }
 

@@ -237,7 +237,9 @@
       } ]
     } ],
     "kind" : "matrix",
-    "challenge" : "standard"
+    "challenge" : "standard",
+    "bankKeepVisibility" : "shared",
+    "totalScore" : 4.25
   },
   "viewLesson" : {
     "examId" : "exam#2",
@@ -335,7 +337,9 @@
       "items" : [ ]
     } ],
     "kind" : "lesson",
-    "challenge" : "standard"
+    "challenge" : "standard",
+    "bankKeepVisibility" : "shared",
+    "totalScore" : 0.75
   },
   "list" : {
     "items" : [ {

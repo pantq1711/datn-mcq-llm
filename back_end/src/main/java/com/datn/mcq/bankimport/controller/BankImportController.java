@@ -38,17 +38,20 @@ public class BankImportController {
      * Tải bộ câu hỏi .docx (multipart, phần {@code file}, tối đa 10 MB, tối đa 200 câu) → 201 bản xem trước (chưa lưu câu
      * nào). Khối, chương, bài, tên bài lấy từ tên file theo mẫu "KHỐI 8 - CHƯƠNG 1 - BÀI 2 - Tên bài"; {@code gradeLevel}
      * (6-9) và {@code topic} (tùy chọn) ghi đè. Câu có ảnh, công thức chưa chuyển được hoặc bảng dữ liệu bị bỏ và đếm theo
-     * lý do. Mã lỗi: 400 EMPTY_FILE, MISSING_FILE, IMPORT_TOPIC_INVALID; 409 IMPORT_PENDING_LIMIT (đã có 3 lô chờ); 413
-     * FILE_TOO_LARGE; 415 UNSUPPORTED_FILE_TYPE; 422 INVALID_FILE, IMPORT_LESSON_UNKNOWN, IMPORT_GRADE_INVALID,
-     * IMPORT_NO_QUESTIONS, IMPORT_TOO_MANY_QUESTIONS; 429 TOO_MANY_UPLOADS; 503 EXTRACTOR_BUSY.
+     * lý do. 16/11 (NV-51): {@code defaultLevel} (easy, medium, hard) là mức cho câu không ghi nhãn [NB]/[TH]/[VD]; bắt buộc
+     * khi file có câu như vậy. Mã lỗi: 400 EMPTY_FILE, MISSING_FILE, IMPORT_TOPIC_INVALID, IMPORT_LEVEL_INVALID,
+     * IMPORT_LEVEL_DEFAULT_REQUIRED ("File có N câu chưa ghi mức, thầy/cô chọn mức mặc định…"); 409 IMPORT_PENDING_LIMIT (đã
+     * có 3 lô chờ); 413 FILE_TOO_LARGE; 415 UNSUPPORTED_FILE_TYPE; 422 INVALID_FILE, IMPORT_LESSON_UNKNOWN,
+     * IMPORT_GRADE_INVALID, IMPORT_NO_QUESTIONS, IMPORT_TOO_MANY_QUESTIONS; 429 TOO_MANY_UPLOADS; 503 EXTRACTOR_BUSY.
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public BatchDto uploadBankImport(CurrentUser user, @RequestParam("file") MultipartFile file,
                                      @RequestParam(value = "topic", required = false) String topic,
-                                     @RequestParam(value = "gradeLevel", required = false) Integer gradeLevel)
+                                     @RequestParam(value = "gradeLevel", required = false) Integer gradeLevel,
+                                     @RequestParam(value = "defaultLevel", required = false) String defaultLevel)
             throws IOException {
-        return service.upload(user.id(), file.getOriginalFilename(), file.getBytes(), topic, gradeLevel);
+        return service.upload(user.id(), file.getOriginalFilename(), file.getBytes(), topic, gradeLevel, defaultLevel);
     }
 
     /** Xem lại một lô. Lô chờ xác nhận có danh sách câu kèm cờ; lô đã xác nhận không còn nội dung. 410 IMPORT_EXPIRED. */

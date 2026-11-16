@@ -7,16 +7,20 @@ import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.common.security.CurrentUser;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.QuestionType;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
- * Ngân hàng câu hỏi dùng chung (quyết định H1): giáo viên và admin chỉ ĐỌC. Sửa, xóa câu ngân hàng chưa làm (Q-4c).
+ * Ngân hàng câu hỏi dùng chung (quyết định H1): giáo viên và admin ĐỌC; sửa câu ngân hàng chưa làm (Q-4c). 16/11 (NV-21):
+ * người Giữ câu hoặc admin "gỡ khỏi ngân hàng" được (ẩn mềm, không xóa vật lý).
  * Ngoại lệ (W2-3, quyết định E): câu sinh từ tài liệu của một giáo viên chỉ chính giáo viên đó thấy; người khác (kể cả
  * admin) không thấy trong danh sách, chủ đề, và chi tiết là 404.
  */
@@ -80,5 +84,16 @@ public class BankController {
     @GetMapping("/{id}")
     public BankItemDetailDto detail(CurrentUser user, @PathVariable Integer id) {
         return bankService.detail(id, user.id(), user.isAdmin());
+    }
+
+    /**
+     * NV-21 (16/11): gỡ câu khỏi ngân hàng (ẩn mềm, 204). Câu không còn trong ngân hàng và không được chọn cho đề mới; đề cũ
+     * vẫn giữ câu. Chỉ người Giữ câu (câu nhập: người tải) hoặc admin. 403 BANK_ITEM_NOT_OWNER khi câu chung không phải của
+     * mình; 404 khi câu không có, đã gỡ, hoặc là câu riêng của người khác.
+     */
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void remove(CurrentUser user, @PathVariable Integer id) {
+        bankService.remove(id, user.id(), user.isAdmin());
     }
 }

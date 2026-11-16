@@ -25,7 +25,9 @@ import java.util.regex.Pattern;
  * Câu đã tách từ file Word → bản xem trước (không ghi DB, không gọi mạng). Quyết định ngày 3/11:
  * <ul>
  *   <li>bỏ (và đếm theo lý do) câu có ảnh, câu có công thức chưa chuyển được, câu có bảng dữ liệu;</li>
- *   <li>mức NB → easy, TH → medium, VD/VDC → hard; không có nhãn mức là cờ chặn {@code level_missing};</li>
+ *   <li>mức NB → easy, TH → medium, VD/VDC → hard; không có nhãn mức là cờ chặn {@code level_missing}, trừ khi có mức mặc
+ *       định (16/11, NV-51): câu nhận mức đó kèm cờ thông tin {@code level_default};</li>
+ *   <li>16/11 (NV-51): mỗi câu có {@code blockReasons} là lý do bằng lời của các cờ chặn ({@link ImportFlags#describe});</li>
  *   <li>đáp số sa qua {@link ShortAnswerValue} chế độ STRICT; không đạt là cờ chặn {@code sa_answer_format}, giữ nguyên
  *       văn (không âm thầm bỏ);</li>
  *   <li>LaTeX kiểm bằng {@link LatexValidationRules}: lỗi ở đề, phương án, ý, đáp số là cờ chặn; ở lời giải và cảnh báo là
@@ -47,6 +49,14 @@ public final class ImportPreviewBuilder {
      * @param bankCandidates câu ngân hàng người tải được thấy (cùng môn); id là id câu nguồn, chỉ dùng để so
      */
     public static PreviewData build(ParsedDoc doc, List<DedupCandidate> bankCandidates) {
+        return build(doc, bankCandidates, null);
+    }
+
+    /**
+     * @param defaultLevel (16/11, NV-51) mức easy, medium hoặc hard cho câu không ghi nhãn mức; null thì câu đó giữ cờ chặn
+     *                     {@code level_missing} (nơi gọi trả 400 trước khi lưu)
+     */
+    public static PreviewData build(ParsedDoc doc, List<DedupCandidate> bankCandidates, String defaultLevel) {
         List<ImportItem> items = new ArrayList<>();
         List<SkippedItem> skipped = new ArrayList<>();
         List<DedupCandidate> inBatch = new ArrayList<>();
@@ -57,7 +67,7 @@ public final class ImportPreviewBuilder {
                 skipped.add(new SkippedItem(q.locator, q.type, reason));
                 continue;
             }
-            ImportItem item = item(q, leakNeedles);
+            ImportItem item = item(q, leakNeedles, defaultLevel);
             DedupCandidate self = candidate(item, -(items.size() + 1));
             List<String> flags = new ArrayList<>(item.flags());
             if (self != null) {
@@ -112,8 +122,15 @@ public final class ImportPreviewBuilder {
         return out;
     }
 
-    private static ImportItem item(Question q, List<String> leakNeedles) {
+    private static ImportItem item(Question q, List<String> leakNeedles, String defaultLevel) {
         List<String> flags = new ArrayList<>(q.flags);
+        String level = q.level;
+        if (level == null && defaultLevel != null) {
+            // NV-51: câu không ghi mức nhận mức mặc định; không còn chặn, chỉ báo để giáo viên biết
+            level = defaultLevel;
+            flags.remove(ImportFlags.LEVEL_MISSING);
+            flags.add(ImportFlags.LEVEL_DEFAULT);
+        }
         QuestionType type = switch (q.type) {
             case "mcq" -> QuestionType.MCQ;
             case "tf" -> QuestionType.TF;
@@ -199,17 +216,18 @@ public final class ImportPreviewBuilder {
         if (containsAny(all, leakNeedles)) {
             flags.add(ImportFlags.LEAK_SUSPECT);
         }
-        return new ImportItem(q.id, type.getDbValue(), q.locator, q.levelRaw, q.level, stem,
+        return new ImportItem(q.id, type.getDbValue(), q.locator, q.levelRaw, level, stem,
                 options == null ? null : List.copyOf(options), correct,
                 statements == null ? null : List.copyOf(statements), saAnswer, explanation, List.copyOf(flags),
-                false);
+                false, List.of());
     }
 
     private static ImportItem withFlags(ImportItem i, List<String> flags) {
         List<String> distinct = flags.stream().distinct().toList();
-        boolean blocking = distinct.stream().anyMatch(ImportFlags::isBlocking);
+        List<String> reasons = distinct.stream().filter(ImportFlags::isBlocking)
+                .map(f -> ImportFlags.describe(f, i.type())).distinct().toList();
         return new ImportItem(i.key(), i.type(), i.locator(), i.levelRaw(), i.level(), i.stem(), i.options(),
-                i.correctOption(), i.statements(), i.saAnswer(), i.explanation(), distinct, blocking);
+                i.correctOption(), i.statements(), i.saAnswer(), i.explanation(), distinct, !reasons.isEmpty(), reasons);
     }
 
     /** Nội dung để so trùng; null khi câu thiếu nội dung (đã có cờ chặn, không so). */

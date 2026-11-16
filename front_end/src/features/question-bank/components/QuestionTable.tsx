@@ -115,6 +115,21 @@ export default function QuestionTable({
             },
         },
         {
+            // NV-30: câu dùng chung hay câu riêng của thầy/cô (docs/api "Ngân hàng câu hỏi")
+            title: (
+                <Tooltip title="Chung: mọi giáo viên thấy và hệ thống có thể dùng lại khi tạo đề. Riêng: chỉ thầy/cô thấy và dùng lại.">
+                    <span>Phạm vi</span>
+                </Tooltip>
+            ),
+            dataIndex: "visibility",
+            key: "visibility",
+            width: 100,
+            align: "center",
+            render: (visibility?: QuestionTableItem["visibility"]) => visibility === "private"
+                ? <Tag color="purple">Riêng</Tag>
+                : visibility === "shared" ? <Tag>Chung</Tag> : "—",
+        },
+        {
             title: (
                 <Tooltip title="Số đề (của mọi giáo viên) đang dùng câu này và ngày tạo đề mới nhất có câu này. Đây là căn cứ của sắp xếp “Ít đề dùng nhất” và “Dùng gần đây”.">
                     <span>Số đề dùng</span>

@@ -38,8 +38,12 @@ public class BankSearchRepository {
                          String content, Difficulty difficulty, String levels, String origin, String q,
                          String usage, Integer viewerId) {}
 
-    /** Mảnh WHERE: câu dùng chung, hoặc câu riêng tư của chính người xem. */
-    private static final String VISIBLE = " AND (b.visible_to_user_id IS NULL OR b.visible_to_user_id = :viewerId)";
+    /**
+     * Mảnh WHERE: câu dùng chung, hoặc câu riêng tư của chính người xem; NV-21 (V30): câu đã gỡ khỏi ngân hàng không hiện
+     * ở danh sách, chủ đề và chi tiết (đề cũ vẫn đọc câu qua {@code BankService#getItems}).
+     */
+    private static final String VISIBLE = " AND b.removed_at IS NULL"
+            + " AND (b.visible_to_user_id IS NULL OR b.visible_to_user_id = :viewerId)";
 
     /** Thứ tự sắp xếp; mỗi giá trị ứng với một mảnh ORDER BY cố định. */
     public enum Sort {
@@ -55,13 +59,16 @@ public class BankSearchRepository {
         }
     }
 
-    /** Một dòng ngân hàng cùng thông tin môn, chủ đề, nguồn và mức dùng. */
+    /**
+     * Một dòng ngân hàng cùng thông tin môn, chủ đề, nguồn và mức dùng. {@code visibleToUserId} null là câu dùng chung;
+     * {@code reviewerId} là người Giữ câu (teacher_review.reviewer_id; câu nhập là người tải), dùng để biết ai gỡ được câu.
+     */
     public record Row(Integer id, Integer sourceQuestionId, Integer reviewId, QuestionType questionType,
                       String questionText, String optionA, String optionB, String optionC, String optionD,
                       Option correctOption, String saAnswer, String explanation, Difficulty difficulty,
                       LocalDateTime createdAt, Integer subjectId, String subjectName, Integer gradeLevel,
                       String topic, String content, String reviewMode, boolean edited, long usageCount,
-                      LocalDateTime lastUsedAt, QuestionOrigin origin) {}
+                      LocalDateTime lastUsedAt, QuestionOrigin origin, Integer visibleToUserId, Integer reviewerId) {}
 
     /** Đếm đề đang dùng câu: số đề khác nhau và ngày tạo đề mới nhất (đề của mọi giáo viên). */
     private static final String USAGE_SUBQUERY = """
@@ -78,7 +85,7 @@ public class BankSearchRepository {
                    b.option_a, b.option_b, b.option_c, b.option_d, b.correct_option, b.sa_answer, b.explanation,
                    b.difficulty, b.created_at, t.subject_id, s.name AS subject_name, t.grade_level, t.topic,
                    mc.content, r.review_mode, (g.edited_from_question_id IS NOT NULL OR r.edited) AS edited,
-                   coalesce(us.uses, 0) AS uses, us.last_used, g.origin
+                   coalesce(us.uses, 0) AS uses, us.last_used, g.origin, b.visible_to_user_id, r.reviewer_id
             """;
 
     private static final String FROM_JOINS = """
@@ -281,7 +288,8 @@ public class BankSearchRepository {
                 rs.getInt("subject_id"), rs.getString("subject_name"), (Integer) rs.getObject("grade_level"),
                 rs.getString("topic"), rs.getString("content"), rs.getString("review_mode"), rs.getBoolean("edited"),
                 rs.getLong("uses"), time(rs, "last_used"),
-                DbEnum.fromDbValue(QuestionOrigin.class, rs.getString("origin")));
+                DbEnum.fromDbValue(QuestionOrigin.class, rs.getString("origin")),
+                (Integer) rs.getObject("visible_to_user_id"), (Integer) rs.getObject("reviewer_id"));
     }
 
     private static LocalDateTime time(ResultSet rs, String column) throws SQLException {

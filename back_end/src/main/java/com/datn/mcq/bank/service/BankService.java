@@ -1,6 +1,7 @@
 package com.datn.mcq.bank.service;
 
 import com.datn.mcq.bank.dto.BankItemDto;
+import com.datn.mcq.bank.dto.BankSearchDtos;
 import com.datn.mcq.bank.dto.BankSearchDtos.BankItemDetailDto;
 import com.datn.mcq.bank.dto.BankSearchDtos.BankListItemDto;
 import com.datn.mcq.bank.dto.BankSearchDtos.BankPageDto;
@@ -17,10 +18,12 @@ import com.datn.mcq.bank.entity.BankItemStatement;
 import com.datn.mcq.bank.repository.BankItemRepository;
 import com.datn.mcq.bank.repository.BankItemStatementRepository;
 import com.datn.mcq.bank.repository.BankSearchRepository;
+import com.datn.mcq.common.exception.ApiErrorException;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionOrigin;
 import com.datn.mcq.enums.QuestionType;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -155,7 +158,50 @@ public class BankService {
                 run.map(r -> r[1]).orElse(null), run.map(r -> r[2]).orElse(null), versions, review);
         UsageDto usage = new UsageDto(row.usageCount(), row.lastUsedAt(),
                 searchRepository.examsOf(id, actorId, MAX_MY_EXAMS));
-        return BankItemDetailDto.of(item, provenance, usage);
+        return BankItemDetailDto.of(item, provenance, usage, canRemove(row.reviewerId(), actorId, isAdmin));
+    }
+
+    /** NV-21: người gỡ được câu: người Giữ câu (teacher_review.reviewer_id, câu nhập là người tải) hoặc admin. */
+    private static boolean canRemove(Integer reviewerId, Integer actorId, boolean isAdmin) {
+        return isAdmin || (actorId != null && actorId.equals(reviewerId));
+    }
+
+    /** Mã 403 khi gỡ câu không phải của mình (NV-21). */
+    public static final String BANK_ITEM_NOT_OWNER = "BANK_ITEM_NOT_OWNER";
+
+    /**
+     * NV-21 (quyết định 16/11, mục 3b): gỡ câu khỏi ngân hàng, ẩn mềm ({@code removed_at}, {@code removed_by}, V30). Câu đã gỡ
+     * không hiện trong ngân hàng và không được chọn cho đề mới; dòng bank_item giữ nguyên nên đề cũ vẫn hiển thị câu. Chỉ người
+     * Giữ câu (teacher_review.reviewer_id; với câu nhập từ Word là người tải) hoặc admin được gỡ.
+     *
+     * <p>404 (NoSuchElementException) khi câu không có, đã gỡ, hoặc là câu riêng của người khác với người không phải admin
+     * (như không tồn tại); 403 {@value #BANK_ITEM_NOT_OWNER} khi câu chung không phải của người gọi.
+     */
+    @Transactional
+    public void remove(Integer id, Integer actorId, boolean isAdmin) {
+        BankItem item = bankItemRepository.findById(id)
+                .filter(i -> i.getRemovedAt() == null)
+                .filter(i -> isAdmin || i.getVisibleToUserId() == null || i.getVisibleToUserId().equals(actorId))
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu ngân hàng id=" + id));
+        Integer reviewerId = searchRepository.review(item.getReviewId())
+                .map(r -> r.reviewer() == null ? null : r.reviewer().id()).orElse(null);
+        if (!canRemove(reviewerId, actorId, isAdmin)) {
+            throw new ApiErrorException(HttpStatus.FORBIDDEN, BANK_ITEM_NOT_OWNER,
+                    "Chỉ người đã lưu câu này vào ngân hàng (hoặc quản trị viên) mới gỡ được câu.");
+        }
+        item.markRemoved(LocalDateTime.now(), actorId);
+        bankItemRepository.save(item);
+    }
+
+    /**
+     * Câu ngân hàng {@code bankItemId} đang dùng chung ({@code shared}) hay riêng của một người ({@code private}); dùng cho
+     * kết quả Giữ câu (NV-28).
+     */
+    @Transactional(readOnly = true)
+    public String visibility(Integer bankItemId) {
+        BankItem item = bankItemRepository.findById(bankItemId)
+                .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu ngân hàng id=" + bankItemId));
+        return item.getVisibleToUserId() == null ? BankSearchDtos.VISIBILITY_SHARED : BankSearchDtos.VISIBILITY_PRIVATE;
     }
 
     private static UserRef anonymize(UserRef userRef, Integer viewerId, boolean isAdmin) {
@@ -208,7 +254,8 @@ public class BankService {
                 r.createdAt(), r.questionType(), r.questionType() == QuestionType.SA ? r.saAnswer() : null,
                 statementDtos, r.subjectId(), r.subjectName(), r.gradeLevel(), r.topic(), r.content(),
                 new OriginDto(r.origin() == QuestionOrigin.IMPORT ? "import" : "ai", r.reviewMode(), r.edited()),
-                r.usageCount(), r.lastUsedAt());
+                r.usageCount(), r.lastUsedAt(), r.visibleToUserId() == null ? BankSearchDtos.VISIBILITY_SHARED
+                        : BankSearchDtos.VISIBILITY_PRIVATE);
     }
 
     private static String blankToNull(String s) {

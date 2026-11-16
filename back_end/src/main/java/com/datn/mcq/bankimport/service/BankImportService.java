@@ -158,7 +158,20 @@ public class BankImportService {
      * @param gradeLevel khối do giáo viên nhập (tùy chọn); mặc định là khối trong tên file
      */
     public BatchDto upload(Integer ownerId, String fileName, byte[] content, String topic, Integer gradeLevel) {
+        return upload(ownerId, fileName, content, topic, gradeLevel, null);
+    }
+
+    /**
+     * Như trên, kèm (16/11, NV-51) mức mặc định cho câu không ghi nhãn mức.
+     *
+     * @param defaultLevel easy, medium hoặc hard (tùy chọn, không phân biệt hoa thường; giá trị khác là 400
+     *                     IMPORT_LEVEL_INVALID). BẮT BUỘC khi file có câu (sẽ vào bản xem trước) không ghi mức: thiếu thì 400
+     *                     IMPORT_LEVEL_DEFAULT_REQUIRED và không lưu lô. Không có mức "chưa rõ"
+     */
+    public BatchDto upload(Integer ownerId, String fileName, byte[] content, String topic, Integer gradeLevel,
+                           String defaultLevel) {
         checkRate(ownerId);
+        String level = resolveDefaultLevel(defaultLevel);
         LocalDateTime now = LocalDateTime.now(clock);
         // Kiểm sớm để khỏi phân tích file vô ích; kiểm chính thức (có khóa theo người tải) ở ImportBatchWriter.savePreview.
         if (batches.countByOwnerIdAndStatusAndExpiresAtAfter(ownerId, ImportBatch.STATUS_PREVIEW, now)
@@ -191,7 +204,12 @@ public class BankImportService {
                                 + " câu mỗi lần nhập. Hãy tách thành nhiều file.");
             }
             Integer subjectId = catalogService.getOrCreateSubject(SUBJECT_NAME).getId();
-            PreviewData preview = ImportPreviewBuilder.build(doc, dedup.bankCandidates(subjectId, ownerId));
+            PreviewData preview = ImportPreviewBuilder.build(doc, dedup.bankCandidates(subjectId, ownerId), level);
+            long unlabelled = preview.items().stream().filter(i -> i.flags().contains(ImportFlags.LEVEL_MISSING)).count();
+            if (unlabelled > 0) {
+                throw ApiErrorException.badRequest(LEVEL_DEFAULT_REQUIRED, "File có " + unlabelled
+                        + " câu chưa ghi mức, thầy/cô chọn mức mặc định (Nhận biết, Thông hiểu hoặc Vận dụng) rồi tải lại.");
+            }
 
             ImportBatch b = new ImportBatch();
             b.setOwnerId(ownerId);
@@ -238,6 +256,23 @@ public class BankImportService {
         } finally {
             limiter.release();
         }
+    }
+
+    /** Mã 400 của NV-51. */
+    static final String LEVEL_DEFAULT_REQUIRED = "IMPORT_LEVEL_DEFAULT_REQUIRED";
+    static final String LEVEL_INVALID = "IMPORT_LEVEL_INVALID";
+
+    /** Mức mặc định đã chuẩn hóa (easy, medium, hard) hoặc null khi bỏ trống; giá trị khác là 400 (trước khi đọc file). */
+    private static String resolveDefaultLevel(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String v = raw.strip().toLowerCase(java.util.Locale.ROOT);
+        if (!v.equals("easy") && !v.equals("medium") && !v.equals("hard")) {
+            throw ApiErrorException.badRequest(LEVEL_INVALID,
+                    "defaultLevel phải là easy (Nhận biết), medium (Thông hiểu) hoặc hard (Vận dụng).");
+        }
+        return v;
     }
 
     private static int resolveGrade(LessonName.Parsed ln, Integer gradeLevel) {
@@ -382,14 +417,29 @@ public class BankImportService {
                     Math.min(unknown.size(), MAX_BLOCKED_KEYS_IN_MESSAGE))) + " trong lần nhập này.");
         }
         List<ImportItem> out = byKey.values().stream().filter(i -> wanted.contains(i.key())).toList();
-        List<String> blocked = out.stream().filter(ImportItem::blocking).map(ImportItem::key).toList();
+        // NV-51 (16/11): mỗi câu bị chặn kèm lý do đầu tiên bằng lời (ví dụ chưa tô vàng đáp án), để biết sửa gì trong file
+        List<String> blocked = out.stream().filter(ImportItem::blocking).map(BankImportService::keyWithReason).toList();
         if (!blocked.isEmpty()) {
             throw new ApiErrorException(HttpStatus.UNPROCESSABLE_CONTENT, "IMPORT_ITEM_BLOCKED",
                     "Các câu sau còn lỗi cần sửa trong file Word nên chưa đưa vào ngân hàng được: "
-                            + String.join(", ", blocked.subList(0, Math.min(blocked.size(), MAX_BLOCKED_KEYS_IN_MESSAGE)))
+                            + String.join("; ", blocked.subList(0, Math.min(blocked.size(), MAX_BLOCKED_KEYS_IN_MESSAGE)))
                             + (blocked.size() > MAX_BLOCKED_KEYS_IN_MESSAGE ? "…" : "") + ".");
         }
         return out;
+    }
+
+    /**
+     * "mcq-003 (Chưa thấy đáp án: …)": mã câu kèm lý do chặn đầu tiên; lô lưu trước 16/11 không có lý do thì tính lại từ cờ.
+     * Lý do kết thúc bằng dấu chấm được bỏ dấu chấm để ghép câu.
+     */
+    private static String keyWithReason(ImportItem i) {
+        List<String> reasons = i.blockReasons() != null && !i.blockReasons().isEmpty() ? i.blockReasons()
+                : i.flags().stream().filter(ImportFlags::isBlocking).map(f -> ImportFlags.describe(f, i.type())).toList();
+        if (reasons.isEmpty()) {
+            return i.key();
+        }
+        String first = reasons.get(0);
+        return i.key() + " (" + (first.endsWith(".") ? first.substring(0, first.length() - 1) : first) + ")";
     }
 
     /** Ghi một câu: generated_question (+ ý tf), teacher_review assisted (+ ý tf), bank_item riêng tư. Trả id bank_item. */

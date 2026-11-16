@@ -216,7 +216,12 @@ export interface ExamItemDto {
     infoReasons?: string[];
     requests?: TeacherRequests;
     inheritedRequests?: TeacherRequests;
+    /** Chỉ có trong kết quả Giữ câu (docs/api mục 7.5): câu vừa lưu vào ngân hàng chung hay riêng của thầy/cô. */
+    bankVisibility?: BankVisibility;
 }
+
+/** Ngân hàng chung (mọi giáo viên dùng lại được) hoặc riêng (chỉ người lưu thấy). */
+export type BankVisibility = "shared" | "private";
 
 export interface ExamPartDto {
     part: string;      // "I" | "II" | "III"
@@ -239,6 +244,10 @@ export interface ExamDetail {
     parts: ExamPartDto[];
     kind: ExamKind;
     challenge?: ExamChallenge;
+    /** Cấu hình hệ thống: câu không cờ khi Giữ vào ngân hàng chung ("shared") hay riêng ("private"). */
+    bankKeepVisibility?: BankVisibility;
+    /** Tổng điểm phần trắc nghiệm theo thang điểm của hệ thống (tính cả chỗ chưa có câu). */
+    totalScore?: number;
 }
 
 /** Mức thử thách của đề (12/11): "advanced" thêm yêu cầu nâng cao cho câu mức Vận dụng. */
@@ -298,6 +307,8 @@ export interface BuildByLessonPayload {
     extraInstruction?: string;
     challenge?: ExamChallenge;
     requestCodes?: TeacherRequestCode[];
+    /** false: mọi câu soạn mới, không lấy câu đã lưu trong ngân hàng (mặc định true). */
+    useBank?: boolean;
 }
 
 export interface BuildResultDto {
@@ -333,4 +344,6 @@ export interface BuildExamRequest {
     cells?: CellContextInput[];
     challenge?: ExamChallenge;
     requestCodes?: TeacherRequestCode[];
+    /** false: mọi câu soạn mới, không lấy câu đã lưu trong ngân hàng (mặc định true). */
+    useBank?: boolean;
 }

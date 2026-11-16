@@ -180,7 +180,7 @@ Chưa phải hợp đồng. AI không tự chọn; khi chạm vào → dừng th
 | Q-3 | Luồng tạo experiment run (endpoint/công cụ nào), và `purpose` lấy từ đâu; có cho phép giá trị mặc định không? | **Thu hẹp (25/10)**: phần liên quan thí nghiệm C1/C2/C3 ngưng. **Vẫn mở** cho các thử nghiệm mới (Solver bắt lỗi, ngưỡng dedup): cần đường tạo run `experiment` riêng vì `generate-sync` gắn cứng `production`. Giữ `Purpose.EXPERIMENT`, `DedupScope.forExperiment`, `ExperimentService.createRun`. Gặp thì dừng hỏi (M-4). |
 | Q-4a | **[NGƯNG 25/10]** Seed demo: giữ, xóa, hay chỉ bật theo profile; run seed mang `purpose` gì; có được ghi kết quả QC không phải từ pipeline thật không? | **Đã chốt (25/10)**: gỡ hẳn seed demo (`MathDemoSeedService`, `/api/reviews/demo/seed-math`). |
 | Q-4b | **[NGƯNG 25/10]** Câu production đã `rejected` có được duyệt lại không? | Không còn câu mới ở trạng thái `rejected` (chỉ form chấm mù đặt trạng thái này, đã gỡ). |
-| Q-4c | `bank_item` đã nằm trong đề có được sửa/gỡ không? | Chờ |
+| Q-4c | `bank_item` đã nằm trong đề có được sửa/gỡ không? | **Chốt một phần (16/11)**: GỠ được (ẩn mềm, V30), xem "Quyết định ngày 16/11/2026"; SỬA câu ngân hàng vẫn chờ. |
 | Q-5 | `llm_difficulty` là kết quả của bước chấm độ khó riêng (theo comment V1) hay là độ khó mục tiêu khi sinh? | Chờ |
 | Q-6 | **[NGƯNG 25/10]** Phạm vi xác thực người chấm; có bắt buộc `label_assignment` khi chấm experiment không? | **Đã chốt (25/10)**: không còn luồng chấm; xác thực JWT (W1-1) áp dụng cho mọi API; `label_assignment` không dùng. |
 | Q-7 | Cô lập DB test: DB riêng (ví dụ `datn_mcq_test` + profile `test`) hay Testcontainers? | **Đã triển khai (2026-10-21)**: dùng database riêng `datn_mcq_test` kèm guard chặn kết nối tới database khác và `BlockingTestLlmClient`. Smoke test và toàn bộ 33 test đã PASS ngày 2026-10-21 theo báo cáo surefire có sẵn (không chạy lại trong lượt cập nhật tài liệu này). |
@@ -285,6 +285,27 @@ Xác nhận: không chạy lệnh thuộc M-27 / không gọi API tính phí / k
   M-10 thêm ngoại lệ câu nhập ở `in_bank`. Không đổi số phiên bản tài liệu.
 - v3 (2026-11-10): quyết định 22/10 mục 4 thêm một dòng: câu có cờ "cần xem kỹ" khi Giữ vẫn được nhưng chỉ vào ngân hàng
   riêng của người Giữ (`visible_to_user_id`); câu không cờ giữ nguyên (dùng chung, trừ đề có tài liệu).
+- 2026-11-16: thêm "Quyết định ngày 16/11/2026 – logic nghiệp vụ sau rà soát 05"; Q-4c chốt một phần (gỡ khỏi ngân hàng).
+  Không đổi số phiên bản tài liệu.
+
+## Quyết định ngày 16/11/2026 – logic nghiệp vụ sau rà soát 05
+
+Chủ dự án chốt theo `.local/review/05-logic-nghiep-vu.md`. Không đổi M-9 (hai đường tạo `bank_item` giữ nguyên).
+
+1. **NV-10:** chọn câu ngân hàng cho ô (tạo đề, Đổi lấy từ ngân hàng) chỉ nhận câu cùng khối với ma trận/bài
+   (`question_template.grade_level`); câu khối trống bị loại.
+2. **NV-11:** tùy chọn `useBank` khi tạo đề (theo ma trận và theo bài), mặc định `true`; `false` thì mọi chỗ soạn mới.
+3. **NV-21/NV-31 (Q-4c, phần gỡ):** cấu hình `app.bank.keep-visibility` = `shared` (mặc định, hành vi cũ) | `private` (mọi câu
+   Giữ vào ngân hàng riêng của người Giữ); câu có cờ vẫn riêng như quyết định 22/10 mục 4. "Gỡ khỏi ngân hàng" là ẩn mềm
+   (`bank_item.removed_at`, `removed_by`, V30): câu đã nằm trong đề cũ vẫn hiển thị ở đề đó, không được chọn cho đề mới. Người
+   gỡ: người Giữ (`teacher_review.reviewer_id`; câu nhập từ Word là người tải) hoặc admin (mọi câu). API trả `visibility` từng
+   câu ngân hàng; kết quả Giữ trả `bankVisibility`.
+4. **NV-51:** câu nhập từ Word thiếu nhãn mức không bị chặn; file có câu như vậy thì mức mặc định lúc tải lên là bắt buộc
+   (400 khi thiếu). Không tạo mức "chưa rõ". Đáp án tô vàng giữ quy tắc, báo rõ lý do khi thiếu.
+5. **NV-40/NV-41:** giao diện hỏi lại trước khi xuất Word khi đề còn chỗ hỏng / đang soạn / câu có cờ chưa xử lý, hoặc tổng
+   điểm trắc nghiệm khác 10; file Word ghi chú tổng điểm trắc nghiệm, dưới 10 thêm dòng phần tự luận do giáo viên bổ sung.
+   Không đổi thang điểm.
+
 ## Quyết định ngày 21/10/2026 (thay thế các comment xung đột trong V1__init_schema.sql)
 
 Không sửa file V1 (đã chạy, sửa sẽ lệch checksum Flyway). Khi comment trong V1 mâu thuẫn với mục này, mục này thắng.

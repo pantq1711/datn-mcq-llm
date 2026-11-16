@@ -8,6 +8,7 @@ import com.datn.mcq.enums.StatementKey;
 import com.datn.mcq.enums.TruthValue;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -50,6 +51,8 @@ public final class ExamViewDtos {
      *                      câu đã Giữ hiện bản ngân hàng, chỗ chưa có câu)
      * @param inheritedRequests (PR B) yêu cầu thừa hưởng của chỗ (của ô, không thì của đề; mã đã lọc theo dạng câu), để hộp
      *                      Đổi câu điền sẵn; vắng khi ô và đề không có yêu cầu áp cho chỗ này
+     * @param bankVisibility (16/11, NV-28) CHỈ có trong kết quả Giữ câu: câu vừa lưu vào ngân hàng chung ("shared") hay
+     *                      riêng của người Giữ ("private"); vắng ở mọi API khác
      */
     public record ExamItemDto(
             Integer slotId,
@@ -80,7 +83,8 @@ public final class ExamViewDtos {
             @JsonInclude(JsonInclude.Include.NON_NULL) String failureReason,
             List<String> infoReasons,
             @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto requests,
-            @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto inheritedRequests
+            @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto inheritedRequests,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String bankVisibility
     ) {
         public static final String QC_CHECKING = "checking";
         public static final String QC_PASSED = "passed";
@@ -99,7 +103,7 @@ public final class ExamViewDtos {
                            String qcState, boolean edited, Integer originalQuestionId, String failureReason) {
             this(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId, questionText,
                     optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation, difficulty,
-                    needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, null, null, null);
+                    needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, null, null, null, null);
         }
 
         /**
@@ -112,7 +116,7 @@ public final class ExamViewDtos {
             return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
                     questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
                     difficulty, true, all, QC_CHECKING.equals(qcState) ? qcState : QC_NEEDS_REVIEW, edited,
-                    originalQuestionId, failureReason, infoReasons, requests, inheritedRequests);
+                    originalQuestionId, failureReason, infoReasons, requests, inheritedRequests, bankVisibility);
         }
 
         /** Bản sao kèm cờ thông tin và yêu cầu (PR B). */
@@ -120,7 +124,15 @@ public final class ExamViewDtos {
             return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
                     questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
                     difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, info, own,
-                    inherited);
+                    inherited, bankVisibility);
+        }
+
+        /** Bản sao kèm nơi câu vừa được Giữ vào ("shared" hoặc "private"), chỉ dùng cho kết quả Giữ (NV-28). */
+        public ExamItemDto withBankVisibility(String visibility) {
+            return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
+                    questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
+                    difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, infoReasons,
+                    requests, inheritedRequests, visibility);
         }
 
         /** Chữ ký trước W2-4b (chỗ đã có câu, không có failureReason). */
@@ -169,6 +181,11 @@ public final class ExamViewDtos {
      * @param matrixId    null với đề sinh theo bài (ma trận ẩn)
      * @param kind        (W1-4) "matrix" (tạo từ ma trận), "lesson" (sinh theo bài) hoặc "manual" (đề cũ không có ma trận)
      * @param challenge   (12/11) mức thử thách của đề: "standard" hoặc "advanced"
+     * @param bankKeepVisibility (16/11, NV-31) cấu hình hệ thống {@code app.bank.keep-visibility}: "shared" (câu không cờ khi
+     *                    Giữ vào ngân hàng chung) hoặc "private" (mọi câu Giữ vào ngân hàng riêng của người Giữ); để giao
+     *                    diện ghi đúng chữ trước khi Giữ. Vắng khi DTO không dựng từ API xem đề (ví dụ bản sao lúc xuất Word)
+     * @param totalScore  (16/11, NV-41) tổng điểm phần trắc nghiệm theo thang điểm cấu hình ({@code app.exam.scoring}): điểm một
+     *                    câu × số chỗ của từng phần, kể cả chỗ chưa có câu (như tiêu đề phần trong file Word)
      */
     public record ExamViewDto(
             Integer examId,
@@ -182,8 +199,18 @@ public final class ExamViewDtos {
             int needsReviewCount,
             List<PartDto> parts,
             String kind,
-            String challenge
+            String challenge,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String bankKeepVisibility,
+            @JsonInclude(JsonInclude.Include.NON_NULL) BigDecimal totalScore
     ) {
+        /** Chữ ký trước 16/11 (không có cấu hình ngân hàng và tổng điểm). */
+        public ExamViewDto(Integer examId, String examCode, String title, String mode, ExamStatus status,
+                           Integer matrixId, LocalDateTime createdAt, String buildStatus, int needsReviewCount,
+                           List<PartDto> parts, String kind, String challenge) {
+            this(examId, examCode, title, mode, status, matrixId, createdAt, buildStatus, needsReviewCount, parts, kind,
+                    challenge, null, null);
+        }
+
         /** Chữ ký trước 12/11 (đề chuẩn). */
         public ExamViewDto(Integer examId, String examCode, String title, String mode, ExamStatus status,
                            Integer matrixId, LocalDateTime createdAt, String buildStatus, int needsReviewCount,

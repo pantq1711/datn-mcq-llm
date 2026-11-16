@@ -247,13 +247,16 @@ POST /api/generation/jobs/enqueue
 ### Ngân hàng câu hỏi
 
 Ngân hàng là dữ liệu đã duyệt nên có đáp án, đáp số và nhãn cuối. Ngân hàng dùng chung cho mọi
-giáo viên (H1). Giáo viên và admin chỉ ĐỌC; sửa, xóa câu ngân hàng chưa làm (Q-4c).
+giáo viên (H1). Giáo viên và admin ĐỌC; sửa câu ngân hàng chưa làm (Q-4c). Từ 16/11 người Giữ câu hoặc admin "gỡ khỏi ngân
+hàng" được (xem **Gỡ khỏi ngân hàng** bên dưới).
 
 **Câu riêng tư (W2-3, quyết định E).** Câu sinh từ đề có tài liệu bài học đính kèm, khi giáo viên Giữ, vẫn vào ngân hàng
 nhưng đánh dấu `bank_item.visible_to_user_id` = người Giữ: CHỈ người đó thấy trong danh sách, chủ đề, chi tiết (`GET
 /api/bank-items/{id}` của người khác, kể cả admin, là 404) và dùng lại được; người khác không nhận câu đó làm ứng viên khi tạo
-đề hay Đổi bằng câu ngân hàng. Câu không dựa trên tài liệu (kể cả đề chỉ có "yêu cầu thêm") vẫn dùng chung. Không có cờ riêng
-trong payload: người xem chỉ thấy câu của mình hoặc câu dùng chung.
+đề hay Đổi bằng câu ngân hàng. Câu không dựa trên tài liệu (kể cả đề chỉ có "yêu cầu thêm") vẫn dùng chung, trừ câu có cờ
+"cần xem kỹ" (mục 7.5) và trừ khi hệ thống cấu hình lưu riêng (`BANK_KEEP_VISIBILITY=private`, mục 7.5). Từ 16/11 (NV-30) mỗi
+câu ở danh sách và chi tiết có `visibility`: `shared` (dùng chung) hoặc `private` (câu riêng của người xem; câu riêng của
+người khác không bao giờ hiện).
 
 **Danh sách** (W1-3: thay danh sách không phân trang; đổi hợp đồng so với trước, frontend chưa dùng):
 
@@ -294,7 +297,7 @@ questionText, optionA..optionD, correctOption, explanation, difficulty, createdA
  ],
  "subjectId": 1, "subjectName": "Toán", "gradeLevel": 8, "topic": "Hằng đẳng thức", "content": "Khai triển",
  "origin": {"type": "ai", "reviewMode": "assisted", "edited": true},
- "usageCount": 3, "lastUsedAt": "2026-10-23T09:00:00"}
+ "usageCount": 3, "lastUsedAt": "2026-10-23T09:00:00", "visibility": "shared"}
 ```
 
 - `origin.reviewMode`: `assisted` (Giữ trong đề ở chế độ giáo viên) hoặc `blind` (dữ liệu cũ từ form chấm mù, đã gỡ ngày 25/10);
@@ -320,9 +323,13 @@ GET /api/bank-items/88
                  "reviewer": {"id": 7, "name": "Nguyễn Văn A"}, "reviewedAt": "2026-10-24T09:30:00"}},
     "usage": {"usageCount": 3, "lastUsedAt": "2026-10-24T10:00:00",
               "myExams": [{"examId": 12, "examCode": "MT261024090000123", "title": "Đề giữa kì I",
-                           "createdAt": "2026-10-24T10:00:00"}]}}
+                           "createdAt": "2026-10-24T10:00:00"}]},
+    "visibility": "shared", "canRemove": true}
 404 {"error": "Không tìm thấy câu ngân hàng id=999"}
 ```
+
+- `canRemove` (16/11, NV-21): người xem gỡ được câu khỏi ngân hàng (người Giữ câu, với câu nhập từ Word là người tải; hoặc
+  admin). Giao diện chỉ hiện nút "Gỡ khỏi ngân hàng" khi `true`.
 
 - `provenance.versions` đi từ câu LLM gốc đến bản được đưa vào ngân hàng; `bank_item.source_question_id` là phiên bản cuối.
   `editedBy` chỉ có khi có nhật ký thao tác Sửa trong đề. Không có `raw_llm_output`.
@@ -332,6 +339,23 @@ GET /api/bank-items/88
 
 **Chủ đề:** `GET /api/bank-items/topics?subjectId=` trả `[{"subjectId": 1, "subjectName": "Toán", "gradeLevel": 8,
 "topic": "Đa thức", "count": 12}]` (sắp theo môn, khối, chủ đề; gộp chủ đề không phân biệt hoa thường).
+
+**Gỡ khỏi ngân hàng (16/11, NV-21):**
+
+```http
+DELETE /api/bank-items/88
+→ 204 (không có thân)
+403 {"error": "Chỉ người đã lưu câu này vào ngân hàng (hoặc quản trị viên) mới gỡ được câu.", "code": "BANK_ITEM_NOT_OWNER"}
+404 {"error": "Không tìm thấy câu ngân hàng id=88"}
+```
+
+- Ẩn mềm (V30, `bank_item.removed_at`, `removed_by`), không xóa dòng nào: câu đã gỡ không còn trong danh sách, chủ đề, chi
+  tiết (404) và không được chọn cho đề mới (tạo đề, "Đổi câu → Lấy từ ngân hàng"). Đề cũ đang có câu vẫn hiển thị và xuất Word
+  được như trước.
+- Người gỡ được: người Giữ câu (`teacher_review.reviewer_id`; câu nhập từ Word là người tải) hoặc admin (mọi câu). Câu chung
+  của giáo viên khác: 403 `BANK_ITEM_NOT_OWNER`. Câu không có, đã gỡ, hoặc câu riêng của người khác (với giáo viên): 404.
+  Chưa đăng nhập 401.
+- Chưa có khôi phục câu đã gỡ.
 
 Hiệu năng: với khoảng 3000 câu và 12000 lượt dùng, mọi tổ hợp lọc/tìm/sắp xếp trên chạy dưới 110 ms trên máy phát triển
 (`BankSearchPerformanceTest`, tag `perf`, không chạy mặc định) nên chưa cần chỉ mục mới.
@@ -563,6 +587,10 @@ POST /api/exams/build
   yêu cầu của đề (cả mã lẫn văn bản). Ô có yêu cầu áp dụng cho dạng câu của ô thì bỏ qua ngân hàng như ô có yêu cầu thêm.
   Mỗi mã thêm một dòng cố định vào khối "YÊU CẦU CỦA GIÁO VIÊN" của prompt; Solver kiểm câu có đúng yêu cầu không trong cùng
   lượt gọi (kết quả ở `infoReasons`, mục 7.4).
+- **Lấy câu đã lưu trong ngân hàng (16/11, NV-11, tùy chọn):** `useBank` (boolean, mặc định `true` khi bỏ trống). `false`:
+  không ô nào lấy ngân hàng, mọi chỗ soạn mới qua hàng đợi (tính đủ vào hạn mức ngày, mục 7.2b). Dùng khi tạo đề thứ hai từ
+  cùng ma trận cho lớp khác, để đề không lặp lại các câu đã lưu ở đề trước. Giao diện: ô chọn "Lấy câu đã lưu trong ngân hàng"
+  (mặc định bật) ở cả hai form tạo đề.
 
 - `title` bỏ trống thì lấy tên ma trận. Người tạo đề là người đăng nhập (`teacherId` đã bỏ khỏi API từ W1-1; gửi lên
   thì bị bỏ qua). Ma trận phải của chính người gọi, không thì 404. Đề có `mode = teacher`, `status = draft`.
@@ -599,9 +627,11 @@ POST /api/exams/build
 - Ngân hàng câu dùng chung cho mọi giáo viên (H1): câu ngân hàng khớp ô được lấy bất kể ai đã đưa vào. Ngoại lệ (W2-3,
   mục "Ngân hàng câu hỏi"): câu sinh từ tài liệu của một giáo viên chỉ chính giáo viên đó thấy và dùng lại; câu đó không là
   ứng viên khi người khác tạo đề hay Đổi bằng câu ngân hàng.
-- Mỗi ô lấy câu ngân hàng khớp ô trước: cùng môn, cùng dạng, cùng mức (`tf`: cùng 4 mức theo thứ tự), cùng chủ đề của
-  template gốc (so sau trim, không phân biệt hoa thường); nếu câu ngân hàng được sinh từ một ô ma trận thì còn phải cùng
-  nội dung. Một câu ngân hàng chỉ vào MỘT chỗ của đề (kể cả khi nhiều ô dùng chung template). Giữa các đề chỉ xếp hạng
+- Mỗi ô lấy câu ngân hàng khớp ô trước: cùng môn, **cùng khối** (16/11, NV-10: khối của template gốc phải bằng khối của ma
+  trận hoặc bài; câu có khối trống, như câu cũ hay template không khai khối, bị loại), cùng dạng, cùng mức (`tf`: cùng 4 mức
+  theo thứ tự), cùng chủ đề của template gốc (so sau trim, không phân biệt hoa thường); nếu câu ngân hàng được sinh từ một
+  ô ma trận thì còn phải cùng nội dung. Câu đã gỡ khỏi ngân hàng (16/11) không được chọn. Cùng tiêu chí áp cho "Đổi câu →
+  Lấy từ ngân hàng" (`source = "bank"`, mục 7.5). Một câu ngân hàng chỉ vào MỘT chỗ của đề (kể cả khi nhiều ô dùng chung template). Giữa các đề chỉ xếp hạng
   mềm, không cấm: câu có ít đề khác dùng hơn được chọn trước, hòa thì câu dùng lần cuối cũ hơn trước (chưa dùng lên đầu),
   hòa nữa thì theo id; đề của mọi giáo viên đều được tính (ngân hàng dùng chung). Hết câu chưa dùng thì dùng lại câu đã dùng.
 - Phần thiếu: mỗi ô một run production, zero-shot, `prompt_version` `matrix-mcq-v1-draft` / `matrix-tf-v3-draft` /
@@ -657,6 +687,7 @@ POST /api/exams/build-by-lesson
 - Tùy chọn (12/11): `challenge` (`standard` | `advanced`) như mục 7.2; giá trị khác là 400 `INVALID_REQUEST` trước khi tạo
   ma trận ẩn.
 - Tùy chọn (PR B, 12/11): `requestCodes` cho cả lần sinh, như mục 7.2; mã lạ là 400 `INVALID_REQUEST` trước khi tạo ma trận ẩn.
+- Tùy chọn (16/11, NV-11): `useBank` (mặc định `true`) như mục 7.2; `false` thì mọi câu soạn mới.
 
 - Bắt buộc: `subjectId`, `gradeLevel` (khối lớp, 6-9; thiếu hoặc `null` trả 400 `Phải chọn khối lớp (gradeLevel từ 6 đến
   9)`), `lesson` (tên bài, tối đa 255 ký tự), `cells` (ít nhất 1). Tùy chọn: `content` (phạm vi trong bài), `title` (trống
@@ -671,7 +702,8 @@ POST /api/exams/build-by-lesson
   đổi định dạng, số lượng, mức độ hay QC). Câu sinh từ đề có tài liệu khi Giữ vào ngân hàng thì chỉ người sinh thấy.
 - Yêu cầu cần đạt: giáo viên không phải nhập. Mỗi mức ô dùng có mặc định theo tên bài ("Nhận biết…", "Hiểu và vận dụng
   trực tiếp…", "Vận dụng…"); `learningOutcomes` ghi đè theo mức.
-- Ngân hàng: khớp theo môn, dạng, mức và **chủ đề = tên bài** (so sau trim, không phân biệt hoa thường). Khi không nhập
+- Ngân hàng: khớp theo môn, **khối của bài** (16/11, NV-10), dạng, mức và **chủ đề = tên bài** (so sau trim, không phân biệt
+  hoa thường). Khi không nhập
   `content`, không lọc theo nội dung: câu ngân hàng sinh từ ô ma trận cùng chủ đề dùng lại được. Có `content` thì giữ quy
   tắc 7.2 (cùng nội dung). Frontend nên gợi ý tên bài từ chủ đề đã có (`GET /api/bank/topics`) để tăng khả năng dùng lại.
 - Ma trận ẩn không hiện ở `GET /api/exam-matrices`; mọi đường dẫn theo id của nó (xem, `POST /api/exams/build`, sửa,
@@ -733,7 +765,7 @@ khác để sinh lại).
 ```json
 {"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "mode": "teacher", "status": "draft",
  "kind": "matrix", "matrixId": 3, "createdAt": "2026-10-22T21:30:00", "buildStatus": "ready", "needsReviewCount": 1,
- "challenge": "standard",
+ "challenge": "standard", "bankKeepVisibility": "shared", "totalScore": 7.0,
  "parts": [{"part": "III", "required": 4, "ready": 4, "items": [
    {"slotId": 101, "cellId": 21, "slotNo": 1, "part": "III", "topic": "Tứ giác", "questionType": "sa", "state": "ready",
     "source": "generated", "questionId": 345, "questionText": "Tứ giác $ABCD$ có ba góc…", "saAnswer": "90",
@@ -742,6 +774,12 @@ khác để sinh lại).
 ```
 
 - Phần luôn theo thứ tự I, II, III; trong phần theo thứ tự ô rồi số thứ tự câu. `required`/`ready` để kiểm đủ câu.
+- `bankKeepVisibility` (16/11, NV-31): cấu hình hệ thống `BANK_KEEP_VISIBILITY`: `shared` (câu không cờ khi Giữ vào ngân hàng
+  chung) hoặc `private` (mọi câu Giữ vào ngân hàng riêng của người Giữ). Giao diện dùng để ghi đúng chữ "ngân hàng chung/riêng"
+  trước khi Giữ (mục 7.5).
+- `totalScore` (16/11, NV-41): tổng điểm phần trắc nghiệm theo `app.exam.scoring` (không đổi thang điểm), tính như tiêu đề
+  phần trong file Word: điểm tối đa một câu × số chỗ của từng phần, kể cả chỗ chưa có câu. Ma trận mẫu 12 + 2 + 4 câu là
+  `7.0`. Giao diện dùng cho hộp xác nhận trước khi xuất Word (mục 7.6).
 - Mỗi câu có nội dung đầy đủ theo dạng: `mcq` có `optionA..optionD`, `correctOption`; `sa` có `saAnswer`; `tf` có
   `statements: [{key, text, label, difficulty}]`; cùng `explanation`, `difficulty` (`tf` để trống, mức ở từng ý).
   Chỗ chưa có câu chỉ có phần định danh và `state` (`generating`, `failed`).
@@ -792,7 +830,7 @@ khác để sinh lại).
 ### 7.5. Giữ / Đổi câu khác
 
 ```http
-POST /api/exams/12/slots/101/keep                    → câu (như 7.4) với "state": "kept", "bankItemId": 88
+POST /api/exams/12/slots/101/keep                    → câu (như 7.4) với "state": "kept", "bankItemId": 88, "bankVisibility": "shared"
 POST /api/exams/12/slots/104/replace                 → câu với "state": "generating" (chưa có nội dung)
 POST /api/exams/12/slots/104/replace  {"instruction": "Dùng ngữ cảnh tính tiền mua vở"}
 POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hàng khớp ô ("state": "ready", "source": "bank")
@@ -807,9 +845,13 @@ POST /api/exams/12/slots/104/replace  {"source": "bank"}      → câu ngân hà
   - (10/11, làm rõ 11/11) câu có cờ **về nội dung** lúc Giữ (mọi lý do trong `reviewReasons` trừ `similar_in_exam: …`;
     cờ cùng khuôn là về đề, không phải về câu) vẫn Giữ được (200, không có 409 hay tham số xác nhận), nhưng
     `bank_item.visible_to_user_id` = người Giữ: câu vào ngân hàng **riêng** của người đó, không vào đề của giáo viên khác
-    (giống câu sinh từ tài liệu). Câu chỉ có lý do `similar_in_exam: …` vào ngân hàng dùng chung như câu không cờ. Phản
-    hồi không có trường riêng cho việc này; giao diện chỉ báo "lưu vào ngân hàng riêng" khi câu (trước khi bấm) có ít nhất
-    một lý do không bắt đầu bằng `similar_in_exam:`;
+    (giống câu sinh từ tài liệu). Câu chỉ có lý do `similar_in_exam: …` vào ngân hàng dùng chung như câu không cờ;
+  - (16/11, NV-31) cấu hình `app.bank.keep-visibility` (biến `BANK_KEEP_VISIBILITY`): `shared` (mặc định, hành vi trên) hoặc
+    `private`: MỌI câu Giữ, kể cả câu không cờ, vào ngân hàng riêng của người Giữ. Giá trị cấu hình trả ở
+    `bankKeepVisibility` của API xem đề (mục 7.4);
+  - (16/11, NV-28) kết quả Giữ có thêm `bankVisibility`: `shared` hoặc `private`, là nơi câu vừa nằm sau khi Giữ (đã tính
+    cờ, tài liệu và cấu hình; câu lấy từ ngân hàng giữ nguyên phạm vi của nó). Giao diện báo theo trường này ("Đã lưu vào
+    ngân hàng riêng/chung"). Trường chỉ có trong kết quả Giữ, không có ở API khác;
   - câu lấy từ ngân hàng thì chỉ đánh dấu `kept`, không tạo đánh giá mới;
   - Giữ lần hai trả 409 `Câu hỏi này đã được giữ.`; chỗ chưa có câu trả 409;
   - W1-2: câu giáo viên đã sửa được chép đúng bản sửa vào ngân hàng và chỗ thành `edited` (thay vì `kept`); khi Solver
@@ -950,6 +992,13 @@ GET /api/exams/12/export/docx?equation=abc       → 400
   với bảng đáp án từng phần (phần I 12 câu mỗi bảng, phần II "Câu | Ý | Đáp án", phần III 6 câu mỗi bảng) và điểm lấy từ
   `app.exam.scoring`; rồi "LỜI GIẢI CHI TIẾT" ("Câu k. Chọn C." / "a) Đúng." / "Câu k. Đáp án: 10." đậm, lấy từ dữ liệu đáp án;
   câu không có lời giải chỉ còn dòng nhãn). Mô tả chi tiết đầu đề ở mục kế.
+- **Ghi chú thang điểm (16/11, NV-41):** ngay dưới "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM" (không in trên đề của học sinh) có dòng "Tổng điểm
+  phần trắc nghiệm: X điểm." (X như `totalScore` của mục 7.4, ví dụ "7,0"); X nhỏ hơn 10 thì thêm dòng "Phần tự luận (nếu
+  có) do giáo viên bổ sung." Thang điểm không đổi.
+- **Xác nhận trước khi xuất (giao diện, 16/11, NV-40/NV-41):** đề còn chỗ chưa soạn được, chỗ đang soạn, câu "cần xem kỹ"
+  chưa lưu, hoặc `totalScore` khác 10 thì giao diện hỏi lại (liệt kê số lượng và tổng điểm, nút "Vẫn xuất" / "Quay lại");
+  không chặn. Còn chỗ đang soạn vẫn xuất được sau khi xác nhận (file ghi "[Chưa có câu – đang sinh]" ở chỗ đó). Backend không
+  đổi: API xuất không kiểm các điều kiện này.
 - **Đầu đề (theo mẫu trường, 4/11):** bảng 2 cột không viền (cột 4194 : 6011 twips). Cột trái, đậm, căn giữa: "UBND PHƯỜNG
   ……………" và "TRƯỜNG THCS ……………". Cột phải, căn giữa: "Thứ..... ngày........ tháng..... năm <năm hiện tại>" (nghiêng), "ĐỀ KIỂM
   TRA <tên kì in hoa>" (đậm; tên ma trận của đề, bỏ phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8" thành "GIỮA KÌ I"; đề sinh
@@ -1445,20 +1494,32 @@ file gốc. Cờ và lý do bỏ câu: xem `docs/contract/enums.md` mục 3 ("Nh
 ### 10.1. Tải lên → bản xem trước
 
 ```
-POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic)
+POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic, defaultLevel easy|medium|hard)
 ```
 
 - File .docx (nhận dạng theo nội dung), tối đa 10 MB và 200 câu. Định dạng: "PHẦN I/II/III", đầu câu "Câu N." hoặc nhãn mức
   `[NB]`/`[TH]`/`[VD]`/`[VDC]`, đáp án mcq tô vàng, tf tô vàng hoặc dòng "Đáp án: Đ S S Đ", sa dòng "Đáp số: ...".
+- **Câu không ghi mức (16/11, NV-51):** không còn bị chặn. Khi file có câu (sẽ vào bản xem trước) không ghi nhãn mức thì
+  `defaultLevel` (`easy` = Nhận biết, `medium` = Thông hiểu, `hard` = Vận dụng; không phân biệt hoa thường) là BẮT BUỘC: thiếu
+  thì 400 `IMPORT_LEVEL_DEFAULT_REQUIRED` "File có N câu chưa ghi mức, thầy/cô chọn mức mặc định (…) rồi tải lại." và không lưu
+  lô. Câu không ghi mức nhận mức này kèm cờ thông tin `level_default` (`levelRaw` vẫn `null`); câu có nhãn giữ mức của mình.
+  File đủ nhãn thì `defaultLevel` không có tác dụng. Không có mức "chưa rõ". `defaultLevel` ngoài ba giá trị: 400
+  `IMPORT_LEVEL_INVALID` (kiểm trước khi đọc file).
 - Khối, chủ đề lấy từ tên file mẫu "KHỐI 8 - CHƯƠNG 1 - BÀI 2 - Tên bài - GV ..." (phần "GV ..." bị bỏ); `gradeLevel`, `topic`
   ghi đè. Môn là Toán.
 - 201 → lô: `{id, displayName, status: "preview", subjectId, gradeLevel, topic, createdAt, expiresAt (24 giờ), confirmedAt,
   questionCount, importableCount, blockedCount, importedCount, skipped: {has_image: 3, ...}, skippedItems: [{locator, type,
   reason}], items: [...]}`. Mỗi `items[]`: `{key ("mcq-007"), type, locator ("Phần I, câu thứ 7"), levelRaw, level, stem,
-  options [{key, text}], correctOption, statements [{key, text, label}], saAnswer, explanation, flags [...], blocking}`.
+  options [{key, text}], correctOption, statements [{key, text, label}], saAnswer, explanation, flags [...], blocking,
+  blockReasons [...]}`.
+- `blockReasons` (16/11, NV-51): lý do bằng lời của từng cờ chặn, để giáo viên biết sửa gì trong file, ví dụ "Chưa thấy đáp án:
+  tô vàng (highlight màu vàng) phương án đúng." (`answer_missing` của câu mcq), "Có nhiều hơn một phương án được tô vàng; chỉ
+  tô vàng một phương án đúng." (`answer_ambiguous`). `[]` khi không chặn. Quy tắc đáp án giữ nguyên (mcq phải tô vàng). Lô lưu
+  trước 16/11 có thể không có trường này.
 - Bản đầu bỏ (và đếm) câu có ảnh, câu có công thức chưa chuyển được, câu có bảng dữ liệu. Không có sửa câu trong bản xem
   trước: câu có `blocking = true` phải sửa trong file Word rồi tải lại.
-- Lỗi: 400 `EMPTY_FILE`, `MISSING_FILE`, `IMPORT_TOPIC_INVALID`; 409 `IMPORT_PENDING_LIMIT` (đã có 3 lô chờ xác nhận); 413
+- Lỗi: 400 `EMPTY_FILE`, `MISSING_FILE`, `IMPORT_TOPIC_INVALID`, `IMPORT_LEVEL_INVALID`, `IMPORT_LEVEL_DEFAULT_REQUIRED`; 409
+  `IMPORT_PENDING_LIMIT` (đã có 3 lô chờ xác nhận); 413
   `FILE_TOO_LARGE`; 415 `UNSUPPORTED_FILE_TYPE`; 422 `INVALID_FILE`, `IMPORT_LESSON_UNKNOWN`, `IMPORT_GRADE_INVALID`,
   `IMPORT_NO_QUESTIONS`, `IMPORT_TOO_MANY_QUESTIONS`, `IMPORT_DATA_INVALID` (dữ liệu vi phạm ràng buộc DB; thông báo chỉ nêu
   tên ràng buộc); 429 `TOO_MANY_UPLOADS` (30 lần/giờ); 503 `EXTRACTOR_BUSY`. Trần 3 lô chờ được kiểm cùng transaction với lúc
@@ -1471,8 +1532,10 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic)
 - `POST /api/bank-imports/{id}/confirm` thân `{"keys": ["mcq-001", "tf-002"]}` → 200 `{batchId, imported, bankItemIds}`. Một
   transaction: lỗi thì không ghi câu nào. Lỗi: 400 `IMPORT_KEYS_INVALID` (rỗng, lặp, không có trong lô); 409
   `IMPORT_NOT_PREVIEW` (đã xác nhận), `IMPORT_CONFLICT` (trùng khóa / khóa ngoại do thao tác đồng thời); 410 `IMPORT_EXPIRED`;
-  422 `IMPORT_ITEM_BLOCKED` (thông báo nêu mã các câu còn cờ chặn), `IMPORT_DATA_INVALID` (vi phạm CHECK/NOT NULL; không ghi
+  422 `IMPORT_ITEM_BLOCKED` (thông báo nêu mã các câu còn cờ chặn, từ 16/11 kèm lý do đầu tiên của mỗi câu, ví dụ "mcq-003
+  (Chưa thấy đáp án: tô vàng (highlight màu vàng) phương án đúng)"), `IMPORT_DATA_INVALID` (vi phạm CHECK/NOT NULL; không ghi
   câu nào).
+- Câu đã nhập gỡ được khỏi ngân hàng bằng `DELETE /api/bank-items/{id}` (người tải hoặc admin; mục "Ngân hàng câu hỏi").
 - `DELETE /api/bank-imports/{id}` → 204 (hủy lô chưa xác nhận); lô đã xác nhận: 409 `IMPORT_NOT_PREVIEW`.
 - Trong ngân hàng: `origin.type = "import"`, lọc bằng `GET /api/bank-items?origin=import`. Câu không có lời giải có
   `explanation = null`; khi xuất đề ra Word, phần LỜI GIẢI bỏ câu đó.

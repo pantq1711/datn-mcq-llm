@@ -22,9 +22,10 @@ export async function keepQuestion(
     examId: number,
     slotId: number,
     questionId?: number
-): Promise<{ success: boolean }> {
+): Promise<ExamItemDto> {
+    // Backend trả câu của chỗ sau khi Giữ, kèm bankVisibility (câu vào ngân hàng chung hay riêng), docs/api mục 7.5
     const url = `/api/exams/${examId}/slots/${slotId}/keep`;
-    const response = await axiosInstance.post(url, questionId !== undefined ? { questionId } : {});
+    const response = await axiosInstance.post<ExamItemDto>(url, questionId !== undefined ? { questionId } : {});
     return response.data;
 }
 

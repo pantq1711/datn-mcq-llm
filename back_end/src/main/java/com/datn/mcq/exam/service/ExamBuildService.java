@@ -119,7 +119,7 @@ public class ExamBuildService {
         }
         // W1-4: khóa chia sẻ hàng ma trận tới hết transaction, để xóa/sửa ma trận đồng thời phải chờ (không thành 500).
         return buildFromMatrix(matrixService.getOwnedMatrixShared(req.matrixId(), actorId), req.title(), actorId,
-                req.materialIds(), null, requestCodes, req.cells(), challenge);
+                req.materialIds(), null, requestCodes, req.cells(), challenge, !Boolean.FALSE.equals(req.useBank()));
     }
 
     /** 400 INVALID_REQUEST khi mức thử thách ngoài standard | advanced (12/11); trống là standard. Kiểm trước mọi ghi. */
@@ -143,7 +143,7 @@ public class ExamBuildService {
         List<String> requestCodes = ExamContextService.normalizeRequestCodes(req == null ? null : req.requestCodes());
         ExamMatrix matrix = matrixService.createLesson(req, actorId);
         return buildFromMatrix(matrix, null, actorId, req.materialIds(), req.extraInstruction(), requestCodes, null,
-                challenge);
+                challenge, !Boolean.FALSE.equals(req.useBank()));
     }
 
     /**
@@ -151,12 +151,13 @@ public class ExamBuildService {
      * cảnh (tài liệu, yêu cầu thêm cho AI) được kiểm tra trước mọi ghi đề, lưu theo đề; ô có tài liệu hoặc yêu cầu thêm
      * bỏ qua ngân hàng (câu ngân hàng không theo được chúng) và sinh mọi chỗ qua hàng đợi. 12/11: đề nâng cao lưu mức
      * thử thách vào exam.challenge; ô có mức Vận dụng (mcq/sa) hoặc có ý Vận dụng (tf) của đề nâng cao cũng bỏ qua ngân hàng
-     * (câu ngân hàng sinh theo mức chuẩn).
+     * (câu ngân hàng sinh theo mức chuẩn). 16/11 (NV-11): {@code useBank} false thì không ô nào lấy ngân hàng, mọi chỗ soạn
+     * mới.
      */
     private BuildResultDto buildFromMatrix(ExamMatrix matrix, String requestedTitle, Integer actorId,
                                            List<Integer> materialIds, String extraInstruction,
                                            List<String> requestCodes, List<CellContextInput> cellInputs,
-                                           ExamChallenge challenge) {
+                                           ExamChallenge challenge, boolean useBank) {
         List<ExamMatrixCell> cells = matrixService.cells(matrix.getId());
         ExamContextService.Resolved context = contextService.resolve(actorId, cells, materialIds, extraInstruction,
                 requestCodes, cellInputs);
@@ -205,7 +206,7 @@ public class ExamBuildService {
             GenerationService.JobRequest cellRequest = level == null ? null : level.forType(cell.getQuestionType());
             boolean withContext = !context.materialsFor(cell.getId()).isEmpty() || cellRequest != null
                     || (challenge == ExamChallenge.ADVANCED && outcomeLevelsUsed(cell).contains(Difficulty.HARD));
-            List<Integer> bank = withContext ? List.of()
+            List<Integer> bank = withContext || !useBank ? List.of()
                     : bankCandidates(exam.getId(), actorId, matrix, cell, slots.size());
             List<ExamSlot> missing = new ArrayList<>();
             for (int i = 0; i < slots.size(); i++) {
@@ -315,11 +316,12 @@ public class ExamBuildService {
      * Câu ngân hàng khớp một ô, đã xếp hạng mềm theo số lần dùng và đã loại câu đã có trong đề {@code examId} hoặc đã bị
      * Đổi khỏi đề (xem {@link ExamSlotRepository#findBankCandidates}). Dùng chung cho tạo đề và Đổi bằng câu ngân hàng
      * (W1-4). W1-4: ô theo bài không nhập nội dung thì không lọc theo nội dung (dùng lại câu sinh từ ô ma trận cùng chủ đề).
-     * W2-3: {@code ownerId} là người tạo đề: câu riêng tư của người khác không là ứng viên.
+     * W2-3: {@code ownerId} là người tạo đề: câu riêng tư của người khác không là ứng viên. NV-10 (16/11): chỉ câu cùng khối
+     * với ma trận/bài.
      */
     List<Integer> bankCandidates(Integer examId, Integer ownerId, ExamMatrix matrix, ExamMatrixCell cell, int limit) {
         boolean anyContent = matrix.isLesson() && (cell.getContent() == null || cell.getContent().isBlank());
-        return slotRepository.findBankCandidates(examId, ownerId, matrix.getSubjectId(),
+        return slotRepository.findBankCandidates(examId, ownerId, matrix.getSubjectId(), matrix.getGradeLevel(),
                 cell.getQuestionType().getDbValue(),
                 cell.getTopic(), cell.getContent() != null ? cell.getContent() : "",
                 cell.getDifficulty() != null ? cell.getDifficulty().getDbValue() : "",

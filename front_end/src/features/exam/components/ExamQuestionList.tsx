@@ -3,7 +3,7 @@ import { Button, Empty, List, Skeleton, Space, Tag, Tooltip, Typography } from "
 import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, WarningOutlined, ReloadOutlined, InfoCircleOutlined } from "@ant-design/icons";
 
 import "./ExamQuestionList.css";
-import type { ExamQuestionItem } from "../types/exam.types";
+import type { BankVisibility, ExamQuestionItem } from "../types/exam.types";
 import { describeInfoReason, teacherRequestLabel } from "../types/exam.types";
 import { describeFailureReason, describeLevel, describeReviewReason, hasContentFlag, resolveQuestionType } from "../../../utils/exam.utils";
 import QuestionContent from "./QuestionContent";
@@ -18,6 +18,8 @@ interface ExamQuestionListProps {
     onChangeQuestion?: (question: ExamQuestionItem, index: number) => void;
     onEdit?: (question: ExamQuestionItem, index: number) => void;
     onViewQcTrace?: (question: ExamQuestionItem, index: number) => void;
+    /** Cấu hình hệ thống (API xem đề): câu không cờ khi lưu vào ngân hàng chung hay riêng. Mặc định chung. */
+    bankKeepVisibility?: BankVisibility;
 }
 
 function renderStateTags(question: ExamQuestionItem) {
@@ -80,6 +82,7 @@ export default function ExamQuestionList({
     onChangeQuestion,
     onEdit,
     onViewQcTrace,
+    bankKeepVisibility = "shared",
 }: ExamQuestionListProps) {
     if (loading) {
         return (
@@ -167,9 +170,12 @@ export default function ExamQuestionList({
                                             <Tooltip
                                                 title={
                                                     // Câu có cờ nội dung vẫn Giữ được nhưng vào ngân hàng riêng (docs/api mục 7.5, làm rõ 11/11)
+                                                    // NV-31: hệ thống cấu hình lưu riêng thì mọi câu vào ngân hàng riêng
                                                     hasContentFlag(question.needsReview, reasons)
                                                         ? "Câu có cảnh báo sẽ chỉ được lưu vào ngân hàng riêng của thầy/cô."
-                                                        : "Câu này sẽ được lưu vào ngân hàng chung để dùng cho các đề sau."
+                                                        : bankKeepVisibility === "private"
+                                                            ? "Câu này sẽ được lưu vào ngân hàng riêng của thầy/cô để dùng cho các đề sau."
+                                                            : "Câu này sẽ được lưu vào ngân hàng chung để dùng cho các đề sau."
                                                 }
                                             >
                                                 <Button

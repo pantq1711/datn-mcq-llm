@@ -142,9 +142,12 @@ class BankItemsSnapshotTest {
         return keys;
     }
 
-    /** W1-3: các key thêm cho lọc, nguồn và số lần dùng; mọi key khác không được xuất hiện. */
+    /**
+     * W1-3: các key thêm cho lọc, nguồn và số lần dùng; 16/11 (NV-30) thêm {@code visibility} (câu chung hay riêng); mọi key
+     * khác không được xuất hiện.
+     */
     private static final Set<String> W13_KEYS = Set.of("subjectId", "subjectName", "gradeLevel", "topic", "content",
-            "origin", "usageCount", "lastUsedAt");
+            "origin", "usageCount", "lastUsedAt", "visibility");
 
     /** Key của một câu sau khi bỏ các key W1-3: phải đúng bằng bộ key W1-2 (12 key cũ, questionType, saAnswer/statements). */
     private static Set<String> keysWithoutW13(JsonNode node) {
