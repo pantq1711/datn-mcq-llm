@@ -18,4 +18,9 @@ public class ExamMaterialUsage implements MaterialUsageLookup {
     public int examCount(Integer materialId) {
         return (int) repository.countExamsUsingMaterial(materialId);
     }
+
+    @Override
+    public int everExamCount(Integer materialId) {
+        return (int) repository.countEverExamsUsingMaterial(materialId);
+    }
 }

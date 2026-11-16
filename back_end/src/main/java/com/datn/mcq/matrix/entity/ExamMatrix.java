@@ -44,6 +44,10 @@ public class ExamMatrix {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    /** V31: xóa mềm (ma trận chỉ còn đề đã xóa); null là ma trận còn. Ma trận đã xóa không hiện ở API nào (404). */
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     /** V11: chủ sở hữu (users.id); chỉ người này xem và tạo đề từ ma trận. */
     @Column(name = "created_by", nullable = false)
     private Integer createdBy;
@@ -135,5 +139,13 @@ public class ExamMatrix {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
     }
 }

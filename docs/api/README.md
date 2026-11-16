@@ -81,7 +81,8 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | GET | `/api/bank-items/topics?subjectId=` | Chủ đề có câu trong ngân hàng kèm số câu, để dựng bộ lọc |
 | POST | `/api/exam-matrices` | Tạo ma trận đề bằng JSON (mục 7) |
 | GET | `/api/exam-matrices`, `/api/exam-matrices/{id}` | Danh sách ma trận / chi tiết một ma trận |
-| PUT, DELETE | `/api/exam-matrices/{id}` | Sửa / xóa ma trận; đã có đề thì chỉ sửa được tên, nguồn, ghi chú và không xóa được: 409 `MATRIX_IN_USE` (mục 7.1a) |
+| PUT, DELETE | `/api/exam-matrices/{id}` | Sửa / xóa ma trận; đã có đề thì chỉ sửa được tên, nguồn, ghi chú và không xóa được: 409 `MATRIX_IN_USE`; chỉ còn đề đã xóa thì xóa mềm được, sửa cấu trúc vẫn 409 (mục 7.1a) |
+| DELETE | `/api/exams/{id}` | Xóa đề của tôi (xóa mềm, V31); câu đã lưu vào ngân hàng vẫn giữ; đề đang soạn: 409 `EXAM_GENERATING` (mục 7.0) |
 | POST | `/api/exam-matrices/{id}/duplicate` | Nhân bản ma trận thành ma trận mới độc lập (mục 7.1a) |
 | GET | `/api/exam-matrices/samples` | Các mẫu ma trận có sẵn (hiện có `giuaki1-toan8`) |
 | POST | `/api/exam-matrices/samples/{key}` | Tạo ma trận từ mẫu có sẵn |
@@ -476,7 +477,8 @@ GET /api/exams?page=0&size=10[&kind=lesson|matrix]
 - W1-4: `kind` là loại đề: `matrix` (tạo từ ma trận), `lesson` (sinh theo bài, `matrixId` luôn `null`) hoặc `manual` (đề
   cũ không có ma trận). Tham số `kind` tùy chọn lọc theo `lesson` hoặc `matrix`; giá trị khác trả 400 (`kind phải là lesson
   hoặc matrix`). Loại suy ra từ ma trận gốc của đề, không có cột riêng.
-- Chỉ đề do người gọi tạo, mới nhất trước. `page` từ 0 (mặc định 0), `size` từ 1 đến 50 (mặc định 10); sai thì 400.
+- Chỉ đề do người gọi tạo, CHƯA XÓA (V31), mới nhất trước. `page` từ 0 (mặc định 0), `size` từ 1 đến 50 (mặc định 10);
+  sai thì 400.
 - `readySlots`: chỗ đã có câu, chưa Giữ (`ready`); `keptSlots`: đã Giữ (`kept`, `edited`); `needsReviewSlots`: số chỗ có
   `needsReview = true` trong `GET /api/exams/{id}` của cùng đề (từ 4/11 dùng CHUNG một hàm dựng mục với trang chi tiết, nên gồm
   cả cờ `similar_in_exam` và luôn bằng `needsReviewCount` của trang chi tiết); `generatingSlots`: `pending`, `generating`;
@@ -486,6 +488,36 @@ GET /api/exams?page=0&size=10[&kind=lesson|matrix]
 - F-07 (4/11): danh sách và trang chi tiết nạp dữ liệu theo lô, số truy vấn cố định (khoảng 14 cho danh sách, 13 cho xem đề)
   không phụ thuộc số câu hay số đề trong trang; xem `docs/experiments/trial/do-f07-so-cau-sql.md`. Trước 4/11
   `needsReviewSlots` bị N+1, chỉ đếm chỗ `ready` và không có cờ `similar_in_exam` nên có thể nhỏ hơn `needsReviewCount`.
+
+#### Xóa đề (NV-01, V31)
+
+```http
+DELETE /api/exams/12   → 204
+```
+
+- Chỉ chủ đề; đề của người khác, không có hoặc đã xóa: **404** như không tồn tại.
+- **Xóa mềm** (`exam.deleted_at`): không xóa vật lý dòng nào. Chỗ (`exam_slot`), nhật ký thao tác (`exam_slot_action`), câu
+  đã sinh (`generated_question`), ngữ cảnh và tài liệu gắn với đề giữ nguyên cho thống kê. Câu đã Giữ vẫn ở ngân hàng. Hạn
+  mức ngày (7.2b) đã trừ không hoàn lại.
+- Sau khi xóa, mọi API của đề trả 404: xem (7.4), tiến độ (7.3), các chỗ của một ô, xuất Word (7.6), Giữ/Đổi (7.5), Sửa
+  (7.5a), vết QC (7.7); đề không hiện ở danh sách (7.0).
+- **Đề còn đang soạn**: còn job sinh câu (`generate`) đang chạy, hoặc đang chờ chạy mà KHÔNG hoãn vì hết lượt AI, thì **409**
+  `EXAM_GENERATING` ("Đề đang được soạn, chờ xong rồi xóa."), không đổi gì. Job đang **hoãn** vì hết lượt AI (C-01) không
+  chặn: đề xóa được, các job đó chuyển `failed` với `last_error = 'exam_deleted'`. Job Solver (`answer_check`) và "bám tài
+  liệu" (`grounding_check`) không chặn và được để chạy nốt (chỉ ghi kết quả QC của câu).
+- Hệ quả của đề đã xóa: không tính vào `examCount` và `MATRIX_IN_USE` khi xóa ma trận (7.1a; sửa cấu trúc ma trận vẫn bị khóa),
+  không tính vào `MATERIAL_IN_USE` (9.2), không tính vào số đề đã dùng (`usageCount`, `lastUsedAt`, `usage.myExams`) của câu
+  ngân hàng, không tính vào xếp hạng mềm khi lấy câu ngân hàng cho đề mới (7.2, `findBankCandidates`). **Còn tính** trong
+  các truy vấn thống kê `docs/thong-ke` (có chủ ý).
+- Xóa đúng lúc đang thao tác trên đề: Giữ, Đổi/Soạn lại, Sửa (và đối soát khi xem đề/tiến độ có chỗ đang sinh) khóa chia sẻ
+  hàng đề, lần xóa khóa ghi. Thao tác đang chạy thì lần xóa chờ nó xong (rồi có thể 409 nếu thao tác vừa xếp job sinh câu);
+  lần xóa đang dở thì thao tác chờ rồi trả **404** như đề không tồn tại, không ghi gì và không xếp job cho đề đã xóa.
+
+| Mã | `code` | Khi nào |
+|---|---|---|
+| 204 | — | Đã xóa |
+| 404 | — | Đề không có, của giáo viên khác hoặc đã xóa |
+| 409 | `EXAM_GENERATING` | Còn job sinh câu đang chạy hoặc đang chờ chạy (không phải hoãn vì hết lượt AI) |
 
 ### 7.1. Ma trận
 
@@ -538,8 +570,8 @@ DELETE /api/exam-matrices/3                                                     
 POST   /api/exam-matrices/3/duplicate       {"name": "Đề thử (cô Lan)"} (body tùy chọn) → 200 ma trận mới
 ```
 
-`GET /api/exam-matrices` và `GET /api/exam-matrices/{id}` có thêm `examCount`: số đề đã tạo từ ma trận (UI dùng để báo
-trước ma trận nào đang bị khóa). Quyền như mục 7: chỉ giáo viên, chỉ ma trận của mình.
+`GET /api/exam-matrices` và `GET /api/exam-matrices/{id}` có thêm `examCount`: số đề CHƯA XÓA tạo từ ma trận (UI dùng để
+báo trước ma trận nào đang bị khóa; V31: đề đã xóa không tính). Quyền như mục 7: chỉ giáo viên, chỉ ma trận của mình.
 
 - **Chưa có đề nào (`examCount = 0`):**
   - sửa: thay toàn bộ môn, khối, tên, nguồn, ghi chú và các ô (kiểm tra như tạo). Mọi ô được tạo lại nên **id ô và
@@ -553,6 +585,12 @@ trước ma trận nào đang bị khóa). Quyền như mục 7: chỉ giáo vi�
     này); đã có khối thì đổi khối vẫn 409;
   - xóa trả **409** `MATRIX_IN_USE`;
   - muốn ma trận khác đi: tạo ma trận mới với nội dung đã sửa (`POST /api/exam-matrices`) hoặc nhân bản.
+- **Chỉ còn đề đã xóa (V31, `examCount = 0` nhưng ma trận đã từng có đề):** chỗ của đề đã xóa vẫn trỏ tới ô, nên:
+  - sửa vẫn chỉ được tên, nguồn, ghi chú; sửa môn, khối hoặc ô thì **409** `MATRIX_IN_USE` với thông báo "Ma trận đã từng
+    có đề (các đề đó đã xóa) nên không sửa được môn, khối và các ô; dùng Nhân bản để sửa cấu trúc. …";
+  - xóa trả **204** và là **xóa mềm** (`exam_matrix.deleted_at`): ô, template và `exam.matrix_id` của các đề đã xóa giữ
+    nguyên. Ma trận đã xóa biến khỏi danh sách; xem, sửa, xóa, nhân bản và tạo đề từ nó đều **404**.
+  - ma trận chưa từng có đề vẫn xóa vật lý như trên.
 - **Nhân bản:** làm được cả với ma trận đã có đề. Ma trận mới độc lập (sửa hoặc xóa bản này không đụng bản kia): cùng nội
   dung ô, nguồn, ghi chú, mỗi ô có template riêng, `sampleKey` bỏ trống, `examCount = 0`, người sở hữu là người gọi. `name`
   bỏ trống thì "&lt;tên&gt; (bản sao)" (cắt cho vừa 255 ký tự); `name` quá 255 ký tự thì 400. Ma trận chưa có khối thì 400
@@ -564,8 +602,8 @@ trước ma trận nào đang bị khóa). Quyền như mục 7: chỉ giáo vi�
 | Mã | `code` | Khi nào |
 |---|---|---|
 | 400 | — | Dữ liệu sai (`Ô 2: …`, `name dài tối đa 255 ký tự`…), không đổi gì |
-| 404 | — | Ma trận không có, của giáo viên khác hoặc là ma trận ẩn; `subjectId` không tồn tại |
-| 409 | `MATRIX_IN_USE` | Sửa môn/khối/ô hoặc xóa khi `examCount > 0`; thông báo nêu số đề |
+| 404 | — | Ma trận không có, của giáo viên khác, là ma trận ẩn hoặc đã xóa (V31); `subjectId` không tồn tại |
+| 409 | `MATRIX_IN_USE` | Sửa môn/khối/ô khi ma trận đã từng có đề (kể cả đề đã xóa), hoặc xóa khi `examCount > 0`; thông báo nêu số đề hoặc gợi ý Nhân bản |
 
 ### 7.2. Tạo đề một lần bấm
 
@@ -1430,9 +1468,13 @@ Mã lỗi (body `{"error", "code"}`):
   (sai thì 400). Mục không có văn bản.
 - `GET /api/materials/{id}` → như trên kèm `textPreview`: tối đa 500 ký tự đầu của văn bản đã trích (để giáo viên kiểm tra
   dấu tiếng Việt và công thức). Không có API trả văn bản đầy đủ.
-- `DELETE /api/materials/{id}` → 204. Tài liệu đã gắn vào một đề (mục 7.2, 7.2a) thì 409 `MATERIAL_IN_USE` (thông báo nêu số
-  đề), không xóa được. Gắn tài liệu vào đề giữ khóa chia sẻ trên hàng tài liệu, nên xóa đúng lúc đang gắn thì phải chờ rồi bị
-  chặn (409), không thành lỗi 500.
+- `DELETE /api/materials/{id}` → 204. Tài liệu đã gắn vào một đề CHƯA XÓA (mục 7.2, 7.2a) thì 409 `MATERIAL_IN_USE` (thông
+  báo nêu số đề), không xóa được. Gắn tài liệu vào đề giữ khóa chia sẻ trên hàng tài liệu, nên xóa đúng lúc đang gắn thì phải
+  chờ rồi bị chặn (409), không thành lỗi 500.
+- V31 (NV-55): tài liệu chỉ còn gắn với đề đã xóa (mục 7.0) thì xóa là **xóa mềm** (`lesson_material.deleted_at`; dòng gắn của
+  đề đã xóa và văn bản trích giữ nguyên); tài liệu chưa gắn đề nào vẫn xóa vật lý. Tài liệu đã xóa: biến khỏi danh sách và
+  `totalItems`, xem/xóa trả 404, gắn vào đề mới trả 404, **không tính vào trần 50 tài liệu**. Tải lại đúng file đó (cùng
+  sha256) thì **khôi phục** bản cũ (cùng `id`, hết `deleted_at`) và trả 201 như tải mới (tính lại vào trần).
 
 ### 9.3. Văn bản trích
 

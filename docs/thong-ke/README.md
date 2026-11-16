@@ -66,6 +66,9 @@ một câu sinh lại nhiều lần được đếm nhiều lần, khác với f
    `GroundingPipelineTest`) đọc file qua `PsqlFile`, làm đúng hai việc đó với giá trị mặc định.
 4. Các file 02 và 04 chỉ tính câu đã nằm (hoặc từng nằm) trong một chỗ của đề giáo viên, nên câu sinh ra nhưng chưa vào đề
    (ví dụ lần sinh bị lỗi định dạng rồi sinh lại) vẫn được tính ở file 02 qua `generation_job.exam_slot_id`.
+   - **Đề đã xóa (V31, `exam.deleted_at`) VẪN được tính, có chủ ý:** xóa đề là xóa mềm, các lần sinh, thao tác Giữ/Sửa/Đổi
+     và chi phí gọi LLM của đề đó đã xảy ra thật. Không file nào ở đây lọc `deleted_at`. Muốn bỏ đề đã xóa thì thêm
+     `AND e.deleted_at IS NULL` ở chỗ nối bảng `exam`.
 5. Dữ liệu trước V13 (chưa có chuỗi bản sửa) và trước V14 (chưa có `solver_error`, `solver_reasoning`) vẫn truy vấn được;
    phần "Solver lỗi" của dữ liệu trước V14 nằm chung trong "Solver không chạy hoặc lỗi".
 

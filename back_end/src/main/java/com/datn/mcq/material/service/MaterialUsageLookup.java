@@ -7,6 +7,9 @@ package com.datn.mcq.material.service;
  */
 public interface MaterialUsageLookup {
 
-    /** Số đề đang dùng tài liệu {@code materialId}. */
+    /** Số đề CHƯA XÓA đang dùng tài liệu {@code materialId} (V31: đề đã xóa không tính). */
     int examCount(Integer materialId);
+
+    /** V31: số đề đã TỪNG gắn tài liệu, kể cả đề đã xóa (quyết định xóa mềm hay xóa vật lý). */
+    int everExamCount(Integer materialId);
 }

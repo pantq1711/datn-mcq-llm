@@ -68,6 +68,10 @@ public class LessonMaterial {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    /** V31: xóa mềm (tài liệu chỉ còn gắn với đề đã xóa); null là tài liệu còn. Không tính vào trần mỗi giáo viên. */
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     public LessonMaterial() {}
 
     public Integer getId() {
@@ -160,5 +164,13 @@ public class LessonMaterial {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
     }
 }

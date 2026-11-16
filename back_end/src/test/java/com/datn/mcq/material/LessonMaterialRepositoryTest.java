@@ -79,8 +79,9 @@ class LessonMaterialRepositoryTest {
     @Test
     void hoiTheoIdVaChuSoHuuKhongTraTaiLieuCuaNguoiKhac() {
         LessonMaterial a = material(teacherA, 'a', "cua-a.docx");
-        assertTrue(repository.findByIdAndOwnerId(a.getId(), teacherA).isPresent());
-        assertTrue(repository.findByIdAndOwnerId(a.getId(), teacherB).isEmpty(), "của người khác: như không tồn tại");
+        assertTrue(repository.findByIdAndOwnerIdAndDeletedAtIsNull(a.getId(), teacherA).isPresent());
+        assertTrue(repository.findByIdAndOwnerIdAndDeletedAtIsNull(a.getId(), teacherB).isEmpty(),
+                "của người khác: như không tồn tại");
     }
 
     @Test
@@ -95,9 +96,10 @@ class LessonMaterialRepositoryTest {
         LessonMaterial first = material(teacherA, 'a', "1.docx");
         LessonMaterial second = material(teacherA, 'b', "2.docx");
         material(teacherB, 'a', "cua-b.docx");
-        List<LessonMaterial> page = repository.findByOwnerIdOrderByIdDesc(teacherA, PageRequest.of(0, 10));
+        List<LessonMaterial> page = repository.findByOwnerIdAndDeletedAtIsNullOrderByIdDesc(teacherA,
+                PageRequest.of(0, 10));
         assertEquals(List.of(second.getId(), first.getId()), page.stream().map(LessonMaterial::getId).toList());
-        assertEquals(2, repository.countByOwnerId(teacherA));
-        assertEquals(1, repository.countByOwnerId(teacherB));
+        assertEquals(2, repository.countByOwnerIdAndDeletedAtIsNull(teacherA));
+        assertEquals(1, repository.countByOwnerIdAndDeletedAtIsNull(teacherB));
     }
 }

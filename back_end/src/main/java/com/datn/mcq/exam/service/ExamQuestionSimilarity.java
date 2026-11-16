@@ -54,9 +54,9 @@ public final class ExamQuestionSimilarity {
     }
 
     /**
-     * Gắn lý do {@link #REASON_PREFIX} cho các câu hệ thống sinh cùng khuôn với câu đứng TRƯỚC nó trong đề. Mỗi cặp chỉ câu
-     * có số thứ tự lớn hơn bị gắn; câu ngân hàng và câu đã Giữ/Sửa được so nhưng không bị gắn. Thay phần tử trong các danh
-     * sách của {@code byPart} (theo thứ tự Phần hiển thị; mỗi chỗ một vị trí, kể cả chỗ chưa có câu).
+     * Gắn lý do {@link #REASON_PREFIX} cho các câu cùng khuôn với câu đứng TRƯỚC nó trong đề (xem {@link #flaggable}). Mỗi
+     * cặp chỉ câu có số thứ tự lớn hơn bị gắn; câu đã Giữ/Sửa trong đề này được so nhưng không bị gắn. Thay phần tử trong
+     * các danh sách của {@code byPart} (theo thứ tự Phần hiển thị; mỗi chỗ một vị trí, kể cả chỗ chưa có câu).
      */
     public static void flag(Map<String, List<ExamItemDto>> byPart, double threshold) {
         List<ExamItemDto> flat = byPart.values().stream().flatMap(List::stream).toList();
@@ -78,13 +78,27 @@ public final class ExamQuestionSimilarity {
                 position++;
                 ExamItemDto item = items.get(i);
                 List<Integer> earlier = similar.get(position);
-                if (earlier != null && item.bankItemId() == null && "generated".equals(item.source())
-                        && item.questionText() != null) {
+                if (earlier != null && flaggable(item)) {
                     items.set(i, item.withExtraReasons(earlier.stream()
                             .map(p -> reason(partOf.get(p - 1), numberOf.get(p - 1))).toList()));
                 }
             }
         }
+    }
+
+    /**
+     * Câu bị gắn cờ được: câu hệ thống sinh chưa Giữ ({@code source = "generated"}, chưa có {@code bankItemId}) và, từ NV-15
+     * (rà soát 15/11), câu lấy từ ngân hàng chưa được Giữ trong chính đề này (chỗ {@code ready}, {@code source = "bank"}).
+     * Câu đã Giữ/Sửa trong đề này không bị gắn.
+     */
+    private static boolean flaggable(ExamItemDto item) {
+        if (item.questionText() == null) {
+            return false;
+        }
+        if ("generated".equals(item.source())) {
+            return item.bankItemId() == null;
+        }
+        return "bank".equals(item.source()) && com.datn.mcq.exam.entity.ExamSlot.READY.equals(item.state());
     }
 
     /** Văn bản đã chuẩn hóa về khuôn; xem mô tả lớp. */

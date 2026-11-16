@@ -70,13 +70,16 @@ public class BankSearchRepository {
                       String topic, String content, String reviewMode, boolean edited, long usageCount,
                       LocalDateTime lastUsedAt, QuestionOrigin origin, Integer visibleToUserId, Integer reviewerId) {}
 
-    /** Đếm đề đang dùng câu: số đề khác nhau và ngày tạo đề mới nhất (đề của mọi giáo viên). */
+    /**
+     * Đếm đề đang dùng câu: số đề khác nhau và ngày tạo đề mới nhất (đề của mọi giáo viên). V31 (NV-01): đề đã xóa không
+     * tính.
+     */
     private static final String USAGE_SUBQUERY = """
             (SELECT u.bank_item_id, count(*) AS uses, max(e.created_at) AS last_used
              FROM (SELECT exam_id, bank_item_id FROM exam_slot WHERE bank_item_id IS NOT NULL
                    UNION
                    SELECT exam_id, bank_item_id FROM exam_question) u
-             JOIN exam e ON e.id = u.exam_id
+             JOIN exam e ON e.id = u.exam_id AND e.deleted_at IS NULL
              %s
              GROUP BY u.bank_item_id) us""";
 
@@ -241,13 +244,13 @@ public class BankSearchRepository {
                         time(rs, "reviewed_at"))).stream().findFirst();
     }
 
-    /** Đề của {@code ownerId} đang dùng câu (mới nhất trước, tối đa {@code limit}). */
+    /** Đề chưa xóa (V31) của {@code ownerId} đang dùng câu (mới nhất trước, tối đa {@code limit}). */
     public List<ExamRef> examsOf(Integer bankItemId, Integer ownerId, int limit) {
         MapSqlParameterSource p = new MapSqlParameterSource().addValue("id", bankItemId)
                 .addValue("owner", ownerId).addValue("limit", limit);
         return jdbc.query("""
                 SELECT e.id, e.exam_code, e.title, e.created_at FROM exam e
-                WHERE e.created_by = :owner
+                WHERE e.created_by = :owner AND e.deleted_at IS NULL
                   AND (EXISTS (SELECT 1 FROM exam_slot es WHERE es.exam_id = e.id AND es.bank_item_id = :id)
                        OR EXISTS (SELECT 1 FROM exam_question q WHERE q.exam_id = e.id AND q.bank_item_id = :id))
                 ORDER BY e.created_at DESC, e.id DESC LIMIT :limit""", p,

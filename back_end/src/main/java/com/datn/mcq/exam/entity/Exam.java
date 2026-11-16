@@ -53,10 +53,25 @@ public class Exam {
     @Column(name = "challenge", nullable = false, length = 10)
     private ExamChallenge challenge = ExamChallenge.STANDARD;
 
+    /**
+     * V31 (NV-01): thời điểm giáo viên xóa đề (xóa mềm); null là đề còn. Đề đã xóa không hiện ở API nào (404); các dòng của
+     * đề (chỗ, nhật ký, câu đã sinh) giữ nguyên cho thống kê.
+     */
+    @Column(name = "deleted_at")
+    private java.time.LocalDateTime deletedAt;
+
     public static final String MODE_MANUAL = "manual";
     public static final String MODE_TEACHER = "teacher";
 
     public Exam() {}
+
+    public java.time.LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(java.time.LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
+    }
 
     public ExamChallenge getChallenge() {
         return challenge;

@@ -1,6 +1,6 @@
-import { Button, Empty, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Button, Empty, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
-import { EyeOutlined, WarningOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EyeOutlined, WarningOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
 import "./ExamTable.css";
@@ -17,6 +17,10 @@ interface ExamTableProps {
     pageSize?: number;
     onPageChange?: (page: number, pageSize: number) => void;
     onView?: (exam: ExamListItem) => void;
+    /** NV-01: xác nhận xóa đề (sau hộp xác nhận). Không truyền thì không có nút xóa. */
+    onDelete?: (exam: ExamListItem) => void | Promise<void>;
+    /** Đề đang được xóa (nút xóa hiện trạng thái đang chạy). */
+    deletingId?: number | null;
     /** Bấm "Tạo đề đầu tiên" ở trạng thái rỗng. */
     onCreate?: () => void;
 }
@@ -30,6 +34,8 @@ export default function ExamTable({
     pageSize = 10,
     onPageChange,
     onView,
+    onDelete,
+    deletingId = null,
     onCreate,
 }: ExamTableProps) {
     const columns: ColumnsType<ExamListItem> = [
@@ -148,7 +154,7 @@ export default function ExamTable({
         {
             title: "Thao tác",
             key: "actions",
-            width: 90,
+            width: 110,
             align: "center",
             fixed: "right",
             render: (_, record) => (
@@ -160,6 +166,26 @@ export default function ExamTable({
                             onClick={() => onView?.(record)}
                         />
                     </Tooltip>
+                    {onDelete && (
+                        <Popconfirm
+                            title="Xóa đề này?"
+                            description="Câu đã lưu vào ngân hàng vẫn được giữ. Không hoàn tác được."
+                            okText="Xóa đề"
+                            cancelText="Hủy"
+                            okButtonProps={{ danger: true }}
+                            onConfirm={() => onDelete(record)}
+                        >
+                            <Tooltip title="Xóa đề">
+                                <Button
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    loading={deletingId === record.examId}
+                                    aria-label={`Xóa đề ${record.title}`}
+                                />
+                            </Tooltip>
+                        </Popconfirm>
+                    )}
                 </Space>
             ),
         },

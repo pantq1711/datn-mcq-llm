@@ -24,7 +24,12 @@ public interface ExamGenerationContextRepository extends JpaRepository<ExamGener
             """, nativeQuery = true)
     List<Object[]> findRequestsByExamIds(@Param("examIds") java.util.Collection<Integer> examIds);
 
-    /** Số đề khác nhau đang dùng một tài liệu (chặn xóa tài liệu đang dùng). */
-    @Query("SELECT count(DISTINCT c.examId) FROM ExamGenerationContext c JOIN c.materialIds m WHERE m = :materialId")
+    /** Số đề CHƯA XÓA (V31) khác nhau đang dùng một tài liệu (chặn xóa tài liệu đang dùng). */
+    @Query("SELECT count(DISTINCT c.examId) FROM ExamGenerationContext c JOIN c.materialIds m WHERE m = :materialId"
+            + " AND EXISTS (SELECT 1 FROM Exam e WHERE e.id = c.examId AND e.deletedAt IS NULL)")
     long countExamsUsingMaterial(@Param("materialId") Integer materialId);
+
+    /** V31: số đề khác nhau đã TỪNG gắn một tài liệu, kể cả đề đã xóa (dòng gắn của đề đã xóa vẫn trỏ tới tài liệu). */
+    @Query("SELECT count(DISTINCT c.examId) FROM ExamGenerationContext c JOIN c.materialIds m WHERE m = :materialId")
+    long countEverExamsUsingMaterial(@Param("materialId") Integer materialId);
 }

@@ -67,6 +67,18 @@ export async function getMyExams(params?: GetMyExamsParams): Promise<ExamListRes
     }
 }
 
+/**
+ * NV-01: xóa đề của mình (backend xóa mềm, trả 204). Câu đã lưu vào ngân hàng vẫn được giữ. Đề còn đang soạn: 409
+ * EXAM_GENERATING; đề không có hoặc đã xóa: 404. Lỗi ném ra là Error với câu báo lỗi của backend.
+ */
+export async function deleteExam(examId: number): Promise<void> {
+    try {
+        await axiosInstance.delete(`/api/exams/${examId}`);
+    } catch (error: unknown) {
+        throw new Error(getApiErrorMessage(error, "Không thể xóa đề thi"), { cause: error });
+    }
+}
+
 // Lấy chi tiết đề (câu, đáp án, lời giải, flag "cần xem kỹ")
 export const getExamDetail = async (examId: string) => {
     const { data } = await axiosInstance.get<ExamDetail>(`/api/exams/${examId}`);

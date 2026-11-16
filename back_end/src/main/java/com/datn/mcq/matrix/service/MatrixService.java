@@ -236,15 +236,20 @@ public class MatrixService {
         validate(req, MATRIX_SUBJECT);
         Subject subject = catalogService.getSubjectById(req.subjectId());
         List<ExamMatrixCell> oldCells = cellRepository.findByMatrixIdOrderByPositionAsc(id);
-        int exams = usage.examCount(id);
+        // V31: đề đã xóa vẫn khóa cấu trúc (chỗ của đề đã xóa còn trỏ tới ô), nên đếm cả đề đã xóa ở đây
+        int everExams = usage.everExamCount(id);
         matrix.setName(req.name().trim());
         matrix.setSource(blankToNull(req.source()));
         matrix.setNotes(JsonStringArray.write(req.notes()));
-        if (exams > 0) {
+        if (everExams > 0) {
             if (!sameStructure(matrix, oldCells, subject.getId(), req)) {
-                throw ApiErrorException.conflict(MATRIX_IN_USE, "Ma trận đã được dùng cho " + exams + " đề nên không "
-                        + "sửa được môn, khối và các ô (đề đã tạo dùng lại ô để sinh câu). Tên, nguồn và ghi chú vẫn "
-                        + "sửa được; muốn đổi ô hãy nhân bản ma trận hoặc tạo ma trận mới.");
+                int exams = usage.examCount(id);
+                throw ApiErrorException.conflict(MATRIX_IN_USE, exams > 0
+                        ? "Ma trận đã được dùng cho " + exams + " đề nên không sửa được môn, khối và các ô (đề đã tạo "
+                                + "dùng lại ô để sinh câu). Tên, nguồn và ghi chú vẫn sửa được; muốn đổi ô hãy nhân bản "
+                                + "ma trận hoặc tạo ma trận mới."
+                        : "Ma trận đã từng có đề (các đề đó đã xóa) nên không sửa được môn, khối và các ô; dùng Nhân "
+                                + "bản để sửa cấu trúc. Tên, nguồn và ghi chú vẫn sửa được.");
             }
             // Ma trận lưu trước khi bắt buộc khối chưa có khối: bổ sung một lần cho ma trận và template của các ô, để
             // câu sinh sau (Đổi/sinh lại) và lọc ngân hàng theo khối dùng đúng khối; môn và ô vẫn phải giữ nguyên
@@ -309,6 +314,8 @@ public class MatrixService {
     /**
      * Xóa ma trận của chính người gọi. Có đề thì 409 {@value #MATRIX_IN_USE} (đề giữ khóa ngoại tới ma trận và ô). Không
      * có đề: xóa ô và ma trận, dọn template của các ô nếu không còn câu hay job tham chiếu (câu đã sinh giữ vết nguồn gốc).
+     * V31: chỉ còn đề đã xóa thì xóa mềm ({@code deleted_at}), giữ nguyên ô (chỗ của đề đã xóa còn trỏ tới); ma trận đã
+     * xóa không hiện ở đâu nữa (404).
      */
     @Transactional
     public void delete(Integer id, Integer ownerId) {
@@ -317,6 +324,11 @@ public class MatrixService {
         if (exams > 0) {
             throw ApiErrorException.conflict(MATRIX_IN_USE, "Ma trận đã được dùng cho " + exams + " đề nên không xóa "
                     + "được.");
+        }
+        if (usage.everExamCount(id) > 0) {
+            matrix.setDeletedAt(java.time.LocalDateTime.now());
+            matrixRepository.save(matrix);
+            return;
         }
         List<ExamMatrixCell> cells = cellRepository.findByMatrixIdOrderByPositionAsc(id);
         List<Integer> templates = cells.stream().map(ExamMatrixCell::getTemplateId).toList();
@@ -401,7 +413,7 @@ public class MatrixService {
      */
     @Transactional(readOnly = true)
     public ExamMatrix getOwnedMatrix(Integer matrixId, Integer ownerId) {
-        return matrixRepository.findByIdAndCreatedByAndKind(matrixId, ownerId, ExamMatrix.KIND_MATRIX)
+        return matrixRepository.findByIdAndCreatedByAndKindAndDeletedAtIsNull(matrixId, ownerId, ExamMatrix.KIND_MATRIX)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy ma trận id=" + matrixId));
     }
 
@@ -463,7 +475,7 @@ public class MatrixService {
     /** Ma trận của người gọi, mới nhất trước (W1-1). */
     @Transactional(readOnly = true)
     public List<MatrixSummaryDto> list(Integer ownerId) {
-        List<ExamMatrix> matrices = matrixRepository.findAllByCreatedByAndKindOrderByIdDesc(ownerId,
+        List<ExamMatrix> matrices = matrixRepository.findAllByCreatedByAndKindAndDeletedAtIsNullOrderByIdDesc(ownerId,
                 ExamMatrix.KIND_MATRIX);
         Map<Integer, Integer> exams = usage.examCounts(matrices.stream().map(ExamMatrix::getId).toList());
         return matrices.stream()

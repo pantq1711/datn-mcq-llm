@@ -190,6 +190,30 @@ class ExamSimilarInExamTest extends ExamFlowTestBase {
         assertEquals(List.of("similar_in_exam: I.1"), reasons(items.get(1)));
     }
 
+    /**
+     * NV-15 (rà soát 15/11): hai câu ngân hàng cùng khuôn trong một đề, chưa được Giữ trong chính đề này: câu sau bị gắn
+     * (trước đây chỉ câu hệ thống sinh bị gắn). Vẫn tính lúc xem, không ghi DB.
+     */
+    @Test
+    void haiCauNganHangCungKhuonChuaGiuTrongDeThiCauSauBiGan() throws Exception {
+        bankMcq(null, "Đa thức", "easy", "Nguồn một", "Bậc của đơn thức $9x^8$ là:",
+                new String[] {"$10$", "$8$", "$0$", "$11$"});
+        bankMcq(null, "Đa thức", "easy", "Nguồn hai", "Bậc của đơn thức $7x^6$ là:",
+                new String[] {"$8$", "$6$", "$0$", "$9$"});
+        int matrixId = createMatrix(mcqCell("Đa thức", "Đơn thức", 2));
+        examId = build(matrixId).get("examId").asInt();
+        assertEquals(0, count("SELECT count(*) FROM generation_job"), "cả hai chỗ lấy từ ngân hàng");
+
+        List<JsonNode> items = items(view());
+        assertEquals("bank", items.get(0).get("source").asText());
+        assertEquals("bank", items.get(1).get("source").asText());
+        assertEquals("ready", items.get(1).get("state").asText());
+        assertEquals(List.of(), reasons(items.get(0)), "câu đứng trước không bị gắn");
+        assertEquals(List.of("similar_in_exam: I.1"), reasons(items.get(1)));
+        assertTrue(items.get(1).get("needsReview").asBoolean());
+        assertEquals(1, view().get("needsReviewCount").asInt());
+    }
+
     @Test
     void cauSauTroVeMoiCauTruocCungKhuonTangDan() throws Exception {
         int matrixId = createMatrix(mcqCell("Đa thức", "Đơn thức", 1), mcqCell("Phân thức", "Rút gọn", 1),
