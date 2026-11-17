@@ -1,0 +1,85 @@
+/* Trang giáo viên của bài giao trực tuyến */
+
+.assignment-page {
+    width: 100%;
+    min-width: 0;
+    padding: 24px 24px 48px;
+    box-sizing: border-box;
+}
+
+.assignment-back {
+    background-color: #ffffff;
+    border-radius: 15px;
+    margin-bottom: 12px;
+    border: 3px solid #f2f2f2;
+}
+
+.assignment-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.assignment-header-main {
+    min-width: 0;
+}
+
+.assignment-title.ant-typography {
+    margin: 0 0 8px;
+    overflow-wrap: anywhere;
+}
+
+.assignment-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.assignment-hint {
+    margin-top: 8px;
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.assignment-link-card-qr {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.assignment-bulk {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.assignment-row-duplicate td {
+    background: #fff1f0 !important;
+}
+
+@media (max-width: 768px) {
+    .assignment-page {
+        padding: 20px 16px 32px;
+    }
+
+    .assignment-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .assignment-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .assignment-bulk {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

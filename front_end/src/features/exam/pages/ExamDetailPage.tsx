@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Alert, Button, Card, Progress, Spin, Space, Tag, Typography, message, Modal } from "antd";
-import { ArrowLeftOutlined, FileWordOutlined, SyncOutlined, WarningOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Progress, Spin, Space, Tag, Tooltip, Typography, message, Modal } from "antd";
+import { ArrowLeftOutlined, FileWordOutlined, ProfileOutlined, SendOutlined, SyncOutlined, WarningOutlined } from "@ant-design/icons";
 
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import ChangeQuestionModal, { type ChangeQuestionResult } from "../components/ChangeQuestionModal";
 import EditQuestionModal from "../components/EditQuestionModal";
 import { QcTraceModal } from '../components/QcTraceModal';
+import AssignExamModal from "../../assignment/components/AssignExamModal";
 import ExportWordDialog from '../components/ExportWordDialog';
 
 const { Title, Text } = Typography;
@@ -124,6 +125,8 @@ export default function ExamDetailPage() {
     // Hộp xuất Word (ExportWordDialog): bấm "Xuất file Word" luôn mở hộp
     const [exportOpen, setExportOpen] = useState(false);
 
+    const [assignOpen, setAssignOpen] = useState(false);
+
     const [qcModalVisible, setQcModalVisible] = useState(false);
     const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
     // Số câu trên thẻ câu (thứ tự trong Phần) để hộp kết quả tự kiểm tra ghi cùng số
@@ -193,6 +196,11 @@ export default function ExamDetailPage() {
             total: generatingCount + checkingCount,
         };
     }, [detail]);
+
+    // Giao bài online cần mọi câu đã Giữ hoặc Sửa
+    const notKeptCount = (detail?.parts ?? [])
+        .flatMap((p) => p.items)
+        .filter((i) => i.state !== "kept" && i.state !== "edited").length;
 
     const hasPendingWork = !pollingStoppedDueToError && pendingSummary.total > 0;
     // Còn câu đang soạn thì chưa xuất Word được
@@ -431,6 +439,21 @@ export default function ExamDetailPage() {
                     </div>
 
                     <Space size={8} className="exam-detail-page-actions">
+                        {/* Giao bài online: cần mọi câu đã Giữ/Sửa (backend cũng kiểm, 409 ASSIGN_NOT_ALL_KEPT) */}
+                        <Tooltip title={notKeptCount > 0 ? `Còn ${notKeptCount} câu chưa Giữ. Giữ hết các câu rồi mới giao bài được.` : undefined}>
+                            <span>
+                                <Button
+                                    icon={<SendOutlined />}
+                                    disabled={notKeptCount > 0}
+                                    onClick={() => setAssignOpen(true)}
+                                >
+                                    Giao bài online
+                                </Button>
+                            </span>
+                        </Tooltip>
+                        <Button icon={<ProfileOutlined />} onClick={() => navigate(`/exams/${examId}/assignments`)}>
+                            Bài đã giao
+                        </Button>
                         {/* Bấm là mở hộp xuất Word (thời gian, mã đề, tên file, công thức, chỉ đề; cảnh báo NV-40/NV-41 trong hộp) */}
                         <Button type="primary" icon={<FileWordOutlined />} onClick={() => setExportOpen(true)}>
                             Xuất file Word
@@ -468,6 +491,13 @@ export default function ExamDetailPage() {
                     <ExamPreview exam={exam} />
                 </Card>
             </div>
+
+            <AssignExamModal
+                open={assignOpen}
+                examId={examId!}
+                onClose={() => setAssignOpen(false)}
+                onCreated={() => undefined}
+            />
 
             <div className="exam-detail-page-question-list">
                 <Card title={questionListCardTitle}>
