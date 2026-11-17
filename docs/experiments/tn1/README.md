@@ -19,6 +19,8 @@ có báo nhầm câu tốt không? So 3 phiên bản prompt Solver mcq:
   - 9 câu "lỗi": 7, 8, 37, 39, 52, 53 (phân tích nhân tử, nhiều phương án nhân lại bằng đa thức gốc); 15, 61 (tính chất
     hình thang cân, đề không có "luôn"); 25 (bản giáo viên sửa).
   - 20 câu "tốt": 24, 4, 6, 5, 32, 27, 28, 30, 31, 33, 35, 38, 41, 48, 50, 62, 29, 34, 49, 60.
+  - Nhãn phụ (An chốt 17/11/2026): 15 và 61 giữ nhãn lỗi, loại "mơ hồ do diễn đạt"; 25 tách khỏi tập chính và báo riêng. Xem
+    mục "Soát lại 16–17/11/2026".
 - Model Solver: `gemini-3.5-flash-lite`, `temperature = 0.0` (đã kiểm trong code: `AnswerSolverChecker` gửi `0.0` cho
   cả mcq, tf, sa; không đặt `seed`, `topP`, `topK`).
 - Mỗi phiên bản chạy 2 lần, mỗi lần 29 lượt gọi.
@@ -82,7 +84,9 @@ Cách tính: một câu "lỗi" là **bắt được** khi `verdict = inconsiste
 
 - Câu 27 lỗi HTTP 429 ở lần 1 của v2 và v4 (vượt 15 lượt/phút của gói miễn phí), nên mẫu số báo nhầm là 19 và ổn định so
   trên 28 câu.
-- Nếu chỉ tính 7 câu lỗi rõ ràng (bỏ 61 và 25): v4 bắt 7/7 và 5/7.
+- Cách chia tập câu lỗi đổi ngày 17/11: 15 và 61 cùng một nhóm, 25 tách riêng; số theo từng tập ở mục "Soát lại
+  16–17/11/2026". Dòng cũ "nếu chỉ tính 7 câu lỗi rõ ràng (bỏ 61 và 25): v4 bắt 7/7 và 5/7" xếp 15 khác nhóm với 61 nên không
+  dùng nữa.
 
 Từng câu lỗi với v4:
 
@@ -104,7 +108,7 @@ Nhận xét:
 - `temperature` đã bằng 0 ở mọi lần đo, nên khác biệt giữa 2 lần (câu 52, 53 của v4; câu 32 của v3) là do Gemini vẫn không
   tất định ở `temperature = 0`, không phải do cấu hình.
 
-## Đo ngày 14/11/2026: khối thêm vào đầu vào làm Solver bắt kém đi
+## Đo ngày 14/11/2026: thêm khối vào đầu vào của Solver (chưa đủ bằng chứng là bắt kém đi)
 
 Cùng 29 câu, cùng model `gemini-3.5-flash-lite`, `temperature = 0`, mỗi cấu hình 1 lần.
 
@@ -127,6 +131,10 @@ Cùng 29 câu, cùng model `gemini-3.5-flash-lite`, `temperature = 0`, mỗi c�
 - So với v4: v5 + chip sót thêm 8, 52, 15; PA1 một lượt sót 7, 52, 53, 15. Ở các câu phân tích nhân tử, Solver có xu hướng coi
   phương án "chưa triệt để" là phương án nhiễu khi đầu vào nói về "bẫy / lỗi học sinh". Đặt `request_check`/`error_checks` ở
   cuối schema không ngăn được, vì khối nằm trong ĐẦU VÀO. Mẫu nhỏ, mỗi cấu hình 1 lần.
+  - Sửa 17/11: hiện tượng coi phương án "chưa triệt để" là sai có cả khi KHÔNG có khối nào. Ở lần "không chip" và ở lượt giải
+    của v6 (không thấy yêu cầu), Solver vẫn ghi cờ sai cho 52B, 52D, 53B với lý do "chưa đặt nhân tử chung lớn nhất". Khối thêm
+    vào có thể làm tăng hiện tượng này, nhưng không phải nguyên nhân duy nhất. Chỗ khớp với giả thuyết "neo" là câu 7 và 8:
+    lượt giải dùng prompt v4 bắt cả hai ở 5/5 lần, lần sót duy nhất của câu 8 là v5 + chip, của câu 7 là PA1 một lượt.
 - Hệ quả: tách Solver thành hai lượt (`solver-v6-two-pass`, hotfix 14/11; `docs/design/kiem-soat-do-kho.md` mục 4.3a): lượt 1
   giữ đúng v4, lượt 2 mới thấy yêu cầu (và về sau lỗi phương án của PA1).
 
@@ -147,14 +155,103 @@ Tổng 145 lượt gọi cho ba lần đo, kể cả chạy lại.
 - **Hệ quả cho cách đọc số liệu:** cùng prompt v4 mà hôm nay có lần chỉ được 4/9, nên khoảng dao động của v4 là ít nhất
   4/9–7/9. Hai cấu hình một lượt ở trên (4/9 và 3/9) nằm ở đáy hoặc ngay dưới khoảng này: bằng chứng về hiệu ứng neo yếu hơn
   nhận định ban đầu. Cách hai lượt vẫn giữ được: lượt giải không thấy yêu cầu theo cấu trúc, không phụ thuộc vào số đo.
-- Các câu không ổn định là 15, 52, 53 (và 37 ở một lần); 61, 25 chưa lần nào bắt được.
+- Các câu không ổn định là 15, 52, 53; 61, 25 chưa lần nào bắt được. (Sửa 17/11: câu 37 KHÔNG đổi kết luận. Mọi lần có kết
+  quả đều là 4 phương án đúng; hai lần thiếu là Gemini trả 503, chạy lại đều bắt được.)
+
+## Soát lại 16–17/11/2026: nhãn, độ ổn định, cách đếm
+
+Không đo thêm và không gọi Gemini: chỉ đọc lại các CSV và `*_responses.jsonl` ở trên.
+
+### Nhãn (An chốt 17/11/2026)
+
+| Nhóm | Câu | Ghi chú |
+|---|---|---|
+| Lỗi, nhiều phương án đúng (nghĩa hẹp) | 7, 8, 37, 39, 52, 53 | Phương án bằng đa thức đã cho: 7 (A, B); 8 (A, B, C); 37, 39 (cả 4); 52 (A, B, D); 53 (A, B) |
+| Lỗi, mơ hồ do diễn đạt | 15, 61 | Đề thiếu "luôn". Theo quy ước ra đề thông thường chỉ B đúng; câu 61 còn có phương án lệch câu dẫn |
+| Tách khỏi tập chính | 25 | Bản người sửa trong E2E, không phải đầu ra LLM; phương án D "$6$ km" hỏng. Báo riêng: Solver sót 5/5 lần |
+| Tốt | 20 câu như cũ | Câu 24 giữ nhãn tốt dù phương án D $\frac{x^2 - 1}{x + 1}$ rút gọn được thành đa thức; không sửa tập đo |
+
+Tập chính có 8 câu lỗi (6 câu nghĩa hẹp và 2 câu mơ hồ do diễn đạt). 9 câu nhãn gốc là tập chính cộng câu 25.
+
+### Lượt giải dùng prompt v4: 5 mẫu
+
+Hai lần v4 ngày 31/10 và ba lần v6 ngày 14/11 (lượt giải của v6 giống v4 từng byte). Ô có mẫu số nhỏ hơn là do lượt lỗi gọi.
+
+| Lần | 9 câu (nhãn gốc) | 8 câu (tập chính) | 6 câu (nghĩa hẹp) | Báo nhầm trên 20 câu tốt |
+|---|---|---|---|---|
+| v4, 31/10 lần 1 | 7/9 | 7/8 | 6/6 | 0/19 |
+| v4, 31/10 lần 2 | 5/9 | 5/8 | 4/6 | 0/20 |
+| v6 không chip, 14/11 | 5/8 | 5/7 | 4/6 | 0/20 |
+| v6 chip lần 1, 14/11 | 5/9 | 5/8 | 5/6 | 0/19 |
+| v6 chip lần 2, 14/11 | 4/9 | 4/8 | 4/6 | 0/20 |
+| Cộng 5 lần | 26/44 | 26/39 | 23/30 | 0/98 |
+| v5 + chip (1 lần, để so) | 4/9 | 4/8 | 4/6 | 0/20 |
+| PA1 một lượt (1 lần, để so) | 3/9 | 3/8 | 3/6 | 0/20 |
+
+Câu 25 không lần nào bắt được, nên nếu giữ câu 25 trong tập nghĩa hẹp thì chỉ mẫu số đổi (6 thành 7).
+
+Theo từng câu, 5 mẫu trên:
+
+| Nhóm | Câu | Số lần bắt |
+|---|---|---|
+| Bắt ổn định | 7, 8, 37, 39 | 5/5 mỗi câu |
+| Lúc bắt lúc sót | 15 | 3/5 |
+| | 52 | 2/5 |
+| | 53 | 1/5 |
+| Sót ổn định | 61 | 0/4 (1 lần 503 kể cả khi chạy lại) |
+| | 25 | 0/5 |
+
+Cách đọc: không trích một lần chạy đơn lẻ (ví dụ "7/9"). Với 5 mẫu, v4 bắt 4–7 trên 9 câu; một lần chạy lệch lần khác tới 3
+câu dù cùng prompt, cùng `temperature = 0`. Hai cấu hình chỉ đo 1 lần (v5 + chip, PA1 một lượt) nằm trong hoặc ngay dưới khoảng
+này.
+
+### Cờ từng phương án lệch với kết luận của chính Solver
+
+Có phản hồi đầy đủ cho 114 lượt giải (v5 + chip và ba lần v6, kể cả chạy lại): 79 lượt trên câu tốt, 35 lượt trên 9 câu lỗi.
+
+| | `judge_answer = multiple` | Từ 2 cờ `correct = true` trở lên |
+|---|---|---|
+| 20 câu tốt (79 lượt) | 0 | 0 |
+| 9 câu lỗi (35 lượt) | 20 | 18 |
+
+Hai lượt lệch nhau: câu 52 (không chip) và câu 53 (chip lần 1, lượt chạy lại). Ở cả hai, mảng cờ chỉ có A đúng, nhưng Solver
+ghi `correct_count` là 3 và 2, `judge_answer = multiple`; lý do của phương án bị ghi sai tự kết luận "vẫn là một tích đúng",
+"do đó phương án này đúng". Schema bắt ghi `correct` trước `reason`. Backend đếm theo cờ
+(`AnswerSolverChecker.fromOptionsVerdict`) nên hai lượt này được ghi là bỏ sót. Nếu đếm theo `judge_answer` thì lần không chip
+là 6/8 và chip lần 1 là 6/9, báo nhầm không đổi.
+
+Từ 17/11 backend đã đổi theo hướng đó (dev-log L-70): từ 2 cờ đúng hoặc `judge_answer = multiple` đều tính là nhiều phương án
+đúng. Mọi CSV trong thư mục này đo TRƯỚC thay đổi; các bảng ở trên giữ số đã đo, không tính lại. Quy tắc được tìm ra trên chính
+29 câu này, chưa kiểm trên tập độc lập.
+
+Không kiểm lại được với v3, v4 (31/10) và PA1 một lượt: các lần đó không lưu phản hồi đầy đủ, và cột `solver_answer` của CSV
+là kết luận backend suy từ cờ, không phải `judge_answer` gốc. Với v2, `solver_answer` chính là `judge_answer`: 0 lần `multiple`.
+
+### Ví dụ trong prompt v4 trùng câu của tập đo
+
+- Ví dụ 1 của prompt v4 ("Phân tích $2x^3 - 6x^2$ thành nhân tử", $2x(x^2 - 3x)$, $2x^2(x - 3)$) là đa thức và hai phương án
+  A, B của câu 37.
+- Ví dụ 2 ("Hai đường chéo vuông góc với nhau" của hình thang cân) là phương án A của câu 15.
+- Năm câu nhân tử còn lại cùng khuôn với ví dụ 1 (đặt nhân tử chung của một nhị thức).
+
+Vì vậy 29 câu này là tập phát triển của prompt v4, không phải tập kiểm tra. Hai câu lỗi không có ví dụ tương ứng (61, 25)
+không lần nào được bắt.
 
 ## Hạn chế
 
-- Nhãn "câu lỗi"/"câu tốt" do AI gán trong buổi thẩm định nội dung 31/10, CHƯA được người xác nhận; câu 61 và 25 còn tranh
-  cãi. Số liệu chỉ dùng làm kết quả chính thức sau khi người xác nhận nhãn.
+- Nhãn "câu lỗi"/"câu tốt" do AI gán trong buổi thẩm định nội dung 31/10. Ngày 16/11 AI tự giải lại cả 29 câu (dựng lại đề
+  từ phản hồi của Solver, không đọc được nguyên văn trong DB) và đồng ý 27 nhãn; ngày 17/11 An chốt các câu còn tranh cãi
+  (15, 61, 25, 24) như ở mục "Soát lại 16–17/11/2026". Chưa có giáo viên ngoài nhóm xác nhận nhãn.
+- 29 câu là tập phát triển: prompt v4 được viết sau khi xem chính các câu này và hai ví dụ của prompt trùng câu 37, 15. Kết
+  quả là mức khớp với câu đã thấy, không phải ước lượng trên câu mới.
+- Chỉ có 9 câu lỗi, trong đó 6 câu cùng một khuôn (đặt nhân tử chung). Tập này không nói được gì về câu sai đáp án do tính
+  toán hay câu không có phương án đúng.
 - Solver và mô hình sinh câu là cùng một model (`gemini-3.5-flash-lite`): mô hình tự kiểm tra đầu ra của chính nó; chưa thử
   Solver bằng model khác.
-- Mẫu nhỏ (29 câu, mỗi phiên bản 2 lần), nên các tỉ lệ chỉ mang tính chỉ báo.
-- v4 chưa ổn định với câu phân tích nhân tử có 2 phương án đúng (52, 53).
-- Hạn mức 15 lượt/phút của gói miễn phí làm có thể có 1 lượt lỗi 429 mỗi lần đo.
+- Mẫu nhỏ: 29 câu; v2 và v3 mỗi bản 2 lần; lượt giải dùng prompt v4 có 5 mẫu (2 lần 31/10, 3 lần 14/11); v5 + chip và PA1 một
+  lượt mỗi cấu hình 1 lần. Các tỉ lệ chỉ mang tính chỉ báo; so sánh giữa các cấu hình đo 1 lần chưa kết luận được.
+- v4 chưa ổn định ở câu 52, 53 (phân tích nhân tử) và câu 15, dù `temperature = 0`. Các lần đo cách nhau hai tuần, nên không
+  tách được dao động ngẫu nhiên với thay đổi phía dịch vụ.
+- Lượt lỗi gọi làm mẫu số thay đổi: 429 (hạn mức 15 lượt/phút của gói miễn phí) ở các lần 31/10, 503 nhiều ở các lần 14/11.
+- v3, v4 (31/10) và PA1 một lượt không lưu phản hồi đầy đủ của Solver, nên không kiểm lại được lý do từng phương án của các
+  lần đó.
