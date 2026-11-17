@@ -84,6 +84,18 @@ class SecurityRouteAccessTest {
         RULES.put("POST /api/exams/{examId}/slots/{slotId}/keep", Access.TEACHER);
         RULES.put("POST /api/exams/{examId}/slots/{slotId}/replace", Access.TEACHER);
         RULES.put("PUT /api/exams/{examId}/slots/{slotId}/question", Access.TEACHER);
+        // V32: bài giao trực tuyến. API giáo viên dưới /api/exams/**; bốn đường của học sinh không đăng nhập.
+        RULES.put("POST /api/exams/{examId}/assignments", Access.TEACHER);
+        RULES.put("GET /api/exams/{examId}/assignments", Access.TEACHER);
+        RULES.put("GET /api/exams/{examId}/assignments/{assignmentId}", Access.TEACHER);
+        RULES.put("POST /api/exams/{examId}/assignments/{assignmentId}/close", Access.TEACHER);
+        RULES.put("DELETE /api/exams/{examId}/assignments/{assignmentId}/attempts/{attemptId}", Access.TEACHER);
+        RULES.put("POST /api/exams/{examId}/assignments/{assignmentId}/attempts/bulk-delete", Access.TEACHER);
+        RULES.put("DELETE /api/exams/{examId}/assignments/{assignmentId}", Access.TEACHER);
+        RULES.put("GET /api/public/assignments/{code}", Access.PUBLIC);
+        RULES.put("POST /api/public/assignments/{code}/attempts", Access.PUBLIC);
+        RULES.put("GET /api/public/attempts/current", Access.PUBLIC);
+        RULES.put("POST /api/public/attempts/current/submit", Access.PUBLIC);
 
         RULES.put("POST /api/materials", Access.TEACHER);
         RULES.put("GET /api/materials", Access.TEACHER);

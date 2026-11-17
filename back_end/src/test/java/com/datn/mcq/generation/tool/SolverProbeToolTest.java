@@ -63,6 +63,18 @@ class SolverProbeToolTest {
         assertEquals("0", none.solverCorrectCount());
     }
 
+    /**
+     * 17/11: Solver kết luận multiple nhưng chỉ ghi cờ đúng cho một phương án. solver_answer và multiple_correct_flag theo
+     * kết luận; solver_correct_count và options_verdict vẫn theo cờ.
+     */
+    @Test
+    void dongMcqKetLuanMultipleNhungChiMotCoDung() {
+        SolverProbeRow row = SolverProbeRow.of(V, mcq(Option.A),
+                optionCheckVerdict(AnswerChoice.MULTIPLE, List.of(true, false, false, false)));
+        assertEquals("37," + V + ",mcq,A,multiple,inconsistent,1,1,A:1|B:0|C:0|D:0,900,2000,gemini-x,",
+                row.toCsvLine());
+    }
+
     @Test
     void headerCoCotKetQuaTungPhuongAn() {
         assertEquals("question_id,prompt_version,question_type,question_answer,solver_answer,verdict,"

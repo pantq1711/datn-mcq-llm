@@ -104,6 +104,59 @@ class McqSolverOptionCheckTest {
         assertEquals(1, out.correctCount());
     }
 
+    /**
+     * 17/11 (TN1, câu 52 lần "không chip"): Solver ghi cờ đúng cho riêng đáp án lưu nhưng tự kết luận judge_answer =
+     * multiple (lý do của phương án bị ghi sai lập luận ngược lại). Từ 2 cờ đúng HOẶC judge_answer = multiple đều là
+     * "nhiều phương án đúng"; cờ từng phương án giữ nguyên như Solver ghi.
+     */
+    @Test
+    void judgeAnswerMultipleDuChiMotCoDungThiVanLaMultipleCorrect() {
+        AnswerSolverChecker.SolverCheckOutcome out =
+                checker.parseAndCompare(v3("multiple", 3, true, false, false, false), "m", Option.A);
+        assertFalse(out.passed(), "Solver tự kết luận nhiều phương án đúng thì câu không qua");
+        assertEquals(AnswerChoice.MULTIPLE, out.judgeAnswer());
+        assertEquals(List.of(true, false, false, false), out.optionCorrect(), "giữ cờ như Solver ghi");
+        assertEquals(1, out.correctCount());
+        assertTrue(out.reasoning().startsWith(AnswerSolverChecker.OPTIONS_VERDICT_PREFIX + " 1/4 phương án đúng\n"
+                + AnswerSolverChecker.JUDGE_MULTIPLE_NOTE + "\n"), out.reasoning());
+        assertTrue(out.reasoning().contains("\nA: đúng – nhân lại kiểm A\nB: sai – nhân lại kiểm B\n"), out.reasoning());
+    }
+
+    @Test
+    void judgeAnswerMultipleVoiMotCoDungKhacDapAnThiLaMultipleCorrect() {
+        AnswerSolverChecker.SolverCheckOutcome out =
+                checker.parseAndCompare(v3("multiple", 2, false, false, true, false), "m", Option.B);
+        assertFalse(out.passed());
+        assertEquals(AnswerChoice.MULTIPLE, out.judgeAnswer(), "không phải C: Solver nói có nhiều phương án đúng");
+    }
+
+    /** An chốt 17/11: không cờ nào đúng mà judge_answer = multiple thì ghi multiple (một quy tắc duy nhất). */
+    @Test
+    void judgeAnswerMultipleKhongCoNaoDungThiLaMultipleCorrect() {
+        AnswerSolverChecker.SolverCheckOutcome out =
+                checker.parseAndCompare(v3("MULTIPLE", 2, false, false, false, false), "m", Option.B);
+        assertFalse(out.passed());
+        assertEquals(AnswerChoice.MULTIPLE, out.judgeAnswer());
+        assertEquals(0, out.correctCount());
+        assertTrue(out.reasoning().startsWith(AnswerSolverChecker.OPTIONS_VERDICT_PREFIX + " 0/4 phương án đúng\n"
+                + AnswerSolverChecker.JUDGE_MULTIPLE_NOTE + "\n"), out.reasoning());
+    }
+
+    /** Chiều ngược lại không đổi: judge_answer là chữ cái hoặc none thì vẫn theo cờ, không có dòng ghi chú thêm. */
+    @Test
+    void judgeAnswerKhongPhaiMultipleThiVanTheoCo() {
+        AnswerSolverChecker.SolverCheckOutcome none =
+                checker.parseAndCompare(v3("none", 0, false, true, false, false), "m", Option.B);
+        assertTrue(none.passed());
+        assertEquals(AnswerChoice.B, none.judgeAnswer());
+        assertFalse(none.reasoning().contains(AnswerSolverChecker.JUDGE_MULTIPLE_NOTE));
+
+        AnswerSolverChecker.SolverCheckOutcome agree =
+                checker.parseAndCompare(v3("multiple", 2, true, false, true, false), "m", Option.A);
+        assertFalse(agree.reasoning().contains(AnswerSolverChecker.JUDGE_MULTIPLE_NOTE),
+                "cờ và kết luận khớp nhau thì không thêm dòng");
+    }
+
     @Test
     void thieuJudgeAnswerNhungCoTungPhuongAnThiVanKetLuan() {
         String raw = "{\"reasoning\": \"r\", \"options_verdict\": [" + item("A", true) + ", " + item("B", false) + ", "

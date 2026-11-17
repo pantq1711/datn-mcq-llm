@@ -102,10 +102,14 @@ public class SecurityConfig {
         CorsConfiguration cors = new CorsConfiguration();
         cors.setAllowedOriginPatterns(properties.cors().allowedOrigins());
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        cors.setAllowedHeaders(List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT));
+        // X-Attempt-Token: token lượt làm của học sinh (V32, PublicAttemptController), chỉ gửi ở header, không trong URL.
+        cors.setAllowedHeaders(List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT,
+                "X-Attempt-Token"));
         // X-Equation-Kept-Omml / X-Equation-Scaled / X-Equation-Failed(-At): xuất Word dạng MathType, số công thức giữ
         // Equation / bị thu nhỏ cho vừa lề / pandoc không đọc được và câu chứa chúng (ExamController)
+        // Retry-After: phản hồi 429 (giới hạn tần suất, hết lượt soạn câu); frontend khác origin cần đọc để biết chờ bao lâu.
         cors.setExposedHeaders(List.of(HttpHeaders.CONTENT_DISPOSITION, HttpHeaders.WWW_AUTHENTICATE,
+                HttpHeaders.RETRY_AFTER,
                 "X-Equation-Kept-Omml", "X-Equation-Scaled", "X-Equation-Failed", "X-Equation-Failed-At"));
         cors.setAllowCredentials(true);
         cors.setMaxAge(3600L);
@@ -131,6 +135,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh", "/api/auth/logout")
                         .permitAll()
+                        // V32: học sinh làm bài qua link, không đăng nhập. Chỉ đúng bốn đường P1-P4; đường khác dưới
+                        // /api/public vẫn rơi vào denyAll ở cuối.
+                        .requestMatchers(HttpMethod.GET, "/api/public/assignments/*", "/api/public/attempts/current")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/public/assignments/*/attempts",
+                                "/api/public/attempts/current/submit").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         // Prometheus scrape không có JWT. An toàn nhờ Caddy chặn /actuator/* từ Internet và app không
                         // publish cổng; mọi đường actuator khác vẫn chỉ ADMIN (dòng bên dưới).
