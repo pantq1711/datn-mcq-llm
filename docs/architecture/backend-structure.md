@@ -71,7 +71,15 @@ qc          ──► llm   (GroundingChecker và AnswerSolverChecker gọi LlmC
 auth        ──► user                                   (W1-1, duyệt ngày 24/10)
 bank, catalog, user, llm ──► (chỉ common/config)
 mathtype    ──► (không module nào; chỉ JDK, Apache POI, JLaTeXMath)
+assignment  ──► exam (chỉ ExamAssignmentSource, ExamDeletionGuard), bank (BankService.getItems), config   (V32, 16/11; exam không biết assignment)
 ```
+
+Bài giao trực tuyến (V32, quyết định 16/11): `exam` khai báo `ExamAssignmentSource` (đề của người gọi kèm các chỗ theo thứ tự
+trang đề, khóa chia sẻ hàng đề khi giao bài) và interface `ExamDeletionGuard` mà `ExamDeleteService.delete` gọi sau khi khóa
+hàng đề, trước mọi thay đổi; `assignment` cài `AssignmentExamDeletionGuard` (đề còn bài giao: 409 `EXAM_HAS_ASSIGNMENTS`), cùng
+mẫu với `MatrixUsageLookup`. `assignment` đọc bảng của chính nó bằng JdbcTemplate (`AssignmentRepository`, không entity JPA)
+và lấy nội dung câu qua `BankService`, không đọc `exam_slot` hay `bank_item` trực tiếp. API công khai `/api/public/**` chỉ mở
+đúng bốn đường P1–P4 trong `SecurityConfig`.
 
 `common.security.CurrentUser` dùng chung cho controller mọi module (không phải chiều phụ thuộc giữa các module).
 

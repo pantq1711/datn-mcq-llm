@@ -1582,3 +1582,52 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
 - Trong ngân hàng: `origin.type = "import"`, lọc bằng `GET /api/bank-items?origin=import`. Câu không có lời giải có
   `explanation = null`; khi xuất đề ra Word, phần LỜI GIẢI bỏ câu đó.
 - Hạn chế: câu tf nhận chung một mức cho cả 4 ý (file chỉ ghi một mức cho câu).
+
+## 11. Bài giao trực tuyến (V32, thiết kế `docs/design/lam-bai-truc-tuyen.md`, quyết định 14/11 và 16/11)
+
+### 11.1. Giáo viên (`TEACHER`, chỉ chủ đề; đề của người khác hoặc đã xóa: 404)
+
+- `POST /api/exams/{examId}/assignments` thân `{durationMinutes (5–180), closesAt (ISO, sau lúc giao ≥ durationMinutes, ≤ 30
+  ngày), showScore, showSolutions (mặc định false), consentConfirmed: true, classes: [{classLabel, size}]}` → 201 bài giao.
+  `classes`: 1–10 lớp, nhãn chuẩn hóa (bỏ khoảng trắng, viết hoa; chữ không dấu, số, `/ . -`; 1–10 ký tự), sĩ số 1–99, không
+  trùng. Lỗi: 400 `INVALID_REQUEST`; 409 `ASSIGN_NOT_ALL_KEPT` (còn chỗ chưa Giữ/Sửa, `errors: ["Phần I, Câu 2", …]`),
+  `ASSIGN_SA_KEY_UNSUPPORTED` (đáp số Trả lời ngắn không phải số nguyên/thập phân, `errors` như trên).
+- Bài giao: `{assignmentId, publicCode, title, status (open|closed), durationMinutes, closesAt, closedAt?, showScore,
+  showSolutions, createdAt, classes: [{classLabel, size}], questionCount, maxScore, maxAttempts (2 × tổng sĩ số), startedCount,
+  submittedCount, duplicateCount, attempts?}`. Link học sinh do frontend ghép: `<origin>/lam-bai/<publicCode>`.
+- `GET /api/exams/{examId}/assignments` → danh sách bài giao (không có `attempts`), mới nhất trước.
+- `GET /api/exams/{examId}/assignments/{id}` → bài giao kèm `attempts: [{attemptId, classLabel, seatNo, state (in_progress |
+  submitted | expired), duplicate, startedAt, submittedAt?, score?, score10?, parts?: [{part, correct, total, score}]}]`, theo
+  lớp (thứ tự khai) rồi số thứ tự. Phần II đếm theo ý. `duplicate = true`: có lượt khác cùng lớp + số thứ tự (cả hai lượt đều
+  được giữ và đánh dấu, tính lúc đọc).
+- `POST …/{id}/close` → 200 bài giao; đã đóng thì trả nguyên trạng. Lượt chưa nộp không nộp được nữa.
+- `DELETE …/{id}/attempts/{attemptId}` → 204; 404. Ở mọi trạng thái, kể cả sau khi đóng (dữ liệu giữ tới khi giáo viên xóa).
+- `POST …/{id}/attempts/bulk-delete` thân `{attemptIds: [..]}` (1–500) → 200 `{deleted}`; id không thuộc bài giao bị bỏ qua.
+  Ở mọi trạng thái; 400 `INVALID_REQUEST`.
+- `DELETE …/{id}` → 204, xóa bài giao cùng mọi lượt làm và câu trả lời, ở mọi trạng thái.
+- `DELETE /api/exams/{examId}` khi đề còn bài giao: 409 `EXAM_HAS_ASSIGNMENTS`, không đổi gì.
+
+### 11.2. Học sinh (không đăng nhập; phản hồi có `Cache-Control: no-store`)
+
+Token lượt làm gửi ở header `X-Attempt-Token`, không bao giờ trong URL.
+
+- `GET /api/public/assignments/{code}` → `{title, questionCount, durationMinutes, closesAt, status, showScore, showSolutions,
+  classes: [{classLabel, size}]}`; không câu hỏi. 404 khi mã sai. Không giới hạn tần suất.
+- `POST /api/public/assignments/{code}/attempts` thân `{classLabel, seatNo}` → 201 lượt làm kèm `attemptToken` (chỉ trả một
+  lần). Lớp phải thuộc bài giao, số thứ tự trong 1..sĩ số (400 `INVALID_REQUEST`). Trùng lớp + số thứ tự vẫn được tạo
+  (`duplicateSeat: true`). Lỗi: 404; 409 `ASSIGNMENT_CLOSED`, `ASSIGNMENT_FULL`; 429 `TOO_MANY_REQUESTS` (theo IP).
+- Lượt làm (P2, P3): `{attemptToken?, classLabel, seatNo, duplicateSeat, startedAt, deadlineAt, serverNow, remainingSeconds,
+  submitted, submittedAt?, resultsReleased, resultsAt, parts?, result?, review?}`. `parts` (chỉ khi còn nộp được):
+  `[{part, items: [{slotId, number, questionType, questionText, options? {A..D}, statements? [{key, text}]}]}]`, không đáp án.
+  `resultsReleased`: bài đã đóng và qua `closed_at + 2 phút`; trước đó không có `result` và `review`. `result` (khi
+  `showScore`, lượt đã nộp): `{score, maxScore, score10, parts}`. `review` (khi `showSolutions`): `[{part, items: [{slotId,
+  number, questionType, questionText, options?, yourChoice?, correctOption?, statements? [{key, text, label, yourAnswer?,
+  correct}], yourText?, saAnswer?, correctCount, score, explanation?}]}]`.
+- `GET /api/public/attempts/current` → lượt làm. 401 `ATTEMPT_TOKEN_INVALID`; 429 (theo lượt).
+- `POST /api/public/attempts/current/submit` thân `{answers: [{slotId, choice}, {slotId, tf: {"a": "T", "b": "F"}}, {slotId,
+  text}]}` → 200 `{submittedAt, resultsAt}` (không có điểm). Câu thiếu là bỏ trống. Lỗi: 400 `INVALID_REQUEST` (nhiều phần tử
+  hơn số câu, `slotId` lạ hoặc lặp, sai dạng câu, ngoài A–D / a–d / T,F, đáp số quá 20 ký tự; không ghi gì); 401; 409
+  `ATTEMPT_ALREADY_SUBMITTED`, `ASSIGNMENT_CLOSED` (giáo viên đóng trước hạn của lượt), `ATTEMPT_EXPIRED` (quá hạn + 2 phút);
+  429 (theo lượt).
+- Hạn mức mặc định (biến môi trường `APP_PUBLIC_LIMIT_*`): tạo lượt 200/phút mỗi IP; mở lại 30/phút và nộp 20/phút mỗi lượt,
+  hai bộ đếm riêng. Bộ đếm trong bộ nhớ một tiến trình.
