@@ -12,7 +12,7 @@ const { Sider } = Layout;
 
 export default function AppLayout() {
     // Mặc định mở rộng, có chữ cạnh biểu tượng để giáo viên không phải đoán
-    const [collapsed, setCollapsed] = useState(false);
+    const [collapsed, setCollapsed] = useState(true);
 
     const handleToggleSidebar = () => {
         setCollapsed((previous) => !previous);

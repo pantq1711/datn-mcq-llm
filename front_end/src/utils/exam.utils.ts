@@ -264,6 +264,77 @@ export function hasContentFlag(needsReview: boolean | undefined, reasons: string
     return list.some((reason) => !reason.startsWith("similar_in_exam:"));
 }
 
+/** id của thẻ câu trên trang đề để mục lục cuộn tới. */
+export function examSlotAnchorId(slotId: string | number): string {
+    return `exam-slot-${slotId}`;
+}
+
+/** Trạng thái một ô của mục lục trang đề. */
+export type ExamNavStatus = "kept" | "review" | "failed" | "generating" | "unreviewed";
+
+/** Thứ tự ưu tiên: đã lưu, chưa soạn được, đang soạn, cần xem kỹ, chưa lưu. */
+export function navStatusOf(question: ExamQuestionItem): ExamNavStatus {
+    switch (question.state) {
+        case "kept":
+        case "edited":
+            return "kept";
+        case "failed":
+            return "failed";
+        case "pending":
+        case "generating":
+            return "generating";
+    }
+    return question.needsReview ? "review" : "unreviewed";
+}
+
+/** Một dòng tóm tắt kết quả tự kiểm tra trên thẻ câu. */
+export interface QcSummaryLine {
+    label: string;
+    value: string;
+    ok: boolean;
+}
+
+/**
+ * Ba dòng tóm tắt kết quả tự kiểm tra (trình bày, trùng câu, tự giải lại), suy từ `reviewReasons`/`qcState` của API xem đề
+ * (docs/api mục 7.4) nên không phải gọi vết QC từng câu. Chỉ có với câu hệ thống soạn chưa lưu (`source = generated`,
+ * `state = ready`); câu ngân hàng, câu đã lưu, chỗ chưa có câu trả null.
+ */
+export function summarizeQc(question: ExamQuestionItem): QcSummaryLine[] | null {
+    if (question.source !== "generated" || (question.state ?? "ready") !== "ready") return null;
+    const reasons = question.reviewReasons ?? [];
+    const has = (code: string) => reasons.includes(code);
+
+    const formatIssue = reasons.some((r) => r.startsWith("warning:"));
+    const duplicate = reasons.some((r) => r.startsWith("duplicate:") || r.startsWith("similar_in_exam:"));
+
+    let solver: { value: string; ok: boolean };
+    if (question.qcState === "checking" || has("solver_pending")) {
+        solver = { value: "đang tự giải lại", ok: true };
+    } else if (has("solver_inconsistent")) {
+        solver = { value: "ra đáp án khác", ok: false };
+    } else if (has("solver_multiple_correct")) {
+        solver = { value: "thấy nhiều phương án cùng đúng", ok: false };
+    } else if (has("solver_no_correct")) {
+        solver = { value: "không thấy phương án nào đúng", ok: false };
+    } else if (has("solver_ambiguous") || has("solver_unparseable") || has("statement_undecidable")) {
+        solver = { value: "chưa kết luận được", ok: false };
+    } else if (has("solver_not_run") || has("solver_failed")) {
+        solver = { value: "chưa giải lại được", ok: false };
+    } else {
+        solver = { value: "khớp đáp án", ok: true };
+    }
+
+    return [
+        { label: "Trình bày", value: formatIssue ? "cần xem lại" : "đạt", ok: !formatIssue },
+        { label: "Trùng câu khác", value: duplicate ? "có câu gần giống" : "không", ok: !duplicate },
+        { label: "Tự giải lại", ...solver },
+    ];
+}
+
+/**
+ * Câu chữ cho một lý do cần xem kỹ. Vị trí câu ghi theo Phần ("Phần II – Câu 3"), đếm lại từ 1 ở mỗi Phần như trang đề
+ * và file Word.
+ */
 export function describeReviewReason(reason: string): string {
     if (reason.startsWith("warning:")) {
         return describeFormatIssue(reason.slice("warning:".length));
@@ -276,7 +347,7 @@ export function describeReviewReason(reason: string): string {
         // Từ 2/11: "II.3" = câu 3 của Phần II (đánh số như trang đề)
         const byPart = /^(I{1,3})\.(\d+)$/.exec(position);
         if (byPart) {
-            return `Gần giống câu ${byPart[2]} Phần ${byPart[1]} trong đề, nên đổi một trong hai câu.`;
+            return `Gần giống Phần ${byPart[1]} – Câu ${byPart[2]} trong đề, nên đổi một trong hai câu.`;
         }
         // Dữ liệu cũ: n là số thứ tự câu trong cả đề; không đọc được số thì không đoán
         if (/^\d+$/.test(position)) {

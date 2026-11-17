@@ -1,0 +1,85 @@
+.exam-summary-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 20px;
+    background: #ffffff;
+    border: 2px solid #f0f0f0;
+    border-radius: 8px;
+}
+
+/* Đề sẵn sàng in: nền xanh lá nhạt, viền xanh lá */
+.exam-summary-bar-ready {
+    background: #f6ffed;
+    border-color: #95de64;
+}
+
+.exam-summary-ready-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.exam-summary-ready-icon {
+    font-size: 28px;
+    color: #237804;
+}
+
+.exam-summary-ready-title {
+    font-size: 18px;
+    color: #237804;
+}
+
+.exam-summary-stats {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    font-size: 16px;
+}
+
+.exam-summary-stat {
+    font-size: 16px;
+}
+
+.exam-summary-stat-warn {
+    font-size: 16px;
+    color: #ad4e00;
+}
+
+.exam-summary-stat-danger {
+    font-size: 16px;
+    color: #cf1322;
+}
+
+/* Phần "(12 trắc nghiệm · …)" sau số câu: chữ thường, không đậm */
+.exam-summary-parts {
+    font-weight: 400;
+}
+
+.exam-summary-sep {
+    color: #bfbfbf;
+}
+
+.exam-summary-progress-icon {
+    color: #0958d9;
+    margin-top: 4px;
+}
+
+.exam-summary-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f0f0;
+}
+
+.exam-summary-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 15px;
+}

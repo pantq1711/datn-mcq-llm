@@ -74,11 +74,63 @@
     margin-bottom: 16px;
 }
 
+/* --- Đang tải đề: vòng quay giữa vùng nội dung --- */
+
+.exam-detail-page-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 80vh;
+}
+
+/* --- Ô tóm tắt đầu trang --- */
+
+.exam-detail-page-summary {
+    width: 100%;
+    min-width: 0;
+    margin-bottom: 16px;
+}
+
+/* --- Bàn làm việc: mục lục 200px + danh sách câu --- */
+
+.exam-detail-page-workspace {
+    display: grid;
+    /* 228px: vừa 5 ô câu mỗi hàng (191px) + padding 16px hai bên + viền mục lục (1px mỗi bên) */
+    grid-template-columns: 228px minmax(0, 1fr);
+    align-items: start;
+    gap: 16px;
+}
+
+/* Không có câu (đề rỗng): danh sách chiếm cả hàng */
+.exam-detail-page-workspace>.exam-detail-page-question-list:only-child {
+    grid-column: 1 / -1;
+}
+
+.exam-detail-page-nav {
+    position: sticky;
+    top: 84px;
+    min-width: 0;
+}
+
 /* --- Question list --- */
 
 .exam-detail-page-question-list {
     width: 100%;
     min-width: 0;
+}
+
+@media (max-width: 992px) {
+    .exam-detail-page-workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .exam-detail-page-nav {
+        top: 0;
+        z-index: 5;
+    }
 }
 
 /* --- Question group layout --- */

@@ -196,7 +196,7 @@ export const QcTraceModal: FC<Props> = ({
                         <div className="qc-trace-modal__context-item">
                             <span className="qc-trace-modal__context-label">Câu</span>
                             <Text strong>
-                                Câu {questionNo ?? trace.slotNo} · Phần {trace.part}
+                                Phần {trace.part} – Câu {questionNo ?? trace.slotNo}
                                 {trace.topic ? ` · ${trace.topic}` : ""}
                             </Text>
                         </div>

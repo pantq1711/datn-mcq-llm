@@ -5,7 +5,7 @@ import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, Warnin
 import "./ExamQuestionList.css";
 import type { BankVisibility, ExamQuestionItem } from "../types/exam.types";
 import { describeInfoReason, teacherRequestLabel } from "../types/exam.types";
-import { describeFailureReason, describeLevel, describeReviewReason, hasContentFlag, resolveQuestionType } from "../../../utils/exam.utils";
+import { describeFailureReason, describeLevel, describeReviewReason, examSlotAnchorId, hasContentFlag, resolveQuestionType, summarizeQc } from "../../../utils/exam.utils";
 import QuestionContent from "./QuestionContent";
 
 const { Text } = Typography;
@@ -20,6 +20,10 @@ interface ExamQuestionListProps {
     onViewQcTrace?: (question: ExamQuestionItem, index: number) => void;
     /** Cấu hình hệ thống (API xem đề): câu không cờ khi lưu vào ngân hàng chung hay riêng. Mặc định chung. */
     bankKeepVisibility?: BankVisibility;
+    /** Số "Câu k" của câu; danh sách có thể đã lọc nên không dùng vị trí trong danh sách. Mặc định index + 1. */
+    getNumber?: (question: ExamQuestionItem, index: number) => number;
+    /** Công tắc "Hiện tất cả lời giải" ở đầu trang. */
+    showAllExplanations?: boolean;
 }
 
 function renderStateTags(question: ExamQuestionItem) {
@@ -55,9 +59,15 @@ function renderStateTags(question: ExamQuestionItem) {
     return tags;
 }
 
-/** Nội dung câu; lời giải thu gọn, giáo viên bấm "Xem lời giải" mới mở. */
-function QuestionBody({ question }: { question: ExamQuestionItem }) {
-    const [showExplanation, setShowExplanation] = useState(false);
+/**
+ * Nội dung câu. Lời giải mở sẵn ở câu cần xem kỹ hoặc khi bật "Hiện tất cả lời giải"; còn lại thu gọn. Giáo viên bấm nút
+ * thì theo lựa chọn đó cho tới khi công tắc đầu trang đổi.
+ */
+function QuestionBody({ question, showAll }: { question: ExamQuestionItem; showAll: boolean }) {
+    // Lựa chọn tay chỉ có hiệu lực khi công tắc đầu trang chưa đổi kể từ lúc bấm
+    const [manual, setManual] = useState<{ open: boolean; showAll: boolean } | null>(null);
+    const manualOpen = manual && manual.showAll === showAll ? manual.open : null;
+    const showExplanation = manualOpen ?? (showAll || Boolean(question.needsReview));
 
     return (
         <>
@@ -65,7 +75,7 @@ function QuestionBody({ question }: { question: ExamQuestionItem }) {
             {question.explanation && (
                 <Button
                     className="exam-explanation-toggle"
-                    onClick={() => setShowExplanation((prev) => !prev)}
+                    onClick={() => setManual({ open: !showExplanation, showAll })}
                 >
                     {showExplanation ? "Ẩn lời giải" : "Xem lời giải"}
                 </Button>
@@ -83,6 +93,8 @@ export default function ExamQuestionList({
     onEdit,
     onViewQcTrace,
     bankKeepVisibility = "shared",
+    getNumber = (_question, index) => index + 1,
+    showAllExplanations = false,
 }: ExamQuestionListProps) {
     if (loading) {
         return (
@@ -127,10 +139,12 @@ export default function ExamQuestionList({
                     const canChange = state !== "pending" && state !== "generating";
                     const canEdit = state === "ready" && question.source !== "bank";
                     const reasons = question.reviewReasons ?? [];
+                    const qcSummary = summarizeQc(question);
 
                     return (
                         <List.Item
                             key={question.slotId ?? question.id}
+                            id={question.slotId !== undefined ? examSlotAnchorId(question.slotId) : undefined}
                             className="exam-question-item"
                         >
                             <div className={`exam-question-item-content${question.needsReview ? " exam-question-item-needs-review" : ""}`}>
@@ -138,7 +152,7 @@ export default function ExamQuestionList({
                                     {/* Số thứ tự, độ khó, cờ cần xem kỹ, nguồn và trạng thái */}
                                     <Space size={8} align="center" wrap>
                                         <div className="exam-question-item-number">
-                                            Câu {index + 1}
+                                            Câu {getNumber(question, index)}
                                         </div>
 
                                         {difficulty && (
@@ -266,18 +280,30 @@ export default function ExamQuestionList({
                                             : "Hệ thống đang soạn câu này…"}
                                     </Text>
                                 ) : (
-                                    <QuestionBody question={question} />
+                                    <QuestionBody question={question} showAll={showAllExplanations} />
                                 )}
 
-                                {/* Kết quả tự kiểm tra: link nhỏ, không nằm trong hàng nút chính */}
+                                {/* Kết quả tự kiểm tra: tóm tắt ngay trên thẻ (câu hệ thống soạn chưa lưu), lịch sử đầy đủ ở "Chi tiết" */}
                                 {onViewQcTrace && (
-                                    <div className="exam-question-qc-link">
+                                    <div className="exam-question-qc-summary">
+                                        {qcSummary && (
+                                            <span className="exam-question-qc-summary-text">
+                                                Hệ thống đã kiểm tra:{" "}
+                                                {qcSummary.map((line, i) => (
+                                                    <span key={line.label}>
+                                                        {i > 0 && " · "}
+                                                        {line.label}:{" "}
+                                                        <span className={line.ok ? "exam-qc-ok" : "exam-qc-bad"}>{line.value}</span>
+                                                    </span>
+                                                ))}
+                                            </span>
+                                        )}
                                         <Button
                                             type="link"
                                             size="small"
                                             onClick={() => onViewQcTrace(question, index)}
                                         >
-                                            Xem kết quả tự kiểm tra
+                                            {qcSummary ? "Chi tiết" : "Xem kết quả tự kiểm tra"}
                                         </Button>
                                     </div>
                                 )}

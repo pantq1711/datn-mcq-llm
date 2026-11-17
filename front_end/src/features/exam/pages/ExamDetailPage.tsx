@@ -1,11 +1,12 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Alert, Button, Card, Progress, Spin, Space, Tag, Tooltip, Typography, message, Modal } from "antd";
-import { ArrowLeftOutlined, FileWordOutlined, ProfileOutlined, SendOutlined, SyncOutlined, WarningOutlined } from "@ant-design/icons";
+import { Button, Card, Empty, Spin, Space, Tooltip, Typography, message, Modal } from "antd";
+import { ArrowLeftOutlined, FileWordOutlined, ProfileOutlined, SendOutlined } from "@ant-design/icons";
 
-import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
-import type { ExamPreviewData, ExamProgress, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
-import { examKindConfig, examStatusConfig, describeReviewReason, hasContentFlag } from "../../../utils/exam.utils";
+import ExamQuestionNav from "../components/ExamQuestionNav";
+import ExamSummaryBar, { type ExamSummaryCounts } from "../components/ExamSummaryBar";
+import type { ExamProgress, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
+import { examKindConfig, examStatusConfig, describeReviewReason, examSlotAnchorId, hasContentFlag } from "../../../utils/exam.utils";
 import { keepQuestion, replaceQuestion, getExamDetail, getExamProgress, getCatalogSubjects } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
 import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
@@ -29,12 +30,17 @@ const partTitles: Record<string, string> = {
     III: "Phần III. Trả lời ngắn",
 };
 
-// Tên ngắn của Phần trong bảng ma trận cấu trúc
-const partSummaryLabels: Record<string, string> = {
-    I: "Phần I – Trắc nghiệm",
-    II: "Phần II – Đúng/Sai",
-    III: "Phần III – Trả lời ngắn",
+// Tên dạng câu của từng Phần trong dòng "18 câu: 12 trắc nghiệm · 2 đúng/sai · 4 trả lời ngắn"
+const partCountLabels: Record<string, string> = {
+    I: "trắc nghiệm",
+    II: "đúng/sai",
+    III: "trả lời ngắn",
 };
+
+/** Câu giáo viên cần xử lý: có cờ cần xem kỹ hoặc chưa soạn được. */
+function needsAttention(question: ExamQuestionItem): boolean {
+    return question.state === "failed" || (question.state === "ready" && Boolean(question.needsReview));
+}
 
 /** Câu chữ và màu của thanh tiến độ ở đầu trang đề (docs/api mục 7.3). */
 function describeBuildProgress(
@@ -134,6 +140,10 @@ export default function ExamDetailPage() {
 
     const [subjectName, setSubjectName] = useState<string | undefined>(undefined);
 
+    // Ô tóm tắt đầu trang: lọc câu cần xem và hiện mọi lời giải
+    const [onlyNeedsAttention, setOnlyNeedsAttention] = useState(false);
+    const [showAllExplanations, setShowAllExplanations] = useState(false);
+
     // Bộ đếm thứ tự request để chống phản hồi cũ đến muộn (stale response guard)
     const fetchSequenceRef = useRef(0);
 
@@ -211,9 +221,17 @@ export default function ExamDetailPage() {
             setLoading(false);
             return;
         }
+        // Chỉ lần tải mới nhất được tắt trạng thái đang tải: StrictMode (dev) chạy effect 2 lần, request đầu bị bỏ qua
+        // (fetchSequenceRef) nhưng nếu nó tắt loading thì trang hiện "Không có dữ liệu đề." trong lúc request sau chưa xong
+        let cancelled = false;
         setProgress(null);
         setLoading(true);
-        loadDetail().finally(() => setLoading(false));
+        loadDetail().finally(() => {
+            if (!cancelled) setLoading(false);
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [examId, loadDetail]);
 
     useEffect(() => {
@@ -261,6 +279,32 @@ export default function ExamDetailPage() {
         [detail]
     );
 
+    // Số "Câu k" đếm lại từ 1 ở mỗi Phần, đúng như file Word (cấu trúc đề theo CV 7991) và lý do similar_in_exam;
+    // tính trên danh sách đầy đủ để khi lọc "Chỉ hiện câu cần xem" số câu không đổi
+    const questionNumbers = useMemo(() => {
+        const numbers = new Map<string | number, number>();
+        parts.forEach((p) => p.questions.forEach((q, i) => numbers.set(q.slotId ?? q.id, i + 1)));
+        return numbers;
+    }, [parts]);
+    
+    const getNumber = useCallback(
+        (question: ExamQuestionItem, index: number) => questionNumbers.get(question.slotId ?? question.id) ?? index + 1,
+        [questionNumbers]
+    );
+
+    // Mục lục: cuộn tới câu; câu đang bị ẩn bởi bộ lọc thì tắt lọc trước
+    const jumpToQuestion = (question: ExamQuestionItem) => {
+        if (question.slotId === undefined) return;
+        const anchor = examSlotAnchorId(question.slotId);
+        const scroll = () => document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (onlyNeedsAttention && !needsAttention(question)) {
+            setOnlyNeedsAttention(false);
+            window.setTimeout(scroll, 0);
+            return;
+        }
+        scroll();
+    };
+
     // Hàm mở Modal Xem vết QC cho slot
     const openQcTrace = (targetSlotId: string | number, questionNo: number) => {
         setSelectedSlotId(String(targetSlotId));
@@ -268,19 +312,33 @@ export default function ExamDetailPage() {
         setQcModalVisible(true);
     };
 
-    if (loading) return <Spin tip="Đang tải đề…" />;
+    if (loading) {
+        return (
+            <div className="exam-detail-page-loading">
+                <Spin size="large" />
+                <Text type="secondary">Đang tải đề…</Text>
+            </div>
+        );
+    }
     if (!detail) return <p>Không có dữ liệu đề.</p>;
 
     // Số câu theo Phần lấy từ ma trận (required), nên luôn cộng đủ tổng dù câu đang soạn hay lỗi
     const questionCount = parts.reduce((sum, p) => sum + p.required, 0);
-    const exam: ExamPreviewData = {
-        questionCount,
-        parts: parts.map((p) => ({
-            part: p.part,
-            label: partSummaryLabels[p.part] ?? `Phần ${p.part}`,
-            count: p.required,
-        })),
+    const allQuestions = parts.flatMap((p) => p.questions);
+    const summaryCounts: ExamSummaryCounts = {
+        total: questionCount,
+        ready: parts.reduce((sum, p) => sum + p.ready, 0),
+        kept: allQuestions.filter((q) => q.state === "kept" || q.state === "edited").length,
+        needsReview: detail.needsReviewCount,
+        failed: allQuestions.filter((q) => q.state === "failed").length,
+        generating: allQuestions.filter((q) => q.state === "pending" || q.state === "generating").length,
     };
+    const partsBreakdown = parts
+        .map((p) => `${p.required} ${partCountLabels[p.part] ?? `câu Phần ${p.part}`}`)
+        .join(" · ");
+    const visibleParts = onlyNeedsAttention
+        ? parts.map((p) => ({ ...p, questions: p.questions.filter(needsAttention) })).filter((p) => p.questions.length > 0)
+        : parts;
     const progressView = progress ? describeBuildProgress(progress, detail.createdAt) : null;
     const progressPercent = progress && progress.total > 0
         ? Math.min(100, Math.round((progress.ready / progress.total) * 100))
@@ -428,11 +486,6 @@ export default function ExamDetailPage() {
                             {detail.kind && (
                                 <Text>{examKindConfig[detail.kind]?.label ?? detail.kind}</Text>
                             )}
-                            {detail.needsReviewCount > 0 && (
-                                <Tag color="volcano" icon={<WarningOutlined />}>
-                                    {detail.needsReviewCount} câu cần xem kỹ
-                                </Tag>
-                            )}
                             {subjectName && <Text type="secondary">{subjectName}</Text>}
                             <Text type="secondary">Mã hệ thống: {detail.examCode}</Text>
                         </Space>
@@ -472,24 +525,20 @@ export default function ExamDetailPage() {
                 </div>
             </div>
 
-            {progress && progressView && (
-                <div className="exam-detail-page-progress">
-                    <Alert
-                        type={progressView.type}
-                        showIcon
-                        icon={progress.status === "generating" ? <SyncOutlined spin /> : undefined}
-                        message={progressView.text}
-                        description={progress.status === "generating"
-                            ? <Progress percent={progressPercent} showInfo={false} />
-                            : undefined}
-                    />
-                </div>
-            )}
-
-            <div className="exam-detail-page-overview">
-                <Card title="Ma trận cấu trúc đề thi">
-                    <ExamPreview exam={exam} />
-                </Card>
+            {/* Ô tóm tắt thay cho dòng tiến độ và bảng "Ma trận cấu trúc đề thi" (CT-1, CT-4) */}
+            <div className="exam-detail-page-summary">
+                <ExamSummaryBar
+                    counts={summaryCounts}
+                    partsBreakdown={partsBreakdown}
+                    progressText={progress?.status === "generating" ? progressView?.text : undefined}
+                    progressPercent={progress?.status === "generating" ? progressPercent : undefined}
+                    onlyNeedsAttention={onlyNeedsAttention}
+                    onOnlyNeedsAttentionChange={setOnlyNeedsAttention}
+                    showAllExplanations={showAllExplanations}
+                    onShowAllExplanationsChange={setShowAllExplanations}
+                    onExport={() => setExportOpen(true)}
+                    exportLoading={false}
+                />
             </div>
 
             <AssignExamModal
@@ -499,13 +548,28 @@ export default function ExamDetailPage() {
                 onCreated={() => undefined}
             />
 
+            {/* Bàn làm việc: mục lục cố định bên trái, danh sách câu bên phải */}
+            <div className="exam-detail-page-workspace">
+                {parts.length > 0 && (
+                    <aside className="exam-detail-page-nav">
+                        <ExamQuestionNav parts={parts} getNumber={getNumber} onJump={jumpToQuestion} />
+                    </aside>
+                )}
+
             <div className="exam-detail-page-question-list">
                 <Card title={questionListCardTitle}>
                     {parts.length === 0 && (
                         <ExamQuestionList questions={[]} />
                     )}
 
-                    {parts.map((p) => (
+                    {onlyNeedsAttention && parts.length > 0 && visibleParts.length === 0 && (
+                        <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description="Không còn câu cần xem kỹ hay câu chưa soạn được."
+                        />
+                    )}
+
+                    {visibleParts.map((p) => (
                         <div key={p.part} className="question-group">
                             <Title level={5} className="question-group-title">
                                 {partTitles[p.part] ?? `Phần ${p.part}`}{" "}
@@ -513,6 +577,8 @@ export default function ExamDetailPage() {
                             </Title>
                             <ExamQuestionList
                                 questions={p.questions}
+                                getNumber={getNumber}
+                                showAllExplanations={showAllExplanations}
                                 onChangeQuestion={(question) => {
                                     setChangeQuestion(question);
                                 }}
@@ -520,7 +586,7 @@ export default function ExamDetailPage() {
                                 bankKeepVisibility={detail.bankKeepVisibility}
                                 onEdit={(question) => setEditingQuestion(question)}
                                 onViewQcTrace={(question, index) => {
-                                    if (question.slotId !== undefined) openQcTrace(question.slotId, index + 1);
+                                    if (question.slotId !== undefined) openQcTrace(question.slotId, getNumber(question, index));
                                 }}
                             />
                         </div>
@@ -553,6 +619,7 @@ export default function ExamDetailPage() {
                         />
                     )}
                 </Card>
+            </div>
             </div>
         </div>
     );
