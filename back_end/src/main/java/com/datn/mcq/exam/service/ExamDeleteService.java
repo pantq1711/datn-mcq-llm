@@ -28,12 +28,14 @@ public class ExamDeleteService {
     private final ExamRepository examRepository;
     private final ExamSlotRepository slotRepository;
     private final GenerationService generationService;
+    private final List<ExamDeletionGuard> deletionGuards;
 
     public ExamDeleteService(ExamRepository examRepository, ExamSlotRepository slotRepository,
-                             GenerationService generationService) {
+                             GenerationService generationService, List<ExamDeletionGuard> deletionGuards) {
         this.examRepository = examRepository;
         this.slotRepository = slotRepository;
         this.generationService = generationService;
+        this.deletionGuards = List.copyOf(deletionGuards);
     }
 
     /**
@@ -42,11 +44,17 @@ public class ExamDeleteService {
      * failed ("exam_deleted"). Job answer_check/grounding_check để chạy nốt (chỉ ghi kết quả QC của câu).
      *
      * <p>Khóa hàng đề (FOR UPDATE), rồi các chỗ (cùng khóa của đối soát), rồi các job sinh câu còn mở, trong một transaction.
+     *
+     * <p>16/11 (AN-04): sau khi khóa hàng đề và TRƯỚC mọi thay đổi, hỏi các {@link ExamDeletionGuard} (đề còn bài giao: 409
+     * {@code EXAM_HAS_ASSIGNMENTS}, không đổi gì).
      */
     @Transactional
     public void delete(Integer examId, Integer actorId) {
         examRepository.lockLiveForUpdate(examId, actorId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy đề id=" + examId));
+        for (ExamDeletionGuard guard : deletionGuards) {
+            guard.checkDeletable(examId);
+        }
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy đề id=" + examId));
         List<Integer> slotIds = slotRepository.lockByExamId(examId).stream().map(ExamSlot::getId).toList();
