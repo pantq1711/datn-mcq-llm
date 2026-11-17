@@ -22,7 +22,7 @@
 }
 
 .exam-matrix-table__meta {
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.4;
 }
 
@@ -47,9 +47,5 @@
 @media (max-width: 640px) {
     .exam-matrix-table__summary {
         margin-bottom: 8px;
-    }
-
-    .exam-matrix-table .ant-table {
-        font-size: 13px;
     }
 }

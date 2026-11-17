@@ -193,7 +193,7 @@ export default function AssignmentDetailPage() {
         []
     );
 
-    if (loading && !data) return <Spin tip="Đang tải bài giao…" />;
+    if (loading && !data) return <Spin description="Đang tải bài giao…" />;
 
     if (notFound || !data) {
         return (

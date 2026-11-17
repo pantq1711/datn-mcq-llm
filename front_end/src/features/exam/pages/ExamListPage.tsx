@@ -142,7 +142,7 @@ export default function ExamListPage() {
                         icon={<PlusOutlined />}
                         onClick={() => navigate("/exams/generate")}
                     >
-                        Tạo đề thi
+                        Tạo đề mới
                     </Button>
                 </div>
             </div>

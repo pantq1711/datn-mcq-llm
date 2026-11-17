@@ -19,15 +19,15 @@ interface QuestionFiltersProps {
 }
 
 const gradeOptions = [
-    { label: "Khối 6", value: 6 },
-    { label: "Khối 7", value: 7 },
-    { label: "Khối 8", value: 8 },
-    { label: "Khối 9", value: 9 },
+    { label: "Lớp 6", value: 6 },
+    { label: "Lớp 7", value: 7 },
+    { label: "Lớp 8", value: 8 },
+    { label: "Lớp 9", value: 9 },
 ];
 
 const questionTypeOptions: { label: string; value: QuestionType }[] = [
-    { label: "Trắc nghiệm 4 lựa chọn", value: "mcq" },
-    { label: "Đúng / Sai", value: "tf" },
+    { label: "Trắc nghiệm nhiều phương án", value: "mcq" },
+    { label: "Trắc nghiệm đúng/sai", value: "tf" },
     { label: "Trả lời ngắn", value: "sa" },
 ];
 
@@ -106,14 +106,14 @@ export default function QuestionFilters({
                             <span className="question-filter-topic-text">{t.topic}</span>
                             {!value.gradeLevel && t.grades && t.grades.length > 0 && (
                                 <div className="question-filter-topic-sub">
-                                    <Text type="secondary" style={{ fontSize: 11 }}>
-                                        Khối {t.grades.join(", ")}
+                                    <Text type="secondary" style={{ fontSize: 14 }}>
+                                        Lớp {t.grades.join(", ")}
                                     </Text>
                                 </div>
                             )}
                         </div>
                         <div className="question-filter-topic-right">
-                            <Tag color="blue" style={{ fontSize: 11, marginLeft: 4 }}>
+                            <Tag color="blue" style={{ fontSize: 14, marginLeft: 4 }}>
                                 {t.count} câu
                             </Tag>
                         </div>
@@ -186,7 +186,7 @@ export default function QuestionFilters({
                     handleFilterClick();
                 }}
             >
-                {/* Hàng 1: Từ khóa, Môn học, Khối lớp, Dạng câu hỏi */}
+                {/* Hàng 1: Từ khóa, Môn học, Lớp, Dạng câu hỏi */}
                 <Row gutter={[16, 0]}>
                     <Col xs={24} sm={12} lg={8}>
                         <Form.Item label="Từ khóa">
@@ -195,6 +195,8 @@ export default function QuestionFilters({
                                 onChange={(event) =>
                                     updateField("keyword", event.target.value)
                                 }
+                                // Nhấn Enter trong ô từ khóa = bấm "Lọc" (rà soát giao diện H1)
+                                onPressEnter={handleFilterClick}
                                 placeholder="Tìm kiếm nội dung câu hỏi..."
                                 allowClear
                             />
@@ -219,9 +221,9 @@ export default function QuestionFilters({
                     </Col>
 
                     <Col xs={24} sm={12} lg={5}>
-                        <Form.Item label="Khối lớp">
+                        <Form.Item label="Lớp">
                             <Select
-                                placeholder="Tất cả khối"
+                                placeholder="Tất cả lớp"
                                 allowClear
                                 value={value.gradeLevel}
                                 onChange={(val) => updateField("gradeLevel", val ?? null)}
@@ -300,13 +302,14 @@ export default function QuestionFilters({
                     <Col xs={24} sm={12} lg={8}>
                         <Form.Item
                             label="Nội dung ô ma trận"
-                            tooltip="So khớp đúng nguyên văn nội dung ô (không phân biệt hoa thường)"
+                            tooltip="Gõ đúng nội dung của ô trong ma trận (không phân biệt chữ hoa, chữ thường)."
                         >
                             <Input
                                 value={value.content || ""}
                                 onChange={(event) =>
                                     updateField("content", event.target.value || null)
                                 }
+                                onPressEnter={handleFilterClick}
                                 placeholder="Nhập nội dung ô ma trận..."
                                 allowClear
                             />

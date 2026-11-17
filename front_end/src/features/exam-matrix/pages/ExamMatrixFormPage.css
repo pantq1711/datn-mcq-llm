@@ -131,6 +131,15 @@
     min-width: 0;
 }
 
+/* Cột "Tổng quan ma trận" đi theo màn hình khi cuộn qua các ô (64px đầu trang + 16px) */
+.exam-matrix-form-page__sidebar {
+    position: sticky;
+    top: 80px;
+    /* Cột cao hơn màn hình thì tự cuộn trong cột, không bị cắt mất phần dưới */
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+}
+
 .exam-matrix-form-page__section-card,
 .exam-matrix-form-page__summary-card,
 .exam-matrix-form-page__help-card {
@@ -167,6 +176,9 @@
     }
 
     .exam-matrix-form-page__sidebar {
+        position: static;
+        max-height: none;
+        overflow-y: visible;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: start;

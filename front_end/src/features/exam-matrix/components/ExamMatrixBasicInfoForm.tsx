@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Col, Form, Input, Row, Select } from 'antd';
 import type { FormInstance } from 'antd';
 
@@ -32,8 +33,8 @@ export interface ExamMatrixBasicInfoFormProps {
     form: FormInstance<ExamMatrixBasicInfoValues>;
 }
 
-// Backend chỉ nhận khối 6-9
-const GRADE_OPTIONS = [6, 7, 8, 9].map((grade) => ({ label: `Khối ${grade}`, value: grade }));
+// Backend chỉ nhận khối 6-9; giao diện gọi là "Lớp" như giáo viên vẫn gọi
+const GRADE_OPTIONS = [6, 7, 8, 9].map((grade) => ({ label: `Lớp ${grade}`, value: grade }));
 
 /**
  * Phần thông tin chung của ma trận: tên, môn, khối, nguồn, ghi chú.
@@ -46,6 +47,17 @@ export function ExamMatrixBasicInfoForm({
     disabled = false,
     form,
 }: ExamMatrixBasicInfoFormProps) {
+    // Hệ thống chỉ có đúng 1 môn: tự chọn môn đó và ẩn ô Môn (rà soát giao diện mục 18).
+    // Từ 2 môn trở lên, hoặc ma trận cũ thuộc môn khác, ô Môn hiện như cũ.
+    const onlySubject = subjects.length === 1 ? subjects[0] : null;
+    const watchedSubjectId = Form.useWatch('subjectId', form);
+    useEffect(() => {
+        if (onlySubject && form.getFieldValue('subjectId') == null) {
+            form.setFieldsValue({ subjectId: onlySubject.value });
+        }
+    }, [onlySubject?.value, form]);
+    const hideSubject = onlySubject !== null && (watchedSubjectId == null || watchedSubjectId === onlySubject.value);
+
     return (
         <Form<ExamMatrixBasicInfoValues>
             form={form}
@@ -66,14 +78,15 @@ export function ExamMatrixBasicInfoForm({
                         ]}
                     >
                         <Input
-                            placeholder="Ví dụ: Ma trận kiểm tra giữa học kỳ I"
+                            placeholder="Ví dụ: Giữa kì I – Toán 8"
                             maxLength={255}
                             showCount
                         />
                     </Form.Item>
                 </Col>
 
-                <Col xs={24} md={12}>
+                {/* Ẩn bằng display, không gỡ Form.Item: validateFields vẫn trả subjectId */}
+                <Col xs={24} md={12} style={hideSubject ? { display: 'none' } : undefined}>
                     <Form.Item
                         label="Môn học"
                         name="subjectId"
@@ -92,12 +105,12 @@ export function ExamMatrixBasicInfoForm({
 
                 <Col xs={24} md={12}>
                     <Form.Item
-                        label="Khối lớp"
+                        label="Lớp"
                         name="gradeLevel"
-                        rules={[{ required: true, message: 'Vui lòng chọn khối lớp.' }]}
+                        rules={[{ required: true, message: 'Vui lòng chọn lớp.' }]}
                     >
                         <Select
-                            placeholder="Chọn khối lớp"
+                            placeholder="Chọn lớp"
                             options={GRADE_OPTIONS}
                             disabled={lockStructure && !allowGradeFill}
                         />

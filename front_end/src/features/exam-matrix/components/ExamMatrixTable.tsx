@@ -23,7 +23,7 @@ export interface ExamMatrixTableProps {
     onEditMatrix: (matrixId: string) => void;
     /** Xóa ma trận sau khi người dùng xác nhận. Nếu bỏ qua, nút xóa không hiển thị. */
     onDeleteMatrix?: (matrixId: string) => void;
-    /** Nhân bản ma trận. */
+    /** Sao chép ma trận. */
     onDuplicateMatrix?: (matrixId: string) => void;
     /** Tạo đề thi từ ma trận. Nếu bỏ qua, nút tạo đề không hiển thị. */
     onGenerateExam?: (matrixId: string) => void;
@@ -88,7 +88,8 @@ export function ExamMatrixTable({
                 [
                     matrix.name,
                     matrix.subjectName,
-                    matrix.gradeLevel == null ? '' : `khoi ${matrix.gradeLevel}`,
+                    // Bảng ghi "Lớp 8"; vẫn tìm được theo cách gõ cũ "khối 8"
+                    matrix.gradeLevel == null ? '' : `lop ${matrix.gradeLevel} khoi ${matrix.gradeLevel}`,
                 ].join(' ')
             );
             return searchableText.includes(keyword);
@@ -117,13 +118,13 @@ export function ExamMatrixTable({
             title: 'Môn học',
             dataIndex: 'subjectName',
             key: 'subjectName',
-            width: 170,
+            width: 130,
             render: (subjectName: string, record) => (
                 <div className="exam-matrix-table__subject-cell">
                     <Text>{subjectName}</Text>
                     {record.gradeLevel != null && (
                         <Text type="secondary" className="exam-matrix-table__meta">
-                            Khối {record.gradeLevel}
+                            Lớp {record.gradeLevel}
                         </Text>
                     )}
                 </div>
@@ -135,7 +136,7 @@ export function ExamMatrixTable({
             dataIndex: 'cellCount',
             key: 'cellCount',
             align: 'center',
-            width: 110,
+            width: 90,
             sorter: (a, b) => a.cellCount - b.cellCount,
             render: (cellCount: number) => (
                 <Text className="exam-matrix-table__question-count">
@@ -147,7 +148,7 @@ export function ExamMatrixTable({
             title: 'Ngày tạo',
             dataIndex: 'createdAt',
             key: 'createdAt',
-            width: 150,
+            width: 140,
             sorter: (a, b) => {
                 const first = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                 const second = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -161,7 +162,8 @@ export function ExamMatrixTable({
             title: 'Thao tác',
             key: 'actions',
             align: 'center',
-            width: 180, // Tăng chiều rộng cột thao tác lên 180px cho 4 nút
+            // Nút có chữ thay cho biểu tượng (rà soát giao diện D1)
+            width: 450,
             render: (_value, record) => {
                 // Mỗi ô có ít nhất 1 câu: còn ô là còn câu để tạo đề
                 const hasNoCells = record.cellCount === 0;
@@ -171,34 +173,34 @@ export function ExamMatrixTable({
                 return (
                     <Space size={4} className="exam-matrix-table__actions">
                         {onGenerateExam && (
-                            <Tooltip title={hasNoCells ? "Ma trận chưa có ô nào" : "Tạo đề từ ma trận này"}>
+                            <Tooltip title={hasNoCells ? "Ma trận chưa có ô nào" : undefined}>
                                 <Button
-                                    type="text"
+                                    type="primary"
                                     icon={<FileAddOutlined />}
                                     disabled={hasNoCells}
-                                    aria-label={`Tạo đề từ ma trận này ${record.name}`}
+                                    aria-label={`Tạo đề từ ma trận ${record.name}`}
                                     onClick={() => !hasNoCells && onGenerateExam(record.id)}
-                                />
+                                >
+                                    Tạo đề
+                                </Button>
                             </Tooltip>
                         )}
                         {onDuplicateMatrix && (
-                            <Tooltip title="Nhân bản ma trận">
-                                <Button
-                                    type="text"
-                                    icon={<CopyOutlined />}
-                                    aria-label={`Nhân bản ma trận ${record.name}`}
-                                    onClick={() => onDuplicateMatrix(record.id)}
-                                />
-                            </Tooltip>
-                        )}
-                        <Tooltip title="Chỉnh sửa ma trận">
                             <Button
-                                type="text"
-                                icon={<EditOutlined />}
-                                aria-label={`Chỉnh sửa ma trận ${record.name}`}
-                                onClick={() => onEditMatrix(record.id)}
-                            />
-                        </Tooltip>
+                                icon={<CopyOutlined />}
+                                aria-label={`Sao chép ma trận ${record.name}`}
+                                onClick={() => onDuplicateMatrix(record.id)}
+                            >
+                                Sao chép
+                            </Button>
+                        )}
+                        <Button
+                            icon={<EditOutlined />}
+                            aria-label={`Sửa ma trận ${record.name}`}
+                            onClick={() => onEditMatrix(record.id)}
+                        >
+                            Sửa
+                        </Button>
                         {onDeleteMatrix && (
                             <Popconfirm
                                 title="Xóa ma trận này?"
@@ -212,8 +214,8 @@ export function ExamMatrixTable({
                                 <Tooltip
                                     title={
                                         inUse
-                                            ? "Ma trận đã có đề, không xóa được. Có thể nhân bản."
-                                            : "Xóa ma trận"
+                                            ? "Ma trận đã có đề, không xóa được. Có thể sao chép."
+                                            : undefined
                                     }
                                 >
                                     <Button
@@ -222,7 +224,9 @@ export function ExamMatrixTable({
                                         disabled={inUse}
                                         icon={<DeleteOutlined />}
                                         aria-label={`Xóa ma trận ${record.name}`}
-                                    />
+                                    >
+                                        Xóa
+                                    </Button>
                                 </Tooltip>
                             </Popconfirm>
                         )}
@@ -252,7 +256,7 @@ export function ExamMatrixTable({
                 loading={loading}
                 size="middle"
                 tableLayout="fixed"
-                scroll={{ x: 760 }}
+                scroll={{ x: 1000 }}
                 locale={{
                     emptyText: (
                         <Empty
