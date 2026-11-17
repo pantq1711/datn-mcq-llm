@@ -1,0 +1,162 @@
+/* Khung bao chứa tooltip của các ô (không overflow để tooltip không bị cắt) */
+.exam-question-nav-root {
+    position: relative;
+}
+
+/* Mục lục câu: dính theo màn hình khi cuộn trang đề */
+.exam-question-nav {
+    position: sticky;
+    top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    padding: 16px 16px 0;
+    background: #ffffff;
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.exam-question-nav-title {
+    font-size: 16px;
+}
+
+.exam-question-nav-part {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Mỗi hàng đúng 5 câu (5 ô 35px + 4 khe 4px = 191px; cột mục lục rộng 228px ở ExamDetailPage.css) */
+.exam-question-nav-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 35px);
+    gap: 4px;
+}
+
+/* Ô 35×35 */
+.exam-question-nav-cell {
+    position: relative;
+    width: 35px;
+    height: 35px;
+    padding: 0;
+    border: 2px solid #d9d9d9;
+    border-radius: 6px;
+    background: #ffffff;
+    color: rgba(0, 0, 0, 0.88);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.exam-question-nav-cell:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.exam-question-nav-cell:focus-visible {
+    outline: 3px solid #0958d9;
+    outline-offset: 2px;
+}
+
+.exam-question-nav-mark {
+    position: absolute;
+    top: 0;
+    right: 2px;
+    font-size: 11px;
+    line-height: 1;
+}
+
+/* Màu theo trạng thái (chữ đạt tương phản ≥ 4,5:1) */
+.exam-question-nav-kept {
+    border-color: #237804;
+    background: #237804;
+    color: #ffffff;
+}
+
+.exam-question-nav-review {
+    border-color: #ad4e00;
+    background: #fff7e6;
+    color: #ad4e00;
+}
+
+.exam-question-nav-failed {
+    border-color: #cf1322;
+    background: #fff1f0;
+    color: #cf1322;
+}
+
+.exam-question-nav-generating {
+    border-style: dashed;
+    border-color: #8c8c8c;
+    background: #f5f5f5;
+    color: #595959;
+}
+
+.exam-question-nav-unreviewed {
+    border-color: #d9d9d9;
+    background: #ffffff;
+}
+
+/* Chú giải màu */
+.exam-question-nav-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 0 0;
+    list-style: none;
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.exam-question-nav-legend li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.exam-question-nav-swatch {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+/* Màn hẹp: mục lục thành một hàng ô cuộn ngang, dính ở đầu */
+@media (max-width: 992px) {
+    .exam-question-nav {
+        top: 0;
+        z-index: 5;
+        flex-direction: row;
+        align-items: center;
+        max-height: none;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 8px 12px;
+    }
+
+    .exam-question-nav-title,
+    .exam-question-nav-legend {
+        display: none;
+    }
+
+    .exam-question-nav-part {
+        flex-direction: row;
+        align-items: center;
+        flex-shrink: 0;
+    }
+
+    /* Màn hẹp: một hàng ngang, không chia 5 cột */
+    .exam-question-nav-grid {
+        display: flex;
+        flex-wrap: nowrap;
+    }
+
+    .exam-question-nav-part-title {
+        white-space: nowrap;
+    }
+}

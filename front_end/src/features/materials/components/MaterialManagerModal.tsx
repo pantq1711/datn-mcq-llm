@@ -340,7 +340,7 @@ export default function MaterialManagerModal({
                                 <Alert
                                     type="info"
                                     showIcon
-                                    message="Quy định tải tài liệu bài học (W2-3)"
+                                    message="Quy định tải tài liệu bài học"
                                     description={`Chấp nhận file .docx, .pdf hoặc .txt UTF-8, tối đa ${MAX_FILE_SIZE_MB} MB. Hệ thống sẽ tự động trích xuất nội dung văn bản để hệ thống soạn câu hỏi bám sát nội dung tài liệu.`}
                                     style={{ marginBottom: 16 }}
                                 />
