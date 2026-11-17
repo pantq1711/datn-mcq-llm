@@ -14,6 +14,7 @@ import com.datn.mcq.exam.export.ExamExportService;
 import com.datn.mcq.exam.export.ExamExportService.DocxFile;
 import com.datn.mcq.exam.export.EquationFormat;
 import com.datn.mcq.exam.export.ExamHeader;
+import com.datn.mcq.exam.export.ExportContent;
 import com.datn.mcq.exam.service.ExamActionService;
 import com.datn.mcq.exam.service.ExamBuildService;
 import com.datn.mcq.exam.service.ExamDeleteService;
@@ -110,14 +111,22 @@ public class ExamController {
      *
      * <p>{@code durationMinutes} (tùy chọn): thời gian làm bài, số nguyên 5–180, in ở đầu đề; không truyền thì in "……"; giá
      * trị khác 400.
+     *
+     * <p>{@code examCode} (tùy chọn, 16/11): mã đề in ở ô mã đề, tiêu đề trang đáp án và chân trang, số nguyên 100–999;
+     * không truyền là 101; giá trị khác 400. {@code content} (tùy chọn, 16/11): {@code all} (mặc định, đề kèm đáp án và lời
+     * giải) hoặc {@code exam} (file dừng ở dòng HẾT); giá trị khác 400.
      */
     @GetMapping("/{examId}/export/docx")
     public ResponseEntity<byte[]> exportDocx(CurrentUser user, @PathVariable Integer examId,
                                              @RequestParam(required = false) String equation,
-                                             @RequestParam(required = false) String durationMinutes) {
+                                             @RequestParam(required = false) String durationMinutes,
+                                             @RequestParam(required = false) String examCode,
+                                             @RequestParam(required = false) String content) {
         EquationFormat format = EquationFormat.parse(equation);
         Integer minutes = ExamHeader.parseDuration(durationMinutes);
-        DocxFile file = examExportService.docx(examId, user.id(), format, minutes);
+        String code = ExamHeader.parseExamCode(examCode);
+        ExportContent part = ExportContent.parse(content);
+        DocxFile file = examExportService.docx(examId, user.id(), format, minutes, code, part);
         ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(ExamExportService.DOCX_CONTENT_TYPE))
                 .header(HttpHeaders.CONTENT_DISPOSITION,

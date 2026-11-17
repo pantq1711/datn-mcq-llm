@@ -128,15 +128,31 @@ const headerCount = (value: unknown): number => {
     return Number.isFinite(n) && n > 0 ? n : 0;
 };
 
+/** Tùy chọn xuất Word (docs/api mục 7.6); trường nào không có thì không gửi, backend dùng mặc định. */
+export interface ExportDocxOptions {
+    /** Thời gian làm bài (phút, 5–180); không có thì file in "……". */
+    durationMinutes?: number;
+    /** Mã đề 100–999 in ở ô mã đề, chân trang, trang đáp án; không có thì 101. */
+    examCode?: string;
+    /** "exam": file dừng ở dòng HẾT, không kèm đáp án và lời giải; không có thì "all". */
+    content?: 'all' | 'exam';
+}
+
 export const getExamExportDocx = async (
     examId: string,
-    equation: ExportEquationFormat = 'omml'
+    equation: ExportEquationFormat = 'omml',
+    options: ExportDocxOptions = {}
 ): Promise<ExportDocxResult> => {
+    const params: Record<string, string | number> = {};
+    if (equation === 'mathtype') params.equation = equation;
+    if (options.durationMinutes !== undefined) params.durationMinutes = options.durationMinutes;
+    if (options.examCode) params.examCode = options.examCode;
+    if (options.content === 'exam') params.content = options.content;
     const resp = await axiosInstance.get(
         `/api/exams/${examId}/export/docx`,
         {
             responseType: 'blob',   // nhận dữ liệu dạng binary
-            ...(equation === 'mathtype' ? { params: { equation } } : {}),
+            ...(Object.keys(params).length > 0 ? { params } : {}),
         }
     );
     return {

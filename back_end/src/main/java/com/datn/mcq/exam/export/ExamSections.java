@@ -23,17 +23,24 @@ final class ExamSections {
     private ExamSections() {
     }
 
-    /**
-     * Thêm chân trang section đề nếu tài liệu có sectPr trỏ tới {@link ExamPage#EXAM_FOOTER_REL_ID}. Tài liệu không có
-     * (không phải đề) hoặc không đọc được thì trả nguyên.
-     */
+    /** Như {@link #ensureExamFooter(byte[], String)} với mã đề mặc định 101. */
     static byte[] ensureExamFooter(byte[] docx) {
+        return ensureExamFooter(docx, ExamHeader.ORIGINAL_CODE);
+    }
+
+    /**
+     * Thêm chân trang section đề ("Mã đề {@code examCode}", 16/11) nếu tài liệu có sectPr trỏ tới
+     * {@link ExamPage#EXAM_FOOTER_REL_ID}. Tài liệu không có (không phải đề, hoặc chỉ đề: section đề là sectPr cuối) hoặc
+     * không đọc được thì trả nguyên.
+     */
+    static byte[] ensureExamFooter(byte[] docx, String examCode) {
         try {
             DocxPackage pkg = DocxPackage.read(docx);
             if (!referencesExamFooter(pkg)) {
                 return docx;
             }
-            pkg.put(PART, ExamReferenceDoc.footerXml(ExamReferenceDoc.EXAM_FOOTER_LEFT).getBytes(StandardCharsets.UTF_8));
+            pkg.put(PART, ExamReferenceDoc.footerXml(ExamReferenceDoc.examFooterLeft(examCode))
+                    .getBytes(StandardCharsets.UTF_8));
             pkg.ensureOverrideContentType("/" + PART, ExamReferenceDoc.FOOTER_CONTENT_TYPE);
             pkg.addRelationship(ExamPage.EXAM_FOOTER_REL_ID, ExamReferenceDoc.FOOTER_REL_TYPE, "footerExam.xml");
             return pkg.write();

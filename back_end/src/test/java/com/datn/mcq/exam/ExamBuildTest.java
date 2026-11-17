@@ -1372,6 +1372,116 @@ class ExamBuildTest {
         }
     }
 
+    /** Nội dung các part chân trang (word/footer*.xml) của file docx, nối lại. */
+    private static String footersXml(byte[] docx) throws Exception {
+        StringBuilder out = new StringBuilder();
+        try (var zip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(docx))) {
+            for (var e = zip.getNextEntry(); e != null; e = zip.getNextEntry()) {
+                if (e.getName().startsWith("word/footer") && e.getName().endsWith(".xml")) {
+                    out.append(new String(zip.readAllBytes(), StandardCharsets.UTF_8)).append('\n');
+                }
+            }
+        }
+        return out.toString();
+    }
+
+    /**
+     * NV-42 (16/11): tên kì in theo tên đề giáo viên nhập (không theo tên ma trận), bỏ hậu tố "(bản sao)" và "– Môn Khối";
+     * file ghi lại tên ma trận cũ thì không còn.
+     */
+    @Test
+    void xuatDeRaWordTenKiTheoTenDe() throws Exception {
+        SOLVER.saJudge = "7";
+        int examId = build("{\"matrixId\": " + matrixId + ", \"title\": \"Giữa kì I – Toán 8 (bản sao)\"}")
+                .get("examId").asInt();
+        processAll();
+        progress(examId);
+        var response = perform(get("/api/exams/" + examId + "/export/docx")).andReturn().getResponse();
+        if (PandocTestSupport.find().isPresent()) {
+            assertEquals(200, response.getStatus(), response.getContentAsString(StandardCharsets.UTF_8));
+            String xml = PandocTestSupport.documentXml(response.getContentAsByteArray());
+            assertTrue(xml.contains(">ĐỀ KIỂM TRA GIỮA KÌ I<"), "tên kì theo tên đề, bỏ hậu tố");
+            assertFalse(xml.contains("ĐỀ THỬ MA TRẬN"), "không dùng tên ma trận");
+            assertFalse(xml.toUpperCase(java.util.Locale.ROOT).contains("BẢN SAO"), "bỏ hậu tố (bản sao)");
+            assertTrue(xml.contains("Môn: Toán, Lớp: 8."), "môn và khối vẫn theo ma trận");
+        } else {
+            assertEquals(503, response.getStatus());
+        }
+    }
+
+    /**
+     * NV-43 (16/11): examCode (100–999) in ở ô mã đề, tiêu đề trang đáp án và chân trang hai section; không truyền (hoặc
+     * trống) là 101; ngoài khoảng hoặc không phải số thì 400. Tên file vẫn theo mã hệ thống.
+     */
+    @Test
+    void xuatDeRaWordThamSoMaDe() throws Exception {
+        int examId = readyExam();
+        progress(examId);
+        String code = jdbc.queryForObject("SELECT exam_code FROM exam WHERE id = ?", String.class, examId);
+        String base = "/api/exams/" + examId + "/export/docx";
+        if (PandocTestSupport.find().isPresent()) {
+            for (String query : List.of("?examCode=205", "?equation=mathtype&examCode=205&durationMinutes=45")) {
+                var ok = perform(get(base + query)).andReturn().getResponse();
+                assertEquals(200, ok.getStatus(), ok.getContentAsString(StandardCharsets.UTF_8));
+                String xml = PandocTestSupport.documentXml(ok.getContentAsByteArray());
+                assertTrue(xml.contains(">205<"), "ô mã đề: " + query);
+                assertTrue(xml.contains("ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 205"), query);
+                assertFalse(xml.contains("MÃ ĐỀ 101"), query);
+                String footers = footersXml(ok.getContentAsByteArray());
+                assertTrue(footers.contains(">Mã đề 205<") && footers.contains(">Đáp án mã đề 205<"), footers);
+                assertFalse(footers.contains("ã đề 101<"), "chân trang không còn mã 101");
+                assertTrue(ok.getHeader("Content-Disposition").contains(code + ".docx"), "tên file theo mã hệ thống");
+            }
+            for (String query : List.of("", "?examCode=")) {
+                var def = perform(get(base + query)).andReturn().getResponse();
+                assertEquals(200, def.getStatus(), query);
+                assertTrue(PandocTestSupport.documentXml(def.getContentAsByteArray())
+                        .contains("ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101"), "mặc định 101: " + query);
+                String footers = footersXml(def.getContentAsByteArray());
+                assertTrue(footers.contains(">Mã đề 101<") && footers.contains(">Đáp án mã đề 101<"), query);
+            }
+        }
+        for (String bad : List.of("99", "1000", "0", "-101", "abc", "10.5")) {
+            var response = perform(get(base + "?examCode=" + bad)).andReturn().getResponse();
+            assertEquals(400, response.getStatus(), bad);
+            String body = response.getContentAsString(StandardCharsets.UTF_8);
+            assertTrue(body.contains("100") && body.contains("999"), "thông báo nêu khoảng hợp lệ: " + body);
+        }
+    }
+
+    /**
+     * NV-44 (16/11): content=exam thì file dừng ở dòng HẾT (một section, không đáp án, không lời giải); content=all hoặc
+     * không truyền thì như cũ; giá trị khác 400.
+     */
+    @Test
+    void xuatDeRaWordChiDe() throws Exception {
+        int examId = readyExam();
+        progress(examId);
+        String base = "/api/exams/" + examId + "/export/docx";
+        if (PandocTestSupport.find().isPresent()) {
+            for (String query : List.of("?content=exam", "?content=EXAM&equation=mathtype&examCode=302")) {
+                var ok = perform(get(base + query)).andReturn().getResponse();
+                assertEquals(200, ok.getStatus(), ok.getContentAsString(StandardCharsets.UTF_8));
+                String xml = PandocTestSupport.documentXml(ok.getContentAsByteArray());
+                assertTrue(xml.contains("------ HẾT ------") && xml.contains("PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN"), query);
+                assertFalse(xml.contains("ĐÁP ÁN") || xml.contains("LỜI GIẢI"), "chỉ đề: " + query);
+                assertEquals(1, xml.split("<w:sectPr", -1).length - 1, "một section: " + query);
+                assertFalse(footersXml(ok.getContentAsByteArray()).contains("Đáp án mã đề"), query);
+            }
+            for (String query : List.of("?content=all", "?content=")) {
+                var all = perform(get(base + query)).andReturn().getResponse();
+                assertEquals(200, all.getStatus(), query);
+                String xml = PandocTestSupport.documentXml(all.getContentAsByteArray());
+                assertTrue(xml.contains("ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101") && xml.contains("LỜI GIẢI CHI TIẾT"), query);
+                assertEquals(2, xml.split("<w:sectPr", -1).length - 1, query);
+            }
+        }
+        var bad = perform(get(base + "?content=answers")).andReturn().getResponse();
+        assertEquals(400, bad.getStatus());
+        String body = bad.getContentAsString(StandardCharsets.UTF_8);
+        assertTrue(body.contains("all") && body.contains("exam"), "thông báo nêu giá trị hợp lệ: " + body);
+    }
+
     /** ?equation=mathtype: công thức thành đối tượng MathType OLE; header báo số công thức giữ Equation của Word. */
     @Test
     void xuatDeRaWordCongThucMathType() throws Exception {
