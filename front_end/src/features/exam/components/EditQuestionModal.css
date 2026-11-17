@@ -11,6 +11,48 @@
     flex-direction: column;
     gap: 4px;
     min-width: 0;
+    /* chừa chỗ cho thanh cuộn của phần thân hộp */
+    padding-right: 4px;
+}
+
+.edit-question-level {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.edit-question-level .edit-question-level-tag {
+    margin-inline-end: 0;
+    font-size: 15px;
+    padding: 2px 10px;
+}
+
+/* Chữ phụ trong hộp không dưới 14px (rà soát 7.4) */
+.edit-question-modal .ant-form-item-extra,
+.edit-question-modal .ant-form-item-explain {
+    font-size: 15px;
+}
+
+.edit-question-answer-choice .ant-radio-button-wrapper {
+    min-width: 56px;
+    text-align: center;
+    font-weight: 600;
+}
+
+.edit-question-truth-choice .ant-radio-button-wrapper {
+    min-width: 72px;
+    text-align: center;
+}
+
+.edit-question-sa-answer .ant-input {
+    max-width: 240px;
+}
+
+/* Đáp số đang báo lỗi: lời báo đã nêu đủ quy tắc kèm ví dụ, ẩn dòng gợi ý lặp lại */
+.edit-question-sa-answer.ant-form-item-has-error .ant-form-item-extra {
+    display: none;
 }
 
 .edit-question-row-grid {
@@ -21,7 +63,7 @@
 
 .edit-question-statement-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 120px;
+    grid-template-columns: minmax(0, 1fr) 160px;
     gap: 16px;
 }
 
@@ -44,8 +86,10 @@
     }
 
     .edit-question-row-grid,
-    .edit-question-options-grid {
+    .edit-question-options-grid,
+    .edit-question-statement-grid {
         grid-template-columns: minmax(0, 1fr);
+        gap: 0;
     }
 
     .edit-question-modal-footer {

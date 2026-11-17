@@ -1,0 +1,118 @@
+/* Ô nhập có công thức của hộp Sửa câu: chữ 16px, chữ phụ không dưới 14px, màu chữ đạt 4,5:1 (rà soát mục 7.4). */
+
+.math-symbol-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin-bottom: 12px;
+    padding: 8px 10px;
+    border: 1px solid #d9d9d9;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+.math-symbol-bar-caption {
+    margin-bottom: 6px;
+    font-size: 15px;
+    color: rgba(0, 0, 0, 0.88);
+}
+
+.math-symbol-bar-tip {
+    color: rgba(0, 0, 0, 0.65);
+    font-size: 14px;
+}
+
+/* 16 nút 40×40 vừa một dòng trong hộp rộng 800px; màn hẹp thì xuống dòng */
+.math-symbol-bar-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.math-symbol-button {
+    min-width: 40px;
+    height: 40px;
+    padding: 0 6px;
+    border: 1px solid #bfbfbf;
+    border-radius: 6px;
+    background: #fff;
+    color: rgba(0, 0, 0, 0.88);
+    font-size: 16px;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.math-symbol-button:hover:not(:disabled) {
+    border-color: #0958d9;
+    color: #0958d9;
+}
+
+.math-symbol-button:focus-visible {
+    outline: 3px solid #4096ff;
+    outline-offset: 1px;
+}
+
+.math-symbol-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.math-input-textarea.ant-input {
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+/* Dòng xem trước nằm trong phần "extra" của Form.Item: bỏ màu xám nhạt và cỡ chữ nhỏ mặc định */
+.math-field .ant-form-item-extra {
+    color: rgba(0, 0, 0, 0.88);
+    font-size: 16px;
+    min-height: 0;
+}
+
+.math-field .ant-form-item-extra:empty {
+    display: none;
+}
+
+.math-preview {
+    margin-top: 6px;
+}
+
+.math-preview-line {
+    padding: 6px 10px;
+    border-left: 3px solid #0958d9;
+    border-radius: 0 6px 6px 0;
+    background: #f0f5ff;
+    overflow-wrap: anywhere;
+    line-height: 1.7;
+}
+
+.math-preview-label {
+    color: #0958d9;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Công thức riêng dòng ($$...$$) không làm tràn ngang */
+.math-preview-content .katex-display {
+    margin: 4px 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.math-preview-warning {
+    margin-top: 4px;
+    color: #ad4e00;
+    font-size: 14px;
+}
+
+@media (max-width: 575px) {
+    /* Màn hẹp: hàng nút xuống nhiều dòng, không dính trên đầu để khỏi che ô đang gõ */
+    .math-symbol-bar {
+        position: static;
+    }
+
+    .math-symbol-bar-tip {
+        display: none;
+    }
+}
