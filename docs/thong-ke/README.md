@@ -3,7 +3,8 @@
 Chỉ là **truy vấn đọc** (PostgreSQL) cho chương thử nghiệm trong báo cáo; chưa có trang thống kê. Mỗi file `.sql` là một
 câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên database của hệ thống đã triển khai. Test
 `StatisticsSqlTest` chạy bốn file đầu trên `datn_mcq_test` với dữ liệu mẫu để bảo đảm cú pháp và số đếm đúng; file 05 và 06 (W2-3) được
-`GroundingPipelineTest` kiểm số đếm, file 07 (giám sát, 08/11) được `StatisticsSqlTest` kiểm số đếm job, và `StatisticsSqlTest` kiểm cả bảy file chỉ là một câu lệnh đọc.
+`GroundingPipelineTest` kiểm số đếm, file 07 (giám sát, 08/11) được `StatisticsSqlTest` kiểm số đếm job, file 11 (hậu kiểm, PR B
+17/11) được `HauKiemSqlTest` bắt khớp với service, và `StatisticsSqlTest` kiểm mọi file chỉ là một câu lệnh đọc.
 
 | File | Trả lời câu hỏi |
 |---|---|
@@ -15,6 +16,7 @@ câu lệnh `SELECT` độc lập, chạy được bằng `psql -f` trên databa
 | [`06-chi-phi.sql`](06-chi-phi.sql) | Chi phí trung bình mỗi câu LLM (token và thời gian gọi LLM) = sinh + Solver + grounding, theo dạng câu và có/không tài liệu; số câu thiếu số đo (V21) |
 | [`07-van-hanh.sql`](07-van-hanh.sql) | Vận hành hàng đợi theo ngày và loại job: số job đã kết thúc, tỉ lệ thất bại, thời gian chờ và xử lý (p50, p95), job bị stale reset |
 | [`10-yeu-cau-giao-vien.sql`](10-yeu-cau-giao-vien.sql) | Yêu cầu của giáo viên (chip, PR B): tỉ lệ `request_check` met / partial / not_met theo từng mã và theo mức lấy yêu cầu (replace, cell, exam), kèm tỉ lệ tính cả câu chưa kiểm (cận dưới); số lượt Đổi câu ngay sau câu not_met hay partial của cùng chỗ (gom theo chuỗi bản sửa); lọc theo cửa sổ `checked_at` của Solver |
+| [`11-hau-kiem.sql`](11-hau-kiem.sql) | Hậu kiểm bằng dữ liệu học sinh (bài giao trực tuyến): mỗi câu của mỗi bài giao đã đóng quá 2 phút một dòng gồm n, k, p, D và cờ hậu kiểm, **tự tính lại từ bài làm gốc** (không đọc `item_stat`), chỉ lượt đã nộp và không trùng lớp + số thứ tự; khớp service (`HauKiemSqlTest`). Bảng chéo tiền kiểm × hậu kiểm làm bằng Python (`co_qc.py`) qua `bank_item_id`, không bằng SQL |
 
 ## Số liệu vận hành thời gian thực (Prometheus)
 

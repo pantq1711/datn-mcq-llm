@@ -5,6 +5,11 @@ import com.datn.mcq.assignment.repository.AssignmentRepository.AttemptRow;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Quy tắc thời gian của bài giao và lượt làm (docs/design/lam-bai-truc-tuyen.md mục 2.2, quyết định 16/11). Hàm thuần.
@@ -60,5 +65,28 @@ final class AttemptRules {
     static long remainingSeconds(AttemptRow attempt, LocalDateTime now) {
         long s = Duration.between(now, attempt.deadlineAt()).toSeconds();
         return Math.max(0, s);
+    }
+
+    /**
+     * Id các lượt "trùng" (quyết định 16/11): có lượt KHÁC cùng lớp + số thứ tự trong cùng bài giao, xét MỌI lượt kể cả
+     * chưa nộp; tính lúc đọc, không lưu. Một quy tắc cho cả bảng điểm (cờ {@code duplicate}) và thống kê câu (lượt trùng
+     * không được tính), để hai nơi luôn khớp nhau.
+     */
+    static Set<Integer> duplicateIds(List<AttemptRow> attempts) {
+        Map<String, Integer> seatCounts = new HashMap<>();
+        for (AttemptRow t : attempts) {
+            seatCounts.merge(seatKey(t), 1, Integer::sum);
+        }
+        Set<Integer> out = new HashSet<>();
+        for (AttemptRow t : attempts) {
+            if (seatCounts.get(seatKey(t)) > 1) {
+                out.add(t.id());
+            }
+        }
+        return out;
+    }
+
+    private static String seatKey(AttemptRow t) {
+        return t.classLabel() + "#" + t.seatNo();
     }
 }

@@ -12,6 +12,7 @@ import com.datn.mcq.assignment.repository.AssignmentRepository.AssignmentRow;
 import com.datn.mcq.assignment.repository.AssignmentRepository.AttemptRow;
 import com.datn.mcq.assignment.repository.AssignmentRepository.ClassRow;
 import com.datn.mcq.assignment.repository.AssignmentRepository.ItemRow;
+import com.datn.mcq.assignment.repository.ItemStatRepository;
 import com.datn.mcq.bank.dto.BankItemDto;
 import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.common.exception.ApiErrorException;
@@ -69,14 +70,17 @@ public class AssignmentService {
     private final ExamAssignmentSource examSource;
     private final BankService bankService;
     private final ExamScoringProperties scoringProperties;
+    private final ItemStatRepository itemStats;
 
     public AssignmentService(AssignmentRepository repository, AssignmentLoader loader, ExamAssignmentSource examSource,
-                             BankService bankService, ExamScoringProperties scoringProperties) {
+                             BankService bankService, ExamScoringProperties scoringProperties,
+                             ItemStatRepository itemStats) {
         this.repository = repository;
         this.loader = loader;
         this.examSource = examSource;
         this.bankService = bankService;
         this.scoringProperties = scoringProperties;
+        this.itemStats = itemStats;
     }
 
     static ApiErrorException invalid(String message) {
@@ -234,20 +238,14 @@ public class AssignmentService {
         List<ClassRow> classes = repository.classes(a.id());
         int roster = classes.stream().mapToInt(ClassRow::rosterSize).sum();
         List<AttemptRow> attempts = repository.attempts(a.id());
-        Map<String, Integer> seatCounts = new HashMap<>();
-        for (AttemptRow t : attempts) {
-            seatCounts.merge(t.classLabel() + "#" + t.seatNo(), 1, Integer::sum);
-        }
+        Set<Integer> duplicateIds = AttemptRules.duplicateIds(attempts);
         int submitted = 0;
-        int duplicates = 0;
         for (AttemptRow t : attempts) {
             if (t.submittedAt() != null) {
                 submitted++;
             }
-            if (seatCounts.get(t.classLabel() + "#" + t.seatNo()) > 1) {
-                duplicates++;
-            }
         }
+        int duplicates = duplicateIds.size();
         List<AttemptDto> rows = null;
         if (withAttempts) {
             Map<Integer, Map<Integer, AnswerRow>> answers = new HashMap<>();
@@ -256,7 +254,7 @@ public class AssignmentService {
             }
             rows = new ArrayList<>(attempts.size());
             for (AttemptRow t : attempts) {
-                boolean duplicate = seatCounts.get(t.classLabel() + "#" + t.seatNo()) > 1;
+                boolean duplicate = duplicateIds.contains(t.id());
                 String state = AttemptRules.state(a, t, now);
                 if (t.submittedAt() == null) {
                     rows.add(new AttemptDto(t.id(), t.classLabel(), t.seatNo(), state, duplicate, t.startedAt(), null,
@@ -272,7 +270,7 @@ public class AssignmentService {
                 a.closedAt(), a.showScore(), a.showSolutions(), a.createdAt(),
                 classes.stream().map(c -> new ClassDto(c.classLabel(), c.rosterSize())).toList(),
                 paper.questionCount(), paper.maxScore(), ATTEMPT_CAP_FACTOR * roster, attempts.size(), submitted,
-                duplicates, rows);
+                duplicates, a.statsComputedAt(), rows);
     }
 
     // ---------- T4: đóng ----------
@@ -293,7 +291,8 @@ public class AssignmentService {
 
     /**
      * T5: xóa một lượt (học sinh mất máy thì vào lại được, hoặc giáo viên xóa dữ liệu của em đó). Ở MỌI trạng thái của bài
-     * giao, kể cả sau khi đóng (quyết định 16/11, ý 4: dữ liệu học sinh giữ tới khi giáo viên xóa).
+     * giao, kể cả sau khi đóng (quyết định 16/11, ý 4: dữ liệu học sinh giữ tới khi giáo viên xóa). Thống kê câu đã tính
+     * bị vô hiệu trong cùng transaction (PR B); lần đọc sau tính lại, kể cả lượt vừa hết cờ trùng.
      */
     @Transactional
     public void deleteAttempt(Integer examId, Integer assignmentId, Integer attemptId, Integer actorId) {
@@ -301,11 +300,13 @@ public class AssignmentService {
         if (repository.deleteAttempts(row.id(), List.of(attemptId)) == 0) {
             throw new NoSuchElementException("Không tìm thấy lượt làm id=" + attemptId);
         }
+        itemStats.invalidate(row.id());
     }
 
     /**
      * Xóa nhiều lượt một lần (quyết định 16/11), ví dụ các lượt trùng số thứ tự hoặc lượt phá. 1..{@value #MAX_BULK_DELETE}
-     * id; id không thuộc bài giao bị bỏ qua (không lộ lượt của bài khác). Ở mọi trạng thái, như T5.
+     * id; id không thuộc bài giao bị bỏ qua (không lộ lượt của bài khác). Ở mọi trạng thái, như T5; xóa được ít nhất một
+     * lượt thì thống kê câu bị vô hiệu như T5.
      */
     @Transactional
     public DeleteAttemptsResult deleteAttempts(Integer examId, Integer assignmentId, List<Integer> attemptIds,
@@ -316,7 +317,11 @@ public class AssignmentService {
         }
         AssignmentRow row = ownedLocked(examId, assignmentId, actorId);
         Set<Integer> ids = attemptIds.stream().collect(Collectors.toCollection(LinkedHashSet::new));
-        return new DeleteAttemptsResult(repository.deleteAttempts(row.id(), ids));
+        int deleted = repository.deleteAttempts(row.id(), ids);
+        if (deleted > 0) {
+            itemStats.invalidate(row.id());
+        }
+        return new DeleteAttemptsResult(deleted);
     }
 
     // ---------- T6: xóa bài giao ----------

@@ -301,6 +301,22 @@ Trạng thái của một lượt làm KHÔNG lưu DB, tính lúc đọc (`Attem
 `submitted`, `expired` (chưa nộp, hết hạn + ân hạn 2 phút, hoặc giáo viên đóng bài trước hạn của lượt). Cờ "trùng" của lượt
 (cùng lớp + số thứ tự với lượt khác của bài giao) cũng tính lúc đọc.
 
+### Mã cờ hậu kiểm (V33, `item_stat.flags`, PR B 17/11)
+
+Mảng JSON chuỗi, chưa có enum Java (hằng ở `ItemStatCalculator`). Cùng mã ở cột `flags` của `docs/thong-ke/11-hau-kiem.sql`.
+
+| Mã | Dạng câu | Khi nào |
+|---|---|---|
+| `insufficient_sample` | mọi dạng | n < 20; khi đó là cờ DUY NHẤT (D vẫn tính nhưng chưa đáng tin) |
+| `low_discrimination` | mọi dạng (tf: cấp câu) | D < 0,2 |
+| `unused_option: <X>` | mcq | phương án sai X có dưới 5% lượt chọn (20 × số lượt < n) |
+| `key_suspect: <X>` | mcq | phương án sai X: nhóm cao chọn nhiều hơn nhóm thấp và ≥ max(2, 20% × k) lượt nhóm cao |
+| `key_suspect: <ý>` | tf | ý a–d: nhóm thấp đúng nhiều hơn nhóm cao ít nhất 2 lượt |
+| `key_suspect` | sa | nhóm thấp đúng nhiều hơn nhóm cao ít nhất 2 lượt |
+
+Thứ tự trong mảng: `low_discrimination`, các `unused_option` (A–D), các `key_suspect` (A–D hoặc a–d). Mã lỗi API mới của
+phần này: 409 `ASSIGNMENT_OPEN` (bài còn mở), 409 `STATS_NOT_READY` (đã đóng nhưng còn ân hạn nộp 2 phút).
+
 ## 3. Quy tắc đi kèm (cần nhớ khi code, DB không tự đảm bảo hết)
 
 - **Đáp án đúng luôn do giáo viên quyết.** API lấy câu để chấm không được trả `correct_option` về form, kể cả trong JSON ẩn. Backend tự so để ra `answer_correct`.

@@ -4,7 +4,9 @@ import com.datn.mcq.assignment.dto.AssignmentDtos.AssignmentDto;
 import com.datn.mcq.assignment.dto.AssignmentDtos.CreateAssignmentRequest;
 import com.datn.mcq.assignment.dto.AssignmentDtos.DeleteAttemptsRequest;
 import com.datn.mcq.assignment.dto.AssignmentDtos.DeleteAttemptsResult;
+import com.datn.mcq.assignment.dto.ItemStatDtos.ItemStatsDto;
 import com.datn.mcq.assignment.service.AssignmentService;
+import com.datn.mcq.assignment.service.ItemStatService;
 import com.datn.mcq.common.security.CurrentUser;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -27,9 +29,11 @@ import java.util.List;
 public class AssignmentController {
 
     private final AssignmentService service;
+    private final ItemStatService itemStatService;
 
-    public AssignmentController(AssignmentService service) {
+    public AssignmentController(AssignmentService service, ItemStatService itemStatService) {
         this.service = service;
+        this.itemStatService = itemStatService;
     }
 
     /** T1: giao bài. 400 INVALID_REQUEST; 404; 409 ASSIGN_NOT_ALL_KEPT / ASSIGN_SA_KEY_UNSUPPORTED (kèm danh sách câu). */
@@ -72,6 +76,22 @@ public class AssignmentController {
                                                @PathVariable Integer assignmentId,
                                                @RequestBody(required = false) DeleteAttemptsRequest request) {
         return service.deleteAttempts(examId, assignmentId, request == null ? null : request.attemptIds(), user.id());
+    }
+
+    /**
+     * B1 (PR B): phân tích câu (p, D, lượt chọn, cờ hậu kiểm). 409 ASSIGNMENT_OPEN khi bài còn mở; 409 STATS_NOT_READY khi đã
+     * đóng nhưng còn ân hạn nộp 2 phút ({@code errors[0]} là lúc có thống kê).
+     */
+    @GetMapping("/{assignmentId}/item-stats")
+    public ItemStatsDto itemStats(CurrentUser user, @PathVariable Integer examId, @PathVariable Integer assignmentId) {
+        return itemStatService.get(examId, assignmentId, user.id());
+    }
+
+    /** B2 (PR B): tính lại phân tích câu; lỗi như B1. */
+    @PostMapping("/{assignmentId}/item-stats/recompute")
+    public ItemStatsDto recomputeItemStats(CurrentUser user, @PathVariable Integer examId,
+                                           @PathVariable Integer assignmentId) {
+        return itemStatService.recompute(examId, assignmentId, user.id());
     }
 
     /** T6: xóa bài giao cùng mọi lượt làm và câu trả lời. */
