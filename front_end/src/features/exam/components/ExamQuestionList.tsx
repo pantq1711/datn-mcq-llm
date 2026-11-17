@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button, Empty, List, Skeleton, Space, Tag, Tooltip, Typography } from "antd";
 import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, WarningOutlined, ReloadOutlined, InfoCircleOutlined } from "@ant-design/icons";
 
@@ -63,7 +63,7 @@ function renderStateTags(question: ExamQuestionItem) {
  * Nội dung câu. Lời giải mở sẵn ở câu cần xem kỹ hoặc khi bật "Hiện tất cả lời giải"; còn lại thu gọn. Giáo viên bấm nút
  * thì theo lựa chọn đó cho tới khi công tắc đầu trang đổi.
  */
-function QuestionBody({ question, showAll }: { question: ExamQuestionItem; showAll: boolean }) {
+function QuestionBody({ question, showAll, actions }: { question: ExamQuestionItem; showAll: boolean; actions?: ReactNode }) {
     // Lựa chọn tay chỉ có hiệu lực khi công tắc đầu trang chưa đổi kể từ lúc bấm
     const [manual, setManual] = useState<{ open: boolean; showAll: boolean } | null>(null);
     const manualOpen = manual && manual.showAll === showAll ? manual.open : null;
@@ -72,13 +72,19 @@ function QuestionBody({ question, showAll }: { question: ExamQuestionItem; showA
     return (
         <>
             <QuestionContent question={question} showExplanation={showExplanation} />
-            {question.explanation && (
-                <Button
-                    className="exam-explanation-toggle"
-                    onClick={() => setManual({ open: !showExplanation, showAll })}
-                >
-                    {showExplanation ? "Ẩn lời giải" : "Xem lời giải"}
-                </Button>
+            {/* Nút lời giải (trái) và phần kết quả tự kiểm tra (phải) cùng một hàng */}
+            {(question.explanation || actions) && (
+                <div className="exam-question-body-actions">
+                    {question.explanation && (
+                        <Button
+                            className="exam-explanation-toggle"
+                            onClick={() => setManual({ open: !showExplanation, showAll })}
+                        >
+                            {showExplanation ? "Ẩn lời giải" : "Xem lời giải"}
+                        </Button>
+                    )}
+                    {actions}
+                </div>
             )}
         </>
     );
@@ -140,6 +146,7 @@ export default function ExamQuestionList({
                     const canEdit = state === "ready" && question.source !== "bank";
                     const reasons = question.reviewReasons ?? [];
                     const qcSummary = summarizeQc(question);
+                    const qcBlock = renderQcBlock(question, index, qcSummary, onViewQcTrace);
 
                     return (
                         <List.Item
@@ -274,44 +281,55 @@ export default function ExamQuestionList({
                                 )}
 
                                 {!hasContent ? (
-                                    <Text type="secondary" italic>
-                                        {state === "failed"
-                                            ? describeFailureReason(question.failureReason)
-                                            : "Hệ thống đang soạn câu này…"}
-                                    </Text>
+                                    <>
+                                        <Text type="secondary" italic>
+                                            {state === "failed"
+                                                ? describeFailureReason(question.failureReason)
+                                                : "Hệ thống đang soạn câu này…"}
+                                        </Text>
+                                        {qcBlock && <div className="exam-question-body-actions">{qcBlock}</div>}
+                                    </>
                                 ) : (
-                                    <QuestionBody question={question} showAll={showAllExplanations} />
-                                )}
-
-                                {/* Kết quả tự kiểm tra: tóm tắt ngay trên thẻ (câu hệ thống soạn chưa lưu), lịch sử đầy đủ ở "Chi tiết" */}
-                                {onViewQcTrace && (
-                                    <div className="exam-question-qc-summary">
-                                        {qcSummary && (
-                                            <span className="exam-question-qc-summary-text">
-                                                Hệ thống đã kiểm tra:{" "}
-                                                {qcSummary.map((line, i) => (
-                                                    <span key={line.label}>
-                                                        {i > 0 && " · "}
-                                                        {line.label}:{" "}
-                                                        <span className={line.ok ? "exam-qc-ok" : "exam-qc-bad"}>{line.value}</span>
-                                                    </span>
-                                                ))}
-                                            </span>
-                                        )}
-                                        <Button
-                                            type="link"
-                                            size="small"
-                                            onClick={() => onViewQcTrace(question, index)}
-                                        >
-                                            {qcSummary ? "Chi tiết" : "Xem kết quả tự kiểm tra"}
-                                        </Button>
-                                    </div>
+                                    <QuestionBody question={question} showAll={showAllExplanations} actions={qcBlock} />
                                 )}
                             </div>
                         </List.Item>
                     );
                 }}
             />
+        </div>
+    );
+}
+
+/** Kết quả tự kiểm tra: tóm tắt ngay trên thẻ (câu hệ thống soạn chưa lưu), lịch sử đầy đủ ở "Chi tiết". */
+function renderQcBlock(
+    question: ExamQuestionItem,
+    index: number,
+    qcSummary: ReturnType<typeof summarizeQc>,
+    onViewQcTrace?: (question: ExamQuestionItem, index: number) => void
+): ReactNode {
+    if (!onViewQcTrace) return null;
+    return (
+        <div className="exam-question-qc-summary">
+            {qcSummary && (
+                <span className="exam-question-qc-summary-text">
+                    Hệ thống đã kiểm tra:{" "}
+                    {qcSummary.map((line, i) => (
+                        <span key={line.label}>
+                            {i > 0 && " · "}
+                            {line.label}:{" "}
+                            <span className={line.ok ? "exam-qc-ok" : "exam-qc-bad"}>{line.value}</span>
+                        </span>
+                    ))}
+                </span>
+            )}
+            <Button
+                type="link"
+                size="small"
+                onClick={() => onViewQcTrace(question, index)}
+            >
+                {qcSummary ? "Chi tiết" : "Xem kết quả kiểm tra tự động"}
+            </Button>
         </div>
     );
 }

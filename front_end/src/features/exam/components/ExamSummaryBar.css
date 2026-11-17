@@ -70,10 +70,16 @@
 
 .exam-summary-toggles {
     display: flex;
+    align-items: center;
     flex-wrap: wrap;
     gap: 8px 24px;
     padding-top: 10px;
     border-top: 1px solid #f0f0f0;
+}
+
+/* Nút "Lưu N câu không có cảnh báo": cuối hàng công tắc, sát phải */
+.exam-summary-bulk-keep {
+    margin-left: auto;
 }
 
 .exam-summary-toggle {

@@ -264,6 +264,17 @@ export function hasContentFlag(needsReview: boolean | undefined, reasons: string
     return list.some((reason) => !reason.startsWith("similar_in_exam:"));
 }
 
+/**
+ * Câu được "Lưu hàng loạt" (CT-7): đã có câu, chưa lưu, không đang tự kiểm tra lại bản sửa, và không có lý do cần xem kỹ
+ * nào (kể cả `similar_in_exam`: giáo viên nên đổi một trong hai câu trước). Cờ thông tin (`infoReasons`) không tính là cờ.
+ */
+export function isBulkKeepCandidate(question: Pick<ExamQuestionItem, "state" | "qcState" | "needsReview" | "reviewReasons">): boolean {
+    return (question.state ?? "ready") === "ready"
+        && question.qcState !== "checking"
+        && !question.needsReview
+        && (question.reviewReasons ?? []).length === 0;
+}
+
 /** id của thẻ câu trên trang đề để mục lục cuộn tới. */
 export function examSlotAnchorId(slotId: string | number): string {
     return `exam-slot-${slotId}`;

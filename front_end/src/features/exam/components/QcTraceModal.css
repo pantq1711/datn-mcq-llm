@@ -13,8 +13,6 @@
 
 .qc-trace-modal .ant-modal-header {
     margin: 0;
-    padding: 20px 24px;
-    border-bottom: 1px solid #f0f0f0;
     background: #ffffff;
 }
 
@@ -32,16 +30,12 @@
     background: #f5f5f5;
 }
 
+/* Thân hộp tự cuộn bên trong khi nội dung dài: hộp không vượt màn hình nên trang không hiện thanh cuộn ngoài
+   (thanh cuộn ngoài làm hộp lệch sang trái). 140px = đầu hộp (~85px) + khoảng trống trên dưới của hộp căn giữa. */
 .qc-trace-modal .ant-modal-body {
-    padding: 22px 24px;
+    max-height: calc(100dvh - 140px);
+    overflow-y: auto;
     background: #ffffff;
-}
-
-.qc-trace-modal .ant-modal-footer {
-    margin: 0;
-    padding: 14px 24px;
-    border-top: 1px solid #f0f0f0;
-    background: #fafafa;
 }
 
 /* --- Modal heading --- */
@@ -49,8 +43,9 @@
 .qc-trace-modal__title {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 24px;
     padding-right: 28px;
+    padding-bottom: 12px;
 }
 
 .qc-trace-modal__title-icon {
@@ -60,11 +55,9 @@
     flex: 0 0 44px;
     width: 44px;
     height: 44px;
-    border: 1px solid #d6e8ff;
-    border-radius: 12px;
-    background: #eaf4ff;
+    /* Không nền, không viền: biểu tượng phóng to lấp đầy ô 44px */
     color: #1677ff;
-    font-size: 21px;
+    font-size: 44px;
 }
 
 .qc-trace-modal__title-content {
@@ -76,15 +69,9 @@
 
 .qc-trace-modal__title-text {
     color: #1f1f1f;
-    font-size: 17px;
-    font-weight: 650;
+    font-size: 20px;
+    font-weight: 600;
     line-height: 1.4;
-}
-
-.qc-trace-modal__subtitle {
-    color: rgba(0, 0, 0, 0.65);
-    font-size: 12px;
-    font-weight: 400;
 }
 
 /* --- Body and question context --- */
@@ -103,7 +90,7 @@
     padding: 14px 16px;
     border: 1px solid #e6f4ff;
     border-radius: 12px;
-    background: linear-gradient(110deg, #f5faff 0%, #ffffff 100%);
+    background: linear-gradient(110deg, #e5faff 0%, #ffffff 100%);
 }
 
 .qc-trace-modal__context-item {
@@ -114,9 +101,18 @@
     min-width: 0;
 }
 
+/* Tiêu đề từng mục (Câu, Tình trạng, Lần thử): chữ đậm màu chính */
 .qc-trace-modal__context-label {
+    color: rgba(0, 0, 0, 0.88);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Nội dung chữ của mục: nhỏ, xám (mục "Tình trạng" là thẻ nên giữ nguyên) */
+.qc-trace-modal__context-value.ant-typography {
     color: rgba(0, 0, 0, 0.65);
     font-size: 12px;
+    font-weight: 400;
 }
 
 .qc-trace-modal__context-item .ant-typography {
@@ -138,24 +134,29 @@
     min-width: 0;
 }
 
-.qc-trace-modal__section-heading {
+/* Khối đầu mục: hàng tiêu đề (chữ + thẻ) ở trên, dòng chú thích rộng hết khung ở dưới */
+.qc-trace-modal__section-header {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
 }
 
-.qc-trace-modal__section-heading>div {
-    min-width: 0;
+/* Chữ tiêu đề và hai thẻ nằm sát nhau bên trái */
+.qc-trace-modal__section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 6px 10px;
 }
 
 .qc-trace-modal__section-heading .ant-typography {
     margin: 0;
 }
 
-.qc-trace-modal__section-heading .ant-typography-secondary {
-    display: block;
-    margin-top: 5px;
+.qc-trace-modal__section-desc.ant-typography {
+    margin: 0;
     font-size: 12px;
     line-height: 1.6;
 }
@@ -163,6 +164,13 @@
 .qc-trace-modal__section-heading .ant-tag {
     flex-shrink: 0;
     margin-inline-end: 0;
+}
+
+/* Hai thẻ "N lần soạn", "N thao tác": một hàng ngang, ngay sau chữ tiêu đề */
+.qc-trace-modal__section-tags {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
 }
 
 /* --- Timeline items --- */
@@ -278,11 +286,18 @@
 
 /* --- Action and timestamp --- */
 
+/* Một hàng: tên thao tác (trái) và thời gian (ngoài cùng bên phải); hẹp thì thời gian xuống dòng */
 .qc-trace-modal__step-header {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px 12px;
     min-width: 0;
+}
+
+.qc-trace-modal__step-header .qc-trace-modal__step-heading {
+    flex: 1 1 auto;
 }
 
 .qc-trace-modal__step-heading {
@@ -306,6 +321,8 @@
 
 .qc-trace-modal__step-time {
     display: flex;
+    flex-shrink: 0;
+    margin-left: auto;
     align-items: center;
     flex-wrap: wrap;
     gap: 7px;
@@ -329,12 +346,18 @@
     padding: 11px 12px;
     border: 1px solid #f0f0f0;
     border-radius: 8px;
-    background: #fafafa;
+    background: #f0f8ff;
     color: #595959;
     font-size: 13px;
     line-height: 1.75;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+/* Dòng đáp án trong khung chi tiết của phiên bản (QcVersionCard) */
+.qc-trace-modal__step-answer {
+    color: #262626;
+    font-weight: 600;
 }
 
 .qc-trace-modal__no-details {
@@ -367,19 +390,6 @@
     line-height: 1.6;
 }
 
-/* --- Footer --- */
-
-.qc-trace-modal__footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-}
-
-.qc-trace-modal__footer-note {
-    font-size: 12px;
-}
-
 /* --- Responsive --- */
 
 @media (max-width: 575px) {
@@ -398,10 +408,6 @@
         overflow-y: auto;
     }
 
-    .qc-trace-modal .ant-modal-footer {
-        padding: 12px 16px;
-    }
-
     .qc-trace-modal__title {
         gap: 10px;
     }
@@ -410,17 +416,11 @@
         flex-basis: 38px;
         width: 38px;
         height: 38px;
-        border-radius: 10px;
-        font-size: 18px;
+        font-size: 38px;
     }
 
     .qc-trace-modal__title-text {
         font-size: 15px;
-    }
-
-    .qc-trace-modal__subtitle {
-        font-size: 11px;
-        line-height: 1.5;
     }
 
     .qc-trace-modal__body {
@@ -474,11 +474,46 @@
 
 /* --- Các bước QC trong một phiên bản (QcVersionCard) --- */
 
+/* Các bước tự kiểm tra (trái) và khung chi tiết (phải, rộng cố định) nằm cạnh nhau */
+.qc-trace-modal__version-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-top: 12px;
+    min-width: 0;
+}
+
+.qc-trace-modal__version-body > .qc-trace-modal__step-details {
+    flex: 0 0 200px;
+    order: 2;
+    margin-top: 0;
+}
+
+.qc-trace-modal__version-body > .qc-trace-modal__qc {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+}
+
 .qc-trace-modal__qc {
     display: flex;
     flex-direction: column;
     gap: 8px;
     margin-top: 12px;
+}
+
+/* Màn hẹp: quay về xếp trên dưới */
+@media (max-width: 575px) {
+    .qc-trace-modal__version-body {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .qc-trace-modal__version-body > .qc-trace-modal__step-details {
+        flex-basis: auto;
+        width: 100%;
+        box-sizing: border-box;
+    }
 }
 
 .qc-trace-modal__qc-row {
@@ -489,6 +524,7 @@
 }
 
 .qc-trace-modal__qc-name.ant-typography {
+    font-weight: 700;
     font-size: 12px;
     line-height: 22px;
 }

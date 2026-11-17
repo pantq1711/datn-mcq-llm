@@ -1,5 +1,5 @@
 import { Button, Progress, Space, Switch, Typography } from "antd";
-import { CheckCircleFilled, FileWordOutlined, SyncOutlined } from "@ant-design/icons";
+import { CheckCircleFilled, FileWordOutlined, SaveOutlined, SyncOutlined } from "@ant-design/icons";
 
 import "./ExamSummaryBar.css";
 
@@ -29,6 +29,10 @@ interface ExamSummaryBarProps {
     onShowAllExplanationsChange: (value: boolean) => void;
     onExport: () => void;
     exportLoading: boolean;
+    /** Lưu hàng loạt (CT-7): số câu không có cảnh báo, chưa lưu; 0 thì ẩn nút. */
+    bulkKeepCount?: number;
+    bulkSaving?: boolean;
+    onBulkKeep?: () => void;
 }
 
 /**
@@ -46,6 +50,9 @@ export default function ExamSummaryBar({
     onShowAllExplanationsChange,
     onExport,
     exportLoading,
+    bulkKeepCount = 0,
+    bulkSaving = false,
+    onBulkKeep,
 }: ExamSummaryBarProps) {
     const readyToPrint =
         counts.total > 0 && counts.generating === 0 && counts.failed === 0 && counts.needsReview === 0
@@ -111,6 +118,16 @@ export default function ExamSummaryBar({
                     <Switch checked={showAllExplanations} onChange={onShowAllExplanationsChange} />
                     <span>Hiện tất cả lời giải</span>
                 </label>
+                {onBulkKeep && (bulkKeepCount > 0 || bulkSaving) && (
+                    <Button
+                        className="exam-summary-bulk-keep"
+                        icon={<SaveOutlined />}
+                        loading={bulkSaving}
+                        onClick={onBulkKeep}
+                    >
+                        {bulkSaving ? "Đang lưu…" : `Lưu ${bulkKeepCount} câu không có cảnh báo`}
+                    </Button>
+                )}
             </div>
         </div>
     );

@@ -6,7 +6,7 @@ import ExamQuestionList from "../components/ExamQuestionList";
 import ExamQuestionNav from "../components/ExamQuestionNav";
 import ExamSummaryBar, { type ExamSummaryCounts } from "../components/ExamSummaryBar";
 import type { ExamProgress, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
-import { examKindConfig, examStatusConfig, describeReviewReason, examSlotAnchorId, hasContentFlag } from "../../../utils/exam.utils";
+import { examKindConfig, examStatusConfig, describeReviewReason, examSlotAnchorId, hasContentFlag, isBulkKeepCandidate } from "../../../utils/exam.utils";
 import { keepQuestion, replaceQuestion, getExamDetail, getExamProgress, getCatalogSubjects } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
 import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
@@ -144,6 +144,16 @@ export default function ExamDetailPage() {
     const [onlyNeedsAttention, setOnlyNeedsAttention] = useState(false);
     const [showAllExplanations, setShowAllExplanations] = useState(false);
 
+    // Lưu hàng loạt (CT-7): đang chạy thì tạm dừng tự tải lại; rời trang thì dừng vòng lưu
+    const [bulkSaving, setBulkSaving] = useState(false);
+    const unmountedRef = useRef(false);
+    useEffect(() => {
+        unmountedRef.current = false;
+        return () => {
+            unmountedRef.current = true;
+        };
+    }, []);
+
     // Bộ đếm thứ tự request để chống phản hồi cũ đến muộn (stale response guard)
     const fetchSequenceRef = useRef(0);
 
@@ -212,7 +222,8 @@ export default function ExamDetailPage() {
         .flatMap((p) => p.items)
         .filter((i) => i.state !== "kept" && i.state !== "edited").length;
 
-    const hasPendingWork = !pollingStoppedDueToError && pendingSummary.total > 0;
+    // Đang lưu hàng loạt thì không tự tải lại giữa chừng (tải lại một lần khi xong)
+    const hasPendingWork = !pollingStoppedDueToError && !bulkSaving && pendingSummary.total > 0;
     // Còn câu đang soạn thì chưa xuất Word được
     const isGenerating = pendingSummary.generatingCount > 0 || progress?.status === "generating";
 
@@ -438,6 +449,103 @@ export default function ExamDetailPage() {
         });
     };
 
+    // ===== Lưu hàng loạt (CT-7): các câu đã soạn xong, chưa lưu, không có lý do cần xem kỹ =====
+    const bulkCandidates = allQuestions.filter((q) => q.slotId !== undefined && isBulkKeepCandidate(q));
+    const describePosition = (q: ExamQuestionItem) => `Phần ${q.part} – Câu ${getNumber(q, 0)}`;
+
+    const runBulkKeep = async (targets: ExamQuestionItem[]) => {
+        if (!examId) return;
+        const progressKey = "bulk-keep";
+        setBulkSaving(true);
+        let shared = 0;
+        let privateCount = 0;
+        const failures: string[] = [];
+        try {
+            // Lần lượt từng câu (mỗi lần Giữ là một giao dịch ghi ở backend), không gửi song song
+            for (let i = 0; i < targets.length; i++) {
+                if (unmountedRef.current) return;
+                const q = targets[i];
+                message.loading({ key: progressKey, content: `Đang lưu ${i + 1}/${targets.length} câu…`, duration: 0 });
+                try {
+                    const kept = await keepQuestion(Number(examId), q.slotId!);
+                    if (kept?.bankVisibility === "private") privateCount++;
+                    else shared++;
+                } catch (e: unknown) {
+                    // Đã được lưu (ví dụ ở tab khác; backend trả 409 "Câu hỏi này đã được giữ."): coi như xong;
+                    // lỗi khác thì ghi lại rồi lưu tiếp câu sau
+                    const response = (e as { response?: { status?: number; data?: { code?: string } } })?.response;
+                    if (response?.status === 409 && response.data?.code !== "QC_CHECKING"
+                        && /đã được giữ/i.test(getApiErrorMessage(e, ""))) {
+                        continue;
+                    }
+                    failures.push(`${describePosition(q)}: ${getApiErrorMessage(e, "không lưu được")}`);
+                }
+            }
+        } finally {
+            if (!unmountedRef.current) {
+                message.destroy(progressKey);
+                setBulkSaving(false);
+            }
+        }
+        if (unmountedRef.current) return;
+
+        const saved = shared + privateCount;
+        if (saved > 0) {
+            message.success(
+                privateCount === 0
+                    ? `Đã lưu ${saved} câu vào ngân hàng chung.`
+                    : shared === 0
+                        ? `Đã lưu ${saved} câu vào ngân hàng riêng của thầy/cô.`
+                        : `Đã lưu ${saved} câu: ${shared} câu vào ngân hàng chung, ${privateCount} câu vào ngân hàng riêng.`
+            );
+        }
+        if (failures.length > 0) {
+            Modal.warning({
+                title: `${failures.length} câu chưa lưu được`,
+                content: (
+                    <ul style={{ paddingLeft: 20, margin: 0 }}>
+                        {failures.map((f) => <li key={f}>{f}</li>)}
+                    </ul>
+                ),
+                okText: "Đã hiểu",
+            });
+        }
+        await loadDetail();
+    };
+
+    const handleBulkKeep = () => {
+        if (bulkCandidates.length === 0) return;
+        const targets = [...bulkCandidates];
+        const bankLabel = detail.bankKeepVisibility === "private" ? "ngân hàng riêng của thầy/cô" : "ngân hàng chung";
+        // Liệt kê theo Phần: "Phần I – Câu 1, 2, 4"
+        const byPart = parts
+            .map((p) => ({
+                part: p.part,
+                numbers: targets.filter((t) => t.part === p.part).map((t) => getNumber(t, 0)),
+            }))
+            .filter((p) => p.numbers.length > 0);
+        Modal.confirm({
+            title: `Lưu ${targets.length} câu chưa có cảnh báo vào ${bankLabel}?`,
+            content: (
+                <div>
+                    <ul style={{ paddingLeft: 20, margin: 0 }}>
+                        {byPart.map((p) => <li key={p.part}>Phần {p.part} – Câu {p.numbers.join(", ")}</li>)}
+                    </ul>
+                    <p style={{ marginTop: 8, marginBottom: 0 }}>
+                        Câu cần xem kỹ, câu đang soạn và câu đang tự kiểm tra lại không được lưu ở bước này.
+                    </p>
+                </div>
+            ),
+            okText: `Lưu ${targets.length} câu`,
+            cancelText: "Để tôi xem lại",
+            // Tiêu điểm mặc định ở nút an toàn (G8)
+            autoFocusButton: "cancel",
+            onOk: () => {
+                void runBulkKeep(targets);
+            },
+        });
+    };
+
     const handleSaveEditedQuestion = async () => {
         setEditingQuestion(null);
         await loadDetail();
@@ -538,6 +646,9 @@ export default function ExamDetailPage() {
                     onShowAllExplanationsChange={setShowAllExplanations}
                     onExport={() => setExportOpen(true)}
                     exportLoading={false}
+                    bulkKeepCount={bulkCandidates.length}
+                    bulkSaving={bulkSaving}
+                    onBulkKeep={handleBulkKeep}
                 />
             </div>
 
