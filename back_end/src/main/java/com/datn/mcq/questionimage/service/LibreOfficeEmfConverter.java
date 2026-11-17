@@ -3,6 +3,7 @@ package com.datn.mcq.questionimage.service;
 import com.datn.mcq.config.PandocLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
@@ -34,10 +35,17 @@ public class LibreOfficeEmfConverter implements EmfConverter {
 
     private final ImageImportProperties props;
     private final PandocLimiter limiter;
+    private final ImageHeaderInspector inspector;
 
-    public LibreOfficeEmfConverter(ImageImportProperties props, PandocLimiter limiter) {
+    @Autowired
+    public LibreOfficeEmfConverter(ImageImportProperties props, PandocLimiter limiter, ImageHeaderInspector inspector) {
         this.props = props;
         this.limiter = limiter;
+        this.inspector = inspector;
+    }
+
+    public LibreOfficeEmfConverter(ImageImportProperties props, PandocLimiter limiter) {
+        this(props, limiter, new ImageHeaderInspector(props));
     }
 
     @Override
@@ -45,10 +53,11 @@ public class LibreOfficeEmfConverter implements EmfConverter {
         try {
             Process process = new ProcessBuilder(props.getLibreofficePath(), "--version")
                     .redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .start();
             boolean finished = process.waitFor(3, TimeUnit.SECONDS);
             if (!finished) {
-                process.destroyForcibly();
+                destroyProcessTree(process);
                 return false;
             }
             return process.exitValue() == 0;
@@ -84,20 +93,37 @@ public class LibreOfficeEmfConverter implements EmfConverter {
             Path outDir = Files.createDirectories(tempDir.resolve("out"));
             Path profileDir = Files.createDirectories(tempDir.resolve("profile"));
 
-            // Ánh xạ key -> file tạm
+            // Kiểm tra header và khung EMF trước khi ghi file tạm và gọi LibreOffice
+            Map<String, EmfConvertResult> results = new LinkedHashMap<>();
             Map<String, String> keyToFileId = new LinkedHashMap<>();
             int idx = 0;
             for (Map.Entry<String, byte[]> entry : emfFiles.entrySet()) {
+                try {
+                    ImageHeaderInfo info = inspector.inspect(entry.getValue());
+                    if (!"emf".equals(info.format())) {
+                        results.put(entry.getKey(), EmfConvertResult.failure(
+                                "INVALID_IMAGE_FORMAT", "Tệp đầu vào không phải định dạng EMF hợp lệ"));
+                        continue;
+                    }
+                } catch (ImageValidationException e) {
+                    results.put(entry.getKey(), EmfConvertResult.failure(e.getErrorCode(), e.getMessage()));
+                    continue;
+                }
                 String fileId = "img_" + (++idx);
                 keyToFileId.put(entry.getKey(), fileId);
                 Path emfPath = inDir.resolve(fileId + ".emf");
                 Files.write(emfPath, entry.getValue());
             }
 
+            if (keyToFileId.isEmpty()) {
+                return results;
+            }
+
             // Dựng lệnh soffice đổi cả lô trong 1 tiến trình
             List<String> command = new ArrayList<>();
             command.add(props.getLibreofficePath());
             command.add("--headless");
+            command.add("--norestore");
             command.add("--convert-to");
             command.add("png");
             command.add("--outdir");
@@ -108,19 +134,23 @@ public class LibreOfficeEmfConverter implements EmfConverter {
                 command.add(inDir.resolve(fileId + ".emf").toAbsolutePath().toString());
             }
 
+            Path logFile = tempDir.resolve("soffice.log");
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
+            pb.redirectOutput(logFile.toFile());
             Process process = pb.start();
 
             boolean finished = process.waitFor(props.getTimeout().toSeconds(), TimeUnit.SECONDS);
             if (!finished) {
-                process.destroyForcibly();
+                destroyProcessTree(process);
                 log.warn("LibreOffice chuyển đổi EMF bị quá hạn (timeout {}s)", props.getTimeout().toSeconds());
-                return failAll(emfFiles, "CONVERTER_TIMEOUT", "Quá thời gian chuyển đổi ảnh EMF");
+                for (String key : keyToFileId.keySet()) {
+                    results.put(key, EmfConvertResult.failure("CONVERTER_TIMEOUT", "Quá thời gian chuyển đổi ảnh EMF"));
+                }
+                return results;
             }
 
             // Đọc và xử lý kết quả từng ảnh
-            Map<String, EmfConvertResult> results = new LinkedHashMap<>();
             for (Map.Entry<String, String> entry : keyToFileId.entrySet()) {
                 String originalKey = entry.getKey();
                 String fileId = entry.getValue();
@@ -135,6 +165,10 @@ public class LibreOfficeEmfConverter implements EmfConverter {
                     byte[] rawPng = Files.readAllBytes(pngPath);
                     byte[] croppedPng = autocropWhitespace(rawPng);
                     results.put(originalKey, EmfConvertResult.ok(croppedPng));
+                } catch (ImageValidationException e) {
+                    log.warn("PNG sau khi đổi EMF cho '{}' không qua kiểm tra header: {} ({})",
+                            originalKey, e.getErrorCode(), e.getMessage());
+                    results.put(originalKey, EmfConvertResult.failure(e.getErrorCode(), e.getMessage()));
                 } catch (Exception e) {
                     log.warn("Lỗi xử lý PNG sau khi đổi EMF cho '{}': {}", originalKey, e.getMessage());
                     results.put(originalKey, EmfConvertResult.failure("CONVERTER_POST_PROCESS_FAILED", e.getMessage()));
@@ -154,9 +188,10 @@ public class LibreOfficeEmfConverter implements EmfConverter {
     }
 
     /**
-     * Tự động cắt lề trắng (autocrop whitespace) cho ảnh PNG.
+     * Tự động cắt lề trắng (autocrop whitespace) cho ảnh PNG. Kiểm tra header PNG trước khi giải mã để chặn ảnh quá lớn.
      */
     public byte[] autocropWhitespace(byte[] pngBytes) throws IOException {
+        inspector.inspectPngHeader(pngBytes);
         BufferedImage image = ImageIO.read(new ByteArrayInputStream(pngBytes));
         if (image == null) {
             return pngBytes;
@@ -249,6 +284,19 @@ public class LibreOfficeEmfConverter implements EmfConverter {
         int blue = rgb & 0xFF;
         // Pixel gần như trắng tinh
         return red >= 250 && green >= 250 && blue >= 250;
+    }
+
+    private void destroyProcessTree(Process process) {
+        try {
+            process.descendants().forEach(ProcessHandle::destroyForcibly);
+        } catch (Exception ignored) {
+        }
+        process.destroyForcibly();
+        try {
+            process.waitFor(2, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private Map<String, EmfConvertResult> failAll(Map<String, byte[]> files, String code, String message) {

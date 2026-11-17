@@ -18,7 +18,7 @@ public class ImageHeaderInspector {
     private static final byte[] GIF_87A = new byte[] {0x47, 0x49, 0x46, 0x38, 0x37, 0x61};
     private static final byte[] GIF_89A = new byte[] {0x47, 0x49, 0x46, 0x38, 0x39, 0x61};
     private static final byte[] BMP_MAGIC = new byte[] {0x42, 0x4D};
-    private static final int EMF_SIGNATURE = 0x28464D45; // " EMF" dạng Little-Endian
+    private static final int EMF_SIGNATURE = 0x464D4520; // " EMF" dạng Little-Endian (20 45 4D 46)
 
     private final ImageImportProperties props;
 
@@ -62,10 +62,22 @@ public class ImageHeaderInspector {
         return info;
     }
 
-    private void validateDimensions(ImageHeaderInfo info) {
-        int width = info.width();
-        int height = info.height();
+    /**
+     * Kiểm tra header IHDR và giới hạn kích thước của ảnh PNG trước khi giải mã (dùng cho đầu ra LibreOffice trước autocrop).
+     */
+    public ImageHeaderInfo inspectPngHeader(byte[] data) {
+        if (data == null || !startsWith(data, PNG_MAGIC)) {
+            throw new ImageValidationException("INVALID_IMAGE_FORMAT", "Dữ liệu không phải ảnh PNG hợp lệ");
+        }
+        ImageHeaderInfo info = inspectPng(data);
+        validateDimensions(info.width(), info.height());
+        return info;
+    }
 
+    /**
+     * Kiểm tra chiều rộng, chiều cao và tổng số pixel với giới hạn cấu hình trước khi cấp phát bộ đệm ảnh.
+     */
+    public void validateDimensions(int width, int height) {
         if (width <= 0 || height <= 0) {
             throw new ImageValidationException("CORRUPTED_IMAGE",
                     "Kích thước ảnh không hợp lệ: " + width + "x" + height);
@@ -81,6 +93,10 @@ public class ImageHeaderInspector {
             throw new ImageValidationException("IMAGE_PIXEL_FLOOD",
                     "Tổng số pixel (" + totalPixels + ") vượt quá ngưỡng tối đa cho phép " + props.getMaxPixels() + " pixels");
         }
+    }
+
+    private void validateDimensions(ImageHeaderInfo info) {
+        validateDimensions(info.width(), info.height());
     }
 
     private ImageHeaderInfo inspectPng(byte[] data) {
@@ -209,25 +225,27 @@ public class ImageHeaderInspector {
 
     private ImageHeaderInfo inspectEmf(byte[] data) {
         ByteBuffer buf = ByteBuffer.wrap(data, 8, 16).order(ByteOrder.LITTLE_ENDIAN);
-        int left = buf.getInt();
-        int top = buf.getInt();
-        int right = buf.getInt();
-        int bottom = buf.getInt();
+        long left = buf.getInt();
+        long top = buf.getInt();
+        long right = buf.getInt();
+        long bottom = buf.getInt();
 
-        int width = Math.abs(right - left) + 1;
-        int height = Math.abs(bottom - top) + 1;
+        long rawWidth = Math.abs(right - left) + 1L;
+        long rawHeight = Math.abs(bottom - top) + 1L;
 
         // Nếu rclBounds rỗng, thử đọc szlDevice tại offset 72..79 nếu dữ liệu đủ dài
-        if ((width <= 1 || height <= 1) && data.length >= 80) {
+        if ((rawWidth <= 1 || rawHeight <= 1) && data.length >= 80) {
             ByteBuffer devBuf = ByteBuffer.wrap(data, 72, 8).order(ByteOrder.LITTLE_ENDIAN);
             int devWidth = devBuf.getInt();
             int devHeight = devBuf.getInt();
             if (devWidth > 0 && devHeight > 0) {
-                width = devWidth;
-                height = devHeight;
+                rawWidth = devWidth;
+                rawHeight = devHeight;
             }
         }
 
+        int width = rawWidth > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) rawWidth;
+        int height = rawHeight > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) rawHeight;
         return new ImageHeaderInfo("emf", "image/x-emf", width, height, data.length);
     }
 

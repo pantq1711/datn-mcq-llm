@@ -90,5 +90,9 @@ public class Question {
         public Double heightCm;
         public String sourceRef;
         public byte[] rawData;
+        /** SHA-256 của byte gốc trong .docx (tính trước khi LibreOffice đổi EMF sang PNG). */
+        public String originalSha256;
+        /** Định dạng gốc trong .docx khi byte đã bị thay (EMF đổi sang PNG); null thì lấy định dạng do bộ chuẩn hóa nhận. */
+        public String originalFormat;
     }
 }

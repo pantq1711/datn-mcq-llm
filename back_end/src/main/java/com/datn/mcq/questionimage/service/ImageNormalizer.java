@@ -4,8 +4,10 @@ import org.springframework.stereotype.Component;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -49,22 +51,12 @@ public class ImageNormalizer {
         // 2. Tính SHA-256 của byte gốc ban đầu
         String sha256 = calculateSha256(rawBytes);
 
-        // 3. Giải mã ảnh qua ImageIO
-        BufferedImage image;
-        try {
-            image = ImageIO.read(new ByteArrayInputStream(rawBytes));
-        } catch (IOException e) {
-            throw new ImageValidationException("CORRUPTED_IMAGE", "Lỗi đọc dữ liệu ảnh: " + e.getMessage(), e);
-        }
-
-        if (image == null) {
-            throw new ImageValidationException("CORRUPTED_IMAGE", "ImageIO không thể giải mã dữ liệu ảnh");
-        }
+        // 3. Giải mã ảnh qua ImageReader, kiểm kích thước khung thực tế (nhất là GIF) trước khi giải mã pixel
+        BufferedImage image = readWithDimensionCheck(rawBytes);
 
         // 4. Xác định định dạng đích
         boolean isJpeg = "jpeg".equalsIgnoreCase(headerInfo.format());
         String targetMime = isJpeg ? "image/jpeg" : "image/png";
-        String targetFormat = isJpeg ? "jpeg" : "png";
 
         // 5. Chuẩn hóa ColorSpace và thu nhỏ kích thước nếu vượt quá 1600px
         int maxDim = props.getMaxOutputDimension();
@@ -102,7 +94,7 @@ public class ImageNormalizer {
         }
 
         // 6. Mã hóa lại và kiểm tra dung lượng byte xuất (<= 500 KB)
-        byte[] outputBytes = encode(processed, targetFormat, isJpeg);
+        byte[] outputBytes = encode(processed, isJpeg);
         if (outputBytes.length > props.getMaxOutputBytes()) {
             throw new ImageValidationException("IMAGE_BYTE_LIMIT",
                     "Dung lượng ảnh sau chuẩn hóa (" + outputBytes.length + " bytes) vượt quá giới hạn " + props.getMaxOutputBytes() + " bytes");
@@ -119,7 +111,37 @@ public class ImageNormalizer {
         );
     }
 
-    private byte[] encode(BufferedImage image, String format, boolean isJpeg) {
+    private BufferedImage readWithDimensionCheck(byte[] rawBytes) {
+        try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(rawBytes))) {
+            if (iis == null) {
+                throw new ImageValidationException("CORRUPTED_IMAGE", "Không tạo được luồng đọc ảnh");
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
+            if (!readers.hasNext()) {
+                throw new ImageValidationException("CORRUPTED_IMAGE", "ImageIO không tìm thấy bộ giải mã cho dữ liệu ảnh");
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(iis, true, true);
+                int readerW = reader.getWidth(0);
+                int readerH = reader.getHeight(0);
+                inspector.validateDimensions(readerW, readerH);
+                BufferedImage image = reader.read(0);
+                if (image == null) {
+                    throw new ImageValidationException("CORRUPTED_IMAGE", "ImageIO không thể giải mã dữ liệu ảnh");
+                }
+                return image;
+            } finally {
+                reader.dispose();
+            }
+        } catch (ImageValidationException e) {
+            throw e;
+        } catch (IOException | RuntimeException e) {
+            throw new ImageValidationException("CORRUPTED_IMAGE", "Lỗi đọc dữ liệu ảnh: " + e.getMessage(), e);
+        }
+    }
+
+    private byte[] encode(BufferedImage image, boolean isJpeg) {
         if (!isJpeg) {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             try {
@@ -148,14 +170,14 @@ public class ImageNormalizer {
                 param.setCompressionQuality(quality);
 
                 writer.write(null, new IIOImage(image, null, null), param);
-                writer.dispose();
                 bestResult = baos.toByteArray();
                 if (bestResult.length <= props.getMaxOutputBytes()) {
                     return bestResult;
                 }
             } catch (IOException e) {
-                writer.dispose();
                 throw new ImageValidationException("CORRUPTED_IMAGE", "Lỗi nén ảnh JPEG: " + e.getMessage(), e);
+            } finally {
+                writer.dispose();
             }
         }
 

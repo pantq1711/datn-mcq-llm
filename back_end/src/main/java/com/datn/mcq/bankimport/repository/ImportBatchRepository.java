@@ -30,4 +30,11 @@ public interface ImportBatchRepository extends JpaRepository<ImportBatch, Intege
     @Query(value = "UPDATE import_batch SET status = 'expired', preview = NULL"
             + " WHERE status = 'preview' AND expires_at <= :now", nativeQuery = true)
     int expirePreviews(@Param("now") LocalDateTime now);
+
+    /** Xóa ảnh mồ côi (chưa gắn câu hỏi chính thức) của các lô đã hết hạn (giữ questionimage là module lá). */
+    @Transactional
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "DELETE FROM question_image WHERE generated_question_id IS NULL"
+            + " AND import_batch_id IN (SELECT id FROM import_batch WHERE status = 'expired')", nativeQuery = true)
+    int deleteExpiredOrphanImages();
 }

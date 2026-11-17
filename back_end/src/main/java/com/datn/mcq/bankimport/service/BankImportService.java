@@ -44,6 +44,7 @@ import com.datn.mcq.questionimage.dto.QuestionImageDto;
 import com.datn.mcq.questionimage.repository.QuestionImageRepository;
 import com.datn.mcq.questionimage.service.EmfConvertResult;
 import com.datn.mcq.questionimage.service.EmfConverter;
+import com.datn.mcq.questionimage.service.ImageHeaderInspector;
 import com.datn.mcq.questionimage.service.ImageNormalizer;
 import com.datn.mcq.questionimage.service.ImageValidationException;
 import com.datn.mcq.questionimage.service.NormalizedImage;
@@ -122,6 +123,7 @@ public class BankImportService {
     private final TeacherReviewStatementRepository reviewStatements;
     private final BankService bankService;
     private final ImportBatchWriter batchWriter;
+    private final ImageHeaderInspector imageHeaderInspector;
     private final ImageNormalizer imageNormalizer;
     private final EmfConverter emfConverter;
     private final QuestionImageSigner signer;
@@ -136,6 +138,7 @@ public class BankImportService {
                              GeneratedQuestionStatementRepository questionStatements, TeacherReviewRepository reviews,
                              TeacherReviewStatementRepository reviewStatements, BankService bankService,
                              ImportBatchWriter batchWriter,
+                             @Autowired(required = false) ImageHeaderInspector imageHeaderInspector,
                              @Autowired(required = false) ImageNormalizer imageNormalizer,
                              @Autowired(required = false) EmfConverter emfConverter,
                              @Autowired(required = false) QuestionImageSigner signer,
@@ -154,6 +157,7 @@ public class BankImportService {
         this.reviews = reviews;
         this.reviewStatements = reviewStatements;
         this.bankService = bankService;
+        this.imageHeaderInspector = imageHeaderInspector;
         this.imageNormalizer = imageNormalizer;
         this.emfConverter = emfConverter;
         this.signer = signer;
@@ -170,7 +174,7 @@ public class BankImportService {
                              @Autowired(required = false) Clock clock) {
         this(props, inputGuard, limiter, batches, dedup, catalogService, generationService, questions,
                 questionStatements, reviews, reviewStatements, bankService, batchWriter,
-                null, null, null, null, clock);
+                null, null, null, null, null, clock);
     }
 
     public BankImportService(BankImportProperties props, DocxInputGuard inputGuard, PandocLimiter limiter,
@@ -181,7 +185,7 @@ public class BankImportService {
                              ImportBatchWriter batchWriter) {
         this(props, inputGuard, limiter, batches, dedup, catalogService, generationService, questions,
                 questionStatements, reviews, reviewStatements, bankService, batchWriter,
-                null, null, null, null, Clock.systemDefaultZone());
+                null, null, null, null, null, Clock.systemDefaultZone());
     }
 
     // ---------- tải lên → bản xem trước ----------
@@ -299,24 +303,43 @@ public class BankImportService {
             return imagesByKey;
         }
 
-        // Chuyển đổi EMF nếu có
+        // Tính sha256 trên byte gốc trong .docx (trước khi đổi EMF) và gom EMF hợp lệ sau khi kiểm khung
         Map<String, byte[]> emfFiles = new LinkedHashMap<>();
         for (Question q : questions) {
             if (q.flags.contains(ImportFlags.SKIP_IMAGE_LIMIT)) {
                 continue;
             }
             if (q.images != null) {
+                Map<String, byte[]> qEmfs = new LinkedHashMap<>();
+                boolean questionBlocked = false;
                 for (Question.ImageRef im : q.images) {
                     if (!"figure".equals(im.kind) || im.rawData == null) {
                         continue;
                     }
+                    im.originalSha256 = sha256(im.rawData);
                     if (isEmf(im.rawData)) {
-                        emfFiles.put(q.id + ":" + im.id, im.rawData);
+                        if (imageHeaderInspector != null) {
+                            try {
+                                imageHeaderInspector.inspect(im.rawData);
+                            } catch (ImageValidationException e) {
+                                q.addFlag(isImageLimitError(e.getErrorCode())
+                                        ? ImportFlags.SKIP_IMAGE_LIMIT
+                                        : ImportFlags.SKIP_IMAGE_CONVERT_FAILED);
+                                questionBlocked = true;
+                                break;
+                            }
+                        }
+                        qEmfs.put(q.id + ":" + im.id, im.rawData);
                     } else if ("emf".equalsIgnoreCase(im.sourceExt)) {
                         // Đuôi .emf nhưng nội dung không phải EMF: không đưa cho LibreOffice (nó sẽ mở như tài liệu văn bản
                         // và xuất ra ảnh chữ, qua được bước chuẩn hóa). Bỏ câu như ảnh lỗi.
                         q.addFlag(ImportFlags.SKIP_IMAGE_CONVERT_FAILED);
+                        questionBlocked = true;
+                        break;
                     }
+                }
+                if (!questionBlocked) {
+                    emfFiles.putAll(qEmfs);
                 }
             }
         }
@@ -330,73 +353,90 @@ public class BankImportService {
                     if (emfFiles.containsKey(key)) {
                         EmfConvertResult res = converted.get(key);
                         if (res == null || !res.success() || res.pngBytes() == null) {
-                            q.addFlag(ImportFlags.SKIP_IMAGE_CONVERT_FAILED);
+                            q.addFlag(res != null && isImageLimitError(res.errorCode())
+                                    ? ImportFlags.SKIP_IMAGE_LIMIT
+                                    : ImportFlags.SKIP_IMAGE_CONVERT_FAILED);
                         } else {
                             im.rawData = res.pngBytes();
                             im.sourceExt = "png";
+                            im.originalFormat = "emf";
                         }
                     }
                 }
             }
         }
 
-        // Chuẩn hóa bằng ImageNormalizer
+        boolean hasFiguresToNormalize = questions.stream()
+                .filter(q -> !q.flags.contains(ImportFlags.SKIP_IMAGE_LIMIT)
+                        && !q.flags.contains(ImportFlags.SKIP_IMAGE_CONVERT_FAILED))
+                .anyMatch(q -> q.images != null && q.images.stream().anyMatch(im -> "figure".equals(im.kind)));
+        if (!hasFiguresToNormalize) {
+            return imagesByKey;
+        }
+
+        // Chuẩn hóa bằng ImageNormalizer trong permit PandocLimiter (tách sau convertBatch để tránh deadlock khi maxConcurrent=1)
+        acquirePermit();
         long totalNormalizedBytes = 0;
-        for (Question q : questions) {
-            if (q.flags.contains(ImportFlags.SKIP_IMAGE_LIMIT) || q.flags.contains(ImportFlags.SKIP_IMAGE_CONVERT_FAILED)) {
-                continue;
-            }
-            if (q.images == null || q.images.isEmpty()) {
-                continue;
-            }
-            List<NormalizedImageRef> normList = new ArrayList<>();
-            boolean failed = false;
-            short ordinal = 1;
-            for (Question.ImageRef im : q.images) {
-                if (!"figure".equals(im.kind)) {
+        try {
+            for (Question q : questions) {
+                if (q.flags.contains(ImportFlags.SKIP_IMAGE_LIMIT) || q.flags.contains(ImportFlags.SKIP_IMAGE_CONVERT_FAILED)) {
                     continue;
                 }
-                if (im.rawData == null || im.rawData.length == 0) {
-                    q.addFlag(ImportFlags.SKIP_IMAGE_CONVERT_FAILED);
-                    failed = true;
-                    break;
+                if (q.images == null || q.images.isEmpty()) {
+                    continue;
                 }
-                short displayWidthMm = im.widthCm != null ? (short) Math.round(im.widthCm * 10) : (short) 100;
-                if (displayWidthMm < 5) displayWidthMm = 5;
-                if (displayWidthMm > 120) displayWidthMm = 120;
-
-                if (imageNormalizer != null) {
-                    try {
-                        NormalizedImage norm = imageNormalizer.normalize(im.rawData);
-                        normList.add(new NormalizedImageRef(
-                                im.id, im.role, ordinal++, norm.mime(), norm.data(), norm.byteSize(),
-                                norm.width(), norm.height(), displayWidthMm, norm.sha256(), norm.sourceFormat()
-                        ));
-                        totalNormalizedBytes += norm.byteSize();
-                    } catch (ImageValidationException e) {
-                        if ("IMAGE_TOO_LARGE".equals(e.getErrorCode()) || "IMAGE_DIMENSION_TOO_LARGE".equals(e.getErrorCode())
-                                || "IMAGE_PIXEL_FLOOD".equals(e.getErrorCode()) || "NORMALIZED_SIZE_EXCEEDED".equals(e.getErrorCode())) {
-                            q.addFlag(ImportFlags.SKIP_IMAGE_LIMIT);
-                        } else {
-                            q.addFlag(ImportFlags.SKIP_IMAGE_CONVERT_FAILED);
-                        }
-                        failed = true;
-                        break;
-                    } catch (Exception e) {
+                List<NormalizedImageRef> normList = new ArrayList<>();
+                boolean failed = false;
+                short ordinal = 1;
+                for (Question.ImageRef im : q.images) {
+                    if (!"figure".equals(im.kind)) {
+                        continue;
+                    }
+                    if (im.rawData == null || im.rawData.length == 0) {
                         q.addFlag(ImportFlags.SKIP_IMAGE_CONVERT_FAILED);
                         failed = true;
                         break;
                     }
-                } else {
-                    // Thiếu bộ chuẩn hóa thì không lưu ảnh chưa kiểm tra (đóng khi lỗi, không lưu kích thước giả).
-                    q.addFlag(ImportFlags.SKIP_IMAGE_CONVERT_FAILED);
-                    failed = true;
-                    break;
+                    short displayWidthMm = im.widthCm != null ? (short) Math.round(im.widthCm * 10) : (short) 100;
+                    if (displayWidthMm < 5) displayWidthMm = 5;
+                    if (displayWidthMm > 120) displayWidthMm = 120;
+
+                    if (imageNormalizer != null) {
+                        try {
+                            NormalizedImage norm = imageNormalizer.normalize(im.rawData);
+                            String effectiveSha256 = im.originalSha256 != null ? im.originalSha256 : norm.sha256();
+                            String sourceFormat = im.originalFormat != null ? im.originalFormat : norm.sourceFormat();
+                            normList.add(new NormalizedImageRef(
+                                    im.id, im.role, ordinal++, norm.mime(), norm.data(), norm.byteSize(),
+                                    norm.width(), norm.height(), displayWidthMm, effectiveSha256, sourceFormat
+                            ));
+                            totalNormalizedBytes += norm.byteSize();
+                        } catch (ImageValidationException e) {
+                            if (isImageLimitError(e.getErrorCode())) {
+                                q.addFlag(ImportFlags.SKIP_IMAGE_LIMIT);
+                            } else {
+                                q.addFlag(ImportFlags.SKIP_IMAGE_CONVERT_FAILED);
+                            }
+                            failed = true;
+                            break;
+                        } catch (Exception e) {
+                            q.addFlag(ImportFlags.SKIP_IMAGE_CONVERT_FAILED);
+                            failed = true;
+                            break;
+                        }
+                    } else {
+                        // Thiếu bộ chuẩn hóa thì không lưu ảnh chưa kiểm tra (đóng khi lỗi, không lưu kích thước giả).
+                        q.addFlag(ImportFlags.SKIP_IMAGE_CONVERT_FAILED);
+                        failed = true;
+                        break;
+                    }
+                }
+                if (!failed && !normList.isEmpty()) {
+                    imagesByKey.put(q.id, normList);
                 }
             }
-            if (!failed && !normList.isEmpty()) {
-                imagesByKey.put(q.id, normList);
-            }
+        } finally {
+            limiter.release();
         }
 
         if (totalNormalizedBytes > 20L * 1024 * 1024) {
@@ -411,15 +451,14 @@ public class BankImportService {
         return imagesByKey;
     }
 
-    private static boolean isEmf(byte[] data) {
-        if (data == null || data.length < 44) {
-            return false;
-        }
-        return data[0] == 1 && data[1] == 0 && data[2] == 0 && data[3] == 0
-                && data[40] == 0x20 && data[41] == 0x45 && data[42] == 0x4D && data[43] == 0x46;
+    private static boolean isImageLimitError(String errorCode) {
+        return "IMAGE_TOO_LARGE".equals(errorCode)
+                || "IMAGE_DIMENSION_TOO_LARGE".equals(errorCode)
+                || "IMAGE_PIXEL_FLOOD".equals(errorCode)
+                || "IMAGE_BYTE_LIMIT".equals(errorCode);
     }
 
-    private ParsedDoc parseLimited(Path file, LessonName.Parsed ln) {
+    private void acquirePermit() {
         boolean acquired;
         try {
             acquired = limiter.tryAcquire(props.getQueueWait());
@@ -430,9 +469,22 @@ public class BankImportService {
         if (!acquired) {
             throw DocxInputGuard.busy();
         }
+    }
+
+    private static boolean isEmf(byte[] data) {
+        if (data == null || data.length < 44) {
+            return false;
+        }
+        return data[0] == 1 && data[1] == 0 && data[2] == 0 && data[3] == 0
+                && data[40] == 0x20 && data[41] == 0x45 && data[42] == 0x4D && data[43] == 0x46;
+    }
+
+    private ParsedDoc parseLimited(Path file, LessonName.Parsed ln) {
+        acquirePermit();
         try {
-            DocxReader.Result pkg = DocxReader.read(file, new DocxReader.Limits(props.getMaxXmlBytes(),
-                    props.getMaxEmbeddingBytes(), props.getMaxEmbeddingTotalBytes()));
+            DocxReader.Result pkg = DocxReader.read(file, new DocxReader.Limits(
+                    props.getMaxXmlBytes(), props.getMaxEmbeddingBytes(), props.getMaxEmbeddingTotalBytes(),
+                    props.getMaxImageBytes(), props.getMaxImageTotalBytes()));
             return DocParser.parse(pkg, ln);
         } catch (IOException e) {
             throw DocxInputGuard.invalid("Không đọc được cấu trúc của file Word (file hỏng, quá lớn hoặc có nội dung "
@@ -751,7 +803,7 @@ public class BankImportService {
             fixedDelayString = "${app.bank-import.purge-interval-ms:3600000}")
     public int purgeExpired() {
         int n = batches.expirePreviews(LocalDateTime.now(clock));
-        int imgDeleted = questionImageRepo != null ? questionImageRepo.deleteExpiredOrphanImages() : 0;
+        int imgDeleted = batches.deleteExpiredOrphanImages();
         if (n > 0 || imgDeleted > 0) {
             LOG.info("Nhập từ Word: {} lô xem trước quá hạn đã bị xóa nội dung (xóa {} ảnh mồ côi)", n, imgDeleted);
         }

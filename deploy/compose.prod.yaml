@@ -47,6 +47,7 @@ services:
   app:
     image: ${IMAGE_PREFIX:-ghcr.io/pantq1711/datn-mcq-llm}/backend:${APP_TAG:-latest}
     restart: unless-stopped
+    init: true
     depends_on:
       db:
         condition: service_healthy

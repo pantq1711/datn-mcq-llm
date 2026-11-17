@@ -134,4 +134,17 @@ class ExamBankSelectionTest extends ExamFlowTestBase {
         assertEquals(List.of(only), bankIdsOf(build(matrix).get("examId").asInt()),
                 "ưu tiên mềm: vẫn dùng lại khi không còn câu khác");
     }
+
+    @Test
+    void cauCoHinhTrongNganHangKhongDuocChonKhiTaoDe() throws Exception {
+        int withImage = bankMcq("Đa thức", "easy", "Cho hình vẽ sau.\n⟦img:1⟧");
+        attachImageToBankItem(withImage);
+        int matrix = createMatrix(mcqCell("Đa thức", null, 1));
+
+        JsonNode built = build(matrix);
+
+        assertEquals(0, built.get("fromBank").asInt(), "câu có hình chưa hỗ trợ đầu ra đề thi nên không được chọn");
+        assertEquals(1, built.get("jobsQueued").asInt());
+        assertEquals(List.of(), bankIdsOf(built.get("examId").asInt()));
+    }
 }

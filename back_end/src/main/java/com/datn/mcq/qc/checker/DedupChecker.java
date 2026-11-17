@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * So trùng một câu với tập ứng viên (hàm thuần: không Spring, DB hay LLM).
@@ -246,11 +247,13 @@ public final class DedupChecker {
         }
     }
 
+    private static final Pattern IMG_TOKEN_PATTERN = Pattern.compile("⟦img(?::?\\d+)?⟧");
+
     private static String stripImg(String text) {
         if (text == null) {
             return null;
         }
-        return text.replaceAll("⟦img(?::?\\d+)?⟧", "").trim();
+        return IMG_TOKEN_PATTERN.matcher(text).replaceAll("").trim();
     }
 
     /**

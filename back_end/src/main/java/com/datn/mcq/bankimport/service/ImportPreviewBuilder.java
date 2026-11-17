@@ -91,7 +91,9 @@ public final class ImportPreviewBuilder {
     }
 
     private static String skipReason(Question q) {
-        if (q.flags.contains(ImportFlags.SKIP_IMAGE_LIMIT) || (q.images != null && q.images.size() > 6)) {
+        long figureCount = q.images == null ? 0
+                : q.images.stream().filter(im -> "figure".equals(im.kind)).count();
+        if (q.flags.contains(ImportFlags.SKIP_IMAGE_LIMIT) || figureCount > 6) {
             return ImportFlags.SKIP_IMAGE_LIMIT;
         }
         if (q.flags.contains(ImportFlags.SKIP_IMAGE_CONVERT_FAILED)) {
@@ -276,10 +278,6 @@ public final class ImportPreviewBuilder {
         return c.hasContent() ? c : null;
     }
 
-    static DedupCandidate candidate(ImportItem i, int syntheticId) {
-        return candidate(i, syntheticId, "");
-    }
-
     static String computeImageKey(Question q) {
         if (q.images == null || q.images.isEmpty()) {
             return "";
@@ -294,7 +292,9 @@ public final class ImportPreviewBuilder {
         }
         List<String> hashes = new ArrayList<>();
         for (Question.ImageRef im : filtered) {
-            if (im.rawData != null && im.rawData.length > 0) {
+            if (im.originalSha256 != null && !im.originalSha256.isEmpty()) {
+                hashes.add(im.originalSha256);
+            } else if (im.rawData != null && im.rawData.length > 0) {
                 hashes.add(sha256(im.rawData));
             } else if (im.sourceRef != null) {
                 hashes.add(sha256(im.sourceRef.getBytes(StandardCharsets.UTF_8)));

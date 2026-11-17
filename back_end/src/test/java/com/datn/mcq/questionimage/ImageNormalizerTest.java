@@ -189,4 +189,55 @@ class ImageNormalizerTest {
 
         assertEquals(expectedSha256, result.sha256());
     }
+
+    @Test
+    @DisplayName("GIF có Logical Screen nhỏ (10x10) nhưng khung ảnh lớn (5000x10) bị từ chối bởi ImageReader trước khi giải mã")
+    void gifKhungLonHonLogicalScreen_TuChoiTruocKhiGiaiMa() {
+        byte[] gifBigFrame = new byte[] {
+                0x47, 0x49, 0x46, 0x38, 0x39, 0x61,         // "GIF89a"
+                0x0A, 0x00, 0x0A, 0x00,                     // Logical Screen: 10x10 (vượt qua kiểm tra header thô)
+                (byte) 0x80, 0x00, 0x00,                    // Global Color Table Flag=1, 2 màu
+                0x00, 0x00, 0x00, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, // GCT (6 bytes)
+                0x2C,                                       // Image Descriptor
+                0x00, 0x00, 0x00, 0x00,                     // left=0, top=0
+                (byte) 0x88, 0x13, 0x0A, 0x00,              // frame width=5000 (>4000), height=10
+                0x00,                                       // packed=0
+                0x02, 0x02, 0x4C, 0x01, 0x00,               // LZW tối thiểu + block terminator
+                0x3B                                        // GIF trailer
+        };
+
+        ImageValidationException ex = assertThrows(ImageValidationException.class, () ->
+                normalizer.normalize(gifBigFrame)
+        );
+        assertEquals("IMAGE_DIMENSION_TOO_LARGE", ex.getErrorCode());
+    }
+
+    @Test
+    @DisplayName("EMF chuẩn MS-EMF (chữ ký 0x464D4520) đọc được khung hợp lệ và chặn khung vượt ngưỡng")
+    void emfChuanMsEmf_KiemKhungHopLeVaTuChoiKhungLon() {
+        byte[] validEmf = createEmfWithBounds(0, 0, 500, 400);
+        ImageHeaderInfo info = inspector.inspect(validEmf);
+        assertEquals("emf", info.format());
+        assertEquals(501, info.width());
+        assertEquals(401, info.height());
+
+        byte[] hugeEmf = createEmfWithBounds(0, 0, 20000, 20000);
+        ImageValidationException ex = assertThrows(ImageValidationException.class, () ->
+                inspector.inspect(hugeEmf)
+        );
+        assertEquals("IMAGE_DIMENSION_TOO_LARGE", ex.getErrorCode());
+    }
+
+    private byte[] createEmfWithBounds(int left, int top, int right, int bottom) {
+        ByteBuffer buf = ByteBuffer.allocate(88).order(ByteOrder.LITTLE_ENDIAN);
+        buf.putInt(1);                          // EMR_HEADER
+        buf.putInt(88);                         // nSize
+        buf.putInt(left);
+        buf.putInt(top);
+        buf.putInt(right);
+        buf.putInt(bottom);                     // rclBounds
+        buf.putInt(0); buf.putInt(0); buf.putInt(1000); buf.putInt(1000); // rclFrame
+        buf.putInt(0x464D4520);                 // " EMF" (MS-EMF chuẩn: 20 45 4D 46)
+        return buf.array();
+    }
 }

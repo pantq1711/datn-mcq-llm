@@ -74,11 +74,11 @@ public final class DocxReader {
     public record Limits(long maxXmlBytes, int maxEmbeddingBytes, long maxEmbeddingTotalBytes,
                          int maxImageBytes, long maxImageTotalBytes) {
         public Limits(long maxXmlBytes, int maxEmbeddingBytes, long maxEmbeddingTotalBytes) {
-            this(maxXmlBytes, maxEmbeddingBytes, maxEmbeddingTotalBytes, 2 << 20, 64L << 20);
+            this(maxXmlBytes, maxEmbeddingBytes, maxEmbeddingTotalBytes, 2 << 20, 24L << 20);
         }
 
         public static Limits defaults() {
-            return new Limits(16L << 20, 1 << 20, 64L << 20, 2 << 20, 64L << 20);
+            return new Limits(16L << 20, 1 << 20, 64L << 20, 2 << 20, 24L << 20);
         }
     }
 

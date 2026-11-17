@@ -44,7 +44,7 @@ class LibreOfficeEmfConverterTest {
         buf.putInt(88);
         buf.putInt(0); buf.putInt(0); buf.putInt(100); buf.putInt(100); // rclBounds (0,0,100,100)
         buf.putInt(0); buf.putInt(0); buf.putInt(1000); buf.putInt(1000); // rclFrame
-        buf.putInt(0x28464D45); // dSignature = " EMF" (0x28464D45)
+        buf.putInt(0x464D4520); // dSignature = " EMF" (MS-EMF chuẩn: 20 45 4D 46)
         buf.putInt(0x00010000); // nVersion
         buf.putInt(108);        // nBytes
         buf.putInt(2);          // nRecords (Header + EOF)
@@ -133,5 +133,44 @@ class LibreOfficeEmfConverterTest {
         assertTrue(croppedImg.getWidth() < 100, "Width sau crop (" + croppedImg.getWidth() + ") phải nhỏ hơn 100");
         assertTrue(croppedImg.getHeight() < 100, "Height sau crop (" + croppedImg.getHeight() + ") phải nhỏ hơn 100");
         assertTrue(croppedImg.getWidth() >= 50, "Width sau crop (" + croppedImg.getWidth() + ") phải >= 50");
+    }
+
+    @Test
+    @DisplayName("autocropWhitespace từ chối PNG khai báo kích thước 20000x20000 trước khi giải mã")
+    void autocropWhitespace_PngHeaderKhungLon_TuChoiTruocKhiGiaiMa() {
+        byte[] fakeBombPng = new byte[] {
+                (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+                0x00, 0x00, 0x00, 0x0D,
+                0x49, 0x48, 0x44, 0x52,
+                0x00, 0x00, 0x4E, 0x20, // width = 20000
+                0x00, 0x00, 0x4E, 0x20, // height = 20000
+                0x08, 0x02, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00
+        };
+
+        com.datn.mcq.questionimage.service.ImageValidationException ex =
+                org.junit.jupiter.api.Assertions.assertThrows(
+                        com.datn.mcq.questionimage.service.ImageValidationException.class,
+                        () -> converter.autocropWhitespace(fakeBombPng));
+        assertEquals("IMAGE_DIMENSION_TOO_LARGE", ex.getErrorCode());
+    }
+
+    @Test
+    @DisplayName("convertBatch từ chối EMF khung quá lớn trước khi gọi LibreOffice")
+    void convertBatch_EmfKhungLon_TuChoiTruocKhiGoiLibreOffice() {
+        props.setLibreofficePath("non-existent-soffice-binary-xyz");
+        LibreOfficeEmfConverter guardedConverter = new LibreOfficeEmfConverter(props, limiter);
+
+        byte[] hugeEmf = createMinimalValidEmf();
+        ByteBuffer.wrap(hugeEmf, 8, 16).order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(0).putInt(0).putInt(20000).putInt(20000);
+
+        Map<String, EmfConvertResult> results = guardedConverter.convertBatch(Map.of("huge1", hugeEmf));
+
+        assertEquals(1, results.size());
+        EmfConvertResult r = results.get("huge1");
+        assertNotNull(r);
+        assertFalse(r.success());
+        assertEquals("IMAGE_DIMENSION_TOO_LARGE", r.errorCode());
     }
 }

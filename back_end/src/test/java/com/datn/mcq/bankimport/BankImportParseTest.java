@@ -345,4 +345,24 @@ class BankImportParseTest {
         assertEquals(1, p.skipped().size(), "Câu SA có ảnh trong đáp số phải bị skip");
         assertEquals(ImportFlags.SKIP_HAS_IMAGE, p.skipped().get(0).reason());
     }
+
+    @Test
+    void cauCoBayAnhCongThucWmfBiBoHasImageKhongPhaiImageLimit() throws IOException {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Câu có 7 ảnh công thức WMF: "),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+        PreviewData p = preview(d.bytes());
+        assertEquals(1, p.skipped().size());
+        assertEquals(ImportFlags.SKIP_HAS_IMAGE, p.skipped().get(0).reason(),
+                "Chỉ đếm figure trong skipReason; 7 ảnh công thức WMF phải là has_image chứ không phải image_limit");
+    }
 }

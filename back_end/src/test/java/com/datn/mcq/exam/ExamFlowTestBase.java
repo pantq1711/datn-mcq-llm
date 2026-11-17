@@ -210,6 +210,20 @@ abstract class ExamFlowTestBase {
         return bankMcq(null, topic, difficulty, text, text, new String[] {"$1$", "$2$", "$3$", "$4$"});
     }
 
+    /** Gắn một bản ghi {@code question_image} vào câu nguồn của {@code bankItemId} (mô phỏng câu nhập có hình). */
+    void attachImageToBankItem(int bankItemId) {
+        int gqId = count("SELECT source_question_id FROM bank_item WHERE id = ?", bankItemId);
+        int batchId = insert("INSERT INTO import_batch (owner_id, display_name, file_sha256, subject_id, grade_level,"
+                + " topic, status, question_count, imported_count, created_at, expires_at, confirmed_at)"
+                + " VALUES (?, 'Lô có hình', ?, ?, 8, 'Đa thức', 'confirmed', 1, 1,"
+                + " CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '24 hours', CURRENT_TIMESTAMP)",
+                teacher, "a".repeat(64), subject);
+        jdbc.update("INSERT INTO question_image (owner_id, import_batch_id, item_key, generated_question_id, role,"
+                + " ordinal, mime, data, byte_size, width_px, height_px, display_width_mm, sha256, source_format)"
+                + " VALUES (?, ?, 'mcq-001', ?, 'stem', 1, 'image/png', E'\\\\x89504e47', 4, 10, 10, 50, ?, 'png')",
+                teacher, batchId, gqId, "b".repeat(64));
+    }
+
     /** Một đề thủ công (exam_question) của {@code owner} dùng câu ngân hàng, tạo lúc {@code createdAt}. */
     int manualExamUsing(int owner, String code, String createdAt, int... bankItems) {
         int exam = insert("INSERT INTO exam (exam_code, title, subject_id, created_by, created_at) VALUES (?, ?, ?, ?,"

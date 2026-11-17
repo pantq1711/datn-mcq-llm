@@ -822,7 +822,8 @@ class BankImportApiTest {
             JsonNode item = p.path("items").get(0);
             assertTrue(item.path("flags").toString().contains("has_figure"));
             assertEquals(1, item.path("images").size());
-            assertEquals(1, rows("SELECT count(*) FROM question_image WHERE source_format = 'png' AND mime = 'image/png'"));
+            // source_format là định dạng gốc trong .docx (cau-co-hinh.md:96), dữ liệu lưu là PNG đã đổi.
+            assertEquals(1, rows("SELECT count(*) FROM question_image WHERE source_format = 'emf' AND mime = 'image/png'"));
         } finally {
             reset(emfConverter);
         }
@@ -895,5 +896,90 @@ class BankImportApiTest {
         } finally {
             org.springframework.test.util.ReflectionTestUtils.setField(target, "imageNormalizer", original);
         }
+    }
+
+    @Test
+    void emfKhungQuaLonBiBoImageLimitKhongGoiConverter() throws Exception {
+        reset(emfConverter);
+        byte[] hugeEmf = fakeEmf();
+        java.nio.ByteBuffer.wrap(hugeEmf, 8, 16).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                .putInt(0).putInt(0).putInt(20000).putInt(20000);
+
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Cho hình EMF khung lớn: "));
+        d.p(d.drawing("emf", hugeEmf, 5.0, 4.0));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+        JsonNode p = previewOk(teacher, d.bytes());
+
+        org.mockito.Mockito.verify(emfConverter, org.mockito.Mockito.never()).convertBatch(any());
+        assertEquals(0, p.path("items").size());
+        assertEquals(1, p.path("skipped").path("image_limit").asInt());
+        assertEquals(0, rows("SELECT count(*) FROM question_image"));
+    }
+
+    @Test
+    void emfSha256DuocTinhTrenByteGocTrongDocxTruocKhiDoi() throws Exception {
+        reset(emfConverter);
+        org.mockito.Mockito.doAnswer(inv -> {
+            Map<String, byte[]> in = inv.getArgument(0);
+            Map<String, com.datn.mcq.questionimage.service.EmfConvertResult> out = new java.util.LinkedHashMap<>();
+            in.keySet().forEach(k -> out.put(k, com.datn.mcq.questionimage.service.EmfConvertResult.ok(VALID_PNG_1X1)));
+            return out;
+        }).when(emfConverter).convertBatch(any());
+        try {
+            byte[] rawEmf = fakeEmf();
+            java.nio.ByteBuffer.wrap(rawEmf, 8, 16).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                    .putInt(0).putInt(0).putInt(200).putInt(150);
+            String expectedSha = java.util.HexFormat.of().formatHex(
+                    java.security.MessageDigest.getInstance("SHA-256").digest(rawEmf));
+
+            DocxBuilder d = new DocxBuilder();
+            d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+            d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Cho hình EMF cần giữ sha256 gốc: "));
+            d.p(d.drawing("emf", rawEmf, 5.0, 4.0));
+            d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+            JsonNode p = previewOk(teacher, d.bytes());
+
+            assertEquals(1, p.path("items").size());
+            String storedSha = jdbc.queryForObject("SELECT sha256 FROM question_image", String.class);
+            assertEquals(expectedSha, storedSha, "sha256 phải tính trên byte EMF gốc trong .docx trước khi đổi PNG");
+        } finally {
+            reset(emfConverter);
+        }
+    }
+
+    @Test
+    void anhSauChuanHoaVuotImageByteLimitBiBoImageLimit() throws Exception {
+        org.mockito.Mockito.doThrow(new com.datn.mcq.questionimage.service.ImageValidationException(
+                "IMAGE_BYTE_LIMIT", "vượt 500 KB sau chuẩn hóa"))
+                .when(imageNormalizer).normalize(any());
+        try {
+            DocxBuilder d = new DocxBuilder();
+            d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+            mcqWithFigures(d, 1);
+
+            JsonNode p = previewOk(teacher, d.bytes());
+
+            assertEquals(0, p.path("items").size());
+            assertEquals(1, p.path("skipped").path("image_limit").asInt());
+            assertEquals(0, p.path("skipped").path("image_convert_failed").asInt());
+        } finally {
+            reset(imageNormalizer);
+        }
+    }
+
+    @Test
+    void docxReaderDungGioiHanAnhTuBankImportProperties() throws Exception {
+        assertEquals(24L * 1024 * 1024, props.getMaxImageTotalBytes());
+        props.setMaxImageTotalBytes(10);
+
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        mcqWithFigures(d, 1);
+
+        assertError(upload(teacher, FixtureDoc.FILE_NAME, d.bytes()), 422, "INVALID_FILE");
     }
 }

@@ -55,18 +55,6 @@ public interface QuestionImageRepository extends JpaRepository<QuestionImage, Lo
 
     @Transactional
     @Modifying
-    @Query("DELETE FROM QuestionImage q WHERE q.importBatchId IN :batchIds AND q.generatedQuestionId IS NULL")
-    int deleteOrphanImagesByBatchIds(@Param("batchIds") Collection<Integer> batchIds);
-
-    @Transactional
-    @Modifying
     @Query("UPDATE QuestionImage q SET q.generatedQuestionId = :gqId WHERE q.importBatchId = :batchId AND q.itemKey = :itemKey")
     int assignGeneratedQuestionId(@Param("batchId") Integer batchId, @Param("itemKey") String itemKey, @Param("gqId") Integer gqId);
-
-    @Transactional
-    @Modifying
-    @Query("DELETE FROM QuestionImage q WHERE q.importBatchId IN (SELECT b.id FROM ImportBatch b WHERE b.status = 'expired') AND q.generatedQuestionId IS NULL")
-    int deleteExpiredOrphanImages();
-
-    List<QuestionImage> findByImportBatchId(Integer importBatchId);
 }
