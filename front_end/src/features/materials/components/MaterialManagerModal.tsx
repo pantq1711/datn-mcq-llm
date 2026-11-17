@@ -228,11 +228,11 @@ export default function MaterialManagerModal({
                             <div className="material-list-container">
                                 {loading ? (
                                     <div style={{ textAlign: "center", padding: "40px 0" }}>
-                                        <Spin tip="Đang tải danh sách tài liệu..." />
+                                        <Spin description="Đang tải danh sách tài liệu..." />
                                     </div>
                                 ) : materials.length === 0 ? (
                                     <Empty
-                                        description="Bạn chưa tải lên tài liệu bài học nào."
+                                        description="Thầy/cô chưa tải lên tài liệu bài học nào."
                                         style={{ padding: "30px 0" }}
                                     >
                                         <Button
@@ -300,28 +300,28 @@ export default function MaterialManagerModal({
                                                     </div>
 
                                                     <Space size={4} onClick={(e) => e.stopPropagation()}>
-                                                        <Tooltip title="Xem trước văn bản trích xuất">
-                                                            <Button
-                                                                type="text"
-                                                                icon={<EyeOutlined />}
-                                                                onClick={() => openPreview(item)}
-                                                            />
-                                                        </Tooltip>
+                                                        {/* Nút có chữ thay cho biểu tượng (rà soát giao diện I6) */}
+                                                        <Button
+                                                            icon={<EyeOutlined />}
+                                                            onClick={() => openPreview(item)}
+                                                        >
+                                                            Xem
+                                                        </Button>
                                                         <Popconfirm
                                                             title="Xóa tài liệu này?"
-                                                            description="Hệ thống sẽ xóa văn bản trích xuất đã lưu."
+                                                            description="Nội dung hệ thống đã đọc từ tài liệu này cũng bị xóa."
                                                             onConfirm={() => handleDelete(item.id)}
                                                             okText="Xóa"
                                                             cancelText="Hủy"
                                                             okButtonProps={{ danger: true }}
                                                         >
-                                                            <Tooltip title="Xóa tài liệu">
-                                                                <Button
-                                                                    type="text"
-                                                                    danger
-                                                                    icon={<DeleteOutlined />}
-                                                                />
-                                                            </Tooltip>
+                                                            <Button
+                                                                type="text"
+                                                                danger
+                                                                icon={<DeleteOutlined />}
+                                                            >
+                                                                Xóa
+                                                            </Button>
                                                         </Popconfirm>
                                                     </Space>
                                                 </List.Item>
@@ -340,8 +340,8 @@ export default function MaterialManagerModal({
                                 <Alert
                                     type="info"
                                     showIcon
-                                    message="Quy định tải tài liệu bài học"
-                                    description={`Chấp nhận file .docx, .pdf hoặc .txt UTF-8, tối đa ${MAX_FILE_SIZE_MB} MB. Hệ thống sẽ tự động trích xuất nội dung văn bản để hệ thống soạn câu hỏi bám sát nội dung tài liệu.`}
+                                    message="Tải tài liệu bài học"
+                                    description={`Nhận file Word (.docx), PDF hoặc văn bản (.txt), tối đa ${MAX_FILE_SIZE_MB} MB. Hệ thống đọc nội dung để soạn câu bám sát tài liệu.`}
                                     style={{ marginBottom: 16 }}
                                 />
 
@@ -372,7 +372,7 @@ export default function MaterialManagerModal({
                                         Nhấp hoặc kéo thả file bài học vào khu vực này để tải lên
                                     </p>
                                     <p className="ant-upload-hint">
-                                        Hỗ trợ các định dạng Microsoft Word (.docx), PDF (.pdf) hoặc Plain Text (.txt)
+                                        Nhận file Word (.docx), PDF (.pdf) hoặc văn bản (.txt)
                                     </p>
                                 </Dragger>
                             </div>

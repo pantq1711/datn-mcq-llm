@@ -82,6 +82,15 @@ export default function BuildByLessonForm({
     const watchedRequestCodes = Form.useWatch("requestCodes", form);
     const watchedUseBank = Form.useWatch("useBank", form);
 
+    // Hệ thống chỉ có đúng 1 môn: tự chọn môn đó và ẩn ô Môn (rà soát giao diện mục 18); từ 2 môn trở lên giữ như cũ
+    const onlySubject = subjects.length === 1 ? subjects[0] : null;
+    useEffect(() => {
+        if (onlySubject && form.getFieldValue("subjectId") == null) {
+            form.setFieldsValue({ subjectId: onlySubject.value });
+        }
+    }, [onlySubject?.value, form]);
+    const hideSubject = onlySubject !== null && (watchedSubjectId == null || watchedSubjectId === onlySubject.value);
+
     const mcqEasy = Form.useWatch("mcqEasy", form) || 0;
     const mcqMedium = Form.useWatch("mcqMedium", form) || 0;
     const mcqHard = Form.useWatch("mcqHard", form) || 0;
@@ -146,8 +155,6 @@ export default function BuildByLessonForm({
     // Sắp xếp và tạo danh sách option cho AutoComplete
     const topicOptions = useMemo(() => {
         return sortBankTopics(mergedTopics, watchedGradeLevel).map((t) => {
-            const matchesGrade = watchedGradeLevel ? t.grades.includes(watchedGradeLevel) : false;
-
             return {
                 value: t.topic,
                 label: (
@@ -155,8 +162,9 @@ export default function BuildByLessonForm({
                         <div className="build-lesson-topic-main">
                             <span className="build-lesson-topic-text">{t.topic}</span>
                             {t.grades && t.grades.length > 0 && (
+                                // Chỉ ghi "Lớp 8", lớp đang chọn in đậm; bỏ cụm lặp "(Đúng khối) · Đúng khối" (rà soát giao diện E9)
                                 <div className="build-lesson-topic-sub">
-                                    <span>Khối: </span>
+                                    <span>Lớp </span>
                                     {t.grades.map((g, idx) => {
                                         const isCurrent = g === watchedGradeLevel;
                                         return (
@@ -164,12 +172,11 @@ export default function BuildByLessonForm({
                                                 key={g}
                                                 style={{
                                                     fontWeight: isCurrent ? 700 : 400,
-                                                    color: isCurrent ? "#1677ff" : "inherit",
+                                                    color: isCurrent ? "#0958d9" : "inherit",
                                                 }}
                                             >
                                                 {idx > 0 ? ", " : ""}
                                                 {g}
-                                                {isCurrent ? " (Đúng khối)" : ""}
                                             </span>
                                         );
                                     })}
@@ -177,11 +184,6 @@ export default function BuildByLessonForm({
                             )}
                         </div>
                         <div className="build-lesson-topic-right">
-                            {matchesGrade && (
-                                <Tag color="success" className="build-lesson-topic-tag" style={{ marginRight: 4 }}>
-                                    Đúng khối
-                                </Tag>
-                            )}
                             <Tag color="blue" className="build-lesson-topic-tag">
                                 {t.count} câu trong ngân hàng
                             </Tag>
@@ -206,7 +208,7 @@ export default function BuildByLessonForm({
             );
         }
         if (topicsError) {
-            return <Text type="secondary">Không tải được gợi ý. Bạn vẫn có thể tự nhập tên bài.</Text>;
+            return <Text type="secondary">Không tải được gợi ý. Thầy/cô vẫn có thể tự nhập tên bài.</Text>;
         }
         if (mergedTopics.length === 0) {
             return <Text type="secondary">Ngân hàng chưa có bài nào của môn này</Text>;
@@ -250,7 +252,7 @@ export default function BuildByLessonForm({
         if (matchedTopic && watchedGradeLevel && !matchedTopic.grades.includes(watchedGradeLevel)) {
             return (
                 <Text type="secondary" style={{ display: "block", marginTop: 4 }}>
-                    Ngân hàng chỉ có câu của bài này ở khối khác. Hệ thống chỉ dùng lại câu cùng khối {watchedGradeLevel},
+                    Ngân hàng chỉ có câu của bài này ở lớp khác. Hệ thống chỉ dùng lại câu cùng lớp {watchedGradeLevel},
                     nên mọi câu sẽ được soạn mới.
                 </Text>
             );
@@ -268,16 +270,16 @@ export default function BuildByLessonForm({
                     </Text>
                     {advancedApplyNew && (
                         <div>
-                            <Text type="warning" style={{ fontSize: 12 }}>
+                            <Text type="warning" style={{ fontSize: 14 }}>
                                 <ExclamationCircleOutlined style={{ marginRight: 4 }} />
-                                Mức thử thách Nâng cao: câu mức Vận dụng (Trắc nghiệm, Trả lời ngắn mức Vận dụng và mọi câu
-                                Đúng/Sai) luôn được soạn mới, không lấy từ ngân hàng.
+                                Độ khó Nâng cao: câu mức Vận dụng (trắc nghiệm nhiều phương án, trả lời ngắn mức Vận dụng và
+                                mọi câu đúng/sai) luôn được soạn mới, không lấy từ ngân hàng.
                             </Text>
                         </div>
                     )}
                     {trimmedContent !== "" && (
                         <div>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
+                            <Text type="secondary" style={{ fontSize: 14 }}>
                                 Đã nhập phạm vi "{trimmedContent}": chỉ dùng lại câu ngân hàng cùng nội dung này, nên số câu dùng lại có thể ít hơn.
                             </Text>
                         </div>
@@ -447,7 +449,8 @@ export default function BuildByLessonForm({
                 {/* Phần 1: Thông tin bài học */}
                 <Card size="small" className="build-lesson-section" title="1. Thông tin bài học & phạm vi">
                     <Row gutter={16}>
-                        <Col xs={24} md={12}>
+                        {/* Ẩn bằng display, không gỡ Form.Item: khi gửi vẫn có subjectId */}
+                        <Col xs={24} md={12} style={hideSubject ? { display: "none" } : undefined}>
                             <Form.Item
                                 name="subjectId"
                                 label="Môn học"
@@ -465,8 +468,8 @@ export default function BuildByLessonForm({
                             </Form.Item>
                         </Col>
                         <Col xs={24} md={12}>
-                            <Form.Item name="gradeLevel" label="Khối lớp">
-                                <Select placeholder="Chọn khối lớp" options={GRADE_OPTIONS} />
+                            <Form.Item name="gradeLevel" label="Lớp">
+                                <Select placeholder="Chọn lớp" options={GRADE_OPTIONS} />
                             </Form.Item>
                         </Col>
                     </Row>
@@ -478,7 +481,7 @@ export default function BuildByLessonForm({
                                 label={
                                     <Space>
                                         <span>Tên bài học</span>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                        <Text type="secondary" style={{ fontSize: 14 }}>
                                             (Hệ thống tự động gợi ý chủ đề trong ngân hàng)
                                         </Text>
                                     </Space>
@@ -541,7 +544,7 @@ export default function BuildByLessonForm({
                         <div className="build-lesson-matrix-header">
                             <span>2. Cấu trúc câu hỏi theo dạng & mức độ</span>
                             <Space size={8}>
-                                <Text type="secondary" style={{ fontSize: 13 }}>
+                                <Text type="secondary" style={{ fontSize: 14 }}>
                                     Mẫu nhanh:
                                 </Text>
                                 <Button size="small" onClick={() => applyPreset("15p")}>
@@ -567,7 +570,7 @@ export default function BuildByLessonForm({
                         <div className="build-lesson-matrix-row">
                             <div className="col-type">
                                 <div>
-                                    <Text strong>Phần I. Trắc nghiệm 4 lựa chọn</Text>
+                                    <Text strong>Phần I. Trắc nghiệm nhiều phương án</Text>
                                     <div className="col-type-desc">Chọn 1 đáp án đúng trong 4 lựa chọn A, B, C, D</div>
                                 </div>
                             </div>
@@ -595,7 +598,7 @@ export default function BuildByLessonForm({
                         <div className="build-lesson-matrix-row">
                             <div className="col-type">
                                 <div>
-                                    <Text strong>Phần II. Đúng / Sai</Text>
+                                    <Text strong>Phần II. Trắc nghiệm đúng/sai</Text>
                                     <div className="col-type-desc">Mỗi câu gồm 4 ý a, b, c, d (Biết, Biết, Hiểu, Vận dụng)</div>
                                 </div>
                             </div>
@@ -605,7 +608,7 @@ export default function BuildByLessonForm({
                                     <Form.Item name="tfCount" noStyle>
                                         <InputNumber min={0} max={20} className="level-input" />
                                     </Form.Item>
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                    <Text type="secondary" style={{ fontSize: 14 }}>
                                         (Mỗi câu gồm 4 ý hỏi)
                                     </Text>
                                 </Space>
@@ -686,7 +689,7 @@ export default function BuildByLessonForm({
                         </div>
                     }
                 >
-                    <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 12 }}>
+                    <Paragraph type="secondary" style={{ fontSize: 14, marginBottom: 12 }}>
                         Đính kèm file Word (.docx), PDF hoặc TXT bài giảng để hệ thống soạn câu hỏi bám sát văn bản tài liệu
                         (tối đa 5 tài liệu).
                     </Paragraph>
@@ -701,24 +704,24 @@ export default function BuildByLessonForm({
                                         setSelectedMaterials((prev) => prev.filter((item) => item.id !== m.id))
                                     }
                                     color="blue"
-                                    style={{ padding: "4px 10px", fontSize: 13 }}
+                                    style={{ padding: "4px 10px", fontSize: 14 }}
                                 >
                                     📄 {m.fileName} ({m.charCount.toLocaleString()} ký tự)
                                 </Tag>
                             ))}
                         </Space>
                     ) : (
-                        <Text type="secondary" style={{ fontStyle: "italic", fontSize: 13 }}>
+                        <Text type="secondary" style={{ fontStyle: "italic", fontSize: 14 }}>
                             Chưa đính kèm tài liệu nào.
                         </Text>
                     )}
                 </Card>
 
-                {/* Phần 4: Yêu cầu bổ sung cho AI */}
-                <Card size="small" className="build-lesson-section" title="4. Yêu cầu thêm cho AI (tùy chọn)">
+                {/* Phần 4: Yêu cầu thêm khi soạn câu */}
+                <Card size="small" className="build-lesson-section" title="4. Yêu cầu thêm khi soạn câu (tùy chọn)">
                     <Form.Item
                         name="challenge"
-                        label="Mức thử thách"
+                        label="Độ khó của câu Vận dụng"
                         tooltip="Nâng cao: câu mức Vận dụng cần nhiều bước hơn, kết hợp nhiều kiến thức, có thể có bẫy lỗi hay gặp. Câu Vận dụng khi đó luôn được soạn mới (không lấy từ ngân hàng)."
                     >
                         <Select options={EXAM_CHALLENGE_OPTIONS} style={{ maxWidth: 320 }} />
@@ -733,7 +736,7 @@ export default function BuildByLessonForm({
                     <Form.Item
                         name="extraInstruction"
                         label="Chỉ dẫn thêm cho câu hỏi soạn mới"
-                        tooltip="Yêu cầu cụ thể về bối cảnh, tình huống thực tế hoặc phong cách diễn đạt cho AI."
+                        tooltip="Yêu cầu cụ thể về bối cảnh, tình huống thực tế hoặc cách diễn đạt của câu hỏi."
                     >
                         <TextArea
                             rows={3}
@@ -747,7 +750,7 @@ export default function BuildByLessonForm({
                         showIcon
                         icon={<BulbOutlined />}
                         message="Lưu ý về nguồn câu hỏi"
-                        description="Hệ thống sẽ đối soát với Ngân hàng câu hỏi theo Môn, Bài học và Mức độ. Nếu có tài liệu hoặc yêu cầu thêm cho AI, hệ thống sẽ ưu tiên soạn câu hỏi mới bám sát các nội dung này."
+                        description="Hệ thống lấy câu trong ngân hàng theo môn, bài và mức độ trước. Nếu có tài liệu hoặc yêu cầu thêm, hệ thống soạn câu mới bám sát các nội dung này."
                     />
                 </Card>
 

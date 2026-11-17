@@ -31,33 +31,27 @@ export default function UserTable({
     currentUserId,
     togglingId,
 }: UserTableProps) {
+    // Bỏ cột ID để bảng vừa khung, cột "Trạng thái" không bị đẩy ra ngoài tầm nhìn (rà soát giao diện L1)
     const columns: ColumnsType<AdminUserItem> = [
-        {
-            title: "ID",
-            dataIndex: "id",
-            key: "id",
-            width: 70,
-            align: "center",
-        },
         {
             title: "Họ và tên",
             dataIndex: "name",
             key: "name",
-            width: 200,
+            width: 170,
             render: (name: string) => <Text strong>{name}</Text>,
         },
         {
             title: "Email",
             dataIndex: "email",
             key: "email",
-            width: 220,
+            width: 200,
             render: (email: string | null) => email || <Text type="secondary">(Chưa có)</Text>,
         },
         {
             title: "Vai trò",
             dataIndex: "role",
             key: "role",
-            width: 130,
+            width: 120,
             align: "center",
             render: (role: AdminRole) => {
                 const config = roleConfig[role] || { label: role, color: "default" };
@@ -68,7 +62,7 @@ export default function UserTable({
             title: "Mật khẩu",
             dataIndex: "hasPassword",
             key: "hasPassword",
-            width: 140,
+            width: 120,
             align: "center",
             render: (hasPassword: boolean) => (
                 <Tag color={hasPassword ? "success" : "warning"}>
@@ -80,7 +74,7 @@ export default function UserTable({
             title: "Lần đăng nhập cuối",
             dataIndex: "lastLoginAt",
             key: "lastLoginAt",
-            width: 170,
+            width: 150,
             align: "center",
             render: (lastLoginAt: string | null) =>
                 lastLoginAt ? dayjs(lastLoginAt).format("DD/MM/YYYY HH:mm") : <Text type="secondary">—</Text>,
@@ -89,7 +83,7 @@ export default function UserTable({
             title: "Trạng thái",
             dataIndex: "enabled",
             key: "enabled",
-            width: 130,
+            width: 115,
             align: "center",
             render: (enabled: boolean, record) => {
                 // Backend chặn tự khóa (409); tắt sẵn công tắc ở dòng của chính mình
@@ -125,32 +119,33 @@ export default function UserTable({
         {
             title: "Thao tác",
             key: "actions",
-            width: 110,
+            width: 270,
             align: "center",
             fixed: "right",
             render: (_, record) => (
+                // Nút có chữ thay cho biểu tượng (rà soát giao diện L2)
                 <Space size={4}>
-                    <Tooltip title="Sửa tài khoản">
-                        <Button
-                            type="text"
-                            icon={<EditOutlined />}
-                            onClick={() => onEdit(record)}
-                        />
-                    </Tooltip>
+                    <Button
+                        icon={<EditOutlined />}
+                        onClick={() => onEdit(record)}
+                    >
+                        Sửa
+                    </Button>
                     {/* Chưa có email thì backend trả 400 khi đặt mật khẩu: phải thêm email trước */}
                     <Tooltip
                         title={
                             record.email
-                                ? "Đặt lại mật khẩu"
+                                ? undefined
                                 : "Chưa có email: hãy Sửa tài khoản để thêm email trước"
                         }
                     >
                         <Button
-                            type="text"
                             icon={<KeyOutlined />}
                             disabled={!record.email}
                             onClick={() => onResetPassword(record)}
-                        />
+                        >
+                            Đặt lại mật khẩu
+                        </Button>
                     </Tooltip>
                 </Space>
             ),
@@ -163,7 +158,7 @@ export default function UserTable({
             columns={columns}
             dataSource={data}
             loading={loading}
-            scroll={{ x: 1050 }}
+            scroll={{ x: 1145 }}
             pagination={{
                 pageSize: 10,
                 showSizeChanger: true,

@@ -108,10 +108,10 @@ export default function ExamMatrixFormPage() {
         try {
             setDuplicating(true);
             const copy = await duplicateExamMatrix(id);
-            message.success(`Đã tạo bản sao "${copy.name}". Bạn có thể sửa cấu trúc ở bản này.`);
+            message.success(`Đã sao chép thành "${copy.name}". Thầy/cô sửa cấu trúc ở bản này.`);
             navigate(`/exam-matrices/${copy.id}/edit`);
         } catch (err: any) {
-            message.error(err?.response?.data?.error || 'Không thể nhân bản ma trận');
+            message.error(err?.response?.data?.error || 'Không sao chép được ma trận');
         } finally {
             setDuplicating(false);
         }
@@ -175,7 +175,7 @@ export default function ExamMatrixFormPage() {
                                 {pageTitle}
                             </Title>
                             <Paragraph type="secondary" className="exam-matrix-form-page__subtitle">
-                                Khai báo môn, khối và các ô (dạng câu, mức độ, chủ đề, số câu) để dùng khi tạo đề theo ma trận.
+                                Khai báo môn, lớp và các ô (dạng câu, mức độ, chủ đề, số câu) để dùng khi tạo đề theo ma trận.
                             </Paragraph>
                         </div>
 
@@ -196,7 +196,7 @@ export default function ExamMatrixFormPage() {
                         <Alert
                             type="info"
                             showIcon
-                            message="Ma trận này chưa có khối lớp. Thầy/cô chọn khối lớp trước khi lưu."
+                            message="Ma trận này chưa có lớp. Thầy/cô chọn lớp trước khi lưu."
                         />
                     )}
 
@@ -206,13 +206,13 @@ export default function ExamMatrixFormPage() {
                             showIcon
                             message={
                                 missingGrade
-                                    ? `Ma trận đã dùng cho ${examCount} đề: chỉ sửa được tên, nguồn, ghi chú và bổ sung khối lớp.`
+                                    ? `Ma trận đã dùng cho ${examCount} đề: chỉ sửa được tên, nguồn, ghi chú và bổ sung lớp.`
                                     : `Ma trận đã dùng cho ${examCount} đề: chỉ sửa được tên, nguồn, ghi chú.`
                             }
-                            description="Muốn đổi môn, khối hoặc các ô, hãy nhân bản ma trận rồi sửa bản sao."
+                            description="Muốn đổi môn, lớp hoặc các ô, thầy/cô sao chép ma trận rồi sửa bản sao chép."
                             action={
                                 <Button icon={<CopyOutlined />} loading={duplicating} onClick={handleDuplicate}>
-                                    Nhân bản để sửa
+                                    Sao chép để sửa
                                 </Button>
                             }
                         />

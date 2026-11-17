@@ -1,5 +1,5 @@
 import { Avatar, Card, Descriptions, Divider, Spin, Tag, Typography } from "antd";
-import { MailOutlined, IdcardOutlined, UserOutlined } from "@ant-design/icons";
+import { MailOutlined, UserOutlined } from "@ant-design/icons";
 import { useAuth } from "../../../context/AuthContext";
 import { describeRole } from "../../../utils/auth.utils";
 import ChangePasswordForm from "../components/ChangePasswordForm";
@@ -53,19 +53,7 @@ export default function ProfilePage() {
                     labelStyle={{ fontWeight: 500, color: "#595959", minWidth: 120 }}
                     contentStyle={{ color: "#262626" }}
                 >
-                    <Descriptions.Item
-                        label={
-                            <span className="profile-label">
-                                <IdcardOutlined className="profile-label-icon" />
-                                Mã người dùng
-                            </span>
-                        }
-                    >
-                        <Text copyable={{ text: user.id }} className="profile-id">
-                            {user.id}
-                        </Text>
-                    </Descriptions.Item>
-
+                    {/* Bỏ dòng "Mã người dùng": giáo viên không cần (rà soát giao diện K1) */}
                     <Descriptions.Item
                         label={
                             <span className="profile-label">

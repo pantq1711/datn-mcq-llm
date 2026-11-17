@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Card, Empty, Popconfirm, Space, Table, Tag, Tooltip, Typography, message } from "antd";
 import type { TableColumnsType } from "antd";
 import { DeleteOutlined, EyeOutlined, FolderOpenOutlined, PlusOutlined, ReloadOutlined, WarningOutlined, } from "@ant-design/icons";
+import dayjs from "dayjs";
 import type { MaterialDto } from "../types/material.types";
 import { deleteMaterial, listMaterials } from "../services/materialApi";
 import MaterialManagerModal from "../components/MaterialManagerModal";
@@ -70,11 +71,11 @@ export default function MaterialListPage() {
                 <Space size={10} align="center">
                     {renderFileIcon(record.kind)}
                     <div>
-                        <Text strong style={{ fontSize: 14 }}>
+                        <Text strong>
                             {record.fileName}
                         </Text>
                         <div>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
+                            <Text type="secondary" style={{ fontSize: 14 }}>
                                 {formatBytes(record.sizeBytes)} • {record.kind.toUpperCase()}
                                 {record.pageCount ? ` • ${record.pageCount} trang` : ""}
                             </Text>
@@ -84,23 +85,23 @@ export default function MaterialListPage() {
             ),
         },
         {
-            title: "Văn bản trích xuất",
+            title: "Đã đọc được",
             key: "charCount",
             width: 170,
             align: "center",
             render: (_, record) => (
-                <Tag color="blue" style={{ fontSize: 13, padding: "2px 8px" }}>
+                <Tag color="blue" style={{ fontSize: 14, padding: "2px 8px" }}>
                     {record.charCount.toLocaleString()} ký tự
                 </Tag>
             ),
         },
         {
-            title: "Cảnh báo trích xuất",
+            title: "Lưu ý",
             key: "warnings",
             width: 220,
             render: (_, record) => {
                 if (!record.warnings || record.warnings.length === 0) {
-                    return <Tag color="success">Không có cảnh báo</Tag>;
+                    return <Tag color="success">Không có</Tag>;
                 }
                 return (
                     <Space size={4} wrap>
@@ -125,35 +126,36 @@ export default function MaterialListPage() {
             width: 160,
             render: (val: string) => {
                 if (!val) return "—";
-                const d = new Date(val);
-                return isNaN(d.getTime()) ? val : d.toLocaleString("vi-VN");
+                // Cùng một dạng ngày giờ với các trang khác: "14/11/2026 18:07", bỏ giây (rà soát giao diện A6)
+                const d = dayjs(val);
+                return d.isValid() ? d.format("DD/MM/YYYY HH:mm") : val;
             },
         },
         {
             title: "Thao tác",
             key: "action",
-            width: 120,
+            width: 190,
             align: "center",
             render: (_, record) => (
+                // Nút có chữ thay cho biểu tượng (rà soát giao diện I6)
                 <Space size={4}>
-                    <Tooltip title="Xem trước văn bản trích xuất">
-                        <Button
-                            type="text"
-                            icon={<EyeOutlined />}
-                            onClick={() => openPreview(record)}
-                        />
-                    </Tooltip>
+                    <Button
+                        icon={<EyeOutlined />}
+                        onClick={() => openPreview(record)}
+                    >
+                        Xem
+                    </Button>
                     <Popconfirm
                         title="Xóa tài liệu này?"
-                        description="Hệ thống sẽ xóa văn bản trích xuất đã lưu."
+                        description="Nội dung hệ thống đã đọc từ tài liệu này cũng bị xóa."
                         onConfirm={() => handleDelete(record.id)}
                         okText="Xóa"
                         cancelText="Hủy"
                         okButtonProps={{ danger: true }}
                     >
-                        <Tooltip title="Xóa tài liệu">
-                            <Button type="text" danger icon={<DeleteOutlined />} />
-                        </Tooltip>
+                        <Button type="text" danger icon={<DeleteOutlined />}>
+                            Xóa
+                        </Button>
                     </Popconfirm>
                 </Space>
             ),
@@ -192,6 +194,8 @@ export default function MaterialListPage() {
                     dataSource={materials}
                     rowKey="id"
                     loading={loading}
+                    // Màn hẹp: bảng cuộn ngang trong khung, cả trang không bị kéo rộng (rà soát giao diện I7)
+                    scroll={{ x: 1000 }}
                     locale={{
                         emptyText: (
                             <Empty

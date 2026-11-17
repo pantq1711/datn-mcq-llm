@@ -18,3 +18,8 @@
 .question-table-question span {
     white-space: nowrap !important;
 }
+
+/* Bấm cả dòng để mở chi tiết */
+.question-table .question-table-row-clickable {
+    cursor: pointer;
+}

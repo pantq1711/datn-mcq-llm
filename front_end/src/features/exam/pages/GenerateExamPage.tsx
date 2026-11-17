@@ -45,8 +45,8 @@ function collectMaterialIds(
 
 // Cùng nhãn và màu với cột "Dạng câu" của bảng ô ma trận
 const QUESTION_TYPE_TAGS: Record<ExamMatrixCellPayload["questionType"], { label: string; color: string }> = {
-    mcq: { label: "Trắc nghiệm", color: "geekblue" },
-    tf: { label: "Đúng / Sai", color: "cyan" },
+    mcq: { label: "Trắc nghiệm nhiều phương án", color: "geekblue" },
+    tf: { label: "Trắc nghiệm đúng/sai", color: "cyan" },
     sa: { label: "Trả lời ngắn", color: "purple" },
 };
 
@@ -138,7 +138,7 @@ export default function GenerateExamPage() {
             }
             return next;
         });
-        message.success("Đã lưu ngữ cảnh riêng cho ô");
+        message.success("Đã lưu tài liệu và ghi chú riêng cho nhóm câu này");
         setActiveConfigCell(null);
     };
 
@@ -269,11 +269,11 @@ export default function GenerateExamPage() {
         setDuplicating(true);
         try {
             const newMatrix = await duplicateExamMatrix(selectedMatrixId);
-            message.success(`Đã nhân bản ma trận thành công: ${newMatrix.name}`);
+            message.success(`Đã sao chép ma trận: ${newMatrix.name}`);
             await fetchMatrices();
             setSelectedMatrixId(String(newMatrix.id));
         } catch (err: any) {
-            message.error(err?.response?.data?.error || "Không thể nhân bản ma trận");
+            message.error(err?.response?.data?.error || "Không sao chép được ma trận");
         } finally {
             setDuplicating(false);
         }
@@ -333,7 +333,8 @@ export default function GenerateExamPage() {
         const sub = subjectOptions.find((s) => s.value === m.subjectId);
         return {
             value: String(m.id),
-            label: `${m.name} — Khối ${m.gradeLevel}${sub ? ` (${sub.label})` : ""}`,
+            // Ma trận cũ chưa có lớp: bỏ hẳn phần lớp, không hiện "Khối null" (rà soát giao diện E2)
+            label: `${m.name}${m.gradeLevel != null ? ` — Lớp ${m.gradeLevel}` : ""}${sub ? ` (${sub.label})` : ""}`,
         };
     });
 
@@ -357,9 +358,9 @@ export default function GenerateExamPage() {
     // Cột hiển thị bảng ô ma trận
     const cellColumns: TableColumnsType<ExamMatrixCellPayload & { cellKey: number }> = [
         {
-            title: "Phần / Vị trí",
+            title: "Phần",
             key: "part",
-            width: 100,
+            width: 90,
             align: "center",
             render: (_, record) => {
                 const partLabel =
@@ -375,12 +376,12 @@ export default function GenerateExamPage() {
             title: "Dạng câu",
             dataIndex: "questionType",
             key: "questionType",
-            width: 130,
+            width: 190,
             align: "center",
             render: (type: string) => {
-                if (type === "tf") return <Text>Đúng / Sai</Text>;
+                if (type === "tf") return <Text>Trắc nghiệm đúng/sai</Text>;
                 if (type === "sa") return <Text>Trả lời ngắn</Text>;
-                return <Text>Trắc nghiệm</Text>;
+                return <Text>Trắc nghiệm nhiều phương án</Text>;
             },
         },
         {
@@ -391,7 +392,7 @@ export default function GenerateExamPage() {
                     <Text strong>{record.topic}</Text>
                     {record.content && (
                         <div>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
+                            <Text type="secondary" style={{ fontSize: 14 }}>
                                 {record.content}
                             </Text>
                         </div>
@@ -420,7 +421,7 @@ export default function GenerateExamPage() {
             render: (count: number) => <Text strong>{count}</Text>,
         },
         {
-            title: "Gắn tài liệu & ghi chú riêng cho ô",
+            title: "Tài liệu và ghi chú riêng",
             key: "context",
             width: 220,
             render: (_, record) => {
@@ -439,27 +440,27 @@ export default function GenerateExamPage() {
                             )}
                             {hasInstruction && (
                                 <Tag color="gold" icon={<BulbOutlined />}>
-                                    Có ghi chú AI
+                                    Có ghi chú
                                 </Tag>
                             )}
                             {!hasMaterials && !hasInstruction && (globalMaterials.length > 0 ? (
                                 // Tài liệu hiệu lực của ô = tài liệu chung ∪ tài liệu ô (docs/api mục 7.2)
                                 <Tag icon={<PaperClipOutlined />}>Dùng tài liệu chung</Tag>
                             ) : (
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    Chưa gắn
+                                <Text type="secondary" style={{ fontSize: 14 }}>
+                                    Chưa có
                                 </Text>
                             ))}
                         </div>
                         {/* Ô chưa có id thật thì không gắn được: cellId gửi lên phải thuộc ma trận */}
-                        <Tooltip title={record.id === undefined ? "Ô chưa có mã trên máy chủ, không gắn riêng được" : undefined}>
+                        <Tooltip title={record.id === undefined ? "Ô này chưa được lưu, chưa thêm tài liệu hay ghi chú riêng được" : undefined}>
                             <Button
                                 size="small"
                                 icon={<SettingOutlined />}
                                 disabled={record.id === undefined}
                                 onClick={() => openCellConfig(record, record.cellKey)}
                             >
-                                {hasMaterials || hasInstruction ? "Sửa gắn riêng" : "Gắn cho ô này"}
+                                {hasMaterials || hasInstruction ? "Sửa tài liệu/ghi chú" : "Thêm tài liệu/ghi chú"}
                             </Button>
                         </Tooltip>
                     </Space>
@@ -490,10 +491,10 @@ export default function GenerateExamPage() {
 
                 <div className="generate-exam-header-content">
                     <Title level={2} className="generate-exam-page-title">
-                        Tạo đề thi
+                        Tạo đề mới
                     </Title>
                     <Paragraph type="secondary" className="generate-exam-page-subtitle">
-                        Tạo đề thi tự động kết hợp câu hỏi ngân hàng và mô hình AI. Hỗ trợ theo từng bài học hoặc theo ma trận chuẩn.
+                        Hệ thống lấy câu có sẵn trong ngân hàng trước, phần còn thiếu sẽ soạn mới.
                     </Paragraph>
                 </div>
             </div>
@@ -502,7 +503,7 @@ export default function GenerateExamPage() {
                 {/* Chưa biết có ma trận hay không thì chưa hiện tab, tránh tab nhảy từ "Theo bài học" sang "Theo ma trận" */}
                 {!tabReady ? (
                     <div style={{ textAlign: "center", padding: "40px 0" }}>
-                        <Spin tip="Đang tải..." />
+                        <Spin description="Đang tải..." />
                     </div>
                 ) : (
                 <Tabs
@@ -519,7 +520,7 @@ export default function GenerateExamPage() {
                             label: (
                                 <Space size={8}>
                                     <TableOutlined />
-                                    <span>Theo ma trận (Giữa kỳ, cuối kỳ)</span>
+                                    <span>Theo ma trận (giữa kì, cuối kì)</span>
                                 </Space>
                             ),
                             children: (
@@ -527,11 +528,11 @@ export default function GenerateExamPage() {
                                     <Card className="generate-exam-matrix-card" bordered={false}>
                                         {loadingMatrices ? (
                                             <div style={{ textAlign: "center", padding: "40px 0" }}>
-                                                <Spin tip="Đang tải danh sách ma trận..." />
+                                                <Spin description="Đang tải danh sách ma trận..." />
                                             </div>
                                         ) : matrices.length === 0 ? (
                                             <Empty
-                                                description="Bạn chưa có ma trận đề thi nào."
+                                                description="Thầy/cô chưa có ma trận đề nào."
                                                 style={{ margin: "40px 0" }}
                                             >
                                                 <Space>
@@ -584,7 +585,7 @@ export default function GenerateExamPage() {
                                                                     disabled={!selectedMatrixId}
                                                                     onClick={handleDuplicateSelectedMatrix}
                                                                 >
-                                                                    Nhân bản
+                                                                    Sao chép
                                                                 </Button>
                                                                 <Button
                                                                     icon={<PlusOutlined />}
@@ -620,9 +621,9 @@ export default function GenerateExamPage() {
                                                 )}
 
                                                 <Form.Item
-                                                    label="Tài liệu áp dụng cho cả ma trận"
-                                                    tooltip="Đính kèm tối đa 5 tài liệu dùng chung cho toàn bộ các ô trong đề thi"
-                                                    extra="Không bắt buộc — AI sẽ bám theo tài liệu này khi soạn"
+                                                    label="Tài liệu cho cả đề"
+                                                    tooltip="Đính kèm tối đa 5 tài liệu dùng chung cho mọi câu của đề"
+                                                    extra="Không bắt buộc. Hệ thống soạn câu bám theo tài liệu này."
                                                     style={{ marginTop: 16 }}
                                                 >
                                                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -649,7 +650,7 @@ export default function GenerateExamPage() {
 
                                                 {globalMaterials.length > 0 && (
                                                     <div style={{ marginBottom: 16, padding: "8px 12px", background: "#f6faff", borderRadius: 6 }}>
-                                                        <Text strong style={{ fontSize: 13, marginRight: 8 }}>
+                                                        <Text strong style={{ fontSize: 14, marginRight: 8 }}>
                                                             Tài liệu chung:
                                                         </Text>
                                                         <Space size={[6, 6]} wrap>
@@ -685,8 +686,8 @@ export default function GenerateExamPage() {
                                                                 <Text strong>{selectedMatrix.name}</Text>
                                                             </Col>
                                                             <Col xs={12} sm={8}>
-                                                                <Text type="secondary">Khối lớp: </Text>
-                                                                <Text>Khối {selectedMatrix.gradeLevel}</Text>
+                                                                <Text type="secondary">Lớp: </Text>
+                                                                <Text>{selectedMatrix.gradeLevel ?? "—"}</Text>
                                                             </Col>
                                                             <Col xs={12} sm={8}>
                                                                 <Button
@@ -697,7 +698,7 @@ export default function GenerateExamPage() {
                                                                         navigate(`/exam-matrices/${selectedMatrix.id}/edit`)
                                                                     }
                                                                 >
-                                                                    Chỉnh sửa ma trận gốc
+                                                                    Sửa ma trận này
                                                                 </Button>
                                                             </Col>
                                                         </Row>
@@ -721,7 +722,7 @@ export default function GenerateExamPage() {
                                                     </Col>
                                                     <Col xs={24} md={10}>
                                                         <Form.Item
-                                                            label="Mức thử thách"
+                                                            label="Độ khó của câu Vận dụng"
                                                             tooltip="Nâng cao: câu mức Vận dụng cần nhiều bước hơn, kết hợp nhiều kiến thức, có thể có bẫy lỗi hay gặp. Câu Vận dụng khi đó luôn được soạn mới (không lấy từ ngân hàng)."
                                                         >
                                                             <Select
@@ -753,13 +754,13 @@ export default function GenerateExamPage() {
                                                         Lấy câu đã lưu trong ngân hàng
                                                     </Checkbox>
                                                     {!matrixUseBank && (
-                                                        <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+                                                        <Text type="secondary" style={{ display: "block", fontSize: 14 }}>
                                                             Mọi câu sẽ được soạn mới và tính vào số câu soạn trong ngày.
                                                         </Text>
                                                     )}
                                                 </Form.Item>
 
-                                                {/* Chỉ phần "Gắn cho ô này" (tài liệu, ghi chú theo ô) nằm trong mục nâng cao, mặc định đóng */}
+                                                {/* Chỉ phần tài liệu, ghi chú theo từng ô nằm trong mục nâng cao, mặc định đóng */}
                                                 <Collapse
                                                     ghost
                                                     items={[{
@@ -779,9 +780,9 @@ export default function GenerateExamPage() {
                                                     size="small"
                                                     title={
                                                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                                            <span>Cấu hình từng ô ma trận [Gắn tài liệu + Ghi chú cho AI]</span>
-                                                            <Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
-                                                                Ô có tài liệu hoặc yêu cầu riêng sẽ không lấy câu từ ngân hàng mà soạn câu mới
+                                                            <span>Tài liệu và ghi chú riêng cho từng nhóm câu</span>
+                                                            <Text type="secondary" style={{ fontSize: 14, fontWeight: 400 }}>
+                                                                Nhóm câu có tài liệu hoặc yêu cầu riêng sẽ không lấy câu từ ngân hàng mà soạn câu mới
                                                             </Text>
                                                         </div>
                                                     }
@@ -789,7 +790,7 @@ export default function GenerateExamPage() {
                                                 >
                                                     {loadingMatrixDetail ? (
                                                         <div style={{ textAlign: "center", padding: "20px 0" }}>
-                                                            <Spin tip="Đang tải danh sách ô ma trận..." />
+                                                            <Spin description="Đang tải danh sách ô ma trận..." />
                                                         </div>
                                                     ) : (
                                                         <Table
@@ -844,7 +845,7 @@ export default function GenerateExamPage() {
                 onSelect={(newSelected) => setGlobalMaterials(newSelected)}
                 onRemoved={handleMaterialRemoved}
                 maxSelect={5}
-                title="Chọn tài liệu chung cho đề thi theo ma trận"
+                title="Chọn tài liệu cho cả đề"
             />
 
             {/* Modal cấu hình tài liệu và ghi chú riêng cho 1 ô ma trận */}
@@ -852,7 +853,7 @@ export default function GenerateExamPage() {
                 open={activeConfigCell !== null}
                 title={
                     activeConfigCell
-                        ? `Ghi chú soạn câu: Ô ${activeConfigCell.cell.part} — ${activeConfigCell.cell.topic}`
+                        ? `Tài liệu và ghi chú riêng: Phần ${activeConfigCell.cell.part} — ${activeConfigCell.cell.topic}`
                         : ""
                 }
                 onCancel={() => setActiveConfigCell(null)}
@@ -870,18 +871,18 @@ export default function GenerateExamPage() {
                                 delete next[activeConfigCell.cellKey];
                                 return next;
                             });
-                            message.info("Đã xóa ngữ cảnh riêng cho ô này");
+                            message.info("Đã bỏ tài liệu và ghi chú riêng của nhóm câu này");
                             setActiveConfigCell(null);
                         }}
                     >
-                        Xóa gắn riêng
+                        Bỏ tài liệu/ghi chú riêng
                     </Button>,
                     <Button
                         key="save"
                         type="primary"
                         onClick={saveCellConfig}
                     >
-                        Lưu ngữ cảnh ô
+                        Lưu
                     </Button>,
                 ]}
                 width={650}
@@ -905,7 +906,7 @@ export default function GenerateExamPage() {
                             </Text>
                             {activeConfigCell.cell.content && (
                                 <div style={{ marginTop: 8 }}>
-                                    <Text type="secondary" style={{ fontSize: 13 }}>
+                                    <Text type="secondary" style={{ fontSize: 14 }}>
                                         Phạm vi: {activeConfigCell.cell.content}
                                     </Text>
                                 </div>
@@ -914,7 +915,7 @@ export default function GenerateExamPage() {
 
                         {/* Tài liệu bài học riêng cho ô */}
                         <div style={{ marginBottom: 16 }}>
-                            <Text strong>Tài liệu bài học riêng cho ô này: </Text>
+                            <Text strong>Tài liệu bài học riêng cho nhóm câu này: </Text>
                             <div style={{ marginTop: 8 }}>
                                 <Button
                                     size="small"
@@ -922,8 +923,8 @@ export default function GenerateExamPage() {
                                     onClick={() => setIsCellMaterialModalOpen(true)}
                                 >
                                     {cellDraft.materialIds.length > 0
-                                        ? "Thay đổi tài liệu cho ô"
-                                        : "Đính kèm tài liệu cho ô"}
+                                        ? "Thay đổi tài liệu"
+                                        : "Đính kèm tài liệu"}
                                 </Button>
                             </div>
 
@@ -942,7 +943,7 @@ export default function GenerateExamPage() {
                             {/* Tài liệu chung cũng áp cho ô này (hợp hai danh sách, docs/api mục 7.2) */}
                             {globalMaterials.length > 0 && (
                                 <div style={{ marginTop: 8 }}>
-                                    <Text type="secondary" style={{ fontSize: 12, marginRight: 6 }}>
+                                    <Text type="secondary" style={{ fontSize: 14, marginRight: 6 }}>
                                         Kèm tài liệu chung:
                                     </Text>
                                     <Space size={[6, 6]} wrap>
@@ -954,10 +955,10 @@ export default function GenerateExamPage() {
                             )}
                         </div>
 
-                        {/* Yêu cầu thêm cho AI riêng cho ô */}
+                        {/* Ghi chú soạn câu riêng cho ô */}
                         <div>
-                            <Text strong>Ghi chú / Yêu cầu thêm cho AI: </Text>
-                            <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+                            <Text strong>Ghi chú thêm khi soạn câu: </Text>
+                            <Paragraph type="secondary" style={{ fontSize: 14, marginBottom: 8 }}>
                                 Chỉ dẫn cụ thể về bối cảnh, dạng bài tập thực tế (tối đa 1000 ký tự).
                             </Paragraph>
                             <TextArea
@@ -975,7 +976,7 @@ export default function GenerateExamPage() {
 
                         {/* Chip yêu cầu riêng cho ô (PR B): chỉ hiện chip hợp dạng câu của ô */}
                         <div style={{ marginTop: 12 }}>
-                            <Text strong>Yêu cầu cho câu của ô: </Text>
+                            <Text strong>Yêu cầu cho câu của nhóm này: </Text>
                             <Checkbox.Group
                                 value={cellDraft.requestCodes}
                                 onChange={(vals) => setCellDraft((prev) => ({ ...prev, requestCodes: vals as TeacherRequestCode[] }))}
@@ -989,7 +990,7 @@ export default function GenerateExamPage() {
                             showIcon
                             icon={<BulbOutlined />}
                             message="Lưu ý quan trọng"
-                            description="Ô có tài liệu, ghi chú hoặc yêu cầu riêng sẽ không lấy câu từ ngân hàng, mọi câu của ô đều được soạn mới. Ô có ghi chú hoặc yêu cầu riêng thì dùng của ô thay cho yêu cầu của cả đề."
+                            description="Nhóm câu có tài liệu, ghi chú hoặc yêu cầu riêng sẽ không lấy câu từ ngân hàng, mọi câu của nhóm đều được soạn mới. Ghi chú và yêu cầu riêng dùng thay cho yêu cầu của cả đề."
                             style={{ marginTop: 16 }}
                         />
                     </div>
@@ -1012,7 +1013,7 @@ export default function GenerateExamPage() {
                         }));
                     }}
                     maxSelect={5}
-                    title={`Chọn tài liệu cho ô: ${activeConfigCell.cell.topic}`}
+                    title={`Chọn tài liệu riêng: ${activeConfigCell.cell.topic}`}
                 />
             )}
         </div>

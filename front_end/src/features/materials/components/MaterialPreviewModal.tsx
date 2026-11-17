@@ -36,7 +36,7 @@ export default function MaterialPreviewModal({
         >
             {loading ? (
                 <div className="material-preview-loading">
-                    <Spin tip="Đang nạp văn bản trích xuất..." />
+                    <Spin description="Đang tải nội dung đã đọc..." />
                 </div>
             ) : material ? (
                 <div>
@@ -52,20 +52,27 @@ export default function MaterialPreviewModal({
                         <Alert
                             type={hasErrorWarning ? "error" : "warning"}
                             showIcon
-                            message="Cảnh báo trích xuất"
-                            description={material.warnings.map((w, i) => {
-                                const { label } = describeMaterialWarning(w.code);
-                                return (
-                                    <div key={i}>
-                                        <strong>{label}:</strong> {w.message}
+                            message="Lưu ý khi đọc tài liệu"
+                            description={
+                                <>
+                                    {material.warnings.map((w, i) => {
+                                        const { label } = describeMaterialWarning(w.code);
+                                        return (
+                                            <div key={i}>
+                                                <strong>{label}:</strong> {w.message}
+                                            </div>
+                                        );
+                                    })}
+                                    <div style={{ marginTop: 4 }}>
+                                        Thầy/cô xem nội dung đã đọc trước khi dùng, hoặc tải bản PDF.
                                     </div>
-                                );
-                            })}
+                                </>
+                            }
                             className="material-preview-alert"
                         />
                     )}
 
-                    <Card size="small" title="Đoạn trích xuất văn bản (500 ký tự đầu)">
+                    <Card size="small" title="Nội dung đã đọc (500 ký tự đầu)">
                         <Paragraph className="material-preview-text">
                             {material.textPreview || "Không có đoạn xem trước."}
                         </Paragraph>

@@ -64,10 +64,10 @@ export default function ExamMatrixListPage() {
     const handleDuplicateMatrix = async (matrixId: string) => {
         try {
             const newMatrix = await duplicateExamMatrix(matrixId);
-            message.success(`Đã tạo bản sao: ${newMatrix.name}`);
+            message.success(`Đã sao chép ma trận: ${newMatrix.name}`);
             await fetchMatrices();
         } catch (err: any) {
-            message.error(err?.response?.data?.error || 'Không thể nhân bản ma trận');
+            message.error(err?.response?.data?.error || 'Không sao chép được ma trận');
         }
     };
 
@@ -122,7 +122,7 @@ export default function ExamMatrixListPage() {
                 <div className="exam-matrix-filter">
                     <Input
                         className="exam-matrix-search"
-                        placeholder="Tìm theo tên ma trận, môn học hoặc khối lớp..."
+                        placeholder="Tìm theo tên ma trận, môn học hoặc lớp..."
                         prefix={<SearchOutlined />}
                         allowClear
                         value={searchText}

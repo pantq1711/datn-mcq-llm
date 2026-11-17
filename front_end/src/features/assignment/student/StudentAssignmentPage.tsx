@@ -231,7 +231,7 @@ export default function StudentAssignmentPage() {
         case "loading":
             content = (
                 <div className="student-center">
-                    <Spin size="large" tip="Đang mở bài…" />
+                    <Spin size="large" description="Đang mở bài…" />
                 </div>
             );
             break;

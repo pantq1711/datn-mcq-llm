@@ -1,11 +1,11 @@
-import { Button, Empty, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Button, Empty, Grid, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
 import { DeleteOutlined, EyeOutlined, WarningOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
 import "./ExamTable.css";
-import type { ExamKind, ExamListItem, ExamStatus } from "../types/exam.types";
-import { examKindConfig, examStatusConfig } from "../../../utils/exam.utils";
+import type { ExamKind, ExamListItem } from "../types/exam.types";
+import { examKindConfig } from "../../../utils/exam.utils";
 
 const { Text } = Typography;
 
@@ -38,23 +38,20 @@ export default function ExamTable({
     deletingId = null,
     onCreate,
 }: ExamTableProps) {
+    // Màn hẹp (dưới 768px): không ghim cột "Thao tác" bên phải, để tên đề còn chỗ hiện
+    const screens = Grid.useBreakpoint();
+
+    // Bỏ cột "Mã hệ thống" và cột "Trạng thái" (luôn là "Bản nháp"); tên đề đứng đầu (rà soát giao diện F1, F4)
     const columns: ColumnsType<ExamListItem> = [
-        {
-            title: "Mã hệ thống",
-            dataIndex: "examCode",
-            key: "examCode",
-            width: 130,
-            align: "center",
-            render: (_, record) => <Text strong>{record.examCode || "—"}</Text>,
-        },
         {
             title: "Tên đề thi",
             dataIndex: "title",
             key: "title",
-            width: 250,
+            // Cột co giãn nhưng không hẹp hơn 220px (màn hẹp thì bảng cuộn ngang trong khung)
+            minWidth: 220,
             render: (title: string) => (
                 <Tooltip title={title}>
-                    <Text className="exam-table-title" ellipsis>
+                    <Text strong className="exam-table-title" ellipsis>
                         {title}
                     </Text>
                 </Tooltip>
@@ -64,7 +61,7 @@ export default function ExamTable({
             title: "Loại đề",
             dataIndex: "kind",
             key: "kind",
-            width: 110,
+            width: 130,
             align: "center",
             render: (kind: ExamKind) => {
                 // Giá trị lạ (backend thêm loại mới) thì hiện nguyên giá trị
@@ -73,9 +70,10 @@ export default function ExamTable({
             },
         },
         {
-            title: "Số câu & Tiến độ",
+            // Một cột thay cho "Số câu & Tiến độ" và "Tình trạng" (hai cột cũ lặp cùng thông tin, F2)
+            title: "Tình trạng",
             key: "progress",
-            width: 160,
+            width: 190,
             align: "center",
             render: (_, record) => {
                 const done = (record.keptSlots ?? 0) + (record.readySlots ?? 0);
@@ -83,70 +81,47 @@ export default function ExamTable({
                 const generating = record.generatingSlots ?? 0;
                 const failed = record.failedSlots ?? 0;
 
-                return (
-                    <Space direction="vertical" size={2} style={{ display: "flex" }}>
-                        <Text>{`${done} / ${total} câu`}</Text>
-                        {generating > 0 && (
-                            <Text type="secondary">{generating} đang soạn...</Text>
-                        )}
-                        {failed > 0 && (
-                            <Text type="danger">{failed} chưa soạn được</Text>
-                        )}
-                    </Space>
-                );
-            },
-        },
-        {
-            title: "Tình trạng",
-            key: "generatingStatus",
-            width: 140,
-            align: "center",
-            render: (_, record) => {
-                const generating = record.generatingSlots ?? 0;
-                const failed = record.failedSlots ?? 0;
-
                 if (generating > 0) {
-                    return <Text>{generating} đang soạn</Text>;
+                    return (
+                        <Space direction="vertical" size={0}>
+                            <Text>Đang soạn {generating} câu</Text>
+                            <Text type="secondary">Đã có {done}/{total} câu</Text>
+                        </Space>
+                    );
                 }
                 if (failed > 0) {
-                    return <Text type="danger">{failed} chưa soạn được</Text>;
+                    return (
+                        <Space direction="vertical" size={0}>
+                            <Text type="danger">Thiếu {failed} câu</Text>
+                            <Text type="secondary">Đã có {done}/{total} câu</Text>
+                        </Space>
+                    );
                 }
-                return <Text>Hoàn tất</Text>;
+                return <Text>Đủ {total} câu</Text>;
             },
         },
         {
-            title: "Cần xem lại",
+            title: "Câu cần xem kỹ",
             dataIndex: "needsReviewSlots",
             key: "needsReviewSlots",
-            width: 120,
+            width: 150,
             align: "center",
             render: (needsReviewSlots: number = 0) => {
                 if (needsReviewSlots > 0) {
                     return (
                         <Tag color="volcano" icon={<WarningOutlined />}>
-                            Cần xem kỹ ({needsReviewSlots})
+                            {needsReviewSlots} câu
                         </Tag>
                     );
                 }
-                return <Text>Đạt</Text>;
-            },
-        },
-        {
-            title: "Trạng thái",
-            dataIndex: "status",
-            key: "status",
-            width: 130,
-            align: "center",
-            render: (status: ExamStatus) => {
-                const config = examStatusConfig[status] ?? { label: status, color: "default" };
-                return <Text>{config.label}</Text>;
+                return <Text type="secondary">Không có</Text>;
             },
         },
         {
             title: "Ngày tạo",
             dataIndex: "createdAt",
             key: "createdAt",
-            width: 150,
+            width: 160,
             align: "center",
             render: (createdAt: string) =>
                 createdAt ? dayjs(createdAt).format("DD/MM/YYYY HH:mm") : "—",
@@ -154,18 +129,18 @@ export default function ExamTable({
         {
             title: "Thao tác",
             key: "actions",
-            width: 110,
+            width: 190,
             align: "center",
-            fixed: "right",
+            fixed: screens.md ? "right" : undefined,
             render: (_, record) => (
-                <Space size={4}>
-                    <Tooltip title="Xem đề thi">
-                        <Button
-                            type="text"
-                            icon={<EyeOutlined />}
-                            onClick={() => onView?.(record)}
-                        />
-                    </Tooltip>
+                // Bấm nút không tính là bấm dòng (kể cả nút trong hộp xác nhận xóa)
+                <Space size={4} onClick={(event) => event.stopPropagation()}>
+                    <Button
+                        icon={<EyeOutlined />}
+                        onClick={() => onView?.(record)}
+                    >
+                        Mở đề
+                    </Button>
                     {onDelete && (
                         <Popconfirm
                             title="Xóa đề này?"
@@ -175,15 +150,15 @@ export default function ExamTable({
                             okButtonProps={{ danger: true }}
                             onConfirm={() => onDelete(record)}
                         >
-                            <Tooltip title="Xóa đề">
-                                <Button
-                                    type="text"
-                                    danger
-                                    icon={<DeleteOutlined />}
-                                    loading={deletingId === record.examId}
-                                    aria-label={`Xóa đề ${record.title}`}
-                                />
-                            </Tooltip>
+                            <Button
+                                type="text"
+                                danger
+                                icon={<DeleteOutlined />}
+                                loading={deletingId === record.examId}
+                                aria-label={`Xóa đề ${record.title}`}
+                            >
+                                Xóa
+                            </Button>
                         </Popconfirm>
                     )}
                 </Space>
@@ -205,6 +180,11 @@ export default function ExamTable({
                 columns={columns}
                 dataSource={data}
                 loading={loading}
+                // Bấm cả dòng để mở đề (F5)
+                onRow={(record) => ({
+                    onClick: () => onView?.(record),
+                    className: onView ? "exam-table-row-clickable" : undefined,
+                })}
                 locale={{
                     emptyText: (
                         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có đề nào.">
@@ -216,7 +196,7 @@ export default function ExamTable({
                         </Empty>
                     ),
                 }}
-                scroll={{ x: 1150 }}
+                scroll={{ x: 1000 }}
                 pagination={{
                     current: page,
                     pageSize,

@@ -78,7 +78,8 @@ export function ExamMatrixCellEditor({ value, onChange, readOnly = false }: Exam
                     }
                 >
                     <Row gutter={[12, 12]}>
-                        <Col xs={24} md={8}>
+                        {/* Cột dạng câu rộng hơn để đủ tên "Trắc nghiệm nhiều phương án (Phần I)" ở chữ 16px */}
+                        <Col xs={24} md={10}>
                             <Text className="exam-matrix-cell-editor__label">Dạng câu</Text>
                             <Select
                                 value={cell.questionType}
@@ -89,18 +90,20 @@ export function ExamMatrixCellEditor({ value, onChange, readOnly = false }: Exam
                             />
                         </Col>
 
-                        <Col xs={24} md={11}>
+                        <Col xs={24} md={9}>
                             <Text className="exam-matrix-cell-editor__label">
                                 {cell.questionType === 'tf' ? 'Mức từng ý (a–d)' : 'Mức độ'}
                             </Text>
                             {cell.questionType === 'tf' ? (
-                                <Row gutter={6}>
+                                // Hai hàng hai ô để đủ chỗ cho chữ "Vận dụng" (bốn ô một hàng bị cắt thành "Vậ…")
+                                <Row gutter={[6, 6]}>
                                     {[0, 1, 2, 3].map((statement) => (
-                                        <Col span={6} key={statement}>
+                                        <Col span={12} key={statement}>
                                             <Select
                                                 value={cell.statementDifficulties?.[statement]}
                                                 options={LEVEL_OPTIONS}
                                                 disabled={readOnly}
+                                                prefix={`${String.fromCharCode(97 + statement)})`}
                                                 placeholder={`Ý ${String.fromCharCode(97 + statement)}`}
                                                 onChange={(level) => setStatementLevel(index, cell, statement, level)}
                                                 style={{ width: '100%' }}

@@ -13,3 +13,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* Bấm cả dòng để mở đề */
+.exam-table .exam-table-row-clickable {
+    cursor: pointer;
+}
