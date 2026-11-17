@@ -1,4 +1,4 @@
-import type { AttemptView, PublicAssignmentInfo } from "../types/assignment.types";
+import type { AttemptView, ItemStats, PublicAssignmentInfo } from "../types/assignment.types";
 
 export const INFO: PublicAssignmentInfo = {
     title: "Kiểm tra 15 phút - Hàm số",
@@ -58,6 +58,80 @@ export function makeAttemptView(overrides: Partial<AttemptView> = {}): AttemptVi
             {
                 part: "III",
                 items: [{ slotId: 103, number: 1, questionType: "sa", questionText: "Tính $2+0,5$." }],
+            },
+        ],
+        ...overrides,
+    };
+}
+
+/** Bộ thống kê đủ mẫu (n = 36): một câu mỗi dạng, đúng thứ tự trang đề; câu mcq có cờ, câu tf đã được đổi sau khi giao. */
+export function makeItemStats(overrides: Partial<ItemStats> = {}): ItemStats {
+    return {
+        assignmentId: 7,
+        n: 36,
+        groupSize: 10,
+        computedAt: "2026-11-20T17:10:00",
+        sampleSufficient: true,
+        minSampleSize: 20,
+        sampleNote: null,
+        excluded: { duplicate: 2, notSubmitted: 3 },
+        items: [
+            {
+                slotId: 101,
+                part: "I",
+                number: 1,
+                questionType: "mcq",
+                bankItemId: 11,
+                answerKey: "B",
+                p: 0.5833,
+                d: 0.1,
+                choiceCounts: {
+                    A: { all: 9, high: 1, low: 3 },
+                    B: { all: 21, high: 6, low: 5 },
+                    C: { all: 6, high: 3, low: 2 },
+                    D: { all: 0, high: 0, low: 0 },
+                    blank: { all: 0, high: 0, low: 0 },
+                },
+                flags: ["low_discrimination", "unused_option: D", "key_suspect: C"],
+                slotChanged: false,
+            },
+            {
+                slotId: 102,
+                part: "II",
+                number: 1,
+                questionType: "tf",
+                bankItemId: 12,
+                answerKey: "TFFT",
+                p: 0.7,
+                d: 0.45,
+                choiceCounts: {
+                    a: { T: 30, F: 6, blank: 0, correct: 30, p: 0.8333, d: 0.4 },
+                    b: { T: 10, F: 24, blank: 2, correct: 24, p: 0.6667, d: 0.5 },
+                    c: { T: 12, F: 22, blank: 2, correct: 22, p: 0.6111, d: 0.3 },
+                    d: { T: 27, F: 8, blank: 1, correct: 27, p: 0.75, d: 0.6 },
+                },
+                flags: [],
+                slotChanged: true,
+            },
+            {
+                slotId: 103,
+                part: "III",
+                number: 1,
+                questionType: "sa",
+                bankItemId: 13,
+                answerKey: "2,5",
+                p: 0.5,
+                d: 0.7,
+                choiceCounts: {
+                    correct: 18,
+                    blank: 5,
+                    topWrong: [
+                        { value: "25", count: 6 },
+                        { value: "0,25", count: 3 },
+                    ],
+                },
+                flags: [],
+                slotChanged: false,
             },
         ],
         ...overrides,

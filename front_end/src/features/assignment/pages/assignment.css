@@ -64,7 +64,133 @@
     background: #fff1f0 !important;
 }
 
+/* Tab "Phân tích câu" */
+
+.item-stat-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 40px 16px;
+    text-align: center;
+}
+
+.item-stat-state-icon {
+    font-size: 32px;
+    color: rgba(0, 0, 0, 0.45);
+}
+
+.item-stat-state-title {
+    font-size: 1.25em;
+    font-weight: 600;
+}
+
+.item-stat-summary {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.item-stat-excluded {
+    display: block;
+    margin-top: 4px;
+}
+
+.item-stat-sample {
+    margin-bottom: 12px;
+}
+
+.item-stat-help {
+    margin: 0 0 16px;
+    padding: 12px 16px 12px 32px;
+    background: #fafafa;
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+}
+
+.item-stat-help li + li {
+    margin-top: 4px;
+}
+
+.item-stat-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 0;
+}
+
+.item-stat-changed-tag {
+    margin-top: 4px;
+}
+
+.item-stat-changed-note {
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: #e6f4ff;
+    border: 1px solid #91caff;
+    border-radius: 8px;
+}
+
+.item-stat-detail-table {
+    width: 100%;
+    max-width: 640px;
+    border-collapse: collapse;
+}
+
+.item-stat-detail-table th,
+.item-stat-detail-table td {
+    padding: 6px 12px;
+    text-align: left;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.item-stat-detail-table th {
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.item-stat-detail-table tr.item-stat-correct td {
+    background: #f6ffed;
+    font-weight: 600;
+}
+
+.item-stat-correct-tag {
+    margin-left: 8px;
+}
+
+.item-stat-wrong-list {
+    margin: 4px 0 0;
+    padding-left: 20px;
+}
+
+.item-stat-wrong-value {
+    font-weight: 600;
+}
+
+.item-stat-detail p {
+    margin: 0 0 4px;
+}
+
 @media (max-width: 768px) {
+    .item-stat-summary {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    /* Bảng chính cuộn ngang: giữ phần chi tiết trong khung nhìn, bảng con rộng hơn thì cuộn riêng */
+    .item-stat-detail {
+        position: sticky;
+        left: 0;
+        max-width: calc(100vw - 120px);
+        overflow-x: auto;
+    }
+
+    .item-stat-detail-table th,
+    .item-stat-detail-table td {
+        padding: 6px 8px;
+    }
+
     .assignment-page {
         padding: 20px 16px 32px;
     }

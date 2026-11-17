@@ -1,5 +1,5 @@
 import apiClient from "../../../services/apiClient";
-import type { Assignment, CreateAssignmentPayload } from "../types/assignment.types";
+import type { Assignment, CreateAssignmentPayload, ItemStats } from "../types/assignment.types";
 import { studentPath } from "../studentPath";
 
 // API giáo viên của bài giao trực tuyến (docs/api mục 11.1). Lỗi do axios ném ra, nơi gọi dùng showApiError.
@@ -40,6 +40,18 @@ export async function bulkDeleteAttempts(
         { attemptIds }
     );
     return data.deleted;
+}
+
+/** B1: thống kê câu của bài đã đóng. 409 `ASSIGNMENT_OPEN` / `STATS_NOT_READY` (errors[0] là lúc có thống kê). */
+export async function getItemStats(examId: number | string, assignmentId: number | string): Promise<ItemStats> {
+    const { data } = await apiClient.get<ItemStats>(`${base(examId)}/${assignmentId}/item-stats`);
+    return data;
+}
+
+/** B2: tính lại rồi trả như B1. */
+export async function recomputeItemStats(examId: number | string, assignmentId: number | string): Promise<ItemStats> {
+    const { data } = await apiClient.post<ItemStats>(`${base(examId)}/${assignmentId}/item-stats/recompute`);
+    return data;
 }
 
 /** Link học sinh mở bài (`<origin>/lam-bai/<mã>`): backend không biết tên miền công khai nên frontend ghép. */
