@@ -1605,7 +1605,7 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
   `explanation = null`; khi xuất đề ra Word, phần LỜI GIẢI bỏ câu đó.
 - Hạn chế: câu tf nhận chung một mức cho cả 4 ý (file chỉ ghi một mức cho câu).
 
-### 10.3. Hình của câu nhập (V30, 11/11)
+### 10.3. Hình của câu nhập (V34, 11/11)
 
 - Mỗi phần tử `images[]`: `{id, role, ordinal, mime, widthPx, heightPx, displayWidthMm, url}`. `role`: `stem`,
   `option_a`..`option_d`, `statement_a`..`statement_d`, `solution`. Văn bản câu (`stem`, `options[].text`,

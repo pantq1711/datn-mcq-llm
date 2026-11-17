@@ -1,7 +1,7 @@
--- V30__question_image.sql
+-- V34__question_image.sql
 -- Bảng question_image lưu trữ ảnh câu hỏi (thiết kế G0, PR #61, duyệt 11/11/2026).
 -- Ảnh được lưu dạng BYTEA STORAGE EXTERNAL trong database, phục vụ xem trước và lưu trữ chính thức.
--- Không sửa V1-V29.
+-- Không sửa V1-V33. (17/11: đổi từ V30 khi merge main vì main đã có V30-V32; V33 để cho PR #93 item_stat.)
 
 CREATE TABLE question_image (
     id                      BIGSERIAL PRIMARY KEY,

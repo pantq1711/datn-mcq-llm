@@ -151,7 +151,7 @@ app:
     preview-ttl: ${BANK_IMPORT_PREVIEW_TTL:24h}                # quá hạn: 410 IMPORT_EXPIRED, nội dung bị xóa
     max-image-bytes: ${BANK_IMPORT_MAX_IMAGE_BYTES:2097152}          # tối đa 2 MB / ảnh đọc từ docx
     max-image-total-bytes: ${BANK_IMPORT_MAX_IMAGE_TOTAL_BYTES:25165824} # tối đa 24 MB tổng ảnh đọc từ docx
-  # Quản lý ảnh câu hỏi (V30, PR #61). Khóa ký URL HMAC-SHA256 (Base64 >= 32 byte).
+  # Quản lý ảnh câu hỏi (V34, PR #61). Khóa ký URL HMAC-SHA256 (Base64 >= 32 byte).
   question-images:
     url-signing-key: ${QUESTION_IMAGE_URL_KEY:}
     url-ttl: ${QUESTION_IMAGE_URL_TTL:1h}

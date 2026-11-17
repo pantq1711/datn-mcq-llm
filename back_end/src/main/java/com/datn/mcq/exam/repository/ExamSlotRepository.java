@@ -64,8 +64,8 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
      *
      * <p>NV-01 (V31): đề đã xóa ({@code exam.deleted_at}) không tính vào số đề đã dùng và lần dùng gần nhất của xếp hạng mềm.
      *
-     * <p>PR I1–I3 (chặn tạm trước O1/O2): loại câu có hình ({@code question_image}) để câu có hình chưa vào đề khi đầu ra
-     * xem đề/xuất Word chưa hỗ trợ hình.
+     * <p>PR I1–I3 (chặn tạm trước O1/O2): loại câu có hình ({@code question_image}, V34) để câu có hình chưa vào đề khi đầu
+     * ra xem đề/xuất Word chưa hỗ trợ hình.
      */
     @Query(value = """
             WITH RECURSIVE out_of_reach(id) AS (
