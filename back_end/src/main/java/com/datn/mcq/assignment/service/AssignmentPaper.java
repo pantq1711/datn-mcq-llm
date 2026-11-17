@@ -128,6 +128,15 @@ final class AssignmentPaper {
         return list;
     }
 
+    /** Nhãn bốn ý theo thứ tự a-d, mỗi ý một ký tự T/F (cùng dạng {@code attempt_answer.tf_choices}), ví dụ "TFFT". */
+    static String tfLabels(BankItemDto b) {
+        StringBuilder out = new StringBuilder(4);
+        for (StatementDto s : statements(b)) {
+            out.append(s.label() == null ? AttemptGrader.BLANK : s.label().getDbValue());
+        }
+        return out.toString();
+    }
+
     // ---------- chấm ----------
 
     /** Chấm đủ mọi câu (câu không có trong {@code answers} là bỏ trống). {@code answers} đã kiểm dạng. */

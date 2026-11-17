@@ -15,14 +15,16 @@ import java.util.Optional;
 
 /**
  * Truy cập các bảng của V32 bằng JdbcTemplate (không entity JPA): exam_assignment, assignment_class, assignment_item,
- * assignment_attempt, attempt_answer. Chỉ module {@code assignment} gọi. Không đọc bảng của module khác.
+ * assignment_attempt, attempt_answer. Chỉ module {@code assignment} gọi. Không đọc bảng của module khác. Bảng item_stat
+ * (V33) ở {@link ItemStatRepository}.
  */
 @Repository
 public class AssignmentRepository {
 
     public record AssignmentRow(Integer id, Integer examId, Integer createdBy, String publicCode, String title,
                                 int durationMinutes, LocalDateTime closesAt, boolean showScore, boolean showSolutions,
-                                String status, LocalDateTime closedAt, String scoringJson, LocalDateTime createdAt) {
+                                String status, LocalDateTime closedAt, String scoringJson, LocalDateTime createdAt,
+                                LocalDateTime statsComputedAt) {
         public boolean open() {
             return OPEN.equals(status);
         }
@@ -44,7 +46,8 @@ public class AssignmentRepository {
     public static final String CLOSED = "closed";
 
     private static final String ASSIGNMENT_COLUMNS = "id, exam_id, created_by, public_code, title, duration_minutes,"
-            + " closes_at, show_score, show_solutions, status, closed_at, scoring::text AS scoring, created_at";
+            + " closes_at, show_score, show_solutions, status, closed_at, scoring::text AS scoring, created_at,"
+            + " stats_computed_at";
     private static final String ATTEMPT_COLUMNS = "id, assignment_id, class_label, seat_no, started_at, deadline_at,"
             + " submitted_at, score, max_score";
 
@@ -52,7 +55,7 @@ public class AssignmentRepository {
             rs.getInt("exam_id"), rs.getInt("created_by"), rs.getString("public_code"), rs.getString("title"),
             rs.getInt("duration_minutes"), time(rs.getTimestamp("closes_at")), rs.getBoolean("show_score"),
             rs.getBoolean("show_solutions"), rs.getString("status"), time(rs.getTimestamp("closed_at")),
-            rs.getString("scoring"), time(rs.getTimestamp("created_at")));
+            rs.getString("scoring"), time(rs.getTimestamp("created_at")), time(rs.getTimestamp("stats_computed_at")));
 
     private static final RowMapper<AttemptRow> ATTEMPT = (rs, i) -> new AttemptRow(rs.getInt("id"),
             rs.getInt("assignment_id"), rs.getString("class_label"), rs.getInt("seat_no"),

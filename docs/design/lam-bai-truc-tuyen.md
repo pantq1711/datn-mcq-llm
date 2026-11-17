@@ -34,8 +34,8 @@ Chỗ **lệch so với phạm vi đã chốt**, cần An biết:
 
 ## 1. Mô hình dữ liệu
 
-Một migration cho A, một cho B: **số kế tiếp của main lúc làm** (tạm V30 cho A, V31 cho B; đổi khi rebase nếu PR khác merge
-trước). Kiểu thời gian theo quy ước hiện có (`TIMESTAMP`, giờ server).
+Một migration cho A, một cho B: **số kế tiếp của main lúc làm** (thực tế: **V32** cho A, **V33** cho B, vì V30, V31 của PR khác
+merge trước). Kiểu thời gian theo quy ước hiện có (`TIMESTAMP`, giờ server).
 Module backend mới `assignment` (`assignment ──► exam, bank, catalog`; `exam` không biết `assignment`), cập nhật
 `docs/architecture/backend-structure.md`.
 
@@ -157,7 +157,7 @@ enum mới (`AssignmentStatus`, mã cờ hậu kiểm) vào `docs/contract/enums
 | T1 | `POST /api/exams/{examId}/assignments` | `{durationMinutes, closesAt, showScore, consentConfirmed: true}` | 201 bài giao (như T3, chưa có lượt) | mục 2.1 |
 | T2 | `GET /api/exams/{examId}/assignments` | | `[{assignmentId, publicCode, status, durationMinutes, closesAt, showScore, createdAt, startedCount, submittedCount, statsComputedAt}]` | 404 |
 | T3 | `GET /api/exams/{examId}/assignments/{id}` | | bài giao + bảng điểm (dưới) | 404 |
-| T4 | `POST …/{id}/close` | | 200 bài giao; đã đóng thì trả nguyên trạng (idempotent). PR B: tính thống kê trong cùng lời gọi | 404 |
+| T4 | `POST …/{id}/close` | | 200 bài giao; đã đóng thì trả nguyên trạng (idempotent). ~~PR B: tính thống kê trong cùng lời gọi~~ (bỏ, mục 14 ý 1) | 404 |
 | T5 | `DELETE …/{id}/attempts/{attemptId}` | | 204; chỉ khi bài còn mở | 409 `ASSIGNMENT_CLOSED`, 404 |
 | T6 | `DELETE …/{id}` | | 204; xóa dây chuyền lượt làm, câu trả lời, thống kê | 404 |
 | B1 | `GET …/{id}/item-stats` (PR B) | | mục 5.5 | 409 `ASSIGNMENT_OPEN`, 404 |
@@ -251,7 +251,8 @@ chấm ngăn hàng nghìn"), nên các dòng "sai vì dạng" hiếm khi tới s
 
 ### 5.1. Dữ liệu vào
 
-Các lượt **đã nộp** của một bài giao (n). Tính khi đóng (T4, kể cả đóng lười) và khi bấm "Tính lại" (B2): xóa các dòng `item_stat`
+Các lượt **đã nộp** của một bài giao (n). ~~Tính khi đóng (T4, kể cả đóng lười)~~ (thay bằng mục 14 ý 1: tính khi đọc lần đầu
+sau lúc đóng + 2 phút ân hạn) và khi bấm "Tính lại" (B2): xóa các dòng `item_stat`
 của bài giao rồi ghi lại trong một transaction, cập nhật `stats_computed_at`. Vài nghìn dòng, tính trong bộ nhớ, không cần job.
 
 ### 5.2. Công thức
@@ -300,6 +301,9 @@ giao" của trang đề, cột Câu | Dạng | p | D | Lượt chọn (A/B/C/D, 
 gặp) | Cờ; dòng trên bảng ghi n, k và câu nhắc giới hạn mẫu; nút "Tính lại". Không biểu đồ.
 
 ### 5.6. Bảng chéo tiền kiểm × hậu kiểm (SQL, không giao diện)
+
+**Thay bằng mục 14 ý 4 (17/11):** file 11 tự tính lại thống kê từ bài làm gốc; bảng chéo làm bằng Python, không bằng SQL.
+Đoạn dưới giữ để tra cứu.
 
 File `docs/thong-ke/11-hau-kiem.sql`: một câu `SELECT`, mỗi dòng `item_stat` (đủ mẫu) xếp vào bảng 2 × 2
 "có cờ tiền kiểm lúc Giữ" × "có cờ hậu kiểm", tách theo dạng câu; câu nhập từ Word (không qua QC) là hàng riêng. Đi từ
@@ -408,7 +412,8 @@ người duyệt** (đọc diff, chạy thử), không theo ngày công viết t
 |---|---|---|---|---|
 | A-BE | `feature/online-attempt-be` từ `origin/main` | Migration V30; module `assignment`; T1–T6; P1–P4; token băm; chấm ba dạng; `SlidingWindowIpLimiter`; `permitAll` cho `/api/public/**`; DTO công khai; tài liệu API, enum, kiến trúc | 3–4 | 1–1,5 giờ |
 | A-FE | `feature/online-attempt-fe` từ nhánh A-BE | Giáo viên: hộp Giao bài, link + QR, mục Bài đã giao, bảng điểm, đóng, xóa. Học sinh: `/lam-bai/:code`, đồng hồ, nộp, `localStorage`, điểm. `tsc -b` + lint | 2–3 | 1 giờ đọc + 30–45 phút thử trên điện thoại |
-| B | `feature/online-attempt-analysis` từ nhánh A-BE | Migration V31; `item_stat` tính khi đóng và tính lại; B1, B2; bảng phân tích trên trang đề; `docs/thong-ke/11-hau-kiem.sql` + test SQL | 2–3 | 1 giờ |
+| B (backend) | `feature/online-item-stat` từ `origin/main` 3401fbb (sau khi A-BE, A-FE đã merge) | Migration **V33**; `item_stat` tính khi đọc lần đầu sau lúc đóng + 2 phút, và khi tính lại; B1, B2; vô hiệu khi xóa lượt; `docs/thong-ke/11-hau-kiem.sql` tự tính lại từ bài làm gốc + test khớp service (mục 14) | 2–3 | 1 giờ |
+| B (frontend) | PR riêng sau B backend, trước 22/11 | Tab "Phân tích câu" trong drawer bảng điểm (mục 5.5), hiện `sampleNote` khi n < 20 | | |
 
 Tổng: khoảng 7–10 giờ agent, 4–5 giờ người duyệt, chưa kể một buổi thử với lớp thật. A-FE và B cùng cắt từ A-BE và cùng sửa
 trang đề ở frontend nên PR merge sau phải rebase.
@@ -464,3 +469,25 @@ An chốt sau báo cáo `.local/review/07-an-ninh-van-hanh.md` (AN-01..AN-04, VH
    `review` theo Phần: đề, phương án/ý, lựa chọn của em, đáp án đúng (`correctOption` / `label` từng ý / `saAnswer`), số đúng,
    điểm câu và lời giải. Lượt chưa nộp cũng xem được (phần của em để trống). Khi bài còn mở tuyệt đối không có các trường đó
    (test cho cả hai trạng thái). Câu 3 ngày 14/11 ("không hiện đáp án") chỉ còn đúng khi giáo viên không bật tùy chọn này.
+
+## 14. Quyết định ngày 17/11/2026 (PR B backend, V33) – thắng các mục trên khi mâu thuẫn
+
+An duyệt sau bước inspect của PR B.
+
+1. **Lúc tính:** thống kê chỉ có khi bài đã đóng **và** đã qua ân hạn nộp 2 phút tính từ lúc đóng (`closed_at + 2 phút`), vì
+   theo mục 13 ý 5 các lượt có hạn không muộn hơn lúc đóng vẫn nộp được trong ân hạn; tính ngay lúc đóng (T4) sẽ sót các lượt
+   đó. T4 không tính nữa. B1 tính khi đọc lần đầu (dưới khóa hàng bài giao), B2 luôn tính lại. Bài mở: 409 `ASSIGNMENT_OPEN`;
+   còn ân hạn: 409 `STATS_NOT_READY` kèm lúc có thống kê. Cột mới `exam_assignment.stats_computed_at`.
+2. **Lượt được tính:** đã nộp và **không trùng**, dùng đúng một quy tắc "trùng" với bảng điểm T3 (`AttemptRules.duplicateIds`,
+   xét mọi lượt kể cả lượt bỏ dở). Hệ quả chấp nhận được: lượt thật bị loại vì có lượt bỏ dở trùng số; giáo viên xóa lượt bỏ dở
+   thì thống kê tự tính lại. B1 trả `excluded: {duplicate, notSubmitted}`.
+3. **Xóa lượt sau khi đã tính** (mục 13 ý 4): **vô hiệu** trong cùng transaction với T5 hoặc xóa nhiều lượt (xóa dòng
+   `item_stat`, `stats_computed_at = NULL`); lần đọc B1 sau tính lại. Chọn vì đơn giản nhất mà không bao giờ hiện số cũ: không cần
+   cột hay trạng thái "cũ" trong API và giao diện, giáo viên không phải nhớ bấm Tính lại, đường xóa không phải tính nặng.
+4. **Công thức** giữ mục 5.2–5.4; k = round(0,27 × n) tính bằng số nguyên `(27n + 50) / 100`; ngưỡng cờ so bằng số nguyên. n < 20:
+   D vẫn tính và trả về, cờ duy nhất là `insufficient_sample`, B1 có `sampleSufficient = false`, `minSampleSize = 20` và
+   `sampleNote` (giao diện phải hiện). Lớp thật 35–40 em (hai lớp 70–80) sẽ vượt ngưỡng.
+5. **`docs/thong-ke/11-hau-kiem.sql`** tự tính lại n, k, p, D và cờ từ bài làm gốc (không đọc `item_stat`), test
+   `HauKiemSqlTest` bắt khớp service. **Không làm file 12 / bảng chéo bằng SQL:** bảng chéo tiền kiểm × hậu kiểm cho chương 4 làm
+   bằng Python từ `tools/measurement/do_luong/co_qc.py` (ghép qua `bank_item_id`), để không có bản sao thứ ba của logic cờ.
+6. **Chia PR:** nhánh `feature/online-item-stat` chỉ backend; tab "Phân tích câu" là PR frontend riêng ngay sau, trước 22/11.
