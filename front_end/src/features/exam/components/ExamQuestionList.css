@@ -80,18 +80,28 @@
     min-height: 36px;
 }
 
-.exam-explanation-toggle {
+/* Hàng cuối thẻ câu: nút "Xem lời giải" bên trái, kết quả tự kiểm tra bên phải */
+.exam-question-body-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
     margin-top: 12px;
 }
 
-/* Dòng tóm tắt kết quả tự kiểm tra + nút "Chi tiết" ở cuối thẻ câu */
+.exam-explanation-toggle {
+    flex-shrink: 0;
+}
+
+/* Dòng tóm tắt kết quả tự kiểm tra + nút "Chi tiết" (chiếm phần còn lại của hàng, dồn phải) */
 .exam-question-qc-summary {
     display: flex;
+    flex: 1 1 auto;
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
     gap: 4px 8px;
-    margin-top: 12px;
+    min-width: 0;
 }
 
 .exam-question-qc-summary-text {

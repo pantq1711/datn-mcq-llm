@@ -107,9 +107,12 @@ export const QcVersionCard: FC<Props> = ({ version, isLast }) => {
                     </div>
                 </div>
 
+                {/* Các bước tự kiểm tra bên trái, khung chi tiết (đáp án, chỗ đã sửa) bên phải (thứ tự đặt bằng CSS order) */}
+                <div className="qc-trace-modal__version-body">
                 {(answer || (version.changedFields && version.changedFields.length > 0)) && (
                     <div className="qc-trace-modal__step-details">
-                        {answer && <div>{answer}</div>}
+                        {/* Đáp án của phiên bản (Đáp án B / Đáp số … / nhãn Đúng/Sai) in đậm cho dễ thấy */}
+                        {answer && <div className="qc-trace-modal__step-answer">{answer}</div>}
                         {version.changedFields && version.changedFields.length > 0 && (
                             <div>
                                 Đã sửa: {describeChangedFields(version.changedFields)}
@@ -194,6 +197,7 @@ export const QcVersionCard: FC<Props> = ({ version, isLast }) => {
                             </QcRow>
                         );
                     })()}
+                </div>
                 </div>
 
                 {version.reviewReasons && version.reviewReasons.length > 0 && (

@@ -1,25 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FC } from "react";
-import {
-    Alert,
-    Button,
-    Collapse,
-    Empty,
-    Modal,
-    Space,
-    Spin,
-    Tag,
-    Tooltip,
-    Typography,
-} from "antd";
-import {
-    ClockCircleOutlined,
-    CloseOutlined,
-    ExclamationCircleOutlined,
-    HistoryOutlined,
-    NodeIndexOutlined,
-    UserOutlined,
-} from "@ant-design/icons";
+import { Alert, Collapse, Empty, Modal, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import { ClockCircleOutlined, ExclamationCircleOutlined, HistoryOutlined, NodeIndexOutlined, UserOutlined } from "@ant-design/icons";
 
 import { getQcTrace } from "../services/examApi";
 import type { QcLineage, QcTraceResponse } from "../types/qcTrace.types";
@@ -116,7 +98,7 @@ export const QcTraceModal: FC<Props> = ({
                 const errorMessage =
                     apiError?.error ??
                     apiError?.message ??
-                    "Không tải được kết quả tự kiểm tra.";
+                    "Không tải được kết quả kiểm tra tự động.";
 
                 if (active) {
                     setError(errorMessage);
@@ -139,10 +121,6 @@ export const QcTraceModal: FC<Props> = ({
     const actions = trace?.actions ?? [];
     const isEmpty = lineages.length === 0 && actions.length === 0;
 
-    // Chỉ mở sẵn lần sinh chứa phiên bản đang dùng; không có thì mở lần cuối
-    const currentIndex = lineages.findIndex((l) => l.versions.some((v) => v.current));
-    const defaultOpen = String(currentIndex >= 0 ? currentIndex : lineages.length - 1);
-
     const slotState = trace ? describeSlotState(trace.state) : null;
 
     return (
@@ -161,41 +139,20 @@ export const QcTraceModal: FC<Props> = ({
 
                     <div className="qc-trace-modal__title-content">
                         <Text className="qc-trace-modal__title-text">
-                            Kết quả tự kiểm tra
-                        </Text>
-
-                        <Text className="qc-trace-modal__subtitle">
-                            Các lần soạn, phiên bản, từng bước tự kiểm tra và thao tác của câu này
+                            Kết quả kiểm tra tự động
                         </Text>
                     </div>
                 </div>
             }
-            footer={
-                <div className="qc-trace-modal__footer">
-                    <Text
-                        type="secondary"
-                        className="qc-trace-modal__footer-note"
-                    >
-                        {loading
-                            ? "Đang tải dữ liệu..."
-                            : `${lineages.length} lần soạn · ${actions.length} thao tác`}
-                    </Text>
-
-                    <Button
-                        icon={<CloseOutlined />}
-                        onClick={onClose}
-                    >
-                        Đóng
-                    </Button>
-                </div>
-            }
+            // Số lần soạn và số thao tác hiện bằng thẻ ở đầu mục "Các lần soạn", không lặp ở chân hộp
+            footer={null}
         >
             <div className="qc-trace-modal__body">
                 {trace && (
                     <div className="qc-trace-modal__context">
                         <div className="qc-trace-modal__context-item">
                             <span className="qc-trace-modal__context-label">Câu</span>
-                            <Text strong>
+                            <Text className="qc-trace-modal__context-value">
                                 Phần {trace.part} – Câu {questionNo ?? trace.slotNo}
                                 {trace.topic ? ` · ${trace.topic}` : ""}
                             </Text>
@@ -217,9 +174,9 @@ export const QcTraceModal: FC<Props> = ({
 
                         <div className="qc-trace-modal__context-item">
                             <span className="qc-trace-modal__context-label">Lần thử</span>
-                            <Text strong>
+                            <Text className="qc-trace-modal__context-value">
                                 {trace.attempts ?? 0}
-                                {trace.solverRetries ? ` · tự kiểm tra lại ${trace.solverRetries} lần` : ""}
+                                {trace.solverRetries ? ` · kiểm tra tự động lại ${trace.solverRetries} lần` : ""}
                             </Text>
                         </div>
                     </div>
@@ -246,7 +203,7 @@ export const QcTraceModal: FC<Props> = ({
                         <Spin size="large" />
 
                         <Text type="secondary">
-                            Đang tải kết quả tự kiểm tra...
+                            Đang tải kết quả kiểm tra tự động...
                         </Text>
                     </div>
                 ) : error ? (
@@ -255,7 +212,7 @@ export const QcTraceModal: FC<Props> = ({
                         type="error"
                         showIcon
                         icon={<ExclamationCircleOutlined />}
-                        message="Không tải được kết quả tự kiểm tra"
+                        message="Không tải được kết quả kiểm tra tự động"
                         description={error}
                     />
                 ) : isEmpty ? (
@@ -268,7 +225,7 @@ export const QcTraceModal: FC<Props> = ({
                                 size={4}
                             >
                                 <Text strong>
-                                    Chưa có kết quả tự kiểm tra
+                                    Chưa có kết quả kiểm tra tự động
                                 </Text>
 
                                 <Text type="secondary">
@@ -281,21 +238,28 @@ export const QcTraceModal: FC<Props> = ({
                     <>
                         {lineages.length > 0 && (
                             <div className="qc-trace-modal__timeline">
-                                <div className="qc-trace-modal__section-heading">
-                                    <div>
+                                {/* Hàng tiêu đề (chữ + hai thẻ) và dòng chú thích tách riêng, chú thích rộng hết khung */}
+                                <div className="qc-trace-modal__section-header">
+                                    <div className="qc-trace-modal__section-heading">
                                         <Text strong>Các lần soạn</Text>
-                                        <Paragraph type="secondary">
-                                            Mỗi lần soạn gồm câu hệ thống soạn ra, rồi các bản thầy/cô sửa, kèm kết quả từng bước tự kiểm tra.
-                                        </Paragraph>
-                                    </div>
 
-                                    <Tag color="blue" icon={<NodeIndexOutlined />}>
-                                        {lineages.length} lần soạn
-                                    </Tag>
+                                        <div className="qc-trace-modal__section-tags">
+                                            <Tag color="blue" icon={<NodeIndexOutlined />}>
+                                                {lineages.length} lần soạn
+                                            </Tag>
+                                            <Tag color="cyan" icon={<UserOutlined />}>
+                                                {actions.length} thao tác
+                                            </Tag>
+                                        </div>
+                                    </div>
+                                    <Paragraph type="secondary" className="qc-trace-modal__section-desc">
+                                        Mỗi lần soạn gồm câu hệ thống soạn ra và các bản thầy/cô sửa kèm kết quả từng bước kiểm tra tự động.
+                                    </Paragraph>
                                 </div>
 
                                 <Collapse
-                                    defaultActiveKey={[defaultOpen]}
+                                    // Mọi lần soạn thu gọn khi mở hộp; giáo viên bấm tiêu đề lần soạn để xem chi tiết
+                                    defaultActiveKey={[]}
                                     items={lineages.map((lineage, index) => ({
                                         key: String(index),
                                         label: lineageHeader(lineage, index),
@@ -317,11 +281,13 @@ export const QcTraceModal: FC<Props> = ({
 
                         {actions.length > 0 && (
                             <div className="qc-trace-modal__timeline">
-                                <div className="qc-trace-modal__section-heading">
-                                    <div>
+                                <div className="qc-trace-modal__section-header">
+                                    <div className="qc-trace-modal__section-heading">
                                         <Text strong>Thao tác của giáo viên</Text>
-                                        <Paragraph type="secondary">Sửa, Đổi, Lưu vào ngân hàng theo thứ tự thời gian.</Paragraph>
                                     </div>
+                                    <Paragraph type="secondary" className="qc-trace-modal__section-desc">
+                                        Sửa, Đổi, Lưu vào ngân hàng theo thứ tự thời gian.
+                                    </Paragraph>
                                 </div>
 
                                 <div className="qc-trace-modal__steps">
