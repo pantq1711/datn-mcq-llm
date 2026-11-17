@@ -29,6 +29,7 @@ __pycache__/
 *.py[cod]
 data/private/
 back_end/.test-selection
+back_end/.test-db.properties
 
 # Công cụ nhập bộ câu hỏi từ Word (W2-1)
 tools/bank-import/target/

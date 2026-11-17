@@ -1009,15 +1009,25 @@ PUT /api/exams/12/slots/101/question
 GET /api/exams/12/export/docx                    → 200, file MT2610231200001.docx (Content-Disposition: attachment)
 GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đối tượng MathType; header X-Equation-Kept-Omml: 0, X-Equation-Scaled: 0
 GET /api/exams/12/export/docx?equation=abc       → 400
+GET /api/exams/12/export/docx?examCode=205&durationMinutes=45  → 200, mã đề 205, thời gian 45 phút
+GET /api/exams/12/export/docx?content=exam       → 200, chỉ đề (dừng ở dòng HẾT)
+GET /api/exams/12/export/docx?examCode=99        → 400
 ```
 
-- **Khuôn đề kiểm tra THCS (4/11, theo mẫu của một trường):** tham số tùy chọn `durationMinutes` (số nguyên 5–180, ngoài khoảng
-  hoặc không phải số là 400) điền "(Thời gian làm bài N phút không kể thời gian giao đề)"; không truyền thì "……". File khổ A4
+- **Tham số tùy chọn mới (16/11, NV-43/NV-44):** không truyền thì file như trước.
+  - `examCode`: mã đề, số nguyên 100–999 (chữ số ASCII; ngoài khoảng hoặc không phải số là 400, thông báo nêu khoảng
+    100–999); không truyền hoặc trống là `101`. In ở ô mã đề của đầu đề, tiêu đề "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ <mã>" và
+    chân trang hai section ("Mã đề <mã>", "Đáp án mã đề <mã>"). Tên file (`Content-Disposition`) vẫn theo mã hệ thống `MT…`.
+  - `content`: `all` (mặc định: đề, rồi section đáp án và lời giải) hoặc `exam` (không phân biệt hoa thường; giá trị khác
+    400). `exam`: file dừng ở dòng "------ HẾT ------", không có trang đáp án, ghi chú thang điểm và lời giải; một section
+    duy nhất (cùng khổ, lề như section đề), chân trang "Mã đề <mã>", số trang từ 1, không đánh số lại.
+- **Khuôn đề kiểm tra THCS (4/11, theo mẫu của một trường):** tham số tùy chọn `durationMinutes` (số nguyên 5–180, chỉ chữ số
+  ASCII từ 16/11; ngoài khoảng hoặc không phải số là 400) điền "(Thời gian làm bài N phút không kể thời gian giao đề)"; không truyền thì "……". File khổ A4
   (lề trái 2 cm = 1134 twips, phải/trên/dưới 1 cm = 567, đầu trang 283, chân trang 567; hằng số ở `ExamPage`), Times New Roman 12
   cho mọi kiểu kể cả tiêu đề (đậm, đen), giãn dòng 1,15, cách đoạn ≤ 3 pt. Hai section A4 cùng lề (bề rộng chữ 10205 twips =
   510,25 pt, bộ ngắt dòng MathType đọc đúng số này): section đề và section đáp án (ngắt section trước "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM",
   đánh số trang lại từ 1). Chân trang cả hai section: đường kẻ trên, chữ trái "Mã đề 101" (section đáp án: "Đáp án mã đề
-  101"), tab phải tại lề phải rồi "Trang x/y" (trường PAGE/SECTIONPAGES, y chỉ tính trang của section). Không còn dòng "(Đề có N
+  101"; mã theo `examCode`), tab phải tại lề phải rồi "Trang x/y" (trường PAGE/SECTIONPAGES, y chỉ tính trang của section). Không còn dòng "(Đề có N
   trang)". Đầu mỗi phần là tiêu đề đậm in hoa kèm tổng điểm = điểm một câu × số câu theo `app.exam.scoring` (phần II: điểm đúng cả
   4 ý), ví dụ "PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN (3,0 điểm)", rồi một dòng hướng dẫn nghiêng ("Học sinh chọn một đáp án đúng duy
   nhất từ câu 1 đến câu N." / "Học sinh trả lời Đúng (Đ) hoặc Sai (S) cho từng ý a), b), c), d) trong mỗi câu." / "Học sinh viết
@@ -1033,25 +1043,30 @@ GET /api/exams/12/export/docx?equation=abc       → 400
 - **Ghi chú thang điểm (16/11, NV-41):** ngay dưới "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM" (không in trên đề của học sinh) có dòng "Tổng điểm
   phần trắc nghiệm: X điểm." (X như `totalScore` của mục 7.4, ví dụ "7,0"); X nhỏ hơn 10 thì thêm dòng "Phần tự luận (nếu
   có) do giáo viên bổ sung." Thang điểm không đổi.
-- **Xác nhận trước khi xuất (giao diện, 16/11, NV-40/NV-41):** đề còn chỗ chưa soạn được, chỗ đang soạn, câu "cần xem kỹ"
-  chưa lưu, hoặc `totalScore` khác 10 thì giao diện hỏi lại (liệt kê số lượng và tổng điểm, nút "Vẫn xuất" / "Quay lại");
-  không chặn. Còn chỗ đang soạn vẫn xuất được sau khi xác nhận (file ghi "[Chưa có câu – đang sinh]" ở chỗ đó). Backend không
-  đổi: API xuất không kiểm các điều kiện này.
+- **Cảnh báo trước khi xuất (giao diện, 16/11, NV-40/NV-41):** đề còn chỗ chưa soạn được, chỗ đang soạn, câu "cần xem kỹ"
+  chưa lưu, hoặc `totalScore` khác 10 thì hộp xuất Word (mục Frontend dưới) hiện khung cảnh báo "Xuất file Word khi đề
+  chưa hoàn chỉnh?" liệt kê số lượng và tổng điểm; không chặn. Còn chỗ đang soạn vẫn xuất được (file ghi "[Chưa có câu –
+  đang sinh]" ở chỗ đó). Backend không đổi: API xuất không kiểm các điều kiện này.
 - **Đầu đề (theo mẫu trường, 4/11):** bảng 2 cột không viền (cột 4194 : 6011 twips). Cột trái, đậm, căn giữa: "UBND PHƯỜNG
   ……………" và "TRƯỜNG THCS ……………". Cột phải, căn giữa: "Thứ..... ngày........ tháng..... năm <năm hiện tại>" (nghiêng), "ĐỀ KIỂM
-  TRA <tên kì in hoa>" (đậm; tên ma trận của đề, bỏ phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8" thành "GIỮA KÌ I"; đề sinh
-  theo bài hoặc đề cũ không có ma trận dùng tên đề), "NĂM HỌC <y> - <y+1>" (đậm; y = năm hiện tại nếu tháng ≥ 8, ngược lại năm
+  TRA <tên kì in hoa>" (đậm; từ 16/11 (NV-42) là tên đề giáo viên nhập cho mọi loại đề, trước đó đề theo ma trận dùng tên ma
+  trận; tên đề bỏ trống lúc tạo thì bằng tên ma trận nên đề cũ in như cũ. Bỏ hậu tố "(bản sao)" (kể cả lặp, không phân biệt
+  hoa thường) rồi phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8 (bản sao)" thành "GIỮA KÌ I"; bỏ hết thì giữ nguyên tên.
+  Tên đã mở đầu bằng "Kiểm tra" hoặc "Đề kiểm tra" (không phân biệt hoa thường) thì không lặp chữ: "Kiểm tra giữa kì I" in
+  "ĐỀ KIỂM TRA GIỮA KÌ I"),
+  "NĂM HỌC <y> - <y+1>" (đậm; y = năm hiện tại nếu tháng ≥ 8, ngược lại năm
   trước), "Môn: <môn>, Lớp: <khối>." (đậm; thiếu thì "……") và "(Thời gian làm bài <N> phút không kể thời gian giao đề)" (nghiêng).
   Dưới đó là bảng có viền 3 cột bằng nhau, toàn chiều rộng: hàng tiêu đề đậm căn giữa "Mã đề | Điểm bài thi | Mã phách", hàng 2
   cao 1440 twips (như mẫu) với mã đề đậm căn giữa ở ô 1, hai ô còn lại để trống. Không còn dòng "Họ và tên/Lớp" và "(Đề có N
-  trang)". Mã đề in ra là số 3 chữ số, 101 cho đề gốc (chưa có chức năng trộn mã đề); **mã hệ thống `MT…` không in ra nội dung
-  file**, chỉ còn ở tên
+  trang)". Mã đề in ra là số 3 chữ số, mặc định 101 cho đề gốc, đổi bằng `examCode` (chưa có chức năng trộn mã đề); **mã hệ
+  thống `MT…` không in ra nội dung file**, chỉ còn ở tên
   file tải về (`Content-Disposition`). Đầu đề viết bằng khối openxml thô do `ExamMarkdownBuilder` chèn (như ngắt trang) vì
   Markdown của pandoc không bỏ được viền bảng; chữ trong đó được thoát XML.
 - Bản cơ bản: PHẦN I/II/III (PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN, PHẦN II. TRẮC NGHIỆM ĐÚNG/SAI,
   PHẦN III. TRẮC NGHIỆM TRẢ LỜI NGẮN); "Câu k." đánh số lại từ 1 trong từng
   phần; `mcq` các phương án "A. ..." xếp cột bằng tab; `tf` các ý "a) ..."; `sa` chỉ có đề. Sau một ngắt section là "ĐÁP ÁN"
-  (`mcq` chữ cái, `tf` chuỗi Đ/S theo thứ tự a–d như `ĐSĐS`, `sa` đáp số) rồi "LỜI GIẢI" từng câu.
+  (bảng từng phần như mô tả ở trên: `mcq` chữ cái, `tf` bảng "Câu | Ý | Đáp án" từng ý, `sa` đáp số) rồi "LỜI GIẢI" từng
+  câu; `content=exam` thì không có hai phần này.
 - Đáp án đúng trong phần đề CHƯA đánh dấu (tùy chọn gạch chân cho phần mềm trộn đề làm sau).
 - Chỉ xuất nội dung các chỗ đã có câu (`ready`, `kept`, `edited`); chỗ `failed` ghi "[Chưa có câu – cần sinh lại]",
   chỗ đang sinh ghi "[Chưa có câu – đang sinh]"; ở ĐÁP ÁN và LỜI GIẢI các chỗ này ghi "—". Xuất đề cũng đối soát như
@@ -1107,9 +1122,13 @@ GET /api/exams/12/export/docx?equation=abc       → 400
     trong cùng thư mục tạm và cùng lượt giữ Semaphore của pandoc.
   - Chi phí (đo 01/11 trên 4 bộ đề thật khoảng 40 câu): file nặng khoảng 1,5–2 MB (Equation khoảng 20 KB) do ảnh xem trước
     600 dpi; thời gian xuất tăng khoảng 2–3 giây với đề nhiều công thức, trong thời gian đó vẫn giữ Semaphore.
-  - Frontend (trang đề): nút "Xuất file Word" có mũi tên mở menu hai mục: "Công thức Word (Equation)" (mặc định, bấm nút
-    chính cũng xuất mục này) và "Công thức MathType (thử nghiệm)" (gọi `?equation=mathtype`, tên file tải về
-    `<tên đề>-mathtype.docx`). Nút khóa khi đề đang soạn. Sau khi tải: `X-Equation-Kept-Omml > 0` hiện "N công thức không
+  - Frontend (trang đề, 16/11, `ExportWordDialog`): bấm "Xuất file Word" luôn mở hộp (không còn menu mũi tên): thời gian
+    làm bài (chọn sẵn 90; nút 45 / 60 / 90 hoặc nhập 5–180; xóa trống thì không gửi, file in "……"), mã đề (mặc định 101, gửi `examCode` khi
+    khác 101), tên file (mặc định "<tên đề> – <dd-mm-yyyy>", đuôi `.docx` tự thêm), công thức "MathType (mặc định)" (gửi
+    `?equation=mathtype`) / "Công thức Word (Equation)", ô "Chỉ đề (không kèm đáp án)" (gửi `content=exam`), khung cảnh báo
+    đề chưa hoàn chỉnh (mục trên); nút "Tải về" / "Quay lại". Trong lúc tạo, nút chính ghi "Đang tạo file Word… (khoảng 10
+    giây)"; xong báo "Đã tải file Word về máy." và đóng hộp. Đề còn câu đang soạn: cạnh nút có dòng chữ thường trực (không
+    khóa nút). Sau khi tải: `X-Equation-Kept-Omml > 0` hiện "N công thức không
     chuyển được sang MathType, vẫn ở dạng công thức Word"; `X-Equation-Scaled > 0` hiện "N công thức dài đã được thu nhỏ
     cho vừa trang"; `X-Equation-Failed > 0` hiện "N công thức không chuyển được, ở câu 8 (phần I), …". Nên ghi rõ "Chỉ
     chọn MathType nếu máy đã cài MathType" khi hướng dẫn giáo viên.
@@ -1582,3 +1601,52 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
 - Trong ngân hàng: `origin.type = "import"`, lọc bằng `GET /api/bank-items?origin=import`. Câu không có lời giải có
   `explanation = null`; khi xuất đề ra Word, phần LỜI GIẢI bỏ câu đó.
 - Hạn chế: câu tf nhận chung một mức cho cả 4 ý (file chỉ ghi một mức cho câu).
+
+## 11. Bài giao trực tuyến (V32, thiết kế `docs/design/lam-bai-truc-tuyen.md`, quyết định 14/11 và 16/11)
+
+### 11.1. Giáo viên (`TEACHER`, chỉ chủ đề; đề của người khác hoặc đã xóa: 404)
+
+- `POST /api/exams/{examId}/assignments` thân `{durationMinutes (5–180), closesAt (ISO, sau lúc giao ≥ durationMinutes, ≤ 30
+  ngày), showScore, showSolutions (mặc định false), consentConfirmed: true, classes: [{classLabel, size}]}` → 201 bài giao.
+  `classes`: 1–10 lớp, nhãn chuẩn hóa (bỏ khoảng trắng, viết hoa; chữ không dấu, số, `/ . -`; 1–10 ký tự), sĩ số 1–99, không
+  trùng. Lỗi: 400 `INVALID_REQUEST`; 409 `ASSIGN_NOT_ALL_KEPT` (còn chỗ chưa Giữ/Sửa, `errors: ["Phần I, Câu 2", …]`),
+  `ASSIGN_SA_KEY_UNSUPPORTED` (đáp số Trả lời ngắn không phải số nguyên/thập phân, `errors` như trên).
+- Bài giao: `{assignmentId, publicCode, title, status (open|closed), durationMinutes, closesAt, closedAt?, showScore,
+  showSolutions, createdAt, classes: [{classLabel, size}], questionCount, maxScore, maxAttempts (2 × tổng sĩ số), startedCount,
+  submittedCount, duplicateCount, attempts?}`. Link học sinh do frontend ghép: `<origin>/lam-bai/<publicCode>`.
+- `GET /api/exams/{examId}/assignments` → danh sách bài giao (không có `attempts`), mới nhất trước.
+- `GET /api/exams/{examId}/assignments/{id}` → bài giao kèm `attempts: [{attemptId, classLabel, seatNo, state (in_progress |
+  submitted | expired), duplicate, startedAt, submittedAt?, score?, score10?, parts?: [{part, correct, total, score}]}]`, theo
+  lớp (thứ tự khai) rồi số thứ tự. Phần II đếm theo ý. `duplicate = true`: có lượt khác cùng lớp + số thứ tự (cả hai lượt đều
+  được giữ và đánh dấu, tính lúc đọc).
+- `POST …/{id}/close` → 200 bài giao; đã đóng thì trả nguyên trạng. Lượt chưa nộp không nộp được nữa.
+- `DELETE …/{id}/attempts/{attemptId}` → 204; 404. Ở mọi trạng thái, kể cả sau khi đóng (dữ liệu giữ tới khi giáo viên xóa).
+- `POST …/{id}/attempts/bulk-delete` thân `{attemptIds: [..]}` (1–500) → 200 `{deleted}`; id không thuộc bài giao bị bỏ qua.
+  Ở mọi trạng thái; 400 `INVALID_REQUEST`.
+- `DELETE …/{id}` → 204, xóa bài giao cùng mọi lượt làm và câu trả lời, ở mọi trạng thái.
+- `DELETE /api/exams/{examId}` khi đề còn bài giao: 409 `EXAM_HAS_ASSIGNMENTS`, không đổi gì.
+
+### 11.2. Học sinh (không đăng nhập; phản hồi có `Cache-Control: no-store`)
+
+Token lượt làm gửi ở header `X-Attempt-Token`, không bao giờ trong URL.
+
+- `GET /api/public/assignments/{code}` → `{title, questionCount, durationMinutes, closesAt, status, showScore, showSolutions,
+  classes: [{classLabel, size}]}`; không câu hỏi. 404 khi mã sai. Không giới hạn tần suất.
+- `POST /api/public/assignments/{code}/attempts` thân `{classLabel, seatNo}` → 201 lượt làm kèm `attemptToken` (chỉ trả một
+  lần). Lớp phải thuộc bài giao, số thứ tự trong 1..sĩ số (400 `INVALID_REQUEST`). Trùng lớp + số thứ tự vẫn được tạo
+  (`duplicateSeat: true`). Lỗi: 404; 409 `ASSIGNMENT_CLOSED`, `ASSIGNMENT_FULL`; 429 `TOO_MANY_REQUESTS` (theo IP).
+- Lượt làm (P2, P3): `{attemptToken?, classLabel, seatNo, duplicateSeat, startedAt, deadlineAt, serverNow, remainingSeconds,
+  submitted, submittedAt?, resultsReleased, resultsAt, parts?, result?, review?}`. `parts` (chỉ khi còn nộp được):
+  `[{part, items: [{slotId, number, questionType, questionText, options? {A..D}, statements? [{key, text}]}]}]`, không đáp án.
+  `resultsReleased`: bài đã đóng và qua `closed_at + 2 phút`; trước đó không có `result` và `review`. `result` (khi
+  `showScore`, lượt đã nộp): `{score, maxScore, score10, parts}`. `review` (khi `showSolutions`): `[{part, items: [{slotId,
+  number, questionType, questionText, options?, yourChoice?, correctOption?, statements? [{key, text, label, yourAnswer?,
+  correct}], yourText?, saAnswer?, correctCount, score, explanation?}]}]`.
+- `GET /api/public/attempts/current` → lượt làm. 401 `ATTEMPT_TOKEN_INVALID`; 429 (theo lượt).
+- `POST /api/public/attempts/current/submit` thân `{answers: [{slotId, choice}, {slotId, tf: {"a": "T", "b": "F"}}, {slotId,
+  text}]}` → 200 `{submittedAt, resultsAt}` (không có điểm). Câu thiếu là bỏ trống. Lỗi: 400 `INVALID_REQUEST` (nhiều phần tử
+  hơn số câu, `slotId` lạ hoặc lặp, sai dạng câu, ngoài A–D / a–d / T,F, đáp số quá 20 ký tự; không ghi gì); 401; 409
+  `ATTEMPT_ALREADY_SUBMITTED`, `ASSIGNMENT_CLOSED` (giáo viên đóng trước hạn của lượt), `ATTEMPT_EXPIRED` (quá hạn + 2 phút);
+  429 (theo lượt).
+- Hạn mức mặc định (biến môi trường `APP_PUBLIC_LIMIT_*`): tạo lượt 200/phút mỗi IP; mở lại 30/phút và nộp 20/phút mỗi lượt,
+  hai bộ đếm riêng. Bộ đếm trong bộ nhớ một tiến trình.

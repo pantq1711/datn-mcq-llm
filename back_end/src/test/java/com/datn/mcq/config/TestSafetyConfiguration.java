@@ -29,6 +29,16 @@ import java.sql.SQLException;
 public class TestSafetyConfiguration {
 
     public static final String REQUIRED_TEST_DB = "datn_mcq_test";
+    /** DB tạm riêng của một nhánh (đặt qua back_end/.test-db.properties); không bao giờ khớp datn_mcq, _e2e, _d2. */
+    private static final java.util.regex.Pattern BRANCH_TEST_DB = java.util.regex.Pattern.compile("datn_mcq_[a-z0-9]+_test");
+
+    static boolean isTestDatabase(String catalog) {
+        if (catalog == null) {
+            return false;
+        }
+        String name = catalog.trim().toLowerCase(java.util.Locale.ROOT);
+        return REQUIRED_TEST_DB.equals(name) || BRANCH_TEST_DB.matcher(name).matches();
+    }
 
     @Bean
     public static TestDatabaseGuard testDatabaseGuard() {
@@ -91,7 +101,7 @@ public class TestSafetyConfiguration {
             try (Connection conn = dataSource.getConnection()) {
                 String catalog = conn.getCatalog();
                 String url = conn.getMetaData() != null ? conn.getMetaData().getURL() : "unknown";
-                if (catalog == null || !REQUIRED_TEST_DB.equalsIgnoreCase(catalog.trim())) {
+                if (!isTestDatabase(catalog)) {
                     String errorMsg = String.format(
                             "\n========================================================================================\n" +
                             "FATAL DATABASE GUARD FAILURE [%s]:\n" +

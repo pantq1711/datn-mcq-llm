@@ -34,6 +34,7 @@ Java: đặt tên hằng kiểu `ZERO_SHOT`, `FEW_SHOT_STRUCTURED`... và có b�
 | `QuestionOrigin` (V26) | `generated_question.origin` |
 | `ImportBatchStatus` (V26) | `import_batch.status` (chưa có enum Java, hằng ở `ImportBatch.STATUS_*`) |
 | `ExamChallenge` (V27, 12/11) | `exam.challenge` |
+| `AssignmentStatus` (V32, 16/11) | `exam_assignment.status` (chưa có enum Java, hằng ở `AssignmentRepository.OPEN/CLOSED`) |
 | `TeacherRequest` (V28, PR B 12/11) | phần tử của mảng `request_codes TEXT[]` ở `exam_generation_context`, `exam_slot_action`, `generation_job`, `generated_question` |
 | `RequestVerdict` (V28, PR B 12/11; V29 thêm `unchecked`) | `quality_check_result.request_verdict` (chỉ dòng `answer_check`) |
 
@@ -288,6 +289,17 @@ API nhận không phân biệt hoa thường, gộp mã trùng; lưu theo thứ 
 
 NULL: câu không có yêu cầu. Với Solver v5 (một lượt), NULL cả khi Solver không trả `request_check` hợp lệ; từ v6 trường hợp đó
 là `unchecked`.
+
+### `AssignmentStatus` (V32, bài giao trực tuyến, 16/11)
+
+| Giá trị trong DB | Ý nghĩa |
+|---|---|
+| `open` | Học sinh bắt đầu và nộp được |
+| `closed` | Giáo viên bấm Đóng (`closed_at` = lúc bấm) hoặc đã tới `closes_at` (đóng lười khi có API đọc bài giao, `closed_at = closes_at`) |
+
+Trạng thái của một lượt làm KHÔNG lưu DB, tính lúc đọc (`AttemptRules.state`): `in_progress` (chưa nộp, còn nộp được),
+`submitted`, `expired` (chưa nộp, hết hạn + ân hạn 2 phút, hoặc giáo viên đóng bài trước hạn của lượt). Cờ "trùng" của lượt
+(cùng lớp + số thứ tự với lượt khác của bài giao) cũng tính lúc đọc.
 
 ## 3. Quy tắc đi kèm (cần nhớ khi code, DB không tự đảm bảo hết)
 

@@ -24,8 +24,9 @@ import java.util.Map;
  * Xuất đề ra Word (ngày 23/10, bản cơ bản): dữ liệu xem đề ở chế độ giáo viên (đã đối soát) → Markdown
  * ({@link ExamMarkdownBuilder}) → docx ({@link PandocRunner}). Không giữ transaction trong lúc chạy pandoc.
  *
- * <p>Từ 2/11 file có đầu đề ({@link ExamHeader}): tên kì, môn và khối lấy từ ma trận của đề; mã đề in ra là 101 (đề gốc),
- * mã hệ thống MT… chỉ còn ở tên file. Từ 4/11 file theo khuôn đề kiểm tra THCS (A4, bảng đáp án, điểm từ
+ * <p>Từ 2/11 file có đầu đề ({@link ExamHeader}): môn và khối lấy từ ma trận của đề, tên kì từ 16/11 theo tên đề; mã đề
+ * in ra mặc định là 101 (đề gốc, từ 16/11 đổi được bằng tham số), mã hệ thống MT… chỉ còn ở tên file. Từ 4/11 file theo
+ * khuôn đề kiểm tra THCS (A4, bảng đáp án, điểm từ
  * {@link ExamScoringProperties}); xem {@link ExamMarkdownBuilder}.
  *
  * <p>Công thức là Equation của Word hoặc đối tượng MathType ({@link EquationFormat}).
@@ -103,12 +104,23 @@ public class ExamExportService {
      *                        kiểm khoảng hợp lệ bằng {@link ExamHeader#parseDuration}.
      */
     public DocxFile docx(Integer examId, Integer actorId, EquationFormat format, Integer durationMinutes) {
+        return docx(examId, actorId, format, durationMinutes, ExamHeader.ORIGINAL_CODE, ExportContent.ALL);
+    }
+
+    /**
+     * @param examCode mã đề in ra (16/11, NV-43; 100–999, nơi gọi kiểm bằng {@link ExamHeader#parseExamCode}); null là 101
+     * @param content  {@link ExportContent#EXAM} thì file dừng ở dòng HẾT (NV-44); null là {@link ExportContent#ALL}
+     */
+    public DocxFile docx(Integer examId, Integer actorId, EquationFormat format, Integer durationMinutes, String examCode,
+                         ExportContent content) {
         ExamViewDto view = viewService.view(examId, actorId);
-        String markdown = ExamMarkdownBuilder.build(view, header(view, durationMinutes), scoring);
+        ExamHeader header = header(view, durationMinutes).withExamCode(examCode);
+        ExamDocxOptions options = new ExamDocxOptions(header.examCode(), content);
+        String markdown = ExamMarkdownBuilder.build(view, header, scoring, options.content());
         PandocRunner.Docx docx = exportMetrics == null
-                ? pandocRunner.markdownToDocx(markdown, format)
+                ? pandocRunner.markdownToDocx(markdown, format, options)
                 : exportMetrics.measure(format == null ? "omml" : format.name().toLowerCase(java.util.Locale.ROOT),
-                        () -> pandocRunner.markdownToDocx(markdown, format));
+                        () -> pandocRunner.markdownToDocx(markdown, format, options));
         List<String> failedAt = List.of();
         if (docx.equationsFailed() != null && docx.equationsFailed() > 0) {
             failedAt = logFailed(view, docx.equationsFailed(), docx.failedLatex());
@@ -189,8 +201,10 @@ public class ExamExportService {
     }
 
     /**
-     * Đầu đề của đề đã qua kiểm tra chủ sở hữu. Đề tạo từ ma trận dùng tên ma trận làm tên kì; đề sinh theo bài (ma trận ẩn)
-     * hoặc đề cũ không có ma trận dùng tên đề. Ma trận chưa có thời gian làm bài nên thời gian lấy từ tham số của API.
+     * Đầu đề của đề đã qua kiểm tra chủ sở hữu. Tên kì là tên đề cho mọi loại đề (16/11, NV-42; trước đó đề tạo từ ma trận
+     * dùng tên ma trận). Tên đề mặc định là tên ma trận nên đề không đặt tên in như cũ; hậu tố "(bản sao)" và "– Môn Khối"
+     * được bỏ ({@link ExamHeader#of}). Môn và khối lấy từ ma trận (kể cả ma trận ẩn của đề sinh theo bài). Ma trận chưa có
+     * thời gian làm bài nên thời gian lấy từ tham số của API. Mã đề mặc định 101.
      */
     ExamHeader header(ExamViewDto view, Integer durationMinutes) {
         Exam exam = examRepository.findById(view.examId()).orElse(null);
@@ -199,8 +213,7 @@ public class ExamExportService {
         }
         ExamMatrix matrix = matrixService.getMatrix(exam.getMatrixId());
         String subject = catalogService.getSubjectById(matrix.getSubjectId()).getName();
-        String period = matrix.isLesson() ? view.title() : matrix.getName();
-        return ExamHeader.of(period, subject, matrix.getGradeLevel(), durationMinutes);
+        return ExamHeader.of(view.title(), subject, matrix.getGradeLevel(), durationMinutes);
     }
 
     static String fileName(ExamViewDto view) {

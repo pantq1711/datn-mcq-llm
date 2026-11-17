@@ -14,6 +14,8 @@ public final class TestDataCleaner {
 
     public static void cleanAll(DataSource dataSource, JdbcTemplate jdbcTemplate, String stage) {
         TestSafetyConfiguration.TestDatabaseGuard.validateTestDatabase(dataSource, stage);
+        // V32: bài giao trước exam/exam_slot/bank_item; lớp, thành phần đề, lượt làm và câu trả lời xóa theo (CASCADE).
+        jdbcTemplate.update("DELETE FROM exam_assignment");
         jdbcTemplate.update("DELETE FROM exam_context_material");
         jdbcTemplate.update("DELETE FROM exam_generation_context");
         jdbcTemplate.update("DELETE FROM exam_slot_action");

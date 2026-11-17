@@ -1,0 +1,485 @@
+/* Trang học sinh làm bài (/lam-bai/:code): công khai, ưu tiên điện thoại. Chữ cơ bản 16px (ô nhập ≥ 16px để iOS không tự phóng to). */
+
+.student-app {
+    min-height: 100vh;
+    background: #f3f5f8;
+    color: #1f2933;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-text-size-adjust: 100%;
+}
+
+.student-main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 16px 16px 48px;
+    box-sizing: border-box;
+}
+
+.student-center {
+    display: flex;
+    justify-content: center;
+    padding: 96px 0;
+}
+
+.student-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 20px 16px;
+    box-shadow: 0 1px 6px rgba(15, 23, 42, 0.12);
+    margin-bottom: 16px;
+}
+
+.student-title {
+    font-size: 22px;
+    line-height: 1.35;
+    margin: 0 0 12px;
+    overflow-wrap: anywhere;
+}
+
+.student-heading {
+    font-size: 20px;
+    line-height: 1.4;
+    margin: 0 0 12px;
+}
+
+.student-muted {
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.student-small {
+    font-size: 14px;
+}
+
+.student-facts {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    color: rgba(0, 0, 0, 0.75);
+}
+
+.student-privacy {
+    background: #eef6ff;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin: 0 0 20px;
+}
+
+.student-field {
+    margin-bottom: 20px;
+}
+
+.student-field-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.student-class-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.student-class {
+    min-width: 72px;
+    min-height: 48px;
+    padding: 8px 16px;
+    font-size: 17px;
+    font-weight: 600;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    background: #fff;
+    color: inherit;
+    cursor: pointer;
+}
+
+.student-class.is-selected {
+    border-color: #1677ff;
+    background: #e6f0ff;
+    color: #0b4fb3;
+}
+
+.student-seat-input,
+.student-sa-input {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 8px 12px;
+    font-size: 18px;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.student-seat-input {
+    max-width: 160px;
+}
+
+.student-seat-input:focus,
+.student-sa-input:focus {
+    outline: none;
+    border-color: #1677ff;
+}
+
+.student-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.student-identity {
+    margin: 0 0 8px;
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.student-done {
+    margin-top: 8px;
+}
+
+/* --- Làm bài --- */
+
+.student-bar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: -16px -16px 12px;
+    padding: 10px 16px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
+}
+
+.student-bar-clock {
+    font-size: 18px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.student-bar-label {
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.student-bar.is-warning .student-bar-clock {
+    color: #d4380d;
+}
+
+.student-bar-progress {
+    border: none;
+    background: transparent;
+    color: #0b4fb3;
+    font-size: 15px;
+    text-decoration: underline;
+    padding: 8px 4px;
+    cursor: pointer;
+}
+
+.student-palette {
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 6px rgba(15, 23, 42, 0.12);
+}
+
+.student-palette-part {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.student-palette-title {
+    font-weight: 600;
+    margin-right: 4px;
+}
+
+.student-palette-item {
+    width: 40px;
+    height: 40px;
+    border: 2px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.student-palette-item.is-done {
+    background: #d9f2e1;
+    border-color: #52c41a;
+}
+
+.student-notices {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.student-exam-title {
+    font-size: 20px;
+    line-height: 1.35;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.student-part-title {
+    font-size: 18px;
+    margin: 20px 0 10px;
+}
+
+.student-question {
+    background: #fff;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 6px rgba(15, 23, 42, 0.1);
+    scroll-margin-top: 72px;
+}
+
+.student-question-title {
+    font-size: 16px;
+    margin: 0 0 8px;
+}
+
+.student-question-text {
+    margin-bottom: 12px;
+    overflow-wrap: anywhere;
+}
+
+/* Công thức riêng dòng rộng hơn màn hình thì cuộn ngang trong khung, không làm cả trang tràn */
+.student-math {
+    max-width: 100%;
+}
+
+.student-math .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    padding: 4px 0;
+}
+
+.student-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.student-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    min-height: 52px;
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 16px;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    background: #fff;
+    color: inherit;
+    cursor: pointer;
+}
+
+.student-option.is-selected {
+    border-color: #1677ff;
+    background: #e6f0ff;
+}
+
+.student-option-key {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    text-align: center;
+    font-weight: 700;
+    border-radius: 50%;
+    background: #e2e8f0;
+}
+
+.student-option.is-selected .student-option-key {
+    background: #1677ff;
+    color: #fff;
+}
+
+.student-option-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.student-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.student-statements {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.student-statement {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 10px 12px;
+}
+
+.student-statement-text {
+    margin-bottom: 8px;
+    overflow-wrap: anywhere;
+}
+
+.student-tf-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.student-tf-button {
+    min-height: 48px;
+    font-size: 16px;
+    font-weight: 600;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    background: #fff;
+    color: inherit;
+    cursor: pointer;
+}
+
+.student-tf-button.is-selected {
+    border-color: #1677ff;
+    background: #e6f0ff;
+    color: #0b4fb3;
+}
+
+.student-tf-button.is-selected.is-false {
+    border-color: #d4380d;
+    background: #fff1ec;
+    color: #a8071a;
+}
+
+.student-sa-row {
+    display: flex;
+    gap: 8px;
+}
+
+.student-sa-row .ant-btn {
+    flex: 0 0 52px;
+    min-height: 48px;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.student-sa-warning {
+    margin: 8px 0 0;
+    color: #a8071a;
+}
+
+.student-submit-area {
+    margin-top: 20px;
+}
+
+/* --- Kết quả --- */
+
+.student-score-main {
+    font-size: 28px;
+    margin: 0;
+}
+
+.student-score-parts {
+    list-style: none;
+    padding: 0;
+    margin: 12px 0 0;
+}
+
+.student-score-parts li {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 0;
+    border-top: 1px solid #e2e8f0;
+}
+
+.student-review-options {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.student-review-option {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 8px 10px;
+    overflow-wrap: anywhere;
+}
+
+.student-review-option.is-correct {
+    border-color: #52c41a;
+    background: #f1faea;
+}
+
+.student-review-option.is-wrong {
+    border-color: #ff7a45;
+    background: #fff4ee;
+}
+
+.student-tag {
+    font-size: 13px;
+    font-weight: 600;
+    margin-left: 6px;
+}
+
+.student-review-score {
+    font-weight: 400;
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.student-explanation {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border-radius: 10px;
+}
+
+/* --- Máy tính --- */
+
+@media (min-width: 768px) {
+    .student-main {
+        padding-top: 32px;
+    }
+
+    .student-card {
+        padding: 28px 32px;
+    }
+
+    .student-bar {
+        margin: -32px -16px 16px;
+        border-radius: 0 0 12px 12px;
+    }
+
+    .student-actions {
+        flex-direction: row;
+    }
+
+    .student-score-parts li {
+        flex-direction: row;
+        justify-content: space-between;
+    }
+}

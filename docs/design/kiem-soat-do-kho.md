@@ -268,6 +268,18 @@ Số liệu: `docs/experiments/tn1/` (tệp ngày 20261114). Lưu ý (đo sau kh
 v4, được 5/8, 5/9 và 4/9, nên v4 tự dao động tới 4/9. Con số 4/9 của v5 kèm chip vì vậy chỉ là chỉ báo yếu; lý do chính để tách
 lượt là về cấu trúc: lượt giải không thấy yêu cầu thì không thể bị yêu cầu ảnh hưởng.
 
+Sửa 17/11 (soát lại TN1, `docs/experiments/tn1/README.md` mục "Soát lại 16–17/11/2026"):
+- "9 câu có từ 2 phương án đúng" ở trên là nhãn gốc. Nhãn An chốt 17/11: 6 câu nhiều phương án đúng (7, 8, 37, 39, 52, 53), 2
+  câu mơ hồ do diễn đạt (15, 61), và câu 25 tách khỏi tập chính. Tập chính có 8 câu lỗi.
+- Cách giải thích "khối yêu cầu làm Solver coi phương án chưa triệt để là phương án nhiễu" chưa đủ bằng chứng. Hiện tượng này
+  có cả ở lượt giải KHÔNG thấy yêu cầu: lần không chip và lượt giải của v6 vẫn ghi cờ sai cho 52B, 52D, 53B với lý do "chưa đặt
+  nhân tử chung lớn nhất". Lượt giải dùng prompt v4 có 5 mẫu, bắt 4–7/9; v5 kèm chip (4/9) và PA1 một lượt (3/9) mỗi cấu hình đo
+  1 lần, nằm trong hoặc ngay dưới khoảng đó. Chỗ khớp với giả thuyết "neo" chỉ là câu 7 và 8 (v4 bắt 5/5; lần sót duy nhất của
+  câu 8 là v5 kèm chip, của câu 7 là PA1 một lượt).
+- Quyết định tách hai lượt không đổi, vì lý do cấu trúc nêu trên.
+- Cách kết luận của lượt 1 có thêm một quy tắc từ 17/11: `judge_answer = multiple` thì tính là nhiều phương án đúng dù cờ từng
+  phương án có dưới 2 phương án đúng (dev-log L-70). Prompt và schema lượt 1 không đổi.
+
 **Cách làm (An chốt 14/11):**
 - **Lượt 1 (mọi câu, có chip hay không):** prompt và schema **giống hệt v4** (mcq) và bản cũ (tf, sa), từng byte (test khóa
   `SolverTwoPassTest`). Kết luận đạt/lệch chỉ từ lượt này.

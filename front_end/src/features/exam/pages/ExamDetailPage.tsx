@@ -1,13 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button, Card, Dropdown, Empty, Spin, Space, Tooltip, Typography, message, Modal } from "antd";
-import { ArrowLeftOutlined, DownOutlined, FileWordOutlined } from "@ant-design/icons";
+import { Button, Card, Empty, Spin, Space, Tooltip, Typography, message, Modal } from "antd";
+import { ArrowLeftOutlined, FileWordOutlined, ProfileOutlined, SendOutlined } from "@ant-design/icons";
 
 import ExamQuestionList from "../components/ExamQuestionList";
 import ExamQuestionNav from "../components/ExamQuestionNav";
 import ExamSummaryBar, { type ExamSummaryCounts } from "../components/ExamSummaryBar";
 import type { ExamProgress, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
 import { examKindConfig, examStatusConfig, describeReviewReason, examSlotAnchorId, hasContentFlag } from "../../../utils/exam.utils";
-import { keepQuestion, replaceQuestion, getExamDetail, getExamProgress, getExamExportDocx, getCatalogSubjects, type ExportEquationFormat } from '../services/examApi';
+import { keepQuestion, replaceQuestion, getExamDetail, getExamProgress, getCatalogSubjects } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
 import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
 
@@ -16,20 +16,10 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import ChangeQuestionModal, { type ChangeQuestionResult } from "../components/ChangeQuestionModal";
 import EditQuestionModal from "../components/EditQuestionModal";
 import { QcTraceModal } from '../components/QcTraceModal';
+import AssignExamModal from "../../assignment/components/AssignExamModal";
+import ExportWordDialog from '../components/ExportWordDialog';
 
 const { Title, Text } = Typography;
-
-/** Tên file an toàn từ tên đề: bỏ ký tự Windows không cho phép trong tên file; rỗng thì dùng {@code fallback}. */
-function toFileName(title: string | undefined, fallback: string): string {
-    // eslint-disable-next-line no-control-regex
-    const cleaned = (title ?? "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().replace(/[. ]+$/, "");
-    return cleaned || fallback;
-}
-
-/** Điểm theo kiểu Việt Nam, ít nhất một chữ số thập phân: 7,0; 12,5; 2,25. */
-function formatScore(value: number): string {
-    return value.toLocaleString("vi-VN", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
-}
 
 const POLL_INTERVAL_MS = 8000;
 const MAX_CONSECUTIVE_ERRORS = 3;
@@ -138,7 +128,10 @@ export default function ExamDetailPage() {
     const [progress, setProgress] = useState<ExamProgress | null>(null);
     const [loading, setLoading] = useState(true);
 
-    const [exportLoading, setExportLoading] = useState(false);
+    // Hộp xuất Word (ExportWordDialog): bấm "Xuất file Word" luôn mở hộp
+    const [exportOpen, setExportOpen] = useState(false);
+
+    const [assignOpen, setAssignOpen] = useState(false);
 
     const [qcModalVisible, setQcModalVisible] = useState(false);
     const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
@@ -214,6 +207,11 @@ export default function ExamDetailPage() {
         };
     }, [detail]);
 
+    // Giao bài online cần mọi câu đã Giữ hoặc Sửa
+    const notKeptCount = (detail?.parts ?? [])
+        .flatMap((p) => p.items)
+        .filter((i) => i.state !== "kept" && i.state !== "edited").length;
+
     const hasPendingWork = !pollingStoppedDueToError && pendingSummary.total > 0;
     // Còn câu đang soạn thì chưa xuất Word được
     const isGenerating = pendingSummary.generatingCount > 0 || progress?.status === "generating";
@@ -288,6 +286,7 @@ export default function ExamDetailPage() {
         parts.forEach((p) => p.questions.forEach((q, i) => numbers.set(q.slotId ?? q.id, i + 1)));
         return numbers;
     }, [parts]);
+    
     const getNumber = useCallback(
         (question: ExamQuestionItem, index: number) => questionNumbers.get(question.slotId ?? question.id) ?? index + 1,
         [questionNumbers]
@@ -304,93 +303,6 @@ export default function ExamDetailPage() {
             return;
         }
         scroll();
-    };
-
-    /**
-     * NV-40/NV-41: trước khi xuất, nếu đề còn chỗ chưa soạn được, chỗ đang soạn, câu có cảnh báo chưa lưu, hoặc tổng điểm
-     * phần trắc nghiệm khác 10 thì hỏi lại (không chặn). Thang điểm không đổi; file Word tự ghi chú tổng điểm.
-     */
-    const requestExportWord = (equation: ExportEquationFormat = 'mathtype') => {
-        const items = (detail?.parts ?? []).flatMap((p) => p.items);
-        const failedCount = items.filter((i) => i.state === "failed").length;
-        const generatingCount = items.filter((i) => i.state === "pending" || i.state === "generating").length;
-        const flaggedCount = items.filter((i) => i.state === "ready" && i.needsReview).length;
-        const totalScore = detail?.totalScore;
-        const scoreOff = typeof totalScore === "number" && Math.abs(totalScore - 10) > 1e-9;
-        if (failedCount + generatingCount + flaggedCount === 0 && !scoreOff) {
-            void handleExportWord(equation);
-            return;
-        }
-        Modal.confirm({
-            title: "Xuất file Word khi đề chưa hoàn chỉnh?",
-            content: (
-                <div>
-                    <ul style={{ paddingLeft: 20, margin: 0 }}>
-                        {failedCount > 0 && <li>{failedCount} câu chưa soạn được (file ghi "Chưa có câu").</li>}
-                        {generatingCount > 0 && <li>{generatingCount} câu đang soạn (file ghi "Chưa có câu").</li>}
-                        {flaggedCount > 0 && <li>{flaggedCount} câu cần xem kỹ chưa được xử lý.</li>}
-                        {scoreOff && (
-                            <li>
-                                Tổng điểm phần trắc nghiệm là {formatScore(totalScore!)} điểm, khác 10 điểm.
-                                {totalScore! < 10 ? " File sẽ ghi chú phần tự luận (nếu có) do thầy/cô bổ sung." : ""}
-                            </li>
-                        )}
-                    </ul>
-                </div>
-            ),
-            okText: "Vẫn xuất",
-            cancelText: "Quay lại",
-            onOk: () => handleExportWord(equation),
-        });
-    };
-
-    // === Hàm xử lý xuất file Word đã được tách riêng ===
-    const handleExportWord = async (equation: ExportEquationFormat = 'mathtype') => {
-        if (!examId) return;
-        try {
-            setExportLoading(true);
-            const { blob, keptOmml, scaled, failed, failedAt, filename } = await getExamExportDocx(examId, equation);
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            // Luôn đặt tên theo tiêu đề đề thi; chỉ khi không có tiêu đề mới dùng tên backend gửi (Content-Disposition)
-            const titleName = toFileName(detail?.title, "");
-            a.download = titleName
-                ? `${titleName}${equation === 'mathtype' ? '-mathtype' : ''}.docx`
-                : filename
-                ?? `${toFileName(undefined, detail?.examCode ?? `exam-${examId}`)}${equation === 'mathtype' ? '-mathtype' : ''}.docx`;
-            a.click();
-            window.URL.revokeObjectURL(url);
-            message.success(equation === 'mathtype'
-                ? 'Xuất file Word (công thức MathType) thành công!'
-                : 'Xuất file Word (công thức Word Equation) thành công!');
-            // Chỉ có khi xuất MathType (backend không gửi header ở chế độ Equation)
-            if (keptOmml > 0) {
-                message.warning(`${keptOmml} công thức không chuyển được sang MathType, vẫn ở dạng công thức Word`, 8);
-            }
-            if (scaled > 0) {
-                message.info(`${scaled} công thức dài đã được thu nhỏ cho vừa trang`, 8);
-            }
-            if (failed > 0) {
-                // failedAt: "I.8" = câu 8 phần I
-                const where = failedAt.map((p) => { const [part, no] = p.split('.'); return `Phần ${part} – Câu ${no}`; });
-                message.warning(`${failed} công thức không chuyển được${where.length > 0 ? `, ở ${where.join(', ')}` : ''}`, 8);
-            }
-        } catch (err: unknown) {
-            // responseType 'blob': thân lỗi JSON cũng là Blob, phải đọc ra chữ mới thấy thông báo của backend
-            let errorMsg = 'Không xuất được file';
-            const data = (err as { response?: { data?: unknown } })?.response?.data;
-            try {
-                const body = data instanceof Blob ? JSON.parse(await data.text()) : data;
-                const serverMsg = (body as { error?: unknown } | null | undefined)?.error;
-                if (serverMsg) errorMsg = String(serverMsg);
-            } catch {
-                // thân lỗi không phải JSON: giữ câu mặc định
-            }
-            message.error(errorMsg);
-        } finally {
-            setExportLoading(false);
-        }
     };
 
     // Hàm mở Modal Xem vết QC cho slot
@@ -580,42 +492,36 @@ export default function ExamDetailPage() {
                     </div>
 
                     <Space size={8} className="exam-detail-page-actions">
-                        {/* NV-40: còn câu đang soạn vẫn xuất được sau hộp xác nhận (file ghi "Chưa có câu" ở chỗ đó) */}
-                        <Tooltip title={isGenerating ? "Đề còn câu đang soạn; thầy/cô vẫn xuất được sau khi xác nhận." : undefined}>
+                        {/* Giao bài online: cần mọi câu đã Giữ/Sửa (backend cũng kiểm, 409 ASSIGN_NOT_ALL_KEPT) */}
+                        <Tooltip title={notKeptCount > 0 ? `Còn ${notKeptCount} câu chưa Giữ. Giữ hết các câu rồi mới giao bài được.` : undefined}>
                             <span>
-                                {/* Bấm nút chính: xuất công thức MathType (giáo viên Toán dùng MathType); mũi tên mở menu chọn cách ghi công thức */}
-                                <Space.Compact>
-                                    <Button
-                                        type="primary"
-                                        icon={<FileWordOutlined />}
-                                        loading={exportLoading}
-                                        onClick={() => requestExportWord('mathtype')}
-                                    >
-                                        Xuất file Word
-                                    </Button>
-                                    <Dropdown
-                                        trigger={["click"]}
-                                        disabled={exportLoading}
-                                        menu={{
-                                            items: [
-                                                { key: "mathtype", label: "Công thức MathType" },
-                                                { key: "omml", label: "Công thức Word (Equation)" },
-                                            ],
-                                            selectedKeys: ["mathtype"],
-                                            onClick: ({ key }) => requestExportWord(key === "mathtype" ? "mathtype" : "omml"),
-                                        }}
-                                    >
-                                        <Button
-                                            type="primary"
-                                            icon={<DownOutlined />}
-                                            disabled={exportLoading}
-                                            aria-label="Chọn cách ghi công thức khi xuất Word"
-                                        />
-                                    </Dropdown>
-                                </Space.Compact>
+                                <Button
+                                    icon={<SendOutlined />}
+                                    disabled={notKeptCount > 0}
+                                    onClick={() => setAssignOpen(true)}
+                                >
+                                    Giao bài online
+                                </Button>
                             </span>
                         </Tooltip>
+                        <Button icon={<ProfileOutlined />} onClick={() => navigate(`/exams/${examId}/assignments`)}>
+                            Bài đã giao
+                        </Button>
+                        {/* Bấm là mở hộp xuất Word (thời gian, mã đề, tên file, công thức, chỉ đề; cảnh báo NV-40/NV-41 trong hộp) */}
+                        <Button type="primary" icon={<FileWordOutlined />} onClick={() => setExportOpen(true)}>
+                            Xuất file Word
+                        </Button>
+                        {/* G19: lời nhắc khi đề còn câu đang soạn hiện thường trực cạnh nút, không chỉ khi rê chuột */}
+                        {isGenerating && (
+                            <Text type="secondary">Đề còn câu đang soạn; thầy/cô vẫn xuất được (chỗ đó ghi "Chưa có câu").</Text>
+                        )}
                     </Space>
+                    <ExportWordDialog
+                        open={exportOpen}
+                        examId={examId!}
+                        detail={detail}
+                        onClose={() => setExportOpen(false)}
+                    />
                 </div>
             </div>
 
@@ -630,10 +536,17 @@ export default function ExamDetailPage() {
                     onOnlyNeedsAttentionChange={setOnlyNeedsAttention}
                     showAllExplanations={showAllExplanations}
                     onShowAllExplanationsChange={setShowAllExplanations}
-                    onExport={() => requestExportWord('mathtype')}
-                    exportLoading={exportLoading}
+                    onExport={() => setExportOpen(true)}
+                    exportLoading={false}
                 />
             </div>
+
+            <AssignExamModal
+                open={assignOpen}
+                examId={examId!}
+                onClose={() => setAssignOpen(false)}
+                onCreated={() => undefined}
+            />
 
             {/* Bàn làm việc: mục lục cố định bên trái, danh sách câu bên phải */}
             <div className="exam-detail-page-workspace">

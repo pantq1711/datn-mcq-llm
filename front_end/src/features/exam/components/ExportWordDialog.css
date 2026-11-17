@@ -1,0 +1,30 @@
+/* Hộp xuất Word (ExportWordDialog) */
+
+.export-word-dialog-warning {
+    margin-bottom: 16px;
+}
+
+.export-word-dialog-warning-list {
+    padding-left: 20px;
+    margin: 0;
+}
+
+.export-word-dialog-duration {
+    width: 140px;
+}
+
+.export-word-dialog-code {
+    width: 96px;
+}
+
+.export-word-dialog-last {
+    margin-bottom: 4px;
+}
+
+/* Nút "Đang tạo file Word… (khoảng 10 giây)" dài: cho xuống dòng trên màn hẹp thay vì tràn hộp */
+.export-word-dialog .ant-modal-footer .ant-btn {
+    max-width: 100%;
+    white-space: normal;
+    height: auto;
+    min-height: 32px;
+}

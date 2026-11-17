@@ -20,7 +20,7 @@ import java.nio.charset.StandardCharsets;
  *   <li>mọi kiểu dùng Times New Roman 13, kể cả tiêu đề: bỏ phông theme, bỏ màu xanh, tiêu đề đậm đen;</li>
  *   <li>giãn dòng 1,15, cách đoạn 0–3 pt;</li>
  *   <li>các kiểu của đề: câu hỏi (thụt lề treo), phương án, dòng hướng dẫn, ô bảng...;</li>
- *   <li>chân trang "Trang x/y – Mã đề 101" căn giữa (trường PAGE/NUMPAGES).</li>
+ *   <li>chân trang "Trang x/y – Mã đề 101" căn giữa (trường PAGE/NUMPAGES); mã đề theo {@link ExamDocxOptions}.</li>
  * </ul>
  */
 public final class ExamReferenceDoc {
@@ -40,6 +40,15 @@ public final class ExamReferenceDoc {
 
     /** @param base nội dung {@code export/reference.docx} */
     public static byte[] build(byte[] base) throws IOException {
+        return build(base, ExamDocxOptions.DEFAULT);
+    }
+
+    /**
+     * @param base    nội dung {@code export/reference.docx}
+     * @param options mã đề in ở chân trang; chỉ đề ({@link ExportContent#EXAM}) thì sectPr cuối là section đề duy nhất
+     */
+    public static byte[] build(byte[] base, ExamDocxOptions options) throws IOException {
+        ExamDocxOptions o = options == null ? ExamDocxOptions.DEFAULT : options;
         DocxPackage pkg = DocxPackage.read(base);
         Document styles = pkg.editable("word/styles.xml");
         if (styles == null) {
@@ -49,23 +58,36 @@ public final class ExamReferenceDoc {
         // sectPr cuối thân tài liệu là section ĐÁP ÁN (đánh số lại từ 1, chân trang "Đáp án mã đề"); section đề do
         // ExamMarkdownBuilder đóng bằng sectPr trong đoạn HẾT, chân trang của nó do ExamSections thêm sau pandoc.
         // Id riêng: "rIdMT<n>" là Id của bộ chuyển MathType (đối tượng OLE, ảnh) và pandoc giữ nguyên Id của chân trang.
-        pkg.put("word/footerAnswer.xml", footerXml(ANSWER_FOOTER_LEFT).getBytes(StandardCharsets.UTF_8));
+        // Chỉ đề (16/11): đoạn HẾT không có sectPr, nên sectPr cuối (vẫn part và Id này) là section đề: chân trang
+        // "Mã đề …", không đánh số lại trang.
+        String left = o.examOnly() ? examFooterLeft(o.examCode()) : answerFooterLeft(o.examCode());
+        pkg.put("word/footerAnswer.xml", footerXml(left).getBytes(StandardCharsets.UTF_8));
         pkg.ensureOverrideContentType("/word/footerAnswer.xml", FOOTER_TYPE);
         pkg.addRelationship(ExamPage.ANSWER_FOOTER_REL_ID, FOOTER_REL, "footerAnswer.xml");
-        patchSection(pkg.document());
+        patchSection(pkg.document(), !o.examOnly());
         return pkg.write();
     }
 
     // ---------------------------------------------------------------- trang
 
-    static final String EXAM_FOOTER_LEFT = "Mã đề " + ExamHeader.ORIGINAL_CODE;
-    static final String ANSWER_FOOTER_LEFT = "Đáp án mã đề " + ExamHeader.ORIGINAL_CODE;
+    static final String EXAM_FOOTER_LEFT = examFooterLeft(ExamHeader.ORIGINAL_CODE);
+    static final String ANSWER_FOOTER_LEFT = answerFooterLeft(ExamHeader.ORIGINAL_CODE);
     static final String FOOTER_REL_TYPE = FOOTER_REL;
     static final String FOOTER_CONTENT_TYPE = FOOTER_TYPE;
 
-    private static void patchSection(Document doc) {
+    /** "Mã đề 205": chữ trái chân trang section đề. */
+    static String examFooterLeft(String examCode) {
+        return "Mã đề " + examCode;
+    }
+
+    /** "Đáp án mã đề 205": chữ trái chân trang section đáp án. */
+    static String answerFooterLeft(String examCode) {
+        return "Đáp án mã đề " + examCode;
+    }
+
+    private static void patchSection(Document doc, boolean restartPageNumbers) {
         Element body = (Element) doc.getElementsByTagNameNS(W, "body").item(0);
-        Element sect = fragment(doc, ExamPage.sectionProperties(ExamPage.ANSWER_FOOTER_REL_ID, true));
+        Element sect = fragment(doc, ExamPage.sectionProperties(ExamPage.ANSWER_FOOTER_REL_ID, restartPageNumbers));
         Node old = null;
         for (Node c = body.getFirstChild(); c != null; c = c.getNextSibling()) {
             if (c instanceof Element e && W.equals(e.getNamespaceURI()) && "sectPr".equals(e.getLocalName())) {

@@ -1,4 +1,4 @@
-import { Button, Card, Segmented, Typography, message } from "antd";
+import { Button, Card, Modal, Segmented, Typography, message } from "antd";
 import { FileTextOutlined, PlusOutlined } from "@ant-design/icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
@@ -7,6 +7,7 @@ import ExamTable from "../components/ExamTable";
 import type { ExamListItem, ExamKind } from "../types/exam.types";
 import { deleteExam, getMyExams } from "../services/examApi";
 import { examKindConfig } from "../../../utils/exam.utils";
+import { isExamHasAssignmentsError } from "../../assignment/utils/examDeleteError";
 
 import "./ExamListPage.css";
 
@@ -92,7 +93,18 @@ export default function ExamListPage() {
                 await fetchExams(page, pageSize, selectedKind);
             }
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Không thể xóa đề thi");
+            if (isExamHasAssignmentsError(error)) {
+                // Đề còn bài giao trực tuyến: nói rõ lý do và dẫn tới các bài giao để xóa trước
+                Modal.confirm({
+                    title: "Chưa xóa được đề",
+                    content: `Đề "${exam.title}" còn bài giao cho học sinh làm online. Thầy/cô xóa hết các bài giao của đề này trước, rồi mới xóa đề được.`,
+                    okText: "Xem các bài giao",
+                    cancelText: "Để sau",
+                    onOk: () => navigate(`/exams/${exam.examId}/assignments`),
+                });
+            } else {
+                message.error(error instanceof Error ? error.message : "Không thể xóa đề thi");
+            }
         } finally {
             setDeletingId(null);
         }
