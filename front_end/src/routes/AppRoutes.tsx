@@ -8,6 +8,8 @@ import QuestionBankPage from "../features/question-bank/pages/QuestionBankPage";
 import GenerateExamPage from "../features/exam/pages/GenerateExamPage";
 import ExamListPage from "../features/exam/pages/ExamListPage";
 import ExamDetailPage from "../features/exam/pages/ExamDetailPage";
+import AssignmentListPage from "../features/assignment/pages/AssignmentListPage";
+import AssignmentDetailPage from "../features/assignment/pages/AssignmentDetailPage";
 import ExamMatrixListPage from "../features/exam-matrix/pages/ExamMatrixListPage";
 import ExamMatrixFormPage from "../features/exam-matrix/pages/ExamMatrixFormPage";
 import MaterialListPage from "../features/materials/pages/MaterialListPage";
@@ -34,6 +36,8 @@ export default function AppRoutes() {
                     <Route path="exams" element={<ExamListPage />} />
                     <Route path="exams/generate" element={<GenerateExamPage />} />
                     <Route path="exams/:id" element={<ExamDetailPage />} />
+                    <Route path="exams/:id/assignments" element={<AssignmentListPage />} />
+                    <Route path="exams/:id/assignments/:assignmentId" element={<AssignmentDetailPage />} />
                     <Route path="exam-matrices" element={<ExamMatrixListPage />} />
                     <Route path="exam-matrices/new" element={<ExamMatrixFormPage />} />
                     <Route path="exam-matrices/:id/edit" element={<ExamMatrixFormPage />} />

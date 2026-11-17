@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Dropdown, Progress, Spin, Space, Tag, Tooltip, Typography, message, Modal } from "antd";
-import { ArrowLeftOutlined, DownOutlined, FileWordOutlined, SyncOutlined, WarningOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, DownOutlined, FileWordOutlined, ProfileOutlined, SendOutlined, SyncOutlined, WarningOutlined } from "@ant-design/icons";
 
 import ExamPreview from "../components/ExamPreview";
 import ExamQuestionList from "../components/ExamQuestionList";
@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import ChangeQuestionModal, { type ChangeQuestionResult } from "../components/ChangeQuestionModal";
 import EditQuestionModal from "../components/EditQuestionModal";
 import { QcTraceModal } from '../components/QcTraceModal';
+import AssignExamModal from "../../assignment/components/AssignExamModal";
 
 const { Title, Text } = Typography;
 
@@ -134,6 +135,8 @@ export default function ExamDetailPage() {
 
     const [exportLoading, setExportLoading] = useState(false);
 
+    const [assignOpen, setAssignOpen] = useState(false);
+
     const [qcModalVisible, setQcModalVisible] = useState(false);
     const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
     // Số câu trên thẻ câu (thứ tự trong Phần) để hộp kết quả tự kiểm tra ghi cùng số
@@ -203,6 +206,11 @@ export default function ExamDetailPage() {
             total: generatingCount + checkingCount,
         };
     }, [detail]);
+
+    // Giao bài online cần mọi câu đã Giữ hoặc Sửa
+    const notKeptCount = (detail?.parts ?? [])
+        .flatMap((p) => p.items)
+        .filter((i) => i.state !== "kept" && i.state !== "edited").length;
 
     const hasPendingWork = !pollingStoppedDueToError && pendingSummary.total > 0;
     // Còn câu đang soạn thì chưa xuất Word được
@@ -528,6 +536,21 @@ export default function ExamDetailPage() {
                     </div>
 
                     <Space size={8} className="exam-detail-page-actions">
+                        {/* Giao bài online: cần mọi câu đã Giữ/Sửa (backend cũng kiểm, 409 ASSIGN_NOT_ALL_KEPT) */}
+                        <Tooltip title={notKeptCount > 0 ? `Còn ${notKeptCount} câu chưa Giữ. Giữ hết các câu rồi mới giao bài được.` : undefined}>
+                            <span>
+                                <Button
+                                    icon={<SendOutlined />}
+                                    disabled={notKeptCount > 0}
+                                    onClick={() => setAssignOpen(true)}
+                                >
+                                    Giao bài online
+                                </Button>
+                            </span>
+                        </Tooltip>
+                        <Button icon={<ProfileOutlined />} onClick={() => navigate(`/exams/${examId}/assignments`)}>
+                            Bài đã giao
+                        </Button>
                         {/* NV-40: còn câu đang soạn vẫn xuất được sau hộp xác nhận (file ghi "Chưa có câu" ở chỗ đó) */}
                         <Tooltip title={isGenerating ? "Đề còn câu đang soạn; thầy/cô vẫn xuất được sau khi xác nhận." : undefined}>
                             <span>
@@ -586,6 +609,13 @@ export default function ExamDetailPage() {
                     <ExamPreview exam={exam} />
                 </Card>
             </div>
+
+            <AssignExamModal
+                open={assignOpen}
+                examId={examId!}
+                onClose={() => setAssignOpen(false)}
+                onCreated={() => undefined}
+            />
 
             <div className="exam-detail-page-question-list">
                 <Card title={questionListCardTitle}>
