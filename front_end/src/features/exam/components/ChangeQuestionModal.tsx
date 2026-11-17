@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Form, Input, Modal, Radio, Space, Tag, Tooltip, Typography } from "antd";
-import { InfoCircleOutlined, SwapOutlined, BulbOutlined, DatabaseOutlined, RobotOutlined } from "@ant-design/icons";
+import { Alert, Button, ConfigProvider, Form, Input, Modal, Radio, Space, Tag, Tooltip, Typography } from "antd";
+import { SwapOutlined, DatabaseOutlined, EditOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
 
 import type { ExamQuestionItem, ChangeQuestionRequest, ExamQuestionType, ReplaceReason, TeacherRequestCode } from "../types/exam.types";
 import { teacherRequestOptionsFor } from "../types/exam.types";
 import { REPLACE_REASON_OPTIONS, describeLevel, resolveQuestionType, describeFailureReason } from "../../../utils/exam.utils";
+import MathText from "../../../components/common/MathText/MathText";
 import QuestionContent from "../components/QuestionContent";
+import { READABLE_MODAL_THEME } from "./readableModalTheme";
 
 import "./ChangeQuestionModal.css";
 
@@ -14,6 +16,15 @@ const { TextArea } = Input;
 
 // Backend API spec mục 7.5: instruction tối đa 1000 ký tự (PR B, bằng giới hạn của đề và ô, để văn bản thừa hưởng điền đủ)
 const MAX_INSTRUCTION_LENGTH = 1000;
+
+// Lời của lý do đổi nói theo giáo viên (rà soát G16, bảng thuật ngữ mục 4); giá trị gửi backend giữ nguyên
+const REASON_LABELS: Partial<Record<ReplaceReason, string>> = {
+    ambiguous_options: "Phương án mơ hồ, có hơn một đáp án đúng",
+    off_matrix: "Không đúng ma trận",
+    duplicate_pattern: "Giống câu khác",
+    latex_format: "Công thức hiện sai",
+};
+const REASON_OPTIONS = REPLACE_REASON_OPTIONS.map((o) => ({ ...o, label: REASON_LABELS[o.value] ?? o.label }));
 
 /** Kết quả trang cha báo lại: "bank_exhausted" khi backend trả 409 BANK_EXHAUSTED (docs/api mục 7.5). */
 export type ChangeQuestionResult = void | "bank_exhausted";
@@ -46,6 +57,8 @@ export default function ChangeQuestionModal({
     const [reason, setReason] = useState<ReplaceReason | undefined>(undefined);
     // Chip yêu cầu của lượt Đổi (PR B): mở hộp thì chọn sẵn chip thừa hưởng của ô hoặc đề
     const [requestCodes, setRequestCodes] = useState<TeacherRequestCode[]>([]);
+    // Câu đang có thu gọn một dòng để phần chọn cách đổi nằm ngay màn đầu (G15); bấm "Xem cả câu" mới mở
+    const [showFullQuestion, setShowFullQuestion] = useState(false);
 
     const watchedSource = Form.useWatch("source", form) ?? "generate";
     const isBusy = loading || submitting;
@@ -57,7 +70,7 @@ export default function ChangeQuestionModal({
     // Lấy nhãn dạng câu
     const getQuestionTypeLabel = (type: ExamQuestionType) => {
         switch (type) {
-            case "tf": return "Đúng sai";
+            case "tf": return "Trắc nghiệm đúng/sai";
             case "sa": return "Trả lời ngắn";
             default: return "Trắc nghiệm nhiều phương án";
         }
@@ -69,7 +82,7 @@ export default function ChangeQuestionModal({
 
         if (type === "tf" && item.statements && item.statements.length > 0) {
             const levelsText = item.statements
-                .map(s => describeLevel(s.difficulty).label)
+                .map(s => `${s.key}) ${describeLevel(s.difficulty).label}`)
                 .join(" · ");
             return <Tag color="blue">{levelsText}</Tag>;
         }
@@ -95,6 +108,7 @@ export default function ChangeQuestionModal({
             setBankExhausted(false);
             setReason(undefined);
             setRequestCodes(applicableCodes(prefill?.codes));
+            setShowFullQuestion(false);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, question?.id, form]);
@@ -153,15 +167,16 @@ export default function ChangeQuestionModal({
     };
 
     return (
+        <ConfigProvider theme={READABLE_MODAL_THEME}>
         <Modal
             open={open}
             title={
                 <Space size={10}>
                     <SwapOutlined className="change-question-modal-title-icon" />
-                    <span>{isFailed ? "Soạn lại câu" : "Đổi câu hỏi"}</span>
+                    <span>{isFailed ? "Soạn lại câu" : "Đổi câu khác"}</span>
                 </Space>
             }
-            width={720}
+            width={760}
             style={{ top: 20 }}
             // Nội dung dài thì cuộn trong hộp; nút hành động ở đáy luôn thấy được (kể cả màn 1366×768)
             styles={{ body: { maxHeight: "calc(100vh - 210px)", overflowY: "auto" } }}
@@ -177,9 +192,9 @@ export default function ChangeQuestionModal({
                     style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}
                 >
                     {isFailed ? (
-                        <Text type="secondary">Hệ thống sẽ soạn lại từ đầu (tính lại 3 lần thử)</Text>
+                        <Text type="secondary">Hệ thống sẽ soạn lại câu này từ đầu.</Text>
                     ) : (
-                        <Text type="danger">Câu hiện tại sẽ bị thay. Không hoàn tác được.</Text>
+                        <Text type="danger">Câu đang có sẽ bị thay, không lấy lại được.</Text>
                     )}
                     <Space size={8}>
                         <Button onClick={handleCancel} disabled={isBusy}>
@@ -205,15 +220,20 @@ export default function ChangeQuestionModal({
                     type="warning"
                     showIcon
                     message="Chưa chọn câu hỏi"
-                    description="Hãy chọn một câu hỏi trong đề thi trước khi yêu cầu đổi câu."
+                    description="Thầy/cô chọn một câu trong đề rồi bấm Đổi câu khác."
                 />
             ) : (
-                <div className="change-question-modal-content">
+                <Form
+                    form={form}
+                    layout="vertical"
+                    requiredMark={false}
+                    initialValues={{ source: "generate", instruction: "" }}
+                    className="change-question-modal-content"
+                >
+                    {/* Câu đang có: một dòng, bấm "Xem cả câu" để mở (G15) */}
                     <section className="change-question-current">
                         <div className="change-question-section-heading">
-                            <div>
-                                <Text strong>Câu hỏi hiện tại</Text>
-                            </div>
+                            <Text strong>{isFailed ? "Câu chưa soạn được" : "Câu đang có"}</Text>
                             <Space size={6} wrap>
                                 <Tag>{getQuestionTypeLabel(qType)}</Tag>
                                 {question.topic && <Tag color="cyan">{question.topic}</Tag>}
@@ -221,117 +241,79 @@ export default function ChangeQuestionModal({
                             </Space>
                         </div>
 
-                        {/* Hiển thị Alert lỗi hoặc QuestionContent tùy theo trạng thái isFailed */}
-                        <div className="change-question-current-question-content">
-                            {isFailed ? (
-                                <Alert
-                                    type="error"
-                                    showIcon
-                                    message="Hệ thống chưa soạn được câu này"
-                                    description={describeFailureReason(question.failureReason)}
-                                />
-                            ) : (
+                        {isFailed ? (
+                            <Text className="change-question-failed-reason">
+                                {describeFailureReason(question.failureReason)}
+                            </Text>
+                        ) : showFullQuestion ? (
+                            <div className="change-question-current-question-content">
                                 <QuestionContent question={question} showExplanation={false} />
-                            )}
-                        </div>
+                            </div>
+                        ) : (
+                            <div className="change-question-current-line">
+                                <MathText text={question.questionText} />
+                            </div>
+                        )}
+                        {!isFailed && (
+                            <Button
+                                type="link"
+                                className="change-question-toggle"
+                                icon={showFullQuestion ? <UpOutlined /> : <DownOutlined />}
+                                aria-expanded={showFullQuestion}
+                                onClick={() => setShowFullQuestion(v => !v)}
+                            >
+                                {showFullQuestion ? "Thu gọn" : "Xem cả câu và các phương án"}
+                            </Button>
+                        )}
                     </section>
 
-                    <Alert
-                        className="change-question-constraint-alert"
-                        type="info"
-                        showIcon
-                        icon={<InfoCircleOutlined />}
-                        message="Quy tắc đổi câu"
-                        description="Câu thay thế sẽ giữ nguyên dạng câu, chủ đề, mức từng ý và mẫu nhãn tương ứng của vị trí này trong đề thi."
-                    />
-
-                    <section className="change-question-instruction-section">
-                        <div className="change-question-instruction-heading">
-                            <div className="change-question-instruction-title">
-                                <BulbOutlined />
-                                <Text strong>Phương thức đổi câu hỏi</Text>
-                            </div>
-                        </div>
-
-                        <Form
-                            form={form}
-                            layout="vertical"
-                            requiredMark={false}
-                            initialValues={{ source: "generate", instruction: "" }}
+                    <section className="change-question-block">
+                        <Form.Item
+                            name="source"
+                            label={<Text strong>Lấy câu mới từ đâu?</Text>}
+                            className="change-question-source"
                         >
-                            <Form.Item name="source" label="Chọn nguồn câu thay thế">
-                                <Radio.Group buttonStyle="solid" disabled={isBusy}>
-                                    <Radio.Button value="generate">
+                            <Radio.Group buttonStyle="solid" disabled={isBusy}>
+                                <Radio.Button value="generate">
+                                    <Space size={6}>
+                                        <EditOutlined />
+                                        <span>Soạn câu mới</span>
+                                    </Space>
+                                </Radio.Button>
+                                <Tooltip title={bankExhausted ? "Ngân hàng đã hết câu phù hợp để thay câu này" : undefined}>
+                                    <Radio.Button value="bank" disabled={bankExhausted}>
                                         <Space size={6}>
-                                            <RobotOutlined />
-                                            <span>Soạn câu mới</span>
+                                            <DatabaseOutlined />
+                                            <span>Lấy từ ngân hàng</span>
                                         </Space>
                                     </Radio.Button>
-                                    <Tooltip title={bankExhausted ? "Ngân hàng đã hết câu phù hợp để thay câu này" : undefined}>
-                                        <Radio.Button value="bank" disabled={bankExhausted}>
-                                            <Space size={6}>
-                                                <DatabaseOutlined />
-                                                <span>Lấy từ ngân hàng câu hỏi</span>
-                                            </Space>
-                                        </Radio.Button>
-                                    </Tooltip>
-                                </Radio.Group>
-                            </Form.Item>
-
-                            {watchedSource === "generate" ? (
-                                <>
-                                    {bankExhausted && (
-                                        <Alert
-                                            className="change-question-bank-exhausted-alert"
-                                            type="warning"
-                                            showIcon
-                                            message="Ngân hàng không còn câu phù hợp để thay câu này"
-                                            description="Bạn có thể soạn câu mới (có thể ghi thêm yêu cầu bên dưới) rồi bấm &quot;Soạn câu mới&quot;."
-                                        />
-                                    )}
-                                    <Form.Item
-                                        name="instruction"
-                                        label="Yêu cầu bổ sung cho AI (tùy chọn)"
-                                        rules={[
-                                            {
-                                                max: MAX_INSTRUCTION_LENGTH,
-                                                message: `Yêu cầu không được vượt quá ${MAX_INSTRUCTION_LENGTH} ký tự.`,
-                                            },
-                                        ]}
-                                    >
-                                        <TextArea
-                                            placeholder="Ví dụ: Tạo câu hỏi bằng một tình huống thực tế khác, thay đổi các phương án nhiễu..."
-                                            autoSize={{ minRows: 3, maxRows: 6 }}
-                                            maxLength={MAX_INSTRUCTION_LENGTH}
-                                            showCount
-                                            disabled={isBusy}
-                                        />
-                                    </Form.Item>
-                                    <div className="change-question-instruction-hint">
-                                        <InfoCircleOutlined />
-                                        <Text type="secondary">
-                                            Nêu rõ bối cảnh hoặc cách diễn đạt mong muốn. Hệ thống sẽ soạn câu mới và tự kiểm tra đáp án.
-                                        </Text>
-                                    </div>
-                                </>
-                            ) : (
-                                <Alert
-                                    type="success"
-                                    showIcon
-                                    icon={<DatabaseOutlined />}
-                                    message="Đổi từ ngân hàng câu hỏi"
-                                    description="Hệ thống sẽ tự động tìm kiếm và thay thế bằng câu hỏi phù hợp nhất đã có trong ngân hàng của bạn. Nếu hết câu khả dụng, hệ thống sẽ thông báo."
-                                />
-                            )}
-                        </Form>
+                                </Tooltip>
+                            </Radio.Group>
+                        </Form.Item>
+                        <Text className="change-question-note">
+                            {watchedSource === "bank"
+                                ? "Hệ thống chọn một câu phù hợp có sẵn trong ngân hàng. Nếu ngân hàng hết câu, hệ thống sẽ báo để thầy/cô chọn soạn câu mới."
+                                : "Câu mới sẽ cùng dạng, cùng chủ đề và cùng mức độ với câu đang có. Hệ thống soạn xong sẽ tự kiểm tra lại đáp án."}
+                        </Text>
+                        {watchedSource === "generate" && bankExhausted && (
+                            <Alert
+                                className="change-question-bank-exhausted-alert"
+                                type="warning"
+                                showIcon
+                                message="Ngân hàng không còn câu phù hợp để thay câu này"
+                                description="Thầy/cô có thể ghi thêm yêu cầu bên dưới rồi bấm &quot;Soạn câu mới&quot;."
+                            />
+                        )}
                     </section>
 
                     {/* Lý do đổi: ẩn hoàn toàn khi lỗi (isFailed) */}
                     {!isFailed && (
                         <section className="change-question-reason-section">
-                            <Text strong>Lý do đổi câu (tùy chọn)</Text>
-                            <div className="change-question-reason-chips" role="group" aria-label="Lý do đổi câu">
-                                {REPLACE_REASON_OPTIONS.map((option) => (
+                            <Text strong>
+                                Câu đang có chưa tốt ở đâu? <span className="change-question-optional">(không bắt buộc)</span>
+                            </Text>
+                            <div className="change-question-reason-chips" role="group" aria-label="Câu đang có chưa tốt ở đâu">
+                                {REASON_OPTIONS.map((option) => (
                                     <Tag.CheckableTag
                                         key={option.value}
                                         className="change-question-reason-chip"
@@ -344,17 +326,16 @@ export default function ChangeQuestionModal({
                                     </Tag.CheckableTag>
                                 ))}
                             </div>
-                            <Text type="secondary" className="change-question-reason-hint">
-                                Giúp hệ thống biết câu cũ chưa tốt ở đâu. Không chọn cũng được.
-                            </Text>
                         </section>
                     )}
 
-                    {/* Chip yêu cầu (PR B): chỉ khi soạn mới; ẩn chip không hợp dạng câu */}
+                    {/* Yêu cầu cho câu mới: chip (PR B) và lời ghi thêm gộp một mục (G16); chỉ khi soạn mới */}
                     {watchedSource === "generate" && (
                         <section className="change-question-reason-section">
-                            <Text strong>Yêu cầu cho câu mới (tùy chọn)</Text>
-                            <div className="change-question-reason-chips" role="group" aria-label="Yêu cầu cho câu mới">
+                            <Text strong>
+                                Thầy/cô muốn câu mới thế nào? <span className="change-question-optional">(không bắt buộc)</span>
+                            </Text>
+                            <div className="change-question-reason-chips" role="group" aria-label="Thầy/cô muốn câu mới thế nào">
                                 {requestOptions.map((option) => (
                                     <Tag.CheckableTag
                                         key={option.value}
@@ -371,18 +352,38 @@ export default function ChangeQuestionModal({
                                     </Tag.CheckableTag>
                                 ))}
                             </div>
+                            <Form.Item
+                                name="instruction"
+                                label={<span className="change-question-instruction-label">Ghi thêm cho hệ thống</span>}
+                                className="change-question-instruction"
+                                rules={[
+                                    {
+                                        max: MAX_INSTRUCTION_LENGTH,
+                                        message: `Lời ghi thêm dài quá ${MAX_INSTRUCTION_LENGTH} kí tự.`,
+                                    },
+                                ]}
+                            >
+                                <TextArea
+                                    placeholder="Ví dụ: dùng tình huống đi chợ mua rau; đổi số liệu cho gọn hơn."
+                                    autoSize={{ minRows: 2, maxRows: 6 }}
+                                    maxLength={MAX_INSTRUCTION_LENGTH}
+                                    showCount
+                                    disabled={isBusy}
+                                />
+                            </Form.Item>
                             {prefill && (
                                 <Text type="secondary" className="change-question-reason-hint">
-                                    {prefill.scope === "replace"
-                                        ? "Yêu cầu của lần đổi trước"
-                                        : prefill.scope === "cell" ? "Yêu cầu của ô" : "Yêu cầu của đề"} đã được chọn và điền sẵn;
-                                    bỏ chọn hoặc sửa nếu không muốn giữ.
+                                    Đã chọn và điền sẵn {prefill.scope === "replace"
+                                        ? "yêu cầu của lần đổi trước"
+                                        : prefill.scope === "cell" ? "yêu cầu của nhóm câu này trong ma trận" : "yêu cầu chung của đề"}.
+                                    Thầy/cô bỏ chọn hoặc sửa nếu muốn khác.
                                 </Text>
                             )}
                         </section>
                     )}
-                </div>
+                </Form>
             )}
         </Modal>
+        </ConfigProvider>
     );
 }
