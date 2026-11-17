@@ -292,6 +292,16 @@ ls -lh /var/backups/datn/
 - File `datn-<ngày-giờ>.dump` (định dạng custom của `pg_dump`), giữ 14 ngày (`KEEP_DAYS`).
 - **Bản sao lưu cùng ổ đĩa với DB không đủ an toàn.** Làm ít nhất một trong hai: bật snapshot/backup của nhà cung cấp,
   hoặc đặt `RCLONE_REMOTE` (ví dụ `gdrive:datn-backup`, cài và cấu hình `rclone` trước) để chép ra ngoài.
+- **Bản ở xa cũng xoay vòng 14 ngày** (quyết định 16/11, rà soát an ninh 07, VH-02). `backup.sh` chỉ xóa bản cục bộ; `rclone
+  copy` chỉ thêm nên bản ở xa không bao giờ tự mất. Từ khi có bài làm của học sinh (bài giao trực tuyến, V32), bản dump chứa
+  dữ liệu học sinh: giáo viên xóa bài giao thì dữ liệu chỉ thật sự hết khỏi bản ở xa sau 14 ngày. Người vận hành thêm vào
+  cron, sau dòng sao lưu (script chưa tự làm việc này):
+
+  ```bash
+  rclone delete --min-age 14d "$RCLONE_REMOTE"   # xóa bản ở xa cũ hơn 14 ngày
+  ```
+
+  Bài làm của học sinh giữ trong DB tới khi giáo viên xóa bài giao (không tự xóa theo hạn).
 - **Thử khôi phục định kỳ (mỗi tháng và trước ngày giáo viên dùng thử)** vào DB tạm, không đụng DB đang chạy:
 
 ```bash
