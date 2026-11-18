@@ -1,4 +1,4 @@
-import type { ExamKind, ExamQuestionDifficulty, ExamQuestionItem, ExamQuestionType, ExamStatus, ReplaceReason } from "../features/exam/types/exam.types";
+import type { ExamKind, ExamProgress, ExamQuestionDifficulty, ExamQuestionItem, ExamQuestionType, ExamStatus, ReplaceReason } from "../features/exam/types/exam.types";
 
 export const difficultyConfig: Record<
     ExamQuestionDifficulty,
@@ -84,12 +84,13 @@ const GENERIC_REVIEW_REASON = "Hệ thống đề nghị thầy/cô xem kỹ câ
 /** Lý do chỗ không soạn được câu (state = "failed"); mã lạ thì chỉ dặn bấm Đổi câu. */
 export function describeFailureReason(reason?: string | null): string {
     switch (reason) {
+        // G20: nói theo giáo viên, không nhắc "AI", số lần thử (G21) hay dấu nháy
         case "llm_error":
             return "Chưa soạn được câu này vì hệ thống soạn câu đang bận. Thầy/cô bấm Soạn lại.";
         case "qc_exhausted":
-            return "Không soạn được câu đạt yêu cầu sau 3 lần. Bấm 'Soạn lại' (có thể ghi thêm yêu cầu).";
+            return "Hệ thống chưa soạn được câu đạt yêu cầu. Thầy/cô bấm Soạn lại, có thể ghi thêm yêu cầu cho câu mới.";
         default:
-            return "Chưa soạn được câu này. Bấm 'Soạn lại' để thử lại.";
+            return "Chưa soạn được câu này. Thầy/cô bấm Soạn lại.";
     }
 }
 
@@ -156,37 +157,51 @@ export function describeChangedFields(fields: string[]): string {
 }
 
 /**
+ * Một cảnh báo định dạng đã dịch: câu hoàn chỉnh, hoặc mẫu câu có chỗ trống cho tên chỗ trong câu (để gộp nhiều chỗ cùng
+ * mẫu thành một câu, G4). `key` phân biệt mẫu; `field` là trường backend (question_text, option_a…).
+ */
+type FormatIssueParts =
+    | { kind: "text"; text: string }
+    | { kind: "place"; key: string; field: string; render: (place: string) => string };
+
+/**
  * Lỗi, cảnh báo và việc tự sửa của bước định dạng do backend ghi (nguồn: FormatChecker, LatexValidationRules,
  * ShortAnswerValue, LlmOutputRepair, TfJsonParser, TfExplanationLeak). Chỉ dịch các dạng đã biết; không bao giờ ghép
  * chuỗi thô của backend ra giao diện.
  */
 export function describeFormatIssue(issue: string): string {
+    const parts = formatIssueParts(issue);
+    return parts.kind === "text" ? parts.text : parts.render(warningFieldLabels[parts.field]);
+}
+
+function formatIssueParts(issue: string): FormatIssueParts {
+    const done = (value: string): FormatIssueParts => ({ kind: "text", text: value });
     const text = issue.trim();
 
     // "label: 4 ý cùng nhãn T|F": cả 4 ý đúng/sai cùng một đáp án
     const sameLabel = /^label:\s*4 ý cùng nhãn\s*([TF])\s*$/i.exec(text);
     if (sameLabel) {
         const same = sameLabel[1].toUpperCase() === "T" ? "Đúng" : "Sai";
-        return `Cả 4 ý đúng/sai đều cùng là ${same} — nên kiểm lại đáp án từng ý.`;
+        return done(`Cả 4 ý đúng/sai đều cùng là ${same} — nên kiểm lại đáp án từng ý.`);
     }
 
     // Lời giải còn phần nháp: cảnh báo không có tên trường đứng trước (bản giáo viên sửa)
     if (text.startsWith("Lời giải còn chứa phần nháp")) {
-        return EXPLANATION_DRAFT_REASON;
+        return done(EXPLANATION_DRAFT_REASON);
     }
 
     // Hệ thống tự sửa lỗi gõ công thức ở đầu ra của AI (không nói chi tiết kỹ thuật)
     if (text.startsWith("json: đã sửa")) {
-        return "Hệ thống đã tự sửa lỗi gõ công thức trong câu.";
+        return done("Hệ thống đã tự sửa lỗi gõ công thức trong câu.");
     }
     if (text.startsWith("Không giải mã được JSON")) {
-        return "Hệ thống không đọc được câu do AI soạn.";
+        return done("Hệ thống không đọc được câu do AI soạn.");
     }
     if (text.startsWith("4 phương án")) {
-        return "Các phương án A, B, C, D có nội dung trùng nhau.";
+        return done("Các phương án A, B, C, D có nội dung trùng nhau.");
     }
     if (text.startsWith("4 ý a, b, c, d")) {
-        return "Các ý a), b), c), d) có nội dung trùng nhau.";
+        return done("Các ý a), b), c), d) có nội dung trùng nhau.");
     }
 
     const parts = /^([a-z_]+):\s*([\s\S]*)$/.exec(text);
@@ -196,61 +211,148 @@ export function describeFormatIssue(issue: string): string {
     // Nhãn đúng/sai của từng ý bị trống hoặc không đọc được
     const labelField = field ? /^label_([a-d])$/.exec(field) : null;
     if (labelField) {
-        return `Chưa rõ ý ${labelField[1]}) đúng hay sai.`;
+        return done(`Chưa rõ ý ${labelField[1]}) đúng hay sai.`);
     }
 
     const place = field ? warningFieldLabels[field] : undefined;
     if (!field || !place) {
-        return GENERIC_FORMAT_WARNING;
+        return done(GENERIC_FORMAT_WARNING);
     }
+    // Mẫu câu có tên chỗ: gộp được khi nhiều chỗ cùng mẫu (G4)
+    const placed = (key: string, render: (p: string) => string): FormatIssueParts => ({ kind: "place", key, field, render });
 
     if (field === "explanation" && detail.startsWith("lời giải nhắc tới mẫu nhãn")) {
-        return "Lời giải nhắc tới việc gán đáp án theo mẫu. Cần viết lại cho đúng từng ý.";
+        return done("Lời giải nhắc tới việc gán đáp án theo mẫu. Cần viết lại cho đúng từng ý.");
     }
     if (field === "explanation" && detail.startsWith("lời giải tự sửa lại")) {
-        return "Lời giải có phần tự sửa lại đề. Cần viết lại lời giải cuối cùng.";
+        return done("Lời giải có phần tự sửa lại đề. Cần viết lại lời giải cuối cùng.");
     }
     if (detail.startsWith("nội dung trống")) {
-        return `Chưa có nội dung ở ${place}.`;
+        return placed("empty", (p) => `Chưa có nội dung ở ${p}.`);
     }
 
     if (field === "explanation" && detail.startsWith("lời giải có thể còn phần nháp")) {
-        return EXPLANATION_DRAFT_REASON;
+        return done(EXPLANATION_DRAFT_REASON);
     }
     if (field === "answer" && detail.includes("phân số chưa tối giản")) {
-        return "Đáp số là phân số chưa tối giản. Thầy/cô kiểm tra lại đáp số.";
+        return done("Đáp số là phân số chưa tối giản. Thầy/cô kiểm tra lại đáp số.");
     }
     if (field.startsWith("statement_") && detail.startsWith("đã bỏ tiền tố")) {
-        return `Ý ${field.slice("statement_".length)}) có ký hiệu đánh số thừa ở đầu nên hệ thống đã tự bỏ. Thầy/cô xem lại ý này.`;
+        return done(`Ý ${field.slice("statement_".length)}) có ký hiệu đánh số thừa ở đầu nên hệ thống đã tự bỏ. Thầy/cô xem lại ý này.`);
     }
     // Chuỗi có từ 3 dấu $ trở lên: vị trí hệ thống tự đóng có thể sai chỗ (khác trường hợp thiếu đúng một dấu $)
     if (detail.startsWith("đã tự đóng $ khi chuỗi có")) {
-        return `Ở ${place} có nhiều dấu $ và hệ thống đã tự thêm một dấu để đóng công thức, có thể đóng sai chỗ. Thầy/cô kiểm tra lại công thức.`;
+        return placed("many-dollars", (p) => `Ở ${p} có nhiều dấu $ và hệ thống đã tự thêm một dấu để đóng công thức, có thể đóng sai chỗ. Thầy/cô kiểm tra lại công thức.`);
     }
     if (detail.startsWith("đã tự đóng")) {
-        return `Công thức ở ${place} chưa đóng đủ nên hệ thống đã tự sửa. Thầy/cô xem lại công thức.`;
+        return placed("auto-closed", (p) => `Công thức ở ${p} chưa đóng đủ nên hệ thống đã tự sửa. Thầy/cô xem lại công thức.`);
     }
     if (detail.startsWith("đã tự bọc")) {
-        return `Hệ thống đã tự sửa cách gõ công thức ở ${place}. Thầy/cô xem lại.`;
+        return placed("auto-wrapped", (p) => `Hệ thống đã tự sửa cách gõ công thức ở ${p}. Thầy/cô xem lại.`);
     }
     if (detail.startsWith("có từ tiếng Anh")) {
-        return "Câu có từ tiếng Anh lẫn vào, thầy/cô xem lại câu chữ.";
+        return done("Câu có từ tiếng Anh lẫn vào, thầy/cô xem lại câu chữ.");
     }
     if (detail.startsWith("Lệnh ")) {
-        return `Công thức ở ${place} có ký hiệu lạ, có thể gõ sai. Thầy/cô xem lại công thức.`;
+        return placed("unknown-command", (p) => `Công thức ở ${p} có ký hiệu lạ, có thể gõ sai. Thầy/cô xem lại công thức.`);
     }
     if (field === "answer") {
         if (ANSWER_FORMAT_START.test(detail)) {
-            return ANSWER_FORMAT_MESSAGE;
+            return done(ANSWER_FORMAT_MESSAGE);
         }
         // Lỗi đáp số do backend viết sẵn bằng tiếng Việt dễ hiểu: bỏ tiền tố "answer:" rồi giữ nguyên câu
         if (readableAnswerErrors.some((start) => detail.startsWith(start))) {
-            return detail.charAt(0).toUpperCase() + detail.slice(1);
+            return done(detail.charAt(0).toUpperCase() + detail.slice(1));
         }
-        return "Đáp số chưa đúng dạng. Thầy/cô kiểm tra lại đáp số.";
+        return done("Đáp số chưa đúng dạng. Thầy/cô kiểm tra lại đáp số.");
     }
     // Còn lại của một trường đã biết là lỗi công thức (môi trường không hỗ trợ, ngoặc lệch, thiếu đối số…)
-    return `Công thức ở ${place} có phần trình bày chưa đúng. Thầy/cô xem lại công thức.`;
+    return placed("bad-formula", (p) => `Công thức ở ${p} có phần trình bày chưa đúng. Thầy/cô xem lại công thức.`);
+}
+
+// Thứ tự các chỗ trong câu khi gộp: câu dẫn → phương án → ý → lời giải → đáp số
+const FIELD_ORDER = [
+    "question_text", "option_a", "option_b", "option_c", "option_d",
+    "statement_a", "statement_b", "statement_c", "statement_d", "explanation", "answer",
+];
+
+/** Tên các chỗ: đủ A–D thì "cả 4 phương án", đủ 4 ý thì "cả 4 ý"; nối bằng dấu phẩy, chỗ cuối dùng "và". */
+function joinPlaces(fields: string[]): string {
+    const unique = [...new Set(fields)].sort((a, b) => FIELD_ORDER.indexOf(a) - FIELD_ORDER.indexOf(b));
+    const names: string[] = [];
+    const allOf = (group: string[]) => group.every((f) => unique.includes(f));
+    const options = ["option_a", "option_b", "option_c", "option_d"];
+    const statements = ["statement_a", "statement_b", "statement_c", "statement_d"];
+    for (const field of unique) {
+        if (options.includes(field) && allOf(options)) {
+            if (field === "option_a") names.push("cả 4 phương án");
+            continue;
+        }
+        if (statements.includes(field) && allOf(statements)) {
+            if (field === "statement_a") names.push("cả 4 ý");
+            continue;
+        }
+        names.push(warningFieldLabels[field]);
+    }
+    return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} và ${names[names.length - 1]}`;
+}
+
+/**
+ * Dịch nhiều cảnh báo định dạng, gộp các chỗ cùng mẫu câu thành một câu (G4): sáu cảnh báo "ký hiệu lạ" ở câu dẫn, 4
+ * phương án và lời giải thành "Công thức ở câu dẫn, cả 4 phương án và lời giải có ký hiệu lạ…". Giữ thứ tự xuất hiện,
+ * bỏ câu trùng chữ.
+ */
+export function describeFormatIssueList(issues: string[]): string[] {
+    type Group = { render: (p: string) => string; fields: string[] };
+    const slots: (string | Group)[] = [];
+    const groups = new Map<string, Group>();
+    for (const issue of issues) {
+        const parts = formatIssueParts(issue);
+        if (parts.kind === "text") {
+            slots.push(parts.text);
+            continue;
+        }
+        const group = groups.get(parts.key);
+        if (group) {
+            group.fields.push(parts.field);
+        } else {
+            const created = { render: parts.render, fields: [parts.field] };
+            groups.set(parts.key, created);
+            slots.push(created);
+        }
+    }
+    const texts = slots.map((slot) => (typeof slot === "string" ? slot : slot.render(joinPlaces(slot.fields))));
+    return [...new Set(texts)];
+}
+
+/** Một lý do cần xem kỹ đã dịch; `position` có với lý do "gần giống Phần P – Câu k" (để hiện liên kết, G5). */
+export interface ReviewReasonEntry {
+    text: string;
+    position: ExamQuestionPosition | null;
+}
+
+/**
+ * Dịch danh sách lý do cần xem kỹ: cảnh báo định dạng (`warning: …`) gộp theo mẫu câu (G4), lý do khác dịch từng cái;
+ * bỏ câu trùng chữ (G3), giữ thứ tự xuất hiện.
+ */
+export function describeReviewReasonList(reasons: string[]): ReviewReasonEntry[] {
+    const warnings = reasons.filter((r) => r.startsWith("warning:")).map((r) => r.slice("warning:".length));
+    const mergedWarnings = describeFormatIssueList(warnings);
+    const entries: ReviewReasonEntry[] = [];
+    let warningsPlaced = false;
+    for (const reason of reasons) {
+        if (reason.startsWith("warning:")) {
+            // Cảnh báo định dạng đứng ở chỗ cảnh báo đầu tiên
+            if (!warningsPlaced) {
+                entries.push(...mergedWarnings.map((text) => ({ text, position: null })));
+                warningsPlaced = true;
+            }
+            continue;
+        }
+        entries.push({ text: describeReviewReason(reason), position: parseSimilarInExam(reason) });
+    }
+    const seen = new Set<string>();
+    return entries.filter((entry) => (seen.has(entry.text) ? false : (seen.add(entry.text), true)));
 }
 
 /**
@@ -273,6 +375,31 @@ export function isBulkKeepCandidate(question: Pick<ExamQuestionItem, "state" | "
         && question.qcState !== "checking"
         && !question.needsReview
         && (question.reviewReasons ?? []).length === 0;
+}
+
+/**
+ * Câu chữ và màu của dòng tiến độ ở đầu trang đề (docs/api mục 7.3). G18: không ước lượng "khoảng N phút" (tính theo giờ
+ * tạo đề thì sai cả hai chiều, và chưa có số đo thời gian soạn một câu); chỉ nói số câu và lời cố định. Khi AI hết lượt
+ * trong ngày thì kèm `notice` của backend (giờ chạy tiếp).
+ */
+export function describeBuildProgress(
+    progress: ExamProgress
+): { type: "info" | "success" | "warning"; text: string } {
+    const done = `${progress.ready}/${progress.total}`;
+    const stayNote = "Thầy/cô có thể rời trang, đề vẫn tiếp tục được soạn.";
+    if (progress.status === "generating") {
+        if (progress.notice) {
+            return { type: "warning", text: `Đang soạn ${done} câu · ${progress.notice}. ${stayNote}` };
+        }
+        return { type: "info", text: `Đang soạn ${done} câu. ${stayNote}` };
+    }
+    if (progress.status === "partial" && progress.failed > 0) {
+        return {
+            type: "warning",
+            text: `Đã soạn xong ${done} câu · ${progress.failed} câu chưa soạn được (xem bên dưới).`,
+        };
+    }
+    return { type: "success", text: `Đã soạn xong ${done} câu.` };
 }
 
 /** id của thẻ câu trên trang đề để mục lục cuộn tới. */
@@ -342,6 +469,22 @@ export function summarizeQc(question: ExamQuestionItem): QcSummaryLine[] | null 
     ];
 }
 
+/** Vị trí câu trong đề theo Phần, như trang đề và file Word: Phần II – Câu 3. */
+export interface ExamQuestionPosition {
+    part: string;
+    number: number;
+}
+
+/**
+ * Vị trí câu gần giống trong lý do `similar_in_exam: II.3` (dạng từ 2/11). Lý do khác, hoặc dạng cũ chỉ có số thứ tự cả đề
+ * (không biết Phần) thì null.
+ */
+export function parseSimilarInExam(reason: string): ExamQuestionPosition | null {
+    if (!reason.startsWith("similar_in_exam:")) return null;
+    const byPart = /^(I{1,3})\.(\d+)$/.exec(reason.slice("similar_in_exam:".length).trim());
+    return byPart ? { part: byPart[1], number: Number(byPart[2]) } : null;
+}
+
 /**
  * Câu chữ cho một lý do cần xem kỹ. Vị trí câu ghi theo Phần ("Phần II – Câu 3"), đếm lại từ 1 ở mỗi Phần như trang đề
  * và file Word.
@@ -356,9 +499,9 @@ export function describeReviewReason(reason: string): string {
     if (reason.startsWith("similar_in_exam:")) {
         const position = reason.slice("similar_in_exam:".length).trim();
         // Từ 2/11: "II.3" = câu 3 của Phần II (đánh số như trang đề)
-        const byPart = /^(I{1,3})\.(\d+)$/.exec(position);
+        const byPart = parseSimilarInExam(reason);
         if (byPart) {
-            return `Gần giống Phần ${byPart[1]} – Câu ${byPart[2]} trong đề, nên đổi một trong hai câu.`;
+            return `Gần giống Phần ${byPart.part} – Câu ${byPart.number} trong đề, nên đổi một trong hai câu.`;
         }
         // Dữ liệu cũ: n là số thứ tự câu trong cả đề; không đọc được số thì không đoán
         if (/^\d+$/.test(position)) {

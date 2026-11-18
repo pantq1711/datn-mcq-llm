@@ -260,7 +260,8 @@ export default function EditQuestionModal({
             styles={{ body: { maxHeight: "calc(100vh - 170px)", overflowY: "auto" } }}
             onCancel={handleCancel}
             closable={!isBusy}
-            maskClosable={false}
+            // Bấm ra ngoài cũng đóng; đã gõ mà chưa lưu thì handleCancel hỏi lại, đang lưu thì không đóng
+            maskClosable={!isBusy}
             keyboard={!isBusy}
             destroyOnClose
             className="edit-question-modal"

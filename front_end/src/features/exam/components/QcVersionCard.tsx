@@ -8,10 +8,11 @@ import {
 } from "@ant-design/icons";
 
 import type { QcVersion } from "../types/qcTrace.types";
-import { describeChangedFields, describeFormatIssue, describeReviewReason } from "../../../utils/exam.utils";
+import { describeChangedFields, describeFormatIssueList, describeReviewReasonList } from "../../../utils/exam.utils";
 import MathText from "../../../components/common/MathText/MathText";
 import {
     describeAnswerCheck,
+    describeDedup,
     describeGrounding,
     describeJudgeAnswer,
     describeQuestionStatus,
@@ -48,7 +49,7 @@ const QcRow: FC<{ name: string; tone: QcTone; label: string; children?: ReactNod
 const NoData: FC<{ name: string }> = ({ name }) => (
     <div className="qc-trace-modal__qc-row">
         <Text type="secondary" className="qc-trace-modal__qc-name">{name}</Text>
-        <Text type="secondary" className="qc-trace-modal__no-details">Không có dữ liệu</Text>
+        <Text type="secondary" className="qc-trace-modal__no-details">Chưa kiểm tra</Text>
     </div>
 );
 
@@ -62,8 +63,9 @@ const List: FC<{ items: string[]; type?: "danger" | "warning" | "secondary" }> =
     );
 
 /** Lỗi, cảnh báo, việc tự sửa của bước định dạng, dịch cho giáo viên và gộp các dòng giống nhau. */
+// Gộp các chỗ cùng mẫu câu thành một dòng (G4), bỏ dòng trùng
 function describeFormatIssues(issues: string[]): string[] {
-    return [...new Set(issues.map(describeFormatIssue))];
+    return describeFormatIssueList(issues);
 }
 
 function describeAnswer(version: QcVersion): string | null {
@@ -93,12 +95,11 @@ export const QcVersionCard: FC<Props> = ({ version, isLast }) => {
                     <Space size={6} wrap className="qc-trace-modal__step-heading">
                         <Text strong className="qc-trace-modal__step-action">
                             {version.kind === "teacher_edit"
-                                ? `GV sửa${version.editedBy?.name ? ` · ${version.editedBy.name}` : ""}`
+                                ? `Bản thầy/cô sửa${version.editedBy?.name ? ` · ${version.editedBy.name}` : ""}`
                                 : "Câu mới"}
                         </Text>
                         <Tag color={tagColor(status.tone)}>{status.label}</Tag>
                         {version.current && <Tag color="purple">Đang dùng</Tag>}
-                        <Text type="secondary">#{version.questionId}</Text>
                     </Space>
 
                     <div className="qc-trace-modal__step-time">
@@ -140,18 +141,9 @@ export const QcVersionCard: FC<Props> = ({ version, isLast }) => {
                         <QcRow
                             name="Trùng lặp"
                             tone={qc.dedup.passed ? "success" : "error"}
-                            label={qc.dedup.passed ? "Không trùng" : "Trùng"}
-                        >
-                            {qc.dedup.similarity != null && (
-                                <Text type="secondary">
-                                    Độ giống {qc.dedup.similarity.toFixed(2)}
-                                    {qc.dedup.threshold != null && ` / ngưỡng ${qc.dedup.threshold.toFixed(2)}`}
-                                    {qc.dedup.comparedTo &&
-                                        ` · so với câu #${qc.dedup.comparedTo.questionId}${qc.dedup.comparedTo.inThisExam ? " (trong đề này)" : ""
-                                        }${qc.dedup.comparedTo.inBank ? " (trong ngân hàng)" : ""}`}
-                                </Text>
-                            )}
-                        </QcRow>
+                            // G22: không hiện độ giống, ngưỡng hay mã câu; chỉ nói câu giống nằm ở đâu
+                            label={describeDedup(qc.dedup)}
+                        />
                     ) : (
                         <NoData name="Trùng lặp" />
                     )}
@@ -203,8 +195,8 @@ export const QcVersionCard: FC<Props> = ({ version, isLast }) => {
                 {version.reviewReasons && version.reviewReasons.length > 0 && (
                     <Space size={[4, 4]} wrap className="qc-trace-modal__qc-reasons">
                         <Text type="secondary">Cần xem kỹ:</Text>
-                        {version.reviewReasons.map((reason) => (
-                            <Tag key={reason} color="orange">{describeReviewReason(reason)}</Tag>
+                        {describeReviewReasonList(version.reviewReasons).map((reason) => (
+                            <Tag key={reason.text} color="orange">{reason.text}</Tag>
                         ))}
                     </Space>
                 )}

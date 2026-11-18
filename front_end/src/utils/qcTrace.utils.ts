@@ -1,4 +1,4 @@
-import type { QcAnswerCheck } from "../features/exam/types/qcTrace.types";
+import type { QcAnswerCheck, QcDedup, QcTraceResponse, QcVersion } from "../features/exam/types/qcTrace.types";
 import { describeJudgeAnswerValue } from "./exam.utils";
 
 export type QcTone = "success" | "error" | "warning" | "default";
@@ -121,6 +121,66 @@ const actionLabels: Record<string, Label> = {
 
 export function describeAction(action: string): Label {
     return actionLabels[action] ?? { label: action, tone: "default" };
+}
+
+/** Câu chữ bước trùng lặp cho giáo viên, không hiện độ giống, ngưỡng hay mã câu (G22). */
+export function describeDedup(dedup: QcDedup): string {
+    if (dedup.passed) return "Không trùng";
+    if (dedup.comparedTo?.inThisExam) return "Rất giống một câu trong đề này";
+    if (dedup.comparedTo?.inBank) return "Rất giống một câu trong ngân hàng";
+    return "Rất giống một câu đã có";
+}
+
+/** Phiên bản đang dùng của chỗ; không có cờ "đang dùng" thì lấy bản cuối của lần soạn cuối. */
+export function currentVersion(trace: QcTraceResponse): QcVersion | null {
+    for (const lineage of trace.lineages) {
+        const current = lineage.versions.find((v) => v.current);
+        if (current) return current;
+    }
+    const last = trace.lineages[trace.lineages.length - 1];
+    return last?.versions[last.versions.length - 1] ?? null;
+}
+
+/** Một dòng tóm tắt ở đầu hộp kết quả kiểm tra; ok = null khi bước chưa chạy. */
+export interface QcSummaryRow {
+    label: string;
+    value: string;
+    ok: boolean | null;
+}
+
+/**
+ * Ba dòng tóm tắt (G22) của một phiên bản: Trình bày, Trùng câu khác, Tự giải lại. Cùng cách nói với dòng tóm tắt trên thẻ
+ * câu (summarizeQc) nhưng lấy từ kết quả kiểm tra thật của phiên bản.
+ */
+export function summarizeVersionQc(version: QcVersion): QcSummaryRow[] {
+    const qc = version.qc;
+    const format: QcSummaryRow = qc?.format
+        ? { label: "Trình bày", value: qc.format.passed ? "đạt" : "cần xem lại", ok: qc.format.passed }
+        : { label: "Trình bày", value: "chưa kiểm tra", ok: null };
+    const dedup: QcSummaryRow = qc?.dedup
+        ? {
+            label: "Trùng câu khác",
+            value: qc.dedup.passed ? "không" : describeDedup(qc.dedup).toLowerCase(),
+            ok: qc.dedup.passed,
+        }
+        : { label: "Trùng câu khác", value: "chưa kiểm tra", ok: null };
+
+    let solver: QcSummaryRow;
+    const check = qc?.answerCheck;
+    if (!check) {
+        solver = { label: "Tự giải lại", value: "chưa kiểm tra", ok: null };
+    } else if (check.state === "consistent") {
+        solver = { label: "Tự giải lại", value: "khớp đáp án", ok: true };
+    } else if (check.state === "inconsistent") {
+        solver = { label: "Tự giải lại", value: "ra đáp án khác", ok: false };
+    } else if (check.state === "pending") {
+        solver = { label: "Tự giải lại", value: "đang tự giải lại…", ok: null };
+    } else if (check.state === "error") {
+        solver = { label: "Tự giải lại", value: "chưa giải lại được", ok: false };
+    } else {
+        solver = { label: "Tự giải lại", value: "chưa tự giải lại", ok: null };
+    }
+    return [format, dedup, solver];
 }
 
 export function formatQcTime(value?: string | null): string {

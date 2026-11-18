@@ -14,19 +14,6 @@ export type ExamQcState = "checking" | "passed" | "needs_review";
 /** Lý do chỗ ở trạng thái failed (docs/contract/enums.md, V23); chỉ có khi state = "failed". */
 export type ExamSlotFailureReason = "llm_error" | "qc_exhausted";
 
-/** Số câu của một Phần theo ma trận (ExamPartDto.required). */
-export interface ExamPreviewPart {
-    part: string;
-    label: string;
-    count: number;
-}
-
-export interface ExamPreviewData {
-    questionCount: number;
-    /** Số câu theo Phần I, II, III; cộng lại bằng questionCount. */
-    parts: ExamPreviewPart[];
-}
-
 export interface ExamItemStatement {
     key: StatementKey;
     text: string;
