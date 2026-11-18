@@ -322,6 +322,70 @@ class QuestionImageApiTest {
                 .andExpect(jsonPath("$.code").value("IMAGE_NOT_FOUND"));
     }
 
+    /** Gắn testImage vào một câu nhập đã xác nhận, có bank_item công khai đã bị gỡ (ẩn mềm, V30). */
+    private void ganAnhVaoCauNganHangCongKhaiDaGo() {
+        int templateId = jdbc.queryForObject(
+                "INSERT INTO question_template (subject_id, grade_level, topic, source_question) " +
+                "VALUES (?, 8, 'Hàm số', 'Đề mẫu đã gỡ') RETURNING id",
+                Integer.class, subjectId
+        );
+        int runId = jdbc.queryForObject(
+                "INSERT INTO experiment_run (subject_id, strategy, model_name, temperature, prompt_text, purpose) " +
+                "VALUES (?, 'zero-shot', 'm', 0.7, 'p', 'production') RETURNING id",
+                Integer.class, subjectId
+        );
+        int gqId = jdbc.queryForObject(
+                "INSERT INTO generated_question (template_id, run_id, question_type, question_text, option_a, option_b, option_c, option_d, correct_option, raw_llm_output, origin, import_batch_id) " +
+                "VALUES (?, ?, 'mcq', 'Câu đã gỡ ⟦img:" + testImage.getId() + "⟧', 'A', 'B', 'C', 'D', 'A', '{}', 'import', ?) RETURNING id",
+                Integer.class, templateId, runId, batchId
+        );
+        testImage.setGeneratedQuestionId(gqId);
+        imageRepository.save(testImage);
+
+        int reviewId = jdbc.queryForObject(
+                "INSERT INTO teacher_review (question_id, reviewer_id, review_purpose, reviewer_answer, answer_correct, format_ok, difficulty_label, decision, final_option) " +
+                "VALUES (?, ?, 'production', 'A', true, true, 'easy', 'approved_as_is', 'A') RETURNING id",
+                Integer.class, gqId, teacherId
+        );
+        jdbc.update(
+                "INSERT INTO bank_item (source_question_id, review_id, question_text, option_a, option_b, option_c, option_d, correct_option, difficulty, visible_to_user_id, removed_at, removed_by) " +
+                "VALUES (?, ?, 'Câu đã gỡ', 'A', 'B', 'C', 'D', 'A', 'easy', NULL, CURRENT_TIMESTAMP, ?)",
+                gqId, reviewId, teacherId
+        );
+    }
+
+    @Test
+    @DisplayName("Ảnh câu ngân hàng công khai đã gỡ: giáo viên khác không xem được (404)")
+    void anhCauNganHangDaGo_NguoiKhacKhongXemDuoc_Tra404() throws Exception {
+        ganAnhVaoCauNganHangCongKhaiDaGo();
+
+        long exp = signer.calculateExp(Instant.now());
+        String sig = signer.sign(testImage.getId(), exp, otherTeacherId);
+
+        mockMvc.perform(get("/api/question-images/{id}", testImage.getId())
+                        .param("exp", String.valueOf(exp))
+                        .param("u", String.valueOf(otherTeacherId))
+                        .param("sig", sig))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("IMAGE_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("Ảnh câu ngân hàng đã gỡ: người tải vẫn xem được ảnh của mình (200)")
+    void anhCauNganHangDaGo_NguoiTaiVanXemDuoc_Tra200() throws Exception {
+        ganAnhVaoCauNganHangCongKhaiDaGo();
+
+        long exp = signer.calculateExp(Instant.now());
+        String sig = signer.sign(testImage.getId(), exp, teacherId);
+
+        mockMvc.perform(get("/api/question-images/{id}", testImage.getId())
+                        .param("exp", String.valueOf(exp))
+                        .param("u", String.valueOf(teacherId))
+                        .param("sig", sig))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(FAKE_PNG_DATA));
+    }
+
     // ===== Thiếu / sai kiểu tham số: hợp đồng yêu cầu luôn 404 IMAGE_NOT_FOUND (không phân biệt) =====
 
     private void expectImageNotFound(org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request)

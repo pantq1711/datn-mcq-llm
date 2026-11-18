@@ -19,6 +19,8 @@ public class ImageHeaderInspector {
     private static final byte[] GIF_89A = new byte[] {0x47, 0x49, 0x46, 0x38, 0x39, 0x61};
     private static final byte[] BMP_MAGIC = new byte[] {0x42, 0x4D};
     private static final int EMF_SIGNATURE = 0x464D4520; // " EMF" dạng Little-Endian (20 45 4D 46)
+    /** DPI dùng để quy đổi rclFrame sang pixel (mức LibreOffice dùng khi xuất PNG). */
+    private static final long EMF_RENDER_DPI = 96;
 
     private final ImageImportProperties props;
 
@@ -244,9 +246,24 @@ public class ImageHeaderInspector {
             }
         }
 
+        // rclFrame (offset 24..39, đơn vị 0,01 mm): LibreOffice dựng ảnh theo khung này, nên file có rclBounds nhỏ nhưng
+        // rclFrame cực lớn vẫn phải bị chặn. Đổi sang pixel ở 96 DPI và lấy cạnh lớn hơn.
+        ByteBuffer frameBuf = ByteBuffer.wrap(data, 24, 16).order(ByteOrder.LITTLE_ENDIAN);
+        long frameLeft = frameBuf.getInt();
+        long frameTop = frameBuf.getInt();
+        long frameRight = frameBuf.getInt();
+        long frameBottom = frameBuf.getInt();
+        rawWidth = Math.max(rawWidth, frameToPixels(Math.abs(frameRight - frameLeft)));
+        rawHeight = Math.max(rawHeight, frameToPixels(Math.abs(frameBottom - frameTop)));
+
         int width = rawWidth > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) rawWidth;
         int height = rawHeight > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) rawHeight;
         return new ImageHeaderInfo("emf", "image/x-emf", width, height, data.length);
+    }
+
+    /** Đổi độ dài rclFrame (0,01 mm) sang pixel ở 96 DPI, làm tròn lên: px = ceil(len × 96 / 2540). */
+    private static long frameToPixels(long hundredthsOfMm) {
+        return (hundredthsOfMm * EMF_RENDER_DPI + 2539) / 2540;
     }
 
     private static boolean startsWith(byte[] data, byte[] prefix) {

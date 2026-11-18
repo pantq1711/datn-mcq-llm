@@ -2,6 +2,7 @@ package com.datn.mcq.questionimage.service;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+import org.springframework.util.unit.DataSize;
 
 import java.time.Duration;
 
@@ -32,6 +33,31 @@ public class ImageImportProperties {
 
     /** Kích thước pixel tối đa cạnh dài sau khi chuẩn hóa (mặc định 1600 px). */
     private int maxOutputDimension = 1600;
+
+    /** Đường dẫn đến binary prlimit (util-linux), dùng để đặt trần bộ nhớ ảo cho soffice. */
+    private String prlimitPath = "prlimit";
+
+    /**
+     * Trần bộ nhớ ảo (RLIMIT_AS) của soffice. Rỗng hoặc 0 thì không giới hạn (máy dev Windows). Khi có giá trị mà thiếu
+     * prlimit thì không đổi ảnh (fail closed), không chạy soffice không trần.
+     */
+    private DataSize sofficeMaxAddressSpace;
+
+    public String getPrlimitPath() {
+        return prlimitPath;
+    }
+
+    public void setPrlimitPath(String prlimitPath) {
+        this.prlimitPath = prlimitPath;
+    }
+
+    public DataSize getSofficeMaxAddressSpace() {
+        return sofficeMaxAddressSpace;
+    }
+
+    public void setSofficeMaxAddressSpace(DataSize sofficeMaxAddressSpace) {
+        this.sofficeMaxAddressSpace = sofficeMaxAddressSpace;
+    }
 
     public String getLibreofficePath() {
         return libreofficePath;

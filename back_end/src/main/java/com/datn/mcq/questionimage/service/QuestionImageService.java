@@ -111,10 +111,12 @@ public class QuestionImageService {
             return false; // Ảnh preview của người khác thì không được xem
         }
 
-        // Kiểm tra có bank_item nào của câu này mà công khai (visible_to_user_id IS NULL) hoặc thuộc về userId
+        // Kiểm tra có bank_item nào của câu này mà công khai (visible_to_user_id IS NULL) hoặc thuộc về userId,
+        // và chưa bị gỡ khỏi ngân hàng (removed_at, V30)
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM bank_item bi " +
-                "WHERE bi.source_question_id = ? AND (bi.visible_to_user_id IS NULL OR bi.visible_to_user_id = ?)",
+                "WHERE bi.source_question_id = ? AND (bi.visible_to_user_id IS NULL OR bi.visible_to_user_id = ?) " +
+                "AND bi.removed_at IS NULL",
                 Integer.class,
                 image.getGeneratedQuestionId(),
                 userId

@@ -155,6 +155,10 @@ app:
   question-images:
     url-signing-key: ${QUESTION_IMAGE_URL_KEY:}
     url-ttl: ${QUESTION_IMAGE_URL_TTL:1h}
+    import:
+      # Trần bộ nhớ ảo cho soffice khi đổi EMF (prlimit --as, cần util-linux), ví dụ 2GB. Rỗng = không giới hạn (máy dev
+      # Windows). Đặt mà thiếu prlimit thì không đổi ảnh (fail closed). Xem ImageImportProperties.
+      soffice-max-address-space: ${QUESTION_IMAGE_SOFFICE_MAX_AS:}
   # NV-31 (16/11): nơi câu được Giữ vào. shared (mặc định, hành vi cũ): câu không cờ vào ngân hàng chung; private: mọi câu
   # Giữ vào ngân hàng riêng của người Giữ (đợt dùng thử nhiều trường đặt BANK_KEEP_VISIBILITY=private). Xem BankProperties.
   bank:

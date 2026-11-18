@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.unit.DataSize;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -21,6 +22,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -32,6 +34,9 @@ import java.util.concurrent.TimeUnit;
 public class LibreOfficeEmfConverter implements EmfConverter {
 
     private static final Logger log = LoggerFactory.getLogger(LibreOfficeEmfConverter.class);
+    private static final boolean IS_WINDOWS =
+            System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
+    private static final List<String> WINDOWS_SYSTEM_VARS = List.of("SystemRoot", "TEMP", "TMP");
 
     private final ImageImportProperties props;
     private final PandocLimiter limiter;
@@ -50,8 +55,10 @@ public class LibreOfficeEmfConverter implements EmfConverter {
 
     @Override
     public boolean isAvailable() {
+        Path homeDir = null;
         try {
-            Process process = new ProcessBuilder(props.getLibreofficePath(), "--version")
+            homeDir = Files.createTempDirectory("datn_soffice_home_");
+            Process process = newSofficeProcess(List.of("--version"), homeDir)
                     .redirectErrorStream(true)
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .start();
@@ -64,6 +71,10 @@ public class LibreOfficeEmfConverter implements EmfConverter {
         } catch (Exception e) {
             log.debug("LibreOffice không khả dụng tại '{}': {}", props.getLibreofficePath(), e.getMessage());
             return false;
+        } finally {
+            if (homeDir != null) {
+                deleteDirectoryRecursively(homeDir);
+            }
         }
     }
 
@@ -92,6 +103,7 @@ public class LibreOfficeEmfConverter implements EmfConverter {
             Path inDir = Files.createDirectories(tempDir.resolve("in"));
             Path outDir = Files.createDirectories(tempDir.resolve("out"));
             Path profileDir = Files.createDirectories(tempDir.resolve("profile"));
+            Path homeDir = Files.createDirectories(tempDir.resolve("home"));
 
             // Kiểm tra header và khung EMF trước khi ghi file tạm và gọi LibreOffice
             Map<String, EmfConvertResult> results = new LinkedHashMap<>();
@@ -119,9 +131,8 @@ public class LibreOfficeEmfConverter implements EmfConverter {
                 return results;
             }
 
-            // Dựng lệnh soffice đổi cả lô trong 1 tiến trình
+            // Dựng lệnh soffice đổi cả lô trong 1 tiến trình (môi trường sạch, trần bộ nhớ nếu cấu hình)
             List<String> command = new ArrayList<>();
-            command.add(props.getLibreofficePath());
             command.add("--headless");
             command.add("--norestore");
             command.add("--convert-to");
@@ -135,7 +146,7 @@ public class LibreOfficeEmfConverter implements EmfConverter {
             }
 
             Path logFile = tempDir.resolve("soffice.log");
-            ProcessBuilder pb = new ProcessBuilder(command);
+            ProcessBuilder pb = newSofficeProcess(command, homeDir);
             pb.redirectErrorStream(true);
             pb.redirectOutput(logFile.toFile());
             Process process = pb.start();
@@ -148,6 +159,10 @@ public class LibreOfficeEmfConverter implements EmfConverter {
                     results.put(key, EmfConvertResult.failure("CONVERTER_TIMEOUT", "Quá thời gian chuyển đổi ảnh EMF"));
                 }
                 return results;
+            }
+            if (process.exitValue() != 0) {
+                // Ví dụ soffice bị dừng vì vượt trần bộ nhớ (prlimit --as): ảnh thiếu PNG sẽ nhận CONVERTER_FAILED bên dưới
+                log.warn("LibreOffice đổi EMF thoát với mã {}", process.exitValue());
             }
 
             // Đọc và xử lý kết quả từng ảnh
@@ -284,6 +299,71 @@ public class LibreOfficeEmfConverter implements EmfConverter {
         int blue = rgb & 0xFF;
         // Pixel gần như trắng tinh
         return red >= 250 && green >= 250 && blue >= 250;
+    }
+
+    /**
+     * Lệnh đầy đủ để chạy soffice. Khi cấu hình {@code soffice-max-address-space} thì bọc bằng {@code prlimit --as=<byte> --}:
+     * prlimit exec thẳng soffice (giữ PID, nên diệt cây tiến trình khi timeout vẫn đúng) và các tiến trình con
+     * (oosplash, soffice.bin) thừa kế trần. Thiếu prlimit thì tiến trình không khởi động được, ảnh không được đổi (fail closed).
+     */
+    public List<String> buildCommand(List<String> sofficeArgs) {
+        List<String> command = new ArrayList<>();
+        DataSize cap = props.getSofficeMaxAddressSpace();
+        if (cap != null && cap.toBytes() > 0) {
+            command.add(props.getPrlimitPath());
+            command.add("--as=" + cap.toBytes());
+            command.add("--");
+        }
+        command.add(props.getLibreofficePath());
+        command.addAll(sofficeArgs);
+        return command;
+    }
+
+    /**
+     * Môi trường tối thiểu cho soffice: không thừa kế biến của JVM (JWT_SECRET, LLM_API_KEY, DB_PASSWORD...). Chỉ giữ PATH
+     * (để script soffice tìm lệnh hệ thống), HOME là thư mục tạm riêng của lần chạy, LANG cố định. Trên Windows (máy dev)
+     * giữ thêm SystemRoot, TEMP, TMP vì thiếu thì soffice.exe không chạy; các biến này không chứa bí mật.
+     */
+    public static Map<String, String> sofficeEnvironment(Map<String, String> parent, Path homeDir, boolean windows) {
+        Map<String, String> env = new LinkedHashMap<>();
+        String path = lookupIgnoreCase(parent, "PATH");
+        if (path != null) {
+            env.put("PATH", path);
+        }
+        env.put("HOME", homeDir.toAbsolutePath().toString());
+        env.put("LANG", "C.UTF-8");
+        if (windows) {
+            for (String name : WINDOWS_SYSTEM_VARS) {
+                String value = lookupIgnoreCase(parent, name);
+                if (value != null) {
+                    env.put(name, value);
+                }
+            }
+        }
+        return env;
+    }
+
+    /** Tạo ProcessBuilder cho soffice với lệnh từ {@link #buildCommand} và môi trường từ {@link #sofficeEnvironment}. */
+    public ProcessBuilder newSofficeProcess(List<String> sofficeArgs, Path homeDir) {
+        ProcessBuilder pb = new ProcessBuilder(buildCommand(sofficeArgs));
+        Map<String, String> env = pb.environment();
+        Map<String, String> clean = sofficeEnvironment(new LinkedHashMap<>(env), homeDir, IS_WINDOWS);
+        env.clear();
+        env.putAll(clean);
+        return pb;
+    }
+
+    private static String lookupIgnoreCase(Map<String, String> env, String name) {
+        String value = env.get(name);
+        if (value != null) {
+            return value;
+        }
+        for (Map.Entry<String, String> e : env.entrySet()) {
+            if (e.getKey().equalsIgnoreCase(name)) {
+                return e.getValue();
+            }
+        }
+        return null;
     }
 
     private void destroyProcessTree(Process process) {

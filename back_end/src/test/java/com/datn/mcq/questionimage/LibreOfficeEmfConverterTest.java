@@ -8,10 +8,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import org.springframework.util.unit.DataSize;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -172,5 +178,104 @@ class LibreOfficeEmfConverterTest {
         assertNotNull(r);
         assertFalse(r.success());
         assertEquals("IMAGE_DIMENSION_TOO_LARGE", r.errorCode());
+    }
+
+    @Test
+    @DisplayName("convertBatch từ chối EMF có rclBounds nhỏ nhưng rclFrame cực lớn, trước khi gọi LibreOffice")
+    void convertBatch_EmfRclFrameLon_TuChoiTruocKhiGoiLibreOffice() {
+        props.setLibreofficePath("non-existent-soffice-binary-xyz");
+        LibreOfficeEmfConverter guardedConverter = new LibreOfficeEmfConverter(props, limiter);
+
+        byte[] emf = createMinimalValidEmf();
+        // rclFrame 0..2.000.000 (đơn vị 0,01 mm = 20 m) ≈ 75.591 px ở 96 DPI; rclBounds vẫn 100×100
+        ByteBuffer.wrap(emf, 24, 16).order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(0).putInt(0).putInt(2_000_000).putInt(2_000_000);
+
+        Map<String, EmfConvertResult> results = guardedConverter.convertBatch(Map.of("frame1", emf));
+
+        EmfConvertResult r = results.get("frame1");
+        assertNotNull(r);
+        assertFalse(r.success());
+        assertEquals("IMAGE_DIMENSION_TOO_LARGE", r.errorCode());
+    }
+
+    @Test
+    @DisplayName("Môi trường của soffice chỉ còn PATH, HOME (thư mục tạm), LANG; không lộ biến bí mật")
+    void sofficeEnvironment_ChiGiuPathHomeLang() {
+        Map<String, String> parent = new HashMap<>();
+        parent.put("PATH", "/usr/bin:/bin");
+        parent.put("JWT_SECRET", "s1");
+        parent.put("LLM_API_KEY", "s2");
+        parent.put("DB_PASSWORD", "s3");
+        parent.put("JAVA_TOOL_OPTIONS", "-Xmx1g");
+        parent.put("HOME", "/home/app");
+        parent.put("SystemRoot", "C:\\Windows");
+        Path home = Path.of("tmp", "home");
+
+        Map<String, String> env = LibreOfficeEmfConverter.sofficeEnvironment(parent, home, false);
+
+        assertEquals(Set.of("PATH", "HOME", "LANG"), env.keySet());
+        assertEquals("/usr/bin:/bin", env.get("PATH"));
+        assertEquals(home.toAbsolutePath().toString(), env.get("HOME"));
+        assertEquals("C.UTF-8", env.get("LANG"));
+    }
+
+    @Test
+    @DisplayName("Trên Windows giữ thêm SystemRoot, TEMP, TMP (không bí mật) để soffice.exe chạy được")
+    void sofficeEnvironment_Windows_GiuThemBienHeThong() {
+        Map<String, String> parent = new HashMap<>();
+        parent.put("Path", "C:\\Windows\\system32");
+        parent.put("SystemRoot", "C:\\Windows");
+        parent.put("TEMP", "C:\\Temp");
+        parent.put("TMP", "C:\\Temp");
+        parent.put("JWT_SECRET", "s1");
+
+        Map<String, String> env = LibreOfficeEmfConverter.sofficeEnvironment(parent, Path.of("h"), true);
+
+        assertEquals(Set.of("PATH", "HOME", "LANG", "SystemRoot", "TEMP", "TMP"), env.keySet());
+        assertEquals("C:\\Windows\\system32", env.get("PATH"));
+    }
+
+    @Test
+    @DisplayName("ProcessBuilder của soffice dùng đúng môi trường đã lọc")
+    void newSofficeProcess_MoiTruongDaLoc() {
+        Path home = Path.of("tmp", "home");
+        ProcessBuilder pb = converter.newSofficeProcess(List.of("--version"), home);
+
+        Map<String, String> expected = LibreOfficeEmfConverter.sofficeEnvironment(
+                System.getenv(), home, System.getProperty("os.name", "").toLowerCase().startsWith("windows"));
+        assertEquals(new HashMap<>(expected), new HashMap<>(pb.environment()));
+    }
+
+    @Test
+    @DisplayName("Có cấu hình trần bộ nhớ thì lệnh soffice được bọc bằng prlimit --as")
+    void buildCommand_CoTranBoNho_BocBangPrlimit() {
+        props.setSofficeMaxAddressSpace(DataSize.ofGigabytes(2));
+
+        List<String> cmd = converter.buildCommand(List.of("--version"));
+
+        assertEquals(List.of("prlimit", "--as=2147483648", "--", "soffice", "--version"), cmd);
+    }
+
+    @Test
+    @DisplayName("Không cấu hình trần bộ nhớ thì giữ lệnh soffice như cũ")
+    void buildCommand_KhongCauHinhTran_KhongBocPrlimit() {
+        List<String> cmd = converter.buildCommand(List.of("--version"));
+
+        assertEquals(List.of("soffice", "--version"), cmd);
+    }
+
+    @Test
+    @DisplayName("Cấu hình trần mà không có prlimit: không chạy soffice không trần, trả lỗi (fail closed)")
+    void convertBatch_ThieuPrlimit_FailClosed() {
+        props.setSofficeMaxAddressSpace(DataSize.ofGigabytes(2));
+        props.setPrlimitPath("non-existent-prlimit-binary-xyz");
+
+        Map<String, EmfConvertResult> results = converter.convertBatch(Map.of("fig1", createMinimalValidEmf()));
+
+        EmfConvertResult r = results.get("fig1");
+        assertNotNull(r);
+        assertFalse(r.success());
+        assertFalse(converter.isAvailable());
     }
 }
