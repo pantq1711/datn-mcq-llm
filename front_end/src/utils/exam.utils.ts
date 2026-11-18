@@ -94,6 +94,32 @@ export function describeFailureReason(reason?: string | null): string {
     }
 }
 
+/**
+ * Tên dạng câu và tên Phần dùng chung mọi trang (G25, theo cấu trúc đề 2025). Đổi tên thì chỉ sửa ở đây.
+ */
+export const QUESTION_TYPE_LABELS: Record<ExamQuestionType, string> = {
+    mcq: "Trắc nghiệm nhiều phương án",
+    tf: "Trắc nghiệm đúng/sai",
+    sa: "Trả lời ngắn",
+};
+
+/** Dạng ngắn, viết thường, cho dòng đếm và cột hẹp: "12 trắc nghiệm · 2 đúng/sai · 4 trả lời ngắn". */
+export const QUESTION_TYPE_SHORT_LABELS: Record<ExamQuestionType, string> = {
+    mcq: "trắc nghiệm",
+    tf: "đúng/sai",
+    sa: "trả lời ngắn",
+};
+
+/** Tiêu đề từng Phần của đề, như file Word: "Phần II. Trắc nghiệm đúng/sai". */
+export const PART_TITLES: Record<string, string> = {
+    I: `Phần I. ${QUESTION_TYPE_LABELS.mcq}`,
+    II: `Phần II. ${QUESTION_TYPE_LABELS.tf}`,
+    III: `Phần III. ${QUESTION_TYPE_LABELS.sa}`,
+};
+
+/** Phần → dạng câu của Phần đó (Phần I trắc nghiệm, II đúng/sai, III trả lời ngắn). */
+export const PART_QUESTION_TYPE: Record<string, ExamQuestionType> = { I: "mcq", II: "tf", III: "sa" };
+
 export const examKindConfig: Record<ExamKind, { label: string; color: string }> = {
     matrix: { label: "Theo ma trận", color: "blue" },
     lesson: { label: "Theo bài", color: "purple" },
@@ -402,6 +428,45 @@ export function describeBuildProgress(
     return { type: "success", text: `Đã soạn xong ${done} câu.` };
 }
 
+// G14: lý do "đang chờ" (hệ thống chưa kiểm xong), không phải lỗi của câu: hiện thành dòng trạng thái, không là "cần xem kỹ"
+const PENDING_REASONS = new Set(["solver_pending", "grounding_pending"]);
+
+/** Lý do cần xem kỹ thật (bỏ các lý do "đang chờ" solver_pending, grounding_pending). */
+export function contentReviewReasons(reasons: string[] | undefined): string[] {
+    return (reasons ?? []).filter((reason) => !PENDING_REASONS.has(reason));
+}
+
+/**
+ * Câu đang cần xem kỹ theo cách giao diện hiển thị (G14): có cờ và còn ít nhất một lý do không phải "đang chờ". Có cờ mà
+ * không kèm lý do nào thì vẫn coi là cần xem kỹ cho an toàn. Dùng chung cho thẻ câu, mục lục và ô tóm tắt.
+ */
+export function needsReviewNow(question: Pick<ExamQuestionItem, "needsReview" | "reviewReasons">): boolean {
+    if (!question.needsReview) return false;
+    const reasons = question.reviewReasons ?? [];
+    return reasons.length === 0 || contentReviewReasons(reasons).length > 0;
+}
+
+/**
+ * Trạng thái "hệ thống đang kiểm tra" của câu (G14): `checking` đang tự giải lại bản sửa, `grounding` đang đối chiếu tài
+ * liệu (hai trường hợp này chưa Lưu được, backend trả 409 QC_CHECKING), `deferred` kiểm lại bị hoãn vì hết lượt AI trong
+ * ngày (vẫn Lưu được, vào ngân hàng riêng). Không có thì null.
+ */
+export type PendingCheck = "checking" | "grounding" | "deferred";
+
+export function pendingCheckOf(question: Pick<ExamQuestionItem, "qcState" | "reviewReasons">): PendingCheck | null {
+    const reasons = question.reviewReasons ?? [];
+    if (question.qcState === "checking") return "checking";
+    if (reasons.includes("grounding_pending")) return "grounding";
+    if (reasons.includes("solver_pending")) return "deferred";
+    return null;
+}
+
+/** Chưa Lưu được vì hệ thống đang kiểm tra (backend trả 409 QC_CHECKING). */
+export function isKeepBlockedByCheck(question: Pick<ExamQuestionItem, "qcState" | "reviewReasons">): boolean {
+    const pending = pendingCheckOf(question);
+    return pending === "checking" || pending === "grounding";
+}
+
 /** id của thẻ câu trên trang đề để mục lục cuộn tới. */
 export function examSlotAnchorId(slotId: string | number): string {
     return `exam-slot-${slotId}`;
@@ -422,7 +487,8 @@ export function navStatusOf(question: ExamQuestionItem): ExamNavStatus {
         case "generating":
             return "generating";
     }
-    return question.needsReview ? "review" : "unreviewed";
+    // G14: chỉ còn lý do "đang chờ" thì không tính là cần xem kỹ
+    return needsReviewNow(question) ? "review" : "unreviewed";
 }
 
 /** Một dòng tóm tắt kết quả tự kiểm tra trên thẻ câu. */

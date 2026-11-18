@@ -4,7 +4,7 @@ import dayjs from "dayjs";
 import "./QuestionDetail.css";
 import QuestionContent from "../../exam/components/QuestionContent";
 import MathText from "../../../components/common/MathText/MathText";
-import { describeLevel } from "../../../utils/exam.utils";
+import { describeLevel, QUESTION_TYPE_LABELS } from "../../../utils/exam.utils";
 import type { BankItemDetail, QuestionType } from "../types/questionBank.types";
 import type { ExamQuestionItem } from "../../exam/types/exam.types";
 
@@ -20,9 +20,9 @@ interface QuestionDetailProps {
 }
 
 const questionTypeMap: Record<QuestionType, { label: string; color: string }> = {
-    mcq: { label: "Trắc nghiệm nhiều phương án", color: "blue" },
-    tf: { label: "Trắc nghiệm đúng/sai", color: "cyan" },
-    sa: { label: "Trả lời ngắn", color: "purple" },
+    mcq: { label: QUESTION_TYPE_LABELS.mcq, color: "blue" },
+    tf: { label: QUESTION_TYPE_LABELS.tf, color: "cyan" },
+    sa: { label: QUESTION_TYPE_LABELS.sa, color: "purple" },
 };
 
 /** Đưa câu ngân hàng về dạng QuestionContent dùng (null → undefined). */

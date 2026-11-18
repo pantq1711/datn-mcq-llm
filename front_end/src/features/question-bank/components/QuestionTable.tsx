@@ -5,7 +5,7 @@ import dayjs from "dayjs";
 import "./QuestionTable.css";
 import type { BankSort, QuestionTableItem, QuestionType } from "../types/questionBank.types";
 import MathText from "../../../components/common/MathText/MathText";
-import { describeLevel } from "../../../utils/exam.utils";
+import { describeLevel, QUESTION_TYPE_LABELS } from "../../../utils/exam.utils";
 
 const { Text } = Typography;
 
@@ -79,11 +79,9 @@ export default function QuestionTable({
             key: "questionType",
             width: 130,
             align: "center",
-            render: (type?: QuestionType) => {
-                if (type === "tf") return <Text>Trắc nghiệm đúng/sai</Text>;
-                if (type === "sa") return <Text>Trả lời ngắn</Text>;
-                return <Text>Trắc nghiệm nhiều phương án</Text>;
-            },
+            render: (type?: QuestionType) => (
+                <Text>{QUESTION_TYPE_LABELS[type ?? "mcq"] ?? QUESTION_TYPE_LABELS.mcq}</Text>
+            ),
         },
         {
             title: "Chủ đề / Bài",

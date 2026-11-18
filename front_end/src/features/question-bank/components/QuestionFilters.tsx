@@ -4,6 +4,7 @@ import { FilterOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { SubjectOption, QuestionFilterValues, BankTopic, BankUsage, QuestionType, QuestionDifficulty } from "../types/questionBank.types";
 import { getBankTopics } from "../services/questionBankApi";
 import { mergeBankTopics, sortBankTopics } from "../../../utils/bankTopic.utils";
+import { QUESTION_TYPE_LABELS } from "../../../utils/exam.utils";
 
 import "./QuestionFilters.css";
 
@@ -25,11 +26,10 @@ const gradeOptions = [
     { label: "Lớp 9", value: 9 },
 ];
 
-const questionTypeOptions: { label: string; value: QuestionType }[] = [
-    { label: "Trắc nghiệm nhiều phương án", value: "mcq" },
-    { label: "Trắc nghiệm đúng/sai", value: "tf" },
-    { label: "Trả lời ngắn", value: "sa" },
-];
+const questionTypeOptions: { label: string; value: QuestionType }[] = (["mcq", "tf", "sa"] as const).map((value) => ({
+    label: QUESTION_TYPE_LABELS[value],
+    value,
+}));
 
 const difficultyOptions: { label: string; value: QuestionDifficulty }[] = [
     { label: "Biết", value: "easy" },

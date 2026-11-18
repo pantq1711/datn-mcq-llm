@@ -1,13 +1,14 @@
 import type { ExamMatrixCellInput, ExamMatrixCellPayload, MatrixDifficulty, MatrixPart, MatrixQuestionType } from "../features/exam-matrix/types/examMatrix.types";
+import { QUESTION_TYPE_LABELS } from "./exam.utils";
 
 // Phần I chỉ mcq, II chỉ tf, III chỉ sa (docs/api mục 7.1)
 export const PART_BY_TYPE: Record<MatrixQuestionType, MatrixPart> = { mcq: "I", tf: "II", sa: "III" };
 
 export const MATRIX_TYPE_LABELS: Record<MatrixQuestionType, string> = {
     // Tên ba Phần theo cấu trúc đề 2025, dùng giống nhau ở mọi trang
-    mcq: "Trắc nghiệm nhiều phương án (Phần I)",
-    tf: "Trắc nghiệm đúng/sai (Phần II)",
-    sa: "Trả lời ngắn (Phần III)",
+    mcq: `${QUESTION_TYPE_LABELS.mcq} (Phần I)`,
+    tf: `${QUESTION_TYPE_LABELS.tf} (Phần II)`,
+    sa: `${QUESTION_TYPE_LABELS.sa} (Phần III)`,
 };
 
 export const MATRIX_LEVEL_LABELS: Record<MatrixDifficulty, string> = {

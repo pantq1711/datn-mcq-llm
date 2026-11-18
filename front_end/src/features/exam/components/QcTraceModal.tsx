@@ -55,7 +55,7 @@ function lineageHeader(lineage: QcLineage, index: number) {
 }
 
 // Thời gian antd mở panel Collapse (motionDurationMid 0,2 giây) cộng chút dư, để đo khi panel đã mở hết
-const COLLAPSE_OPEN_MS = 190;
+const COLLAPSE_OPEN_MS = 250;
 
 /**
  * Cuộn thân hộp để panel vừa mở hiện trọn: cạnh dưới panel không thấp hơn cạnh dưới vùng nhìn thấy của hộp. Panel cao

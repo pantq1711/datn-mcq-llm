@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, ConfigProvider, Form, Input, message, Modal, Radio, Space, Tag, Typography } from "antd";
 import type { FormInstance } from "antd";
-import { EditOutlined } from "@ant-design/icons";
+import { CloseOutlined, SaveOutlined } from "@ant-design/icons";
 
 import type {
     ExamItemDto, ExamOption, ExamQuestionItem, StatementKey, TruthLabel, UpdateSlotQuestionPayload,
@@ -10,8 +10,9 @@ import { updateQuestion } from "../services/examApi";
 import { describeFormatIssue, describeLevel } from "../../../utils/exam.utils";
 import { MathField, MathInputProvider, MathSymbolBar } from "./MathInput";
 import { READABLE_MODAL_THEME } from "./readableModalTheme";
+import { clearEditDraft, loadEditDraft, saveEditDraft } from "../utils/editDraft";
 
-import "./EditQuestionModal.css";
+import "./EditQuestionForm.css";
 
 const { Text } = Typography;
 
@@ -82,15 +83,6 @@ interface EditQuestionFormValues {
     explanation?: string;
 }
 
-interface EditQuestionModalProps {
-    open: boolean;
-    question: ExamQuestionItem | null;
-    examId: number;
-    onCancel: () => void;
-    onSave: (saved: ExamItemDto) => void | Promise<void>;
-    loading?: boolean;
-}
-
 interface SaveErrorBody {
     error?: string;
     message?: string;
@@ -112,8 +104,8 @@ function handleSaveError(e: unknown, form: FormInstance): string {
             return `Bản sửa chưa lưu được: ${rest.join(" ")}`;
         }
         return rest.length > 0
-            ? `Bản sửa chưa lưu được. Thầy/cô xem chỗ báo đỏ trong hộp. ${rest.join(" ")}`
-            : "Bản sửa chưa lưu được. Thầy/cô xem chỗ báo đỏ trong hộp.";
+            ? `Bản sửa chưa lưu được. Thầy/cô xem chỗ báo đỏ trên câu. ${rest.join(" ")}`
+            : "Bản sửa chưa lưu được. Thầy/cô xem chỗ báo đỏ trên câu.";
     }
     if (data?.code === "VERSION_CONFLICT") {
         return `${base}. Thầy/cô tải lại trang rồi sửa tiếp.`;
@@ -121,42 +113,76 @@ function handleSaveError(e: unknown, form: FormInstance): string {
     return base;
 }
 
-export default function EditQuestionModal({
-    open,
-    question,
-    examId,
-    onCancel,
-    onSave,
-    loading = false,
-}: EditQuestionModalProps) {
+/** Giá trị ban đầu của form lấy từ câu đang có trong đề. */
+function toFormValues(question: ExamQuestionItem): EditQuestionFormValues {
+    return {
+        questionText: question.questionText || "",
+        optionA: question.optionA || "",
+        optionB: question.optionB || "",
+        optionC: question.optionC || "",
+        optionD: question.optionD || "",
+        correctOption: question.correctOption || "A",
+        saAnswer: question.saAnswer || "",
+        statements: STATEMENT_KEYS.map((key) => {
+            const statement = question.statements?.find((s) => s.key === key);
+            return { text: statement?.text || "", label: statement?.label || "T" };
+        }),
+        explanation: question.explanation || "",
+    };
+}
+
+interface EditQuestionFormProps {
+    question: ExamQuestionItem;
+    examId: number;
+    /** Lưu xong (backend trả câu của chỗ sau khi sửa). */
+    onSaved: (saved: ExamItemDto) => void | Promise<void>;
+    /** Bấm Hủy (đã hỏi lại nếu có thay đổi chưa lưu). */
+    onCancel: () => void;
+    /** Báo trang khi form bắt đầu có thay đổi chưa lưu (để hỏi lại khi chuyển câu, đóng tab…). */
+    onDirtyChange?: (dirty: boolean) => void;
+}
+
+/**
+ * Form sửa câu ngay trên thẻ câu (CT-2, mục 7.2): ô có công thức với dòng "Sẽ hiện là", hàng nút kí hiệu, lỗi dưới đúng
+ * ô; thanh nút Hủy/Lưu dính đáy màn hình. Giá trị ban đầu chỉ đổ một lần khi mở: trang tự tải lại đề không xóa chữ đang
+ * gõ (trang gắn `key` theo chỗ để đổi câu thì mở form mới).
+ */
+export default function EditQuestionForm({ question, examId, onSaved, onCancel, onDirtyChange }: EditQuestionFormProps) {
     const [form] = Form.useForm<EditQuestionFormValues>();
+    const slotId = question.slotId;
+    const questionId = question.questionId;
+    // Bản đang sửa dở lưu tạm trong tab (tải lại trang không mất chữ đang gõ); không có thì lấy nội dung câu
+    const [draft] = useState(() =>
+        slotId !== undefined && questionId !== undefined
+            ? loadEditDraft<EditQuestionFormValues>(examId, slotId, questionId)
+            : null
+    );
+    const [restored, setRestored] = useState(draft !== null);
+    const [initialValues] = useState(() => draft ?? toFormValues(question));
     const [submitting, setSubmitting] = useState(false);
-    // Hộp hỏi lại dùng chung cỡ chữ 16px của hộp Sửa (Modal.confirm tĩnh không nhận ConfigProvider bọc hộp)
+
+    // Mở lại bản sửa dở: báo trang là đang có thay đổi chưa lưu (hỏi lại khi đóng tab, khi chuyển câu)
+    useEffect(() => {
+        if (draft) onDirtyChange?.(true);
+        // chỉ chạy một lần khi mở form
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const forgetDraft = () => {
+        if (slotId !== undefined) clearEditDraft(examId, slotId);
+    };
+
+    // Bỏ bản khôi phục, quay về nội dung hiện tại của câu
+    const useCurrentQuestion = () => {
+        form.setFieldsValue(toFormValues(question));
+        forgetDraft();
+        setRestored(false);
+        onDirtyChange?.(false);
+    };
+    // Hộp hỏi lại dùng chung cỡ chữ 16px (Modal.confirm tĩnh không nhận ConfigProvider)
     const [modal, modalContextHolder] = Modal.useModal();
 
-    const isBusy = loading || submitting;
-    const questionType = question?.questionType ?? "mcq";
-
-    // Khi Modal mở hoặc đổi câu hỏi, đổ dữ liệu cũ vào form
-    useEffect(() => {
-        if (open && question) {
-            form.setFieldsValue({
-                questionText: question.questionText || "",
-                optionA: question.optionA || "",
-                optionB: question.optionB || "",
-                optionC: question.optionC || "",
-                optionD: question.optionD || "",
-                correctOption: question.correctOption || "A",
-                saAnswer: question.saAnswer || "",
-                statements: STATEMENT_KEYS.map((key) => {
-                    const statement = question.statements?.find((s) => s.key === key);
-                    return { text: statement?.text || "", label: statement?.label || "T" };
-                }),
-                explanation: question.explanation || "",
-            });
-            setSubmitting(false);
-        }
-    }, [open, question, form]);
+    const questionType = question.questionType ?? "mcq";
 
     const buildPayload = (values: EditQuestionFormValues, baseQuestionId: number): UpdateSlotQuestionPayload => {
         const common = {
@@ -188,7 +214,7 @@ export default function EditQuestionModal({
     };
 
     const handleSubmit = async () => {
-        if (!question || isBusy) return;
+        if (submitting) return;
         if (question.slotId === undefined || question.questionId === undefined) {
             message.error("Không xác định được câu này trong đề. Hãy tải lại trang.");
             return;
@@ -203,17 +229,15 @@ export default function EditQuestionModal({
 
         setSubmitting(true);
         try {
-            const saved = await updateQuestion(
-                examId,
-                question.slotId,
-                buildPayload(values, question.questionId)
-            );
+            const saved = await updateQuestion(examId, question.slotId, buildPayload(values, question.questionId));
             message.success(
                 saved.qcState === "checking"
                     ? "Đã lưu bản sửa. Hệ thống đang tự kiểm tra lại đáp án."
                     : "Đã lưu bản sửa."
             );
-            await onSave(saved);
+            forgetDraft();
+            onDirtyChange?.(false);
+            await onSaved(saved);
         } catch (e) {
             console.error(e);
             message.error({ content: handleSaveError(e, form), duration: 8 });
@@ -222,81 +246,67 @@ export default function EditQuestionModal({
         }
     };
 
-    const closeModal = () => {
-        form.resetFields();
-        onCancel();
-    };
-
     const handleCancel = () => {
-        if (isBusy) return;
-        // Đã gõ gì đó mà chưa lưu thì hỏi lại, tránh mất công sửa vì lỡ bấm ra ngoài
-        if (form.isFieldsTouched()) {
+        if (submitting) return;
+        // Đã gõ gì đó (hoặc đang mở bản sửa dở khôi phục) mà chưa lưu thì hỏi lại, tránh mất công sửa vì lỡ bấm
+        if (restored || form.isFieldsTouched()) {
             modal.confirm({
                 title: "Bỏ các thay đổi chưa lưu?",
                 okText: "Bỏ thay đổi",
                 cancelText: "Tiếp tục sửa",
                 okButtonProps: { danger: true },
-                onOk: closeModal,
+                autoFocusButton: "cancel",
+                onOk: () => {
+                    forgetDraft();
+                    onDirtyChange?.(false);
+                    onCancel();
+                },
             });
             return;
         }
-        closeModal();
+        forgetDraft();
+        onCancel();
     };
 
     return (
         <ConfigProvider theme={READABLE_MODAL_THEME}>
-        {modalContextHolder}
-        <Modal
-            open={open}
-            title={
-                <Space size={10}>
-                    <EditOutlined className="edit-question-modal-title-icon" />
-                    <span>Sửa câu hỏi</span>
-                </Space>
-            }
-            width={800}
-            style={{ top: 20 }}
-            // Nội dung dài thì cuộn trong hộp; nút Lưu ở đáy luôn thấy được, kể cả câu đúng/sai ở màn 1366×768 (G12)
-            styles={{ body: { maxHeight: "calc(100vh - 170px)", overflowY: "auto" } }}
-            onCancel={handleCancel}
-            closable={!isBusy}
-            // Bấm ra ngoài cũng đóng; đã gõ mà chưa lưu thì handleCancel hỏi lại, đang lưu thì không đóng
-            maskClosable={!isBusy}
-            keyboard={!isBusy}
-            destroyOnClose
-            className="edit-question-modal"
-            footer={
-                <div className="edit-question-modal-footer">
-                    <Button onClick={handleCancel} disabled={isBusy}>
-                        Hủy
-                    </Button>
-                    <Button
-                        type="primary"
-                        icon={<EditOutlined />}
-                        loading={isBusy}
-                        disabled={!question}
-                        onClick={handleSubmit}
-                    >
-                        Lưu thay đổi
-                    </Button>
-                </div>
-            }
-        >
-            {!question ? (
-                <Alert
-                    type="warning"
-                    showIcon
-                    message="Chưa chọn câu hỏi"
-                    description="Thầy/cô chọn một câu trong đề rồi bấm Sửa."
-                />
-            ) : (
-                <MathInputProvider>
+            {modalContextHolder}
+            <MathInputProvider>
                 <Form
                     form={form}
                     layout="vertical"
                     requiredMark={false}
+                    initialValues={initialValues}
+                    onValuesChange={(_, allValues) => {
+                        onDirtyChange?.(true);
+                        // Lưu tạm bản đang gõ trong tab để tải lại trang không mất
+                        if (slotId !== undefined && questionId !== undefined) {
+                            saveEditDraft(examId, slotId, questionId, allValues);
+                        }
+                    }}
                     className="edit-question-form"
+                    // G13: Esc ở bất kỳ ô nào = bấm Hủy (đã gõ thì hỏi lại). Bỏ qua khi đang gõ dấu bằng bộ gõ tiếng Việt
+                    // hoặc phím đã được xử lý; hộp hỏi lại vẽ ngoài Form nên Esc đóng hộp đó không lan tới đây
+                    onKeyDown={(e) => {
+                        if (e.key !== "Escape" || e.defaultPrevented || e.nativeEvent.isComposing) return;
+                        e.preventDefault();
+                        handleCancel();
+                    }}
                 >
+                    {restored && (
+                        <Alert
+                            type="info"
+                            showIcon
+                            className="edit-question-restored"
+                            message="Đã mở lại bản thầy/cô đang sửa dở (chưa lưu)."
+                            action={
+                                <Button size="small" onClick={useCurrentQuestion} disabled={submitting}>
+                                    Dùng nội dung hiện tại của câu
+                                </Button>
+                            }
+                        />
+                    )}
+
                     {/* Mức độ do ô ma trận quyết định, không sửa được (docs/api mục 7.5a) */}
                     {questionType !== "tf" && (
                         <div className="edit-question-level">
@@ -306,7 +316,7 @@ export default function EditQuestionModal({
                         </div>
                     )}
 
-                    <MathSymbolBar disabled={isBusy} />
+                    <MathSymbolBar disabled={submitting} />
 
                     <MathField
                         name="questionText"
@@ -316,7 +326,7 @@ export default function EditQuestionModal({
                         placeholder="Nhập câu dẫn. Công thức đặt giữa hai dấu $, ví dụ $x^2 + 1$"
                         minRows={3}
                         maxRows={8}
-                        disabled={isBusy}
+                        disabled={submitting}
                     />
 
                     {questionType === "mcq" && (
@@ -330,7 +340,7 @@ export default function EditQuestionModal({
                                         fieldLabel={`Phương án ${label}`}
                                         requiredMessage={`Thầy/cô chưa nhập phương án ${label}.`}
                                         maxRows={4}
-                                        disabled={isBusy}
+                                        disabled={submitting}
                                     />
                                 ))}
                             </div>
@@ -341,7 +351,7 @@ export default function EditQuestionModal({
                                 rules={[{ required: true, message: "Thầy/cô chưa chọn đáp án đúng." }]}
                             >
                                 <Radio.Group
-                                    disabled={isBusy}
+                                    disabled={submitting}
                                     optionType="button"
                                     buttonStyle="solid"
                                     className="edit-question-answer-choice"
@@ -359,7 +369,7 @@ export default function EditQuestionModal({
                             rules={[{ required: true, whitespace: true, message: "Thầy/cô chưa nhập đáp số." }]}
                             className="edit-question-sa-answer"
                         >
-                            <Input placeholder="Ví dụ: 12" disabled={isBusy} />
+                            <Input placeholder="Ví dụ: 12" disabled={submitting} />
                         </Form.Item>
                     )}
 
@@ -379,7 +389,7 @@ export default function EditQuestionModal({
                                         fieldLabel={`Ý ${key})`}
                                         requiredMessage={`Thầy/cô chưa nhập ý ${key}).`}
                                         maxRows={4}
-                                        disabled={isBusy}
+                                        disabled={submitting}
                                     />
                                     <Form.Item
                                         name={["statements", i, "label"]}
@@ -387,7 +397,7 @@ export default function EditQuestionModal({
                                         rules={[{ required: true, message: "Thầy/cô chọn Đúng hoặc Sai." }]}
                                     >
                                         <Radio.Group
-                                            disabled={isBusy}
+                                            disabled={submitting}
                                             optionType="button"
                                             buttonStyle="solid"
                                             className="edit-question-truth-choice"
@@ -413,12 +423,20 @@ export default function EditQuestionModal({
                         placeholder="Nhập lời giải để đối chiếu khi chấm"
                         minRows={2}
                         maxRows={8}
-                        disabled={isBusy}
+                        disabled={submitting}
                     />
+
+                    {/* Thanh nút dính đáy màn hình khi câu dài (G12) */}
+                    <div className="edit-question-form-footer">
+                        <Button icon={<CloseOutlined />} onClick={handleCancel} disabled={submitting}>
+                            Hủy
+                        </Button>
+                        <Button type="primary" icon={<SaveOutlined />} loading={submitting} onClick={handleSubmit}>
+                            Lưu thay đổi
+                        </Button>
+                    </div>
                 </Form>
-                </MathInputProvider>
-            )}
-        </Modal>
+            </MathInputProvider>
         </ConfigProvider>
     );
 }

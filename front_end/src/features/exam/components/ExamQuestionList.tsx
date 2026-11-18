@@ -1,11 +1,14 @@
 import { useState, type ReactNode } from "react";
 import { Button, Empty, List, Skeleton, Space, Tag, Tooltip, Typography } from "antd";
-import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, WarningOutlined, ReloadOutlined, InfoCircleOutlined } from "@ant-design/icons";
+import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, WarningOutlined, ReloadOutlined, InfoCircleOutlined, PauseCircleOutlined, SyncOutlined } from "@ant-design/icons";
 
 import "./ExamQuestionList.css";
 import type { BankVisibility, ExamQuestionItem } from "../types/exam.types";
 import { describeInfoReason, teacherRequestLabel } from "../types/exam.types";
-import { describeFailureReason, describeLevel, describeReviewReasonList, examSlotAnchorId, hasContentFlag, resolveQuestionType, summarizeQc } from "../../../utils/exam.utils";
+import {
+    contentReviewReasons, describeFailureReason, describeLevel, describeReviewReasonList, examSlotAnchorId, hasContentFlag,
+    isKeepBlockedByCheck, needsReviewNow, pendingCheckOf, resolveQuestionType, summarizeQc,
+} from "../../../utils/exam.utils";
 import QuestionContent from "./QuestionContent";
 
 const { Text } = Typography;
@@ -28,6 +31,10 @@ interface ExamQuestionListProps {
     onJumpTo?: (part: string, number: number) => void;
     /** Câu vừa được nhảy tới (mục lục hoặc liên kết trong lý do): viền nổi trong chốc lát. */
     flashSlotId?: number;
+    /** Chỗ đang sửa ngay trên thẻ (CT-2): thẻ đó hiện form sửa thay cho nội dung câu và ẩn các nút của thẻ. */
+    editingSlotId?: number;
+    /** Vẽ form sửa cho câu đang sửa (trang giữ trạng thái và cách lưu). */
+    renderEditor?: (question: ExamQuestionItem) => ReactNode;
 }
 
 function renderStateTags(question: ExamQuestionItem) {
@@ -57,9 +64,7 @@ function renderStateTags(question: ExamQuestionItem) {
     if (question.edited && question.state === "ready") {
         tags.push(<Tag key="edited" color="gold">Đã sửa</Tag>);
     }
-    if (question.qcState === "checking") {
-        tags.push(<Text key="qc" type="secondary">Đang tự kiểm tra lại</Text>);
-    }
+    // "Đang tự kiểm tra lại" nay ở dòng trạng thái riêng dưới đầu thẻ (G14), không lặp ở đây
     return tags;
 }
 
@@ -72,7 +77,9 @@ function QuestionBody({ question, showAll, actions }: { question: ExamQuestionIt
     const [manual, setManual] = useState<{ open: boolean; showAll: boolean } | null>(null);
     const manualOpen = manual && manual.showAll === showAll ? manual.open : null;
     // Chỉ câu có cờ về nội dung mới mở sẵn lời giải; cờ "gần giống câu khác" là về đề, xem lời giải không giúp gì
-    const showExplanation = manualOpen ?? (showAll || hasContentFlag(question.needsReview, question.reviewReasons));
+    // Lý do "đang chờ" không tính (G14): câu vừa sửa đang kiểm lại không mở sẵn lời giải
+    const showExplanation = manualOpen
+        ?? (showAll || hasContentFlag(needsReviewNow(question), contentReviewReasons(question.reviewReasons)));
 
     return (
         <>
@@ -108,6 +115,8 @@ export default function ExamQuestionList({
     showAllExplanations = false,
     onJumpTo,
     flashSlotId,
+    editingSlotId,
+    renderEditor,
 }: ExamQuestionListProps) {
     if (loading) {
         return (
@@ -148,10 +157,21 @@ export default function ExamQuestionList({
                         hasContent && resolveQuestionType(question) !== "tf"
                             ? describeLevel(question.difficulty)
                             : null;
-                    const canKeep = state === "ready" && question.qcState !== "checking";
-                    const canChange = state !== "pending" && state !== "generating";
-                    const canEdit = state === "ready" && question.source !== "bank";
-                    const reasons = question.reviewReasons ?? [];
+                    // CT-2: câu đang sửa trên thẻ (chỉ khi câu vẫn đang ở trạng thái sửa được)
+                    const isEditing = Boolean(renderEditor) && editingSlotId !== undefined
+                        && question.slotId === editingSlotId && state === "ready";
+                    // G14: đang kiểm tra thì nút Lưu vẫn hiện nhưng khóa, kèm lời giải thích
+                    const canKeep = !isEditing && state === "ready";
+                    const keepBlocked = isKeepBlockedByCheck(question);
+                    const pendingCheck = state === "ready" ? pendingCheckOf(question) : null;
+                    // Chỉ còn lý do "đang chờ" thì không tô cam, không hiện "Cần xem kỹ"
+                    const showReview = needsReviewNow(question);
+                    const canChange = !isEditing && state !== "pending" && state !== "generating";
+                    const canEdit = !isEditing && state === "ready" && question.source !== "bank";
+                    const hasActions = canKeep || canChange || canEdit || Boolean(onRemove);
+                    const allReasons = question.reviewReasons ?? [];
+                    // Lý do "đang chờ" (solver_pending, grounding_pending) không nằm trong nhóm lý do cần xem kỹ (G14)
+                    const reasons = contentReviewReasons(allReasons);
                     // Câu chữ lý do cần xem kỹ: gộp cảnh báo cùng mẫu (G4), bỏ câu trùng (G3); lý do "gần giống
                     // Phần P – Câu k" giữ vị trí để hiện thành liên kết nhảy tới câu đó (G5)
                     const reasonEntries = describeReviewReasonList(reasons);
@@ -166,20 +186,21 @@ export default function ExamQuestionList({
                             className="exam-question-item"
                         >
                             <div
-                                className={`exam-question-item-content${question.needsReview ? " exam-question-item-needs-review" : ""}${flashSlotId !== undefined && question.slotId === flashSlotId ? " exam-question-item-flash" : ""}`}
+                                className={`exam-question-item-content${showReview ? " exam-question-item-needs-review" : ""}${flashSlotId !== undefined && question.slotId === flashSlotId ? " exam-question-item-flash" : ""}${isEditing ? " exam-question-item-editing" : ""}`}
                             >
                                 <div className="exam-question-item-header">
                                     {/* Số thứ tự, độ khó, cờ cần xem kỹ, nguồn và trạng thái */}
                                     <Space size={8} align="center" wrap>
                                         <div className="exam-question-item-number">
                                             Câu {getNumber(question, index)}
+                                            {isEditing && <span className="exam-question-editing-note"> (đang sửa)</span>}
                                         </div>
 
                                         {difficulty && (
                                             <Text type="secondary">{difficulty.label}</Text>
                                         )}
 
-                                        {question.needsReview && (
+                                        {showReview && (
                                             <Tooltip
                                                 title={
                                                     <ul className="exam-question-review-tooltip">
@@ -198,29 +219,38 @@ export default function ExamQuestionList({
 
                                         {renderStateTags(question)}
                                     </Space>
+                                </div>
 
-                                    {/* Nhóm các nút hành động */}
-                                    <Space size={4} align="center">
+                                {/* Nhóm các nút hành động: màn rộng nằm bên phải dòng đầu thẻ, màn ≤768px xuống cuối thẻ (G26) */}
+                                {hasActions && (
+                                    <div className="exam-question-item-actions">
                                         {canKeep && (
                                             <Tooltip
                                                 title={
-                                                    // Câu có cờ nội dung vẫn Giữ được nhưng vào ngân hàng riêng (docs/api mục 7.5, làm rõ 11/11)
-                                                    // NV-31: hệ thống cấu hình lưu riêng thì mọi câu vào ngân hàng riêng
-                                                    hasContentFlag(question.needsReview, reasons)
-                                                        ? "Câu có cảnh báo sẽ chỉ được lưu vào ngân hàng riêng của thầy/cô."
-                                                        : bankKeepVisibility === "private"
-                                                            ? "Câu này sẽ được lưu vào ngân hàng riêng của thầy/cô để dùng cho các đề sau."
-                                                            : "Câu này sẽ được lưu vào ngân hàng chung để dùng cho các đề sau."
+                                                    keepBlocked
+                                                        ? "Lưu được sau khi hệ thống kiểm tra xong."
+                                                        // Câu có cờ nội dung vẫn Giữ được nhưng vào ngân hàng riêng (docs/api mục 7.5, làm rõ 11/11);
+                                                        // tính cả solver_pending (hoãn kiểm lại vẫn vào ngân hàng riêng)
+                                                        // NV-31: hệ thống cấu hình lưu riêng thì mọi câu vào ngân hàng riêng
+                                                        : hasContentFlag(question.needsReview, allReasons)
+                                                            ? "Câu cần xem kỹ sẽ chỉ được lưu vào ngân hàng riêng của thầy/cô."
+                                                            : bankKeepVisibility === "private"
+                                                                ? "Câu này sẽ được lưu vào ngân hàng riêng của thầy/cô để dùng cho các đề sau."
+                                                                : "Câu này sẽ được lưu vào ngân hàng chung để dùng cho các đề sau."
                                                 }
                                             >
-                                                <Button
-                                                    type="primary"
-                                                    icon={<CheckCircleOutlined />}
-                                                    className="exam-action-btn-keep"
-                                                    onClick={() => onKeep?.(question, index)}
-                                                >
-                                                    Lưu vào ngân hàng
-                                                </Button>
+                                                {/* span để tooltip vẫn hiện khi nút bị khóa */}
+                                                <span className="exam-action-keep-wrap">
+                                                    <Button
+                                                        type="primary"
+                                                        icon={<CheckCircleOutlined />}
+                                                        className="exam-action-btn-keep"
+                                                        disabled={keepBlocked}
+                                                        onClick={() => onKeep?.(question, index)}
+                                                    >
+                                                        Lưu vào ngân hàng
+                                                    </Button>
+                                                </span>
                                             </Tooltip>
                                         )}
 
@@ -259,10 +289,25 @@ export default function ExamQuestionList({
                                                 />
                                             </Tooltip>
                                         )}
-                                    </Space>
-                                </div>
+                                    </div>
+                                )}
 
-                                {question.needsReview && reasons.length > 0 && (
+                                <div className="exam-question-item-body">
+                                {/* G14: hệ thống đang kiểm tra (hoặc tạm hoãn): dòng trạng thái riêng, tách khỏi nhóm lý do */}
+                                {pendingCheck && !isEditing && (
+                                    <div className={`exam-question-pending exam-question-pending-${pendingCheck}`}>
+                                        {pendingCheck === "deferred" ? <PauseCircleOutlined /> : <SyncOutlined spin />}
+                                        <span>
+                                            {pendingCheck === "checking"
+                                                ? "Hệ thống đang tự kiểm tra lại đáp án của bản sửa. Lưu vào ngân hàng được sau khi kiểm tra xong; trang tự cập nhật."
+                                                : pendingCheck === "grounding"
+                                                    ? "Hệ thống đang đối chiếu câu với tài liệu đính kèm. Lưu vào ngân hàng được sau khi đối chiếu xong; trang tự cập nhật."
+                                                    : "Hệ thống tạm hoãn kiểm tra lại vì hết lượt trong ngày. Thầy/cô vẫn lưu được; câu sẽ vào ngân hàng riêng."}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {showReview && reasons.length > 0 && (
                                     <div className="exam-question-review-reasons">
                                         <Text strong className="exam-question-review-label">Lý do cần xem kỹ:</Text>
                                         {/* Mỗi lý do một dòng có gạch đầu dòng (G3) */}
@@ -309,7 +354,10 @@ export default function ExamQuestionList({
                                     </Space>
                                 )}
 
-                                {!hasContent ? (
+                                {isEditing ? (
+                                    // CT-2: sửa ngay trên thẻ; lý do cần xem kỹ vẫn hiện ở trên để giáo viên sửa theo
+                                    renderEditor?.(question)
+                                ) : !hasContent ? (
                                     <>
                                         <Text type="secondary" italic>
                                             {state === "failed"
@@ -321,6 +369,7 @@ export default function ExamQuestionList({
                                 ) : (
                                     <QuestionBody question={question} showAll={showAllExplanations} actions={qcBlock} />
                                 )}
+                                </div>
                             </div>
                         </List.Item>
                     );

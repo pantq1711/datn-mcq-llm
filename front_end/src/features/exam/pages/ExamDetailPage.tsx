@@ -1,12 +1,12 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button, Card, Empty, Spin, Space, Tooltip, Typography, message, Modal } from "antd";
+import { Button, Card, Empty, Result, Spin, Space, Tooltip, Typography, message, Modal } from "antd";
 import { ArrowLeftOutlined, FileWordOutlined, ProfileOutlined, SendOutlined } from "@ant-design/icons";
 
 import ExamQuestionList from "../components/ExamQuestionList";
 import ExamQuestionNav from "../components/ExamQuestionNav";
 import ExamSummaryBar, { type ExamSummaryCounts } from "../components/ExamSummaryBar";
 import type { ExamProgress, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
-import { describeBuildProgress, examKindConfig, examStatusConfig, describeReviewReasonList, examSlotAnchorId, hasContentFlag, isBulkKeepCandidate } from "../../../utils/exam.utils";
+import { describeBuildProgress, examKindConfig, examStatusConfig, describeReviewReasonList, examSlotAnchorId, hasContentFlag, isBulkKeepCandidate, contentReviewReasons, needsReviewNow, pendingCheckOf, PART_QUESTION_TYPE, PART_TITLES, QUESTION_TYPE_SHORT_LABELS } from "../../../utils/exam.utils";
 import { keepQuestion, replaceQuestion, getExamDetail, getExamProgress, getCatalogSubjects } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
 import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
@@ -14,7 +14,8 @@ import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
 import "./ExamDetailPage.css";
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import ChangeQuestionModal, { type ChangeQuestionResult } from "../components/ChangeQuestionModal";
-import EditQuestionModal from "../components/EditQuestionModal";
+import EditQuestionForm from "../components/EditQuestionForm";
+import { clearEditDraft, findEditDraftSlots, loadEditDraft } from "../utils/editDraft";
 import { QcTraceModal } from '../components/QcTraceModal';
 import AssignExamModal from "../../assignment/components/AssignExamModal";
 import ExportWordDialog from '../components/ExportWordDialog';
@@ -25,22 +26,16 @@ const POLL_INTERVAL_MS = 8000;
 const SHOW_ALL_EXPLANATIONS_KEY = "examShowAllExplanations";
 const MAX_CONSECUTIVE_ERRORS = 3;
 
-const partTitles: Record<string, string> = {
-    I: "Phần I. Trắc nghiệm nhiều phương án",
-    II: "Phần II. Trắc nghiệm đúng sai",
-    III: "Phần III. Trả lời ngắn",
-};
-
-// Tên dạng câu của từng Phần trong dòng "18 câu: 12 trắc nghiệm · 2 đúng/sai · 4 trả lời ngắn"
-const partCountLabels: Record<string, string> = {
-    I: "trắc nghiệm",
-    II: "đúng/sai",
-    III: "trả lời ngắn",
-};
+// Tên Phần và dạng câu dùng chung (G25): PART_TITLES cho tiêu đề Phần; dạng ngắn cho dòng
+// "12 trắc nghiệm · 2 đúng/sai · 4 trả lời ngắn"
+const partCountLabels: Record<string, string> = Object.fromEntries(
+    Object.entries(PART_QUESTION_TYPE).map(([part, type]) => [part, QUESTION_TYPE_SHORT_LABELS[type]])
+);
 
 /** Câu giáo viên cần xử lý: có cờ cần xem kỹ hoặc chưa soạn được. */
 function needsAttention(question: ExamQuestionItem): boolean {
-    return question.state === "failed" || (question.state === "ready" && Boolean(question.needsReview));
+    // G14: chỉ còn lý do "đang chờ" (hệ thống đang kiểm tra) thì chưa phải việc của giáo viên
+    return question.state === "failed" || (question.state === "ready" && needsReviewNow(question));
 }
 
 
@@ -86,7 +81,20 @@ export default function ExamDetailPage() {
 
     const [changeQuestion, setChangeQuestion] = useState<ExamQuestionItem | null>(null);
 
-    const [editingQuestion, setEditingQuestion] = useState<ExamQuestionItem | null>(null);
+    // CT-2: sửa ngay trên thẻ câu; mỗi lần một câu. editDirty: form đang có thay đổi chưa lưu
+    const [editingSlotId, setEditingSlotId] = useState<number | undefined>(undefined);
+    const [editDirty, setEditDirty] = useState(false);
+
+    // Đóng tab hoặc tải lại trang khi đang sửa dở: trình duyệt hỏi lại (bấm menu sang trang khác thì chưa chặn được)
+    useEffect(() => {
+        if (!editDirty) return;
+        const warn = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = "";
+        };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, [editDirty]);
 
     const [detail, setDetail] = useState<ExamDetail | null>(null);
     const [progress, setProgress] = useState<ExamProgress | null>(null);
@@ -133,6 +141,9 @@ export default function ExamDetailPage() {
         };
     }, []);
 
+    // Đã xét mở lại bản sửa dở sau khi tải lại trang chưa (chỉ một lần mỗi lần mở trang)
+    const draftRestoreCheckedRef = useRef(false);
+
     // Bộ đếm thứ tự request để chống phản hồi cũ đến muộn (stale response guard)
     const fetchSequenceRef = useRef(0);
 
@@ -140,8 +151,15 @@ export default function ExamDetailPage() {
     const consecutiveErrorsRef = useRef(0);
     const [pollingStoppedDueToError, setPollingStoppedDueToError] = useState(false);
 
+    // G24: lỗi của lần tải đề đầu tiên (chưa có dữ liệu đề) hiện thành khối thông báo thay cho trang; đã có đề rồi thì
+    // lỗi tải lại vẫn chỉ là thông báo nhỏ như trước
+    const [loadError, setLoadError] = useState<{ kind: "not_found" | "network" | "other"; text?: string } | null>(null);
+    const detailLoadedRef = useRef(false);
+    // Mã đề trên địa chỉ phải là số nguyên dương; sai dạng thì coi như không tìm thấy, không gọi API
+    const invalidExamId = examId !== undefined && !/^[1-9]\d*$/.test(examId);
+
     const loadDetail = useCallback(async (options?: { silent?: boolean }) => {
-        if (!examId) return;
+        if (!examId || !/^[1-9]\d*$/.test(examId)) return;
         const currentFetchId = ++fetchSequenceRef.current;
         try {
             // Tiến độ lỗi thì thôi, vẫn hiện đề; chỉ lỗi tải đề mới tính vào bộ đếm lỗi
@@ -154,13 +172,45 @@ export default function ExamDetailPage() {
             if (currentFetchId !== fetchSequenceRef.current) return;
 
             setDetail(data);
+            detailLoadedRef.current = true;
+            setLoadError(null);
             if (progressData) setProgress(progressData);
+            // Lần tải đầu: còn bản sửa dở của câu nào (tải lại trang khi đang sửa) thì mở lại form ở câu đó
+            if (!draftRestoreCheckedRef.current) {
+                draftRestoreCheckedRef.current = true;
+                const examNumber = Number(examId);
+                const items = data.parts.flatMap((p) => p.items);
+                const target = findEditDraftSlots(examNumber)
+                    .map((slotId) => items.find((i) => i.slotId === slotId))
+                    .find((item) => item && item.state === "ready" && item.questionId != null
+                        && loadEditDraft(examNumber, item.slotId, item.questionId) !== null);
+                if (target) {
+                    setEditingSlotId(target.slotId);
+                    window.setTimeout(() => {
+                        document.getElementById(examSlotAnchorId(target.slotId))
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }, 300);
+                }
+            }
             consecutiveErrorsRef.current = 0;
             setPollingStoppedDueToError(false);
         } catch (err: any) {
             if (currentFetchId !== fetchSequenceRef.current) return;
 
             if (!options?.silent) {
+                if (!detailLoadedRef.current) {
+                    // Chưa có đề: thay cả trang bằng khối thông báo, không hiện chữ kỹ thuật của backend
+                    // ("Không tìm thấy đề id=…", "Yêu cầu không hợp lệ…"); 404 và 400 gộp là "không tìm thấy"
+                    const status = err?.response?.status;
+                    if (status === 404 || status === 400) {
+                        setLoadError({ kind: "not_found" });
+                    } else if (!err?.response) {
+                        setLoadError({ kind: "network" });
+                    } else {
+                        setLoadError({ kind: "other", text: err?.response?.data?.error });
+                    }
+                    return;
+                }
                 message.error(err?.response?.data?.error || 'Không tải được đề');
             } else {
                 consecutiveErrorsRef.current += 1;
@@ -327,11 +377,58 @@ export default function ExamDetailPage() {
         setQcModalVisible(true);
     };
 
+    // G24: không tìm thấy đề (404, địa chỉ sai dạng) hoặc không tải được (mất mạng, lỗi máy chủ)
+    const retryLoad = () => {
+        setLoadError(null);
+        setLoading(true);
+        loadDetail().finally(() => setLoading(false));
+    };
+    if (invalidExamId || (!detail && loadError?.kind === "not_found")) {
+        return (
+            <div className="exam-detail-page-result">
+                <Result
+                    status="warning"
+                    title="Không tìm thấy đề này"
+                    subTitle="Có thể đề đã bị xóa hoặc đường dẫn chưa đúng."
+                    extra={
+                        <Button type="primary" onClick={() => navigate("/exams")}>
+                            Về danh sách đề
+                        </Button>
+                    }
+                />
+            </div>
+        );
+    }
+
     if (loading) {
         return (
             <div className="exam-detail-page-loading">
                 <Spin size="large" />
                 <Text type="secondary">Đang tải đề…</Text>
+            </div>
+        );
+    }
+
+    if (!detail && loadError) {
+        return (
+            <div className="exam-detail-page-result">
+                <Result
+                    status="error"
+                    title="Không tải được đề"
+                    subTitle={
+                        loadError.kind === "network"
+                            ? "Thầy/cô kiểm tra kết nối mạng rồi thử lại."
+                            : loadError.text || "Máy chủ đang gặp lỗi. Thầy/cô thử lại sau ít phút."
+                    }
+                    extra={[
+                        <Button key="retry" type="primary" onClick={retryLoad}>
+                            Thử lại
+                        </Button>,
+                        <Button key="back" onClick={() => navigate("/exams")}>
+                            Về danh sách đề
+                        </Button>,
+                    ]}
+                />
             </div>
         );
     }
@@ -344,15 +441,19 @@ export default function ExamDetailPage() {
         total: questionCount,
         ready: parts.reduce((sum, p) => sum + p.ready, 0),
         kept: allQuestions.filter((q) => q.state === "kept" || q.state === "edited").length,
-        needsReview: detail.needsReviewCount,
+        // G14: đếm theo cùng quy tắc với thẻ câu và mục lục (bỏ câu chỉ còn lý do "đang chờ"), không dùng needsReviewCount
+        needsReview: allQuestions.filter((q) => q.state === "ready" && needsReviewNow(q)).length,
         failed: allQuestions.filter((q) => q.state === "failed").length,
         generating: allQuestions.filter((q) => q.state === "pending" || q.state === "generating").length,
     };
     const partsBreakdown = parts
         .map((p) => `${p.required} ${partCountLabels[p.part] ?? `câu Phần ${p.part}`}`)
         .join(" · ");
+    // Câu đang sửa luôn hiện, kể cả khi lọc "Chỉ hiện câu cần xem" (ẩn đi là mất chữ đang gõ)
     const visibleParts = onlyNeedsAttention
-        ? parts.map((p) => ({ ...p, questions: p.questions.filter(needsAttention) })).filter((p) => p.questions.length > 0)
+        ? parts
+            .map((p) => ({ ...p, questions: p.questions.filter((q) => needsAttention(q) || q.slotId === editingSlotId) }))
+            .filter((p) => p.questions.length > 0)
         : parts;
     const progressView = progress ? describeBuildProgress(progress) : null;
     const progressPercent = progress && progress.total > 0
@@ -432,30 +533,45 @@ export default function ExamDetailPage() {
             return;
         }
         // Câu có cờ nội dung vẫn Giữ được nhưng vào ngân hàng riêng (docs/api mục 7.5, 10/11, làm rõ 11/11)
-        const reasons = question.reviewReasons ?? [];
+        // G14: lý do "đang chờ" không liệt kê như lý do cần xem kỹ; hoãn kiểm lại (solver_pending) thì nói riêng một dòng
+        const reasons = contentReviewReasons(question.reviewReasons);
+        const deferred = pendingCheckOf(question) === "deferred";
+        // G8: chữ theo bảng thuật ngữ ("Lưu", "Cần xem kỹ"); nút được chọn sẵn là nút an toàn
         Modal.confirm({
-            title: "Lưu câu đang có cảnh báo?",
+            title: "Lưu câu cần xem kỹ?",
             content: (
                 <div>
-                    <p>Câu này đang có cảnh báo:</p>
                     {reasons.length > 0 && (
-                        <ul style={{ paddingLeft: 20, margin: 0 }}>
-                            {/* Gộp cảnh báo cùng mẫu (G4), bỏ câu trùng */}
-                            {describeReviewReasonList(reasons).map((r) => <li key={r.text}>{r.text}</li>)}
-                        </ul>
+                        <>
+                            <p>Lý do cần xem kỹ:</p>
+                            <ul style={{ paddingLeft: 20, margin: 0 }}>
+                                {/* Gộp cảnh báo cùng mẫu (G4), bỏ câu trùng */}
+                                {describeReviewReasonList(reasons).map((r) => <li key={r.text}>{r.text}</li>)}
+                            </ul>
+                        </>
                     )}
-                    <p style={{ marginTop: 8 }}>Nếu vẫn giữ, câu chỉ được lưu vào ngân hàng riêng của thầy/cô.</p>
+                    {deferred && (
+                        <p style={{ marginTop: reasons.length > 0 ? 8 : 0 }}>
+                            Hệ thống chưa kiểm tra lại xong đáp án (tạm hoãn vì hết lượt trong ngày).
+                        </p>
+                    )}
+                    <p style={{ marginTop: 8 }}>Nếu vẫn lưu, câu chỉ vào ngân hàng riêng của thầy/cô.</p>
                 </div>
             ),
-            okText: "Vẫn giữ",
-            cancelText: "Xem lại",
-            // onOk trả về Promise từ doKeep giúp nút "Vẫn giữ" tự động hiển thị hiệu ứng loading
+            okText: "Vẫn lưu",
+            cancelText: "Để tôi xem lại",
+            // Lỡ nhấn Enter thì đóng hộp, không lưu
+            autoFocusButton: "cancel",
+            // onOk trả về Promise từ doKeep giúp nút "Vẫn lưu" tự động hiển thị hiệu ứng loading
             onOk: () => doKeep(question, true),
         });
     };
 
     // ===== Lưu hàng loạt (CT-7): các câu đã soạn xong, chưa lưu, không có lý do cần xem kỹ =====
-    const bulkCandidates = allQuestions.filter((q) => q.slotId !== undefined && isBulkKeepCandidate(q));
+    // Câu đang sửa trên thẻ không được lưu hàng loạt (bản đang gõ chưa lưu)
+    const bulkCandidates = allQuestions.filter(
+        (q) => q.slotId !== undefined && q.slotId !== editingSlotId && isBulkKeepCandidate(q)
+    );
     const describePosition = (q: ExamQuestionItem) => `Phần ${q.part} – Câu ${getNumber(q, 0)}`;
 
     const runBulkKeep = async (targets: ExamQuestionItem[]) => {
@@ -655,8 +771,56 @@ export default function ExamDetailPage() {
         });
     };
 
+    // Hộp xuất Word → "Xem các câu này" (G23, phác thảo 7.5): bật lọc câu cần xem và cuộn tới câu cần xem kỹ đầu tiên
+    const showFlaggedQuestions = () => {
+        setOnlyNeedsAttention(true);
+        const first = allQuestions.find((q) => q.state === "ready" && needsReviewNow(q));
+        if (first) window.setTimeout(() => jumpToQuestion(first), 0);
+    };
+
+    // ===== Sửa ngay trên thẻ (CT-2) =====
+    /** Đang sửa dở thì hỏi bỏ thay đổi trước khi làm `then`; không sửa dở thì làm ngay. */
+    const confirmDiscardEdit = (then: () => void) => {
+        if (!editDirty) {
+            then();
+            return;
+        }
+        Modal.confirm({
+            title: "Bỏ các thay đổi chưa lưu?",
+            content: "Thầy/cô đang sửa dở một câu. Tiếp tục thì bản đang sửa sẽ mất.",
+            okText: "Bỏ thay đổi",
+            cancelText: "Tiếp tục sửa",
+            okButtonProps: { danger: true },
+            autoFocusButton: "cancel",
+            onOk: () => {
+                setEditDirty(false);
+                then();
+            },
+        });
+    };
+
+    const startEdit = (question: ExamQuestionItem) => {
+        if (question.slotId === undefined || question.slotId === editingSlotId) return;
+        const slotId = question.slotId;
+        confirmDiscardEdit(() => {
+            // Bỏ bản sửa dở (lưu tạm trong tab) của câu đang sửa trước đó
+            if (editingSlotId !== undefined) clearEditDraft(Number(examId), editingSlotId);
+            setEditDirty(false);
+            setEditingSlotId(slotId);
+            // Đưa thẻ lên đầu màn hình để thấy cả form
+            window.setTimeout(() => {
+                document.getElementById(examSlotAnchorId(slotId))?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }, 0);
+        });
+    };
+
+    const closeEditor = () => {
+        setEditDirty(false);
+        setEditingSlotId(undefined);
+    };
+
     const handleSaveEditedQuestion = async () => {
-        setEditingQuestion(null);
+        closeEditor();
         await loadDetail();
     };
 
@@ -677,7 +841,6 @@ export default function ExamDetailPage() {
                         <div className="exam-detail-page-title-row">
                             <Button
                                 type="text"
-                                size="small"
                                 icon={<ArrowLeftOutlined />}
                                 className="exam-detail-page-back-button"
                                 onClick={() => navigate("/exams")}
@@ -725,6 +888,7 @@ export default function ExamDetailPage() {
                         examId={examId!}
                         detail={detail}
                         onClose={() => setExportOpen(false)}
+                        onShowFlagged={showFlaggedQuestions}
                     />
                 </div>
             </div>
@@ -784,7 +948,7 @@ export default function ExamDetailPage() {
                     {visibleParts.map((p) => (
                         <div key={p.part} className="question-group">
                             <Title level={5} className="question-group-title">
-                                {partTitles[p.part] ?? `Phần ${p.part}`}{" "}
+                                {PART_TITLES[p.part] ?? `Phần ${p.part}`}{" "}
                                 <Text type="secondary">({p.ready}/{p.required} câu)</Text>
                             </Title>
                             <ExamQuestionList
@@ -798,7 +962,19 @@ export default function ExamDetailPage() {
                                 }}
                                 onKeep={handleKeep}
                                 bankKeepVisibility={detail.bankKeepVisibility}
-                                onEdit={(question) => setEditingQuestion(question)}
+                                onEdit={startEdit}
+                                editingSlotId={editingSlotId}
+                                renderEditor={(question) => (
+                                    <EditQuestionForm
+                                        // Đổi chỗ thì mở form mới; trang tự tải lại đề không xóa chữ đang gõ
+                                        key={question.slotId}
+                                        question={question}
+                                        examId={Number(examId)}
+                                        onSaved={handleSaveEditedQuestion}
+                                        onCancel={closeEditor}
+                                        onDirtyChange={setEditDirty}
+                                    />
+                                )}
                                 onViewQcTrace={(question, index) => {
                                     if (question.slotId !== undefined) openQcTrace(question.slotId, getNumber(question, index));
                                 }}
@@ -814,13 +990,6 @@ export default function ExamDetailPage() {
                         onGenerate={handleGenerateReplacement}
                     />
 
-                    <EditQuestionModal
-                        open={editingQuestion !== null}
-                        question={editingQuestion}
-                        examId={Number(examId)}
-                        onCancel={() => setEditingQuestion(null)}
-                        onSave={handleSaveEditedQuestion}
-                    />
 
                     {/* Modal hiển thị vết QC cho slot được chọn */}
                     {selectedSlotId && (

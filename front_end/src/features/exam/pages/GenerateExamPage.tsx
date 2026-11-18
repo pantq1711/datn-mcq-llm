@@ -11,7 +11,8 @@ import type { ExamSubjectOption, BuildResultDto, CellContextInput, BuildExamRequ
 import { EXAM_CHALLENGE_OPTIONS, TEACHER_REQUEST_OPTIONS, teacherRequestOptionsFor } from "../types/exam.types";
 import type { ExamMatrix, ExamMatrixDetail, ExamMatrixCellPayload } from "../../exam-matrix/types/examMatrix.types";
 import { getCatalogSubjects, buildExamByMatrix } from "../services/examApi";
-import { describeLevel } from "../../../utils/exam.utils";
+import { describeLevel, QUESTION_TYPE_LABELS } from "../../../utils/exam.utils";
+import type { ExamQuestionType } from "../types/exam.types";
 import { showApiError } from "../../../utils/apiError";
 import { listExamMatrices, getExamMatrix, duplicateExamMatrix, } from "../../exam-matrix/services/examMatrixService";
 
@@ -45,9 +46,9 @@ function collectMaterialIds(
 
 // Cùng nhãn và màu với cột "Dạng câu" của bảng ô ma trận
 const QUESTION_TYPE_TAGS: Record<ExamMatrixCellPayload["questionType"], { label: string; color: string }> = {
-    mcq: { label: "Trắc nghiệm nhiều phương án", color: "geekblue" },
-    tf: { label: "Trắc nghiệm đúng/sai", color: "cyan" },
-    sa: { label: "Trả lời ngắn", color: "purple" },
+    mcq: { label: QUESTION_TYPE_LABELS.mcq, color: "geekblue" },
+    tf: { label: QUESTION_TYPE_LABELS.tf, color: "cyan" },
+    sa: { label: QUESTION_TYPE_LABELS.sa, color: "purple" },
 };
 
 const EMPTY_CELL_CONTEXT: CellContextState = { materialIds: [], materialNames: [], extraInstruction: "", requestCodes: [] };
@@ -378,11 +379,9 @@ export default function GenerateExamPage() {
             key: "questionType",
             width: 190,
             align: "center",
-            render: (type: string) => {
-                if (type === "tf") return <Text>Trắc nghiệm đúng/sai</Text>;
-                if (type === "sa") return <Text>Trả lời ngắn</Text>;
-                return <Text>Trắc nghiệm nhiều phương án</Text>;
-            },
+            render: (type: string) => (
+                <Text>{QUESTION_TYPE_LABELS[type as ExamQuestionType] ?? QUESTION_TYPE_LABELS.mcq}</Text>
+            ),
         },
         {
             title: "Chủ đề / Nội dung",
