@@ -6,7 +6,7 @@ import type {
     ExamItemDto, ExamOption, ExamQuestionItem, StatementKey, TruthLabel, UpdateSlotQuestionPayload,
 } from "../types/exam.types";
 import { updateQuestion } from "../services/examApi";
-import { describeFormatIssue, describeLevel } from "../../../utils/exam.utils";
+import { describeFormatIssueList, describeLevel } from "../../../utils/exam.utils";
 
 import "./EditQuestionModal.css";
 
@@ -42,7 +42,8 @@ function extractErrorMessage(e: any): string {
     const base = data?.error || data?.message || e?.message || "Gặp lỗi khi cập nhật câu hỏi";
     if (Array.isArray(data?.errors) && data.errors.length > 0) {
         // `error` của backend đã chứa sẵn các lỗi này: chỉ hiện danh sách lỗi một lần, bỏ tiền tố tên trường ("answer: …")
-        const lines = [...new Set((data.errors as string[]).map(describeFormatIssue))];
+        // Gộp lỗi cùng mẫu ở nhiều chỗ thành một dòng, bỏ dòng trùng (G4)
+        const lines = describeFormatIssueList(data.errors as string[]);
         return `Bản sửa chưa đạt: ${lines.join("; ")}`;
     }
     if (data?.code === "VERSION_CONFLICT") {
@@ -184,7 +185,8 @@ export default function EditQuestionModal({
             style={{ top: 20 }}
             onCancel={handleCancel}
             closable={!isBusy}
-            maskClosable={false}
+            // Bấm ra ngoài cũng đóng; đã gõ mà chưa lưu thì handleCancel hỏi lại, đang lưu thì không đóng
+            maskClosable={!isBusy}
             keyboard={!isBusy}
             destroyOnClose
             className="edit-question-modal"

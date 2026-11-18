@@ -2,7 +2,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    padding: 16px 20px;
+    padding: 12px 20px;
     background: #ffffff;
     border: 2px solid #f0f0f0;
     border-radius: 8px;
@@ -14,11 +14,18 @@
     border-color: #95de64;
 }
 
-.exam-summary-ready-row {
+/* Hàng chính: số liệu (hoặc "Đề sẵn sàng in") bên trái, công tắc và nút bên phải; thiếu chỗ thì xuống dòng */
+.exam-summary-main {
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
+    gap: 10px 24px;
+}
+
+.exam-summary-ready-row {
+    display: flex;
+    align-items: center;
     gap: 12px;
 }
 
@@ -68,18 +75,17 @@
     margin-top: 4px;
 }
 
+/* Nhóm công tắc và nút, dồn sang phải hàng chính */
 .exam-summary-toggles {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px 24px;
-    padding-top: 10px;
-    border-top: 1px solid #f0f0f0;
+    gap: 8px 20px;
+    margin-left: auto;
 }
 
-/* Nút "Lưu N câu không có cảnh báo": cuối hàng công tắc, sát phải */
-.exam-summary-bulk-keep {
-    margin-left: auto;
+.exam-summary-pending {
+    font-size: 14px;
 }
 
 .exam-summary-toggle {

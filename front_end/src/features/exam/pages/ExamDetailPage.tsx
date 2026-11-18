@@ -6,7 +6,7 @@ import ExamQuestionList from "../components/ExamQuestionList";
 import ExamQuestionNav from "../components/ExamQuestionNav";
 import ExamSummaryBar, { type ExamSummaryCounts } from "../components/ExamSummaryBar";
 import type { ExamProgress, ExamQuestionItem, ChangeQuestionRequest, ExamDetail, ExamItemDto } from "../types/exam.types";
-import { examKindConfig, examStatusConfig, describeReviewReason, examSlotAnchorId, hasContentFlag, isBulkKeepCandidate } from "../../../utils/exam.utils";
+import { describeBuildProgress, examKindConfig, examStatusConfig, describeReviewReasonList, examSlotAnchorId, hasContentFlag, isBulkKeepCandidate } from "../../../utils/exam.utils";
 import { keepQuestion, replaceQuestion, getExamDetail, getExamProgress, getCatalogSubjects } from '../services/examApi';
 import { getExamMatrix } from '../../exam-matrix/services/examMatrixService';
 import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
@@ -22,6 +22,7 @@ import ExportWordDialog from '../components/ExportWordDialog';
 const { Title, Text } = Typography;
 
 const POLL_INTERVAL_MS = 8000;
+const SHOW_ALL_EXPLANATIONS_KEY = "examShowAllExplanations";
 const MAX_CONSECUTIVE_ERRORS = 3;
 
 const partTitles: Record<string, string> = {
@@ -42,43 +43,6 @@ function needsAttention(question: ExamQuestionItem): boolean {
     return question.state === "failed" || (question.state === "ready" && Boolean(question.needsReview));
 }
 
-/** Câu chữ và màu của thanh tiến độ ở đầu trang đề (docs/api mục 7.3). */
-function describeBuildProgress(
-    progress: ExamProgress,
-    createdAt: string
-): { type: "info" | "success" | "warning"; text: string } {
-    const done = `${progress.ready}/${progress.total}`;
-    const stayNote = "Thầy/cô có thể rời trang, đề vẫn tiếp tục được soạn.";
-    if (progress.status === "generating") {
-        // D-01: AI hết lượt trong ngày thì backend báo giờ chạy tiếp; ước lượng "khoảng N phút" lúc này là sai
-        if (progress.notice) {
-            return { type: "warning", text: `Đang soạn ${done} câu · ${progress.notice}. ${stayNote}` };
-        }
-        // Chưa xong câu nào thì chưa có cơ sở để ước lượng: không hiện thời gian
-        if (progress.ready <= 0) {
-            return { type: "info", text: `Đang soạn ${done} câu… ${stayNote}` };
-        }
-        // Thời gian trung bình mỗi câu đã xong (từ lúc tạo đề) nhân số câu còn lại
-        const elapsedSeconds = Math.max(0, (Date.now() - new Date(createdAt).getTime()) / 1000);
-        if (!Number.isFinite(elapsedSeconds)) {
-            return { type: "info", text: `Đang soạn ${done} câu… ${stayNote}` };
-        }
-        const remainingSeconds = (elapsedSeconds / progress.ready) * Math.max(0, progress.generating);
-        // Làm tròn lên phút, ít nhất 1 phút khi còn câu đang soạn
-        const minutes = Math.max(1, Math.ceil(remainingSeconds / 60));
-        return {
-            type: "info",
-            text: `Đang soạn ${done} câu · khoảng ${minutes} phút nữa. ${stayNote}`,
-        };
-    }
-    if (progress.status === "partial" && progress.failed > 0) {
-        return {
-            type: "warning",
-            text: `Đã soạn xong ${done} câu · ${progress.failed} câu chưa soạn được (xem bên dưới).`,
-        };
-    }
-    return { type: "success", text: `Đã soạn xong ${done} câu.` };
-}
 
 /** Chuyển một chỗ của đề (ExamItemDto) sang dạng câu hiển thị trong danh sách. */
 function toQuestionItem(item: ExamItemDto): ExamQuestionItem {
@@ -142,7 +106,22 @@ export default function ExamDetailPage() {
 
     // Ô tóm tắt đầu trang: lọc câu cần xem và hiện mọi lời giải
     const [onlyNeedsAttention, setOnlyNeedsAttention] = useState(false);
-    const [showAllExplanations, setShowAllExplanations] = useState(false);
+    // "Hiện tất cả lời giải" ghi nhớ trong trình duyệt (dùng chung mọi đề); trình duyệt chặn lưu trữ thì mặc định tắt
+    const [showAllExplanations, setShowAllExplanationsState] = useState<boolean>(() => {
+        try {
+            return localStorage.getItem(SHOW_ALL_EXPLANATIONS_KEY) === "1";
+        } catch {
+            return false;
+        }
+    });
+    const setShowAllExplanations = (value: boolean) => {
+        setShowAllExplanationsState(value);
+        try {
+            localStorage.setItem(SHOW_ALL_EXPLANATIONS_KEY, value ? "1" : "0");
+        } catch {
+            // không lưu được thì chỉ áp dụng trong lần mở trang này
+        }
+    };
 
     // Lưu hàng loạt (CT-7): đang chạy thì tạm dừng tự tải lại; rời trang thì dừng vòng lưu
     const [bulkSaving, setBulkSaving] = useState(false);
@@ -303,17 +282,42 @@ export default function ExamDetailPage() {
         [questionNumbers]
     );
 
+    // Câu vừa nhảy tới: viền nổi 1,5 giây (G5); đặt lại về undefined trước để bấm lại cùng câu vẫn chạy hiệu ứng
+    const [flashSlotId, setFlashSlotId] = useState<number | undefined>(undefined);
+    const flashTimerRef = useRef<number | undefined>(undefined);
+    useEffect(() => () => window.clearTimeout(flashTimerRef.current), []);
+    const flash = (slotId: number) => {
+        window.clearTimeout(flashTimerRef.current);
+        setFlashSlotId(undefined);
+        window.setTimeout(() => setFlashSlotId(slotId), 0);
+        flashTimerRef.current = window.setTimeout(() => setFlashSlotId(undefined), 1600);
+    };
+
     // Mục lục: cuộn tới câu; câu đang bị ẩn bởi bộ lọc thì tắt lọc trước
     const jumpToQuestion = (question: ExamQuestionItem) => {
         if (question.slotId === undefined) return;
-        const anchor = examSlotAnchorId(question.slotId);
-        const scroll = () => document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const slotId = question.slotId;
+        const anchor = examSlotAnchorId(slotId);
+        const scroll = () => {
+            document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
+            flash(slotId);
+        };
         if (onlyNeedsAttention && !needsAttention(question)) {
             setOnlyNeedsAttention(false);
             window.setTimeout(scroll, 0);
             return;
         }
         scroll();
+    };
+
+    // Liên kết "Phần P – Câu k" trong lý do gần giống (G5): câu thứ k của Phần P, đếm như trang đề
+    const jumpToPosition = (part: string, number: number) => {
+        const target = parts.find((p) => p.part === part)?.questions[number - 1];
+        if (!target) {
+            message.info(`Không tìm thấy Phần ${part} – Câu ${number} trong đề.`);
+            return;
+        }
+        jumpToQuestion(target);
     };
 
     // Hàm mở Modal Xem vết QC cho slot
@@ -350,7 +354,7 @@ export default function ExamDetailPage() {
     const visibleParts = onlyNeedsAttention
         ? parts.map((p) => ({ ...p, questions: p.questions.filter(needsAttention) })).filter((p) => p.questions.length > 0)
         : parts;
-    const progressView = progress ? describeBuildProgress(progress, detail.createdAt) : null;
+    const progressView = progress ? describeBuildProgress(progress) : null;
     const progressPercent = progress && progress.total > 0
         ? Math.min(100, Math.round((progress.ready / progress.total) * 100))
         : 0;
@@ -436,7 +440,8 @@ export default function ExamDetailPage() {
                     <p>Câu này đang có cảnh báo:</p>
                     {reasons.length > 0 && (
                         <ul style={{ paddingLeft: 20, margin: 0 }}>
-                            {reasons.map((r) => <li key={r}>{describeReviewReason(r)}</li>)}
+                            {/* Gộp cảnh báo cùng mẫu (G4), bỏ câu trùng */}
+                            {describeReviewReasonList(reasons).map((r) => <li key={r.text}>{r.text}</li>)}
                         </ul>
                     )}
                     <p style={{ marginTop: 8 }}>Nếu vẫn giữ, câu chỉ được lưu vào ngân hàng riêng của thầy/cô.</p>
@@ -546,48 +551,143 @@ export default function ExamDetailPage() {
         });
     };
 
+    // ===== Soạn lại hàng loạt (G20): chỉ câu chưa soạn được vì hệ thống bận (llm_error) =====
+    // Câu qc_exhausted đã hỏng 3 lần: soạn lại không kèm yêu cầu dễ hỏng tiếp, nên giáo viên soạn lại riêng từng câu
+    const regenerateCandidates = allQuestions.filter(
+        (q) => q.slotId !== undefined && q.state === "failed" && q.failureReason === "llm_error"
+    );
+    const otherFailedCount = allQuestions.filter((q) => q.state === "failed").length - regenerateCandidates.length;
+
+    const runBulkRegenerate = async (targets: ExamQuestionItem[]) => {
+        if (!examId) return;
+        const progressKey = "bulk-regenerate";
+        setBulkSaving(true);
+        let sent = 0;
+        let stoppedError: unknown = null;
+        const failures: string[] = [];
+        try {
+            for (let i = 0; i < targets.length; i++) {
+                if (unmountedRef.current) return;
+                const q = targets[i];
+                message.loading({ key: progressKey, content: `Đang gửi soạn lại ${i + 1}/${targets.length} câu…`, duration: 0 });
+                try {
+                    // Không gửi yêu cầu, không gửi requestCodes: backend dùng yêu cầu thừa hưởng của ô/đề như hộp Soạn lại
+                    await replaceQuestion(examId, q.slotId!, { source: "generate" });
+                    sent++;
+                } catch (e: unknown) {
+                    const status = (e as { response?: { status?: number } })?.response?.status;
+                    // Chạm giới hạn hàng chờ / hạn mức ngày (429): dừng hẳn, câu sau cũng sẽ bị từ chối
+                    if (status === 429) {
+                        stoppedError = e;
+                        break;
+                    }
+                    // Chỗ vừa chuyển sang đang soạn (409, ví dụ tab khác): bỏ qua; lỗi khác ghi lại rồi chạy tiếp
+                    if (status !== 409) {
+                        failures.push(`${describePosition(q)}: ${getApiErrorMessage(e, "không gửi được")}`);
+                    }
+                }
+            }
+        } finally {
+            if (!unmountedRef.current) {
+                message.destroy(progressKey);
+                setBulkSaving(false);
+            }
+        }
+        if (unmountedRef.current) return;
+
+        if (stoppedError) {
+            // Thông báo hạn mức của backend có sẵn số liệu và giờ thử lại
+            showApiError(stoppedError, "Chưa soạn lại được lúc này.");
+            message.warning(
+                `Đã gửi soạn lại ${sent}/${targets.length} câu, ${targets.length - sent} câu còn lại thầy/cô thử lại sau.`,
+                8
+            );
+        } else if (sent > 0) {
+            message.success(`Đã gửi soạn lại ${sent} câu. Trang sẽ tự cập nhật khi soạn xong.`);
+        }
+        if (failures.length > 0) {
+            Modal.warning({
+                title: `${failures.length} câu chưa gửi soạn lại được`,
+                content: (
+                    <ul style={{ paddingLeft: 20, margin: 0 }}>
+                        {failures.map((f) => <li key={f}>{f}</li>)}
+                    </ul>
+                ),
+                okText: "Đã hiểu",
+            });
+        }
+        await loadDetail();
+    };
+
+    const handleBulkRegenerate = () => {
+        if (regenerateCandidates.length === 0) return;
+        const targets = [...regenerateCandidates];
+        const byPart = parts
+            .map((p) => ({
+                part: p.part,
+                numbers: targets.filter((t) => t.part === p.part).map((t) => getNumber(t, 0)),
+            }))
+            .filter((p) => p.numbers.length > 0);
+        Modal.confirm({
+            title: `Soạn lại ${targets.length} câu chưa soạn được vì hệ thống bận?`,
+            content: (
+                <div>
+                    <ul style={{ paddingLeft: 20, margin: 0 }}>
+                        {byPart.map((p) => <li key={p.part}>Phần {p.part} – Câu {p.numbers.join(", ")}</li>)}
+                    </ul>
+                    <p style={{ marginTop: 8, marginBottom: 0 }}>
+                        Mỗi câu soạn lại tính 1 lượt trong hạn mức soạn câu mỗi ngày.
+                    </p>
+                    {otherFailedCount > 0 && (
+                        <p style={{ marginTop: 8, marginBottom: 0 }}>
+                            {otherFailedCount} câu khác chưa đạt yêu cầu sau nhiều lần soạn: thầy/cô bấm Soạn lại ở từng câu
+                            để ghi thêm yêu cầu.
+                        </p>
+                    )}
+                </div>
+            ),
+            okText: `Soạn lại ${targets.length} câu`,
+            cancelText: "Để tôi xem lại",
+            autoFocusButton: "cancel",
+            onOk: () => {
+                void runBulkRegenerate(targets);
+            },
+        });
+    };
+
     const handleSaveEditedQuestion = async () => {
         setEditingQuestion(null);
         await loadDetail();
     };
 
-    // Tiêu đề card Danh sách câu hỏi kèm thông báo trạng thái cập nhật tự động
-    const questionListCardTitle = (
-        <Space size={12}>
-            <span>Danh sách câu hỏi</span>
-            {hasPendingWork && (
-                <Space size={6}>
-                    <Spin size="small" />
-                    <Text type="secondary" style={{ fontSize: 13, fontWeight: "normal" }}>
-                        Đang cập nhật:
-                        {pendingSummary.generatingCount > 0 ? ` ${pendingSummary.generatingCount} câu đang soạn` : ""}
-                        {pendingSummary.generatingCount > 0 && pendingSummary.checkingCount > 0 ? "," : ""}
-                        {pendingSummary.checkingCount > 0 ? ` ${pendingSummary.checkingCount} câu đang tự kiểm tra lại` : ""}
-                    </Text>
-                </Space>
-            )}
-        </Space>
-    );
+    // Dòng "Đang cập nhật" (trước nằm ở tiêu đề card Danh sách câu hỏi, đã bỏ để câu đầu lên màn đầu, G1): nay ở ô tóm tắt
+    const pendingText = hasPendingWork
+        ? [
+            pendingSummary.generatingCount > 0 ? `${pendingSummary.generatingCount} câu đang soạn` : "",
+            pendingSummary.checkingCount > 0 ? `${pendingSummary.checkingCount} câu đang tự kiểm tra lại` : "",
+        ].filter(Boolean).join(", ")
+        : undefined;
 
     return (
         <div className="exam-detail-page">
             <div className="exam-detail-page-header">
-                <div className="exam-detail-page-header-top">
-                    <Button
-                        type="text"
-                        icon={<ArrowLeftOutlined />}
-                        className="exam-detail-page-back-button"
-                        onClick={() => navigate("/exams")}
-                    >
-                        Quay lại danh sách
-                    </Button>
-                </div>
-
                 <div className="exam-detail-page-header-content">
                     <div className="exam-detail-page-title-section">
-                        <Title level={2} className="exam-detail-page-title">
-                            {detail.title}
-                        </Title>
+                        {/* Nút quay lại nhỏ cùng hàng tiêu đề (G1: bớt một hàng ở đầu trang) */}
+                        <div className="exam-detail-page-title-row">
+                            <Button
+                                type="text"
+                                size="small"
+                                icon={<ArrowLeftOutlined />}
+                                className="exam-detail-page-back-button"
+                                onClick={() => navigate("/exams")}
+                            >
+                                Đề thi
+                            </Button>
+                            <Title level={2} className="exam-detail-page-title">
+                                {detail.title}
+                            </Title>
+                        </div>
 
                         <Space size={8} wrap className="exam-detail-page-meta">
                             <Text>{examStatusConfig[detail.status]?.label ?? detail.status}</Text>
@@ -619,10 +719,6 @@ export default function ExamDetailPage() {
                         <Button type="primary" icon={<FileWordOutlined />} onClick={() => setExportOpen(true)}>
                             Xuất file Word
                         </Button>
-                        {/* G19: lời nhắc khi đề còn câu đang soạn hiện thường trực cạnh nút, không chỉ khi rê chuột */}
-                        {isGenerating && (
-                            <Text type="secondary">Đề còn câu đang soạn; thầy/cô vẫn xuất được (chỗ đó ghi "Chưa có câu").</Text>
-                        )}
                     </Space>
                     <ExportWordDialog
                         open={exportOpen}
@@ -640,6 +736,9 @@ export default function ExamDetailPage() {
                     partsBreakdown={partsBreakdown}
                     progressText={progress?.status === "generating" ? progressView?.text : undefined}
                     progressPercent={progress?.status === "generating" ? progressPercent : undefined}
+                    pendingText={pendingText}
+                    // G19: lời nhắc thường trực khi đề còn câu đang soạn (trước nằm cạnh nút ở đầu trang, làm phình hàng nút)
+                    exportNote={isGenerating ? 'Vẫn xuất Word được; câu chưa soạn xong sẽ ghi "Chưa có câu".' : undefined}
                     onlyNeedsAttention={onlyNeedsAttention}
                     onOnlyNeedsAttentionChange={setOnlyNeedsAttention}
                     showAllExplanations={showAllExplanations}
@@ -649,6 +748,8 @@ export default function ExamDetailPage() {
                     bulkKeepCount={bulkCandidates.length}
                     bulkSaving={bulkSaving}
                     onBulkKeep={handleBulkKeep}
+                    bulkRegenerateCount={regenerateCandidates.length}
+                    onBulkRegenerate={handleBulkRegenerate}
                 />
             </div>
 
@@ -668,7 +769,7 @@ export default function ExamDetailPage() {
                 )}
 
             <div className="exam-detail-page-question-list">
-                <Card title={questionListCardTitle}>
+                <Card className="exam-detail-page-question-card">
                     {parts.length === 0 && (
                         <ExamQuestionList questions={[]} />
                     )}
@@ -690,6 +791,8 @@ export default function ExamDetailPage() {
                                 questions={p.questions}
                                 getNumber={getNumber}
                                 showAllExplanations={showAllExplanations}
+                                onJumpTo={jumpToPosition}
+                                flashSlotId={flashSlotId}
                                 onChangeQuestion={(question) => {
                                     setChangeQuestion(question);
                                 }}

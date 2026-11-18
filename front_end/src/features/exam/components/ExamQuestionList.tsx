@@ -5,7 +5,7 @@ import { DeleteOutlined, CheckCircleOutlined, SwapOutlined, EditOutlined, Warnin
 import "./ExamQuestionList.css";
 import type { BankVisibility, ExamQuestionItem } from "../types/exam.types";
 import { describeInfoReason, teacherRequestLabel } from "../types/exam.types";
-import { describeFailureReason, describeLevel, describeReviewReason, examSlotAnchorId, hasContentFlag, resolveQuestionType, summarizeQc } from "../../../utils/exam.utils";
+import { describeFailureReason, describeLevel, describeReviewReasonList, examSlotAnchorId, hasContentFlag, resolveQuestionType, summarizeQc } from "../../../utils/exam.utils";
 import QuestionContent from "./QuestionContent";
 
 const { Text } = Typography;
@@ -24,6 +24,10 @@ interface ExamQuestionListProps {
     getNumber?: (question: ExamQuestionItem, index: number) => number;
     /** Công tắc "Hiện tất cả lời giải" ở đầu trang. */
     showAllExplanations?: boolean;
+    /** Bấm "Phần P – Câu k" trong lý do "gần giống" thì nhảy tới câu đó (G5); không truyền thì hiện chữ thường. */
+    onJumpTo?: (part: string, number: number) => void;
+    /** Câu vừa được nhảy tới (mục lục hoặc liên kết trong lý do): viền nổi trong chốc lát. */
+    flashSlotId?: number;
 }
 
 function renderStateTags(question: ExamQuestionItem) {
@@ -60,14 +64,15 @@ function renderStateTags(question: ExamQuestionItem) {
 }
 
 /**
- * Nội dung câu. Lời giải mở sẵn ở câu cần xem kỹ hoặc khi bật "Hiện tất cả lời giải"; còn lại thu gọn. Giáo viên bấm nút
+ * Nội dung câu. Lời giải mở sẵn ở câu có cờ về nội dung hoặc khi bật "Hiện tất cả lời giải"; còn lại thu gọn. Giáo viên bấm nút
  * thì theo lựa chọn đó cho tới khi công tắc đầu trang đổi.
  */
 function QuestionBody({ question, showAll, actions }: { question: ExamQuestionItem; showAll: boolean; actions?: ReactNode }) {
     // Lựa chọn tay chỉ có hiệu lực khi công tắc đầu trang chưa đổi kể từ lúc bấm
     const [manual, setManual] = useState<{ open: boolean; showAll: boolean } | null>(null);
     const manualOpen = manual && manual.showAll === showAll ? manual.open : null;
-    const showExplanation = manualOpen ?? (showAll || Boolean(question.needsReview));
+    // Chỉ câu có cờ về nội dung mới mở sẵn lời giải; cờ "gần giống câu khác" là về đề, xem lời giải không giúp gì
+    const showExplanation = manualOpen ?? (showAll || hasContentFlag(question.needsReview, question.reviewReasons));
 
     return (
         <>
@@ -101,6 +106,8 @@ export default function ExamQuestionList({
     bankKeepVisibility = "shared",
     getNumber = (_question, index) => index + 1,
     showAllExplanations = false,
+    onJumpTo,
+    flashSlotId,
 }: ExamQuestionListProps) {
     if (loading) {
         return (
@@ -145,6 +152,10 @@ export default function ExamQuestionList({
                     const canChange = state !== "pending" && state !== "generating";
                     const canEdit = state === "ready" && question.source !== "bank";
                     const reasons = question.reviewReasons ?? [];
+                    // Câu chữ lý do cần xem kỹ: gộp cảnh báo cùng mẫu (G4), bỏ câu trùng (G3); lý do "gần giống
+                    // Phần P – Câu k" giữ vị trí để hiện thành liên kết nhảy tới câu đó (G5)
+                    const reasonEntries = describeReviewReasonList(reasons);
+                    const reasonTexts = reasonEntries.map((entry) => entry.text);
                     const qcSummary = summarizeQc(question);
                     const qcBlock = renderQcBlock(question, index, qcSummary, onViewQcTrace);
 
@@ -154,7 +165,9 @@ export default function ExamQuestionList({
                             id={question.slotId !== undefined ? examSlotAnchorId(question.slotId) : undefined}
                             className="exam-question-item"
                         >
-                            <div className={`exam-question-item-content${question.needsReview ? " exam-question-item-needs-review" : ""}`}>
+                            <div
+                                className={`exam-question-item-content${question.needsReview ? " exam-question-item-needs-review" : ""}${flashSlotId !== undefined && question.slotId === flashSlotId ? " exam-question-item-flash" : ""}`}
+                            >
                                 <div className="exam-question-item-header">
                                     {/* Số thứ tự, độ khó, cờ cần xem kỹ, nguồn và trạng thái */}
                                     <Space size={8} align="center" wrap>
@@ -170,13 +183,14 @@ export default function ExamQuestionList({
                                             <Tooltip
                                                 title={
                                                     <ul className="exam-question-review-tooltip">
-                                                        {reasons.map((reason) => (
-                                                            <li key={reason}>{describeReviewReason(reason)}</li>
+                                                        {reasonTexts.map((text) => (
+                                                            <li key={text}>{text}</li>
                                                         ))}
                                                     </ul>
                                                 }
                                             >
-                                                <Tag color="volcano" icon={<WarningOutlined />}>
+                                                {/* Chữ cam nâu #ad4e00 trên nền cam nhạt (đạt tương phản 4,5:1, G3) */}
+                                                <Tag icon={<WarningOutlined />} className="exam-question-review-tag">
                                                     Cần xem kỹ
                                                 </Tag>
                                             </Tooltip>
@@ -200,7 +214,7 @@ export default function ExamQuestionList({
                                                 }
                                             >
                                                 <Button
-                                                    type="text"
+                                                    type="primary"
                                                     icon={<CheckCircleOutlined />}
                                                     className="exam-action-btn-keep"
                                                     onClick={() => onKeep?.(question, index)}
@@ -213,7 +227,6 @@ export default function ExamQuestionList({
                                         {canChange && (
                                             <Tooltip title={isFailed ? "Soạn lại câu này" : "Đổi sang câu hỏi khác cùng mức độ"}>
                                                 <Button
-                                                    type="text"
                                                     icon={isFailed ? <ReloadOutlined /> : <SwapOutlined />}
                                                     className="exam-action-btn-change"
                                                     onClick={() => onChangeQuestion?.(question, index)}
@@ -226,7 +239,6 @@ export default function ExamQuestionList({
                                         {canEdit && (
                                             <Tooltip title="Chỉnh sửa nội dung câu hỏi">
                                                 <Button
-                                                    type="text"
                                                     icon={<EditOutlined />}
                                                     className="exam-action-btn-edit"
                                                     onClick={() => onEdit?.(question, index)}
@@ -252,12 +264,29 @@ export default function ExamQuestionList({
 
                                 {question.needsReview && reasons.length > 0 && (
                                     <div className="exam-question-review-reasons">
-                                        <Text type="warning" strong>Lý do cần xem kỹ:</Text>
-                                        <Space size={[12, 4]} wrap>
-                                            {reasons.map((reason) => (
-                                                <Text key={reason}>{describeReviewReason(reason)}</Text>
+                                        <Text strong className="exam-question-review-label">Lý do cần xem kỹ:</Text>
+                                        {/* Mỗi lý do một dòng có gạch đầu dòng (G3) */}
+                                        <ul className="exam-question-review-list">
+                                            {reasonEntries.map(({ text, position }) => (
+                                                <li key={text}>
+                                                    {position && onJumpTo ? (
+                                                        <>
+                                                            Gần giống{" "}
+                                                            <Button
+                                                                type="link"
+                                                                className="exam-question-review-jump"
+                                                                onClick={() => onJumpTo(position.part, position.number)}
+                                                            >
+                                                                Phần {position.part} – Câu {position.number}
+                                                            </Button>{" "}
+                                                            trong đề, nên đổi một trong hai câu.
+                                                        </>
+                                                    ) : (
+                                                        text
+                                                    )}
+                                                </li>
                                             ))}
-                                        </Space>
+                                        </ul>
                                     </div>
                                 )}
 
