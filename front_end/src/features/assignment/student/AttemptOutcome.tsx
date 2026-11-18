@@ -3,12 +3,8 @@ import { Alert, Button } from "antd";
 import MathText from "../../../components/common/MathText/MathText";
 import type { AttemptView, ReviewItem, ReviewPart } from "../types/assignment.types";
 import { formatPoints, formatServerTime } from "../utils/timeFormat";
-
-const PART_TITLES: Record<string, string> = {
-    I: "Phần I. Trắc nghiệm nhiều phương án",
-    II: "Phần II. Trắc nghiệm đúng sai",
-    III: "Phần III. Trả lời ngắn",
-};
+// Tên Phần dùng chung với trang đề của giáo viên và file Word (G25)
+import { PART_TITLES } from "../../../utils/exam.utils";
 
 const TF_WORD: Record<string, string> = { T: "Đúng", F: "Sai" };
 

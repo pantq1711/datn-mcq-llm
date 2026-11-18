@@ -4,7 +4,7 @@ import { SwapOutlined, DatabaseOutlined, EditOutlined, DownOutlined, UpOutlined 
 
 import type { ExamQuestionItem, ChangeQuestionRequest, ExamQuestionType, ReplaceReason, TeacherRequestCode } from "../types/exam.types";
 import { teacherRequestOptionsFor } from "../types/exam.types";
-import { REPLACE_REASON_OPTIONS, describeLevel, resolveQuestionType, describeFailureReason } from "../../../utils/exam.utils";
+import { REPLACE_REASON_OPTIONS, describeLevel, resolveQuestionType, describeFailureReason, QUESTION_TYPE_LABELS } from "../../../utils/exam.utils";
 import MathText from "../../../components/common/MathText/MathText";
 import QuestionContent from "../components/QuestionContent";
 import { READABLE_MODAL_THEME } from "./readableModalTheme";
@@ -67,14 +67,8 @@ export default function ChangeQuestionModal({
     // Xác định loại câu hỏi
     const qType: ExamQuestionType = question ? resolveQuestionType(question) : "mcq";
 
-    // Lấy nhãn dạng câu
-    const getQuestionTypeLabel = (type: ExamQuestionType) => {
-        switch (type) {
-            case "tf": return "Trắc nghiệm đúng/sai";
-            case "sa": return "Trả lời ngắn";
-            default: return "Trắc nghiệm nhiều phương án";
-        }
-    };
+    // Lấy nhãn dạng câu (tên dùng chung, G25)
+    const getQuestionTypeLabel = (type: ExamQuestionType) => QUESTION_TYPE_LABELS[type] ?? QUESTION_TYPE_LABELS.mcq;
 
     // Mức độ của câu đang có (tf hiện mức 4 ý); câu chưa soạn được thì không có mức nên không gọi
     const renderDifficultyTags = (item: ExamQuestionItem) => {

@@ -15,16 +15,13 @@ import {
 } from "../utils/submitRetry";
 import { formatCountdown } from "../utils/timeFormat";
 import { McqInput, SaInput, TfInput } from "./QuestionInputs";
+// Tên Phần dùng chung với trang đề của giáo viên và file Word (G25)
+import { PART_TITLES } from "../../../utils/exam.utils";
 
 /** Ân hạn nộp sau hạn của lượt (docs/api mục 11.2: 2 phút). */
 export const GRACE_MS = 2 * 60 * 1000;
 const WARNING_SECONDS = 5 * 60;
 
-const PART_TITLES: Record<string, string> = {
-    I: "Phần I. Trắc nghiệm nhiều phương án",
-    II: "Phần II. Trắc nghiệm đúng sai",
-    III: "Phần III. Trả lời ngắn",
-};
 
 /** Lỗi nộp mà thử lại cũng vô ích: máy chủ đã từ chối hẳn. */
 const NON_RETRYABLE: SubmitFailureKind[] = ["closed", "expired", "token_invalid"];

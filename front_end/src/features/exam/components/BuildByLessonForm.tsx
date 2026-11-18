@@ -13,6 +13,7 @@ import type { BankTopic } from "../../question-bank/types/questionBank.types";
 import { getBankTopics } from "../../question-bank/services/questionBankApi";
 import { mergeBankTopics, sortBankTopics } from "../../../utils/bankTopic.utils";
 import { showApiError } from "../../../utils/apiError";
+import { PART_TITLES } from "../../../utils/exam.utils";
 import "./BuildByLessonForm.css";
 
 const { Text, Paragraph } = Typography;
@@ -570,7 +571,7 @@ export default function BuildByLessonForm({
                         <div className="build-lesson-matrix-row">
                             <div className="col-type">
                                 <div>
-                                    <Text strong>Phần I. Trắc nghiệm nhiều phương án</Text>
+                                    <Text strong>{PART_TITLES.I}</Text>
                                     <div className="col-type-desc">Chọn 1 đáp án đúng trong 4 lựa chọn A, B, C, D</div>
                                 </div>
                             </div>
@@ -598,7 +599,7 @@ export default function BuildByLessonForm({
                         <div className="build-lesson-matrix-row">
                             <div className="col-type">
                                 <div>
-                                    <Text strong>Phần II. Trắc nghiệm đúng/sai</Text>
+                                    <Text strong>{PART_TITLES.II}</Text>
                                     <div className="col-type-desc">Mỗi câu gồm 4 ý a, b, c, d (Biết, Biết, Hiểu, Vận dụng)</div>
                                 </div>
                             </div>
@@ -622,7 +623,7 @@ export default function BuildByLessonForm({
                         <div className="build-lesson-matrix-row">
                             <div className="col-type">
                                 <div>
-                                    <Text strong>Phần III. Trả lời ngắn</Text>
+                                    <Text strong>{PART_TITLES.III}</Text>
                                     <div className="col-type-desc">Học sinh tự điền câu trả lời ngắn gọn / con số</div>
                                 </div>
                             </div>

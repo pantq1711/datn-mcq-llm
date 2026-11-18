@@ -6,10 +6,12 @@
     box-sizing: border-box;
 }
 
-/* Nút "← Đề thi" nhỏ, cùng hàng tiêu đề */
+/* Nút "← Đề thi" cùng hàng tiêu đề; kiểu nút giống nút quay lại của trang Tạo ma trận và Tạo đề thi */
 .exam-detail-page-back-button {
     flex-shrink: 0;
-    color: rgba(0, 0, 0, 0.65);
+    background-color: #ffffff;
+    border-radius: 15px;
+    border: 3px solid #f2f2f2;
 }
 
 .exam-detail-page-header {
@@ -90,6 +92,20 @@
     gap: 12px;
     width: 100%;
     min-height: 80vh;
+}
+
+/* --- Không tìm thấy / không tải được đề (G24): khối thông báo giữa vùng nội dung, chữ 16px --- */
+
+.exam-detail-page-result {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+}
+
+.exam-detail-page-result .ant-result-subtitle {
+    font-size: 16px;
+    color: rgba(0, 0, 0, 0.65);
 }
 
 /* --- Ô tóm tắt đầu trang --- */

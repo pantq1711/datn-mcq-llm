@@ -1,18 +1,15 @@
-.edit-question-modal .ant-modal-header {
-    margin-bottom: 20px;
-}
-
-.edit-question-modal-title-icon {
-    color: #faad14;
-}
+/* Form sửa câu ngay trên thẻ câu (CT-2). Chữ 16px, ô và nút 40px qua READABLE_MODAL_THEME; chữ phụ không dưới 14px. */
 
 .edit-question-form {
     display: flex;
     flex-direction: column;
     gap: 4px;
     min-width: 0;
-    /* chừa chỗ cho thanh cuộn của phần thân hộp */
-    padding-right: 4px;
+    margin-top: 4px;
+}
+
+.edit-question-restored {
+    margin-bottom: 12px;
 }
 
 .edit-question-level {
@@ -29,9 +26,8 @@
     padding: 2px 10px;
 }
 
-/* Chữ phụ trong hộp không dưới 14px (rà soát 7.4) */
-.edit-question-modal .ant-form-item-extra,
-.edit-question-modal .ant-form-item-explain {
+.edit-question-form .ant-form-item-extra,
+.edit-question-form .ant-form-item-explain {
     font-size: 15px;
 }
 
@@ -55,12 +51,6 @@
     display: none;
 }
 
-.edit-question-row-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-}
-
 .edit-question-statement-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 160px;
@@ -73,30 +63,35 @@
     gap: 12px 16px;
 }
 
-.edit-question-modal-footer {
+/* Hàng nút kí hiệu dính ngay dưới đầu màn hình khi cuộn trong câu đang sửa */
+.edit-question-form .math-symbol-bar {
+    top: 8px;
+}
+
+/* Thanh Hủy / Lưu thay đổi dính đáy màn hình khi câu dài (G12) */
+.edit-question-form-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    margin: 4px -16px -16px;
+    padding: 12px 16px;
+    border-top: 1px solid #d9d9d9;
+    border-radius: 0 0 8px 8px;
+    background: #ffffff;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
 }
 
 @media (max-width: 575px) {
-    .edit-question-modal .ant-modal-body {
-        max-height: calc(100vh - 180px);
-        overflow-y: auto;
-    }
-
-    .edit-question-row-grid,
     .edit-question-options-grid,
     .edit-question-statement-grid {
         grid-template-columns: minmax(0, 1fr);
         gap: 0;
     }
 
-    .edit-question-modal-footer {
-        width: 100%;
-    }
-
-    .edit-question-modal-footer .ant-btn {
+    .edit-question-form-footer .ant-btn {
         flex: 1;
     }
 }

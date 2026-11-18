@@ -9,6 +9,21 @@
     margin: 0;
 }
 
+/* Chú thích trong ngoặc ngay sau tiêu đề trường: chữ thường, xám (không đậm như tiêu đề) */
+.export-word-dialog-label-note.ant-typography {
+    font-weight: 400;
+}
+
+/* "Xem các câu này": liên kết nằm trong dòng cảnh báo, xanh đậm đạt tương phản, gạch chân */
+.export-word-dialog-show-flagged.ant-btn {
+    height: auto;
+    padding: 0;
+    color: #0958d9;
+    font-weight: 600;
+    text-decoration: underline;
+    vertical-align: baseline;
+}
+
 .export-word-dialog-duration {
     width: 140px;
 }

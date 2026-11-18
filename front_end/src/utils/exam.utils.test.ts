@@ -8,9 +8,37 @@ import {
     describeFormatIssueList,
     describeReviewReason,
     describeReviewReasonList,
+    contentReviewReasons,
     isBulkKeepCandidate,
+    isKeepBlockedByCheck,
+    needsReviewNow,
     parseSimilarInExam,
+    pendingCheckOf,
 } from "./exam.utils";
+
+describe("lý do đang chờ (G14)", () => {
+    it("bỏ solver_pending, grounding_pending khỏi lý do cần xem kỹ", () => {
+        expect(contentReviewReasons(["solver_pending", "solver_inconsistent", "grounding_pending"]))
+            .toEqual(["solver_inconsistent"]);
+    });
+
+    it("chỉ còn lý do đang chờ thì không tính là cần xem kỹ; cờ không kèm lý do vẫn tính", () => {
+        expect(needsReviewNow({ needsReview: true, reviewReasons: ["solver_pending"] })).toBe(false);
+        expect(needsReviewNow({ needsReview: true, reviewReasons: ["solver_pending", "solver_failed"] })).toBe(true);
+        expect(needsReviewNow({ needsReview: true, reviewReasons: [] })).toBe(true);
+        expect(needsReviewNow({ needsReview: false, reviewReasons: [] })).toBe(false);
+    });
+
+    it("đang kiểm lại, đang đối chiếu tài liệu thì khóa Lưu; hoãn vì hết lượt thì vẫn Lưu được", () => {
+        expect(pendingCheckOf({ qcState: "checking", reviewReasons: ["solver_pending"] })).toBe("checking");
+        expect(pendingCheckOf({ qcState: "needs_review", reviewReasons: ["grounding_pending"] })).toBe("grounding");
+        expect(pendingCheckOf({ qcState: "needs_review", reviewReasons: ["solver_pending"] })).toBe("deferred");
+        expect(pendingCheckOf({ qcState: "passed", reviewReasons: [] })).toBeNull();
+        expect(isKeepBlockedByCheck({ qcState: "checking", reviewReasons: [] })).toBe(true);
+        expect(isKeepBlockedByCheck({ qcState: "needs_review", reviewReasons: ["grounding_pending"] })).toBe(true);
+        expect(isKeepBlockedByCheck({ qcState: "needs_review", reviewReasons: ["solver_pending"] })).toBe(false);
+    });
+});
 
 type Candidate = Pick<ExamQuestionItem, "state" | "qcState" | "needsReview" | "reviewReasons">;
 

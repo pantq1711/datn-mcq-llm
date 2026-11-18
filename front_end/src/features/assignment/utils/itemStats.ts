@@ -1,4 +1,5 @@
 import type { ItemStat, PartCode, QuestionType } from "../types/assignment.types";
+import { QUESTION_TYPE_SHORT_LABELS } from "../../../utils/exam.utils";
 
 // Hàm thuần của tab "Phân tích câu": nhãn tiếng Việt, mã cờ (docs/contract/enums.md, "Mã cờ hậu kiểm"), đọc choiceCounts.
 
@@ -32,11 +33,8 @@ export function itemLabel(part: PartCode, number: number): string {
     return `${PART_LABEL[part] ?? `Phần ${part}`} – Câu ${number}`;
 }
 
-const TYPE_LABEL: Record<QuestionType, string> = {
-    mcq: "Trắc nghiệm",
-    tf: "Đúng/Sai",
-    sa: "Trả lời ngắn",
-};
+// Dạng ngắn, viết thường, khớp dòng đếm ở trang đề (G25)
+const TYPE_LABEL: Record<QuestionType, string> = QUESTION_TYPE_SHORT_LABELS;
 
 export function questionTypeLabel(type: QuestionType): string {
     return TYPE_LABEL[type] ?? type;

@@ -4,6 +4,7 @@ import { DownloadOutlined } from "@ant-design/icons";
 
 import type { ExamDetail } from "../types/exam.types";
 import { getExamExportDocx, type ExportEquationFormat } from "../services/examApi";
+import { needsReviewNow } from "../../../utils/exam.utils";
 
 import "./ExportWordDialog.css";
 
@@ -51,6 +52,8 @@ interface ExportWordDialogProps {
     examId: string;
     detail: ExamDetail;
     onClose: () => void;
+    /** Bấm "Xem các câu này" ở dòng cảnh báo câu cần xem kỹ: trang đề lọc và cuộn tới các câu đó. */
+    onShowFlagged?: () => void;
 }
 
 /**
@@ -58,7 +61,7 @@ interface ExportWordDialogProps {
  * gian làm bài, mã đề, tên file, cách ghi công thức, chỉ đề hay đề kèm đáp án; nếu đề chưa hoàn chỉnh thì nhắc ngay trong
  * hộp (nội dung cảnh báo như hộp xác nhận của NV-40/NV-41, không chặn).
  */
-export default function ExportWordDialog({ open, examId, detail, onClose }: ExportWordDialogProps) {
+export default function ExportWordDialog({ open, examId, detail, onClose, onShowFlagged }: ExportWordDialogProps) {
     const [form] = Form.useForm<FormValues>();
     const [exporting, setExporting] = useState(false);
     const duration = Form.useWatch("durationMinutes", form);
@@ -82,7 +85,8 @@ export default function ExportWordDialog({ open, examId, detail, onClose }: Expo
         return {
             failedCount: items.filter((i) => i.state === "failed").length,
             generatingCount: items.filter((i) => i.state === "pending" || i.state === "generating").length,
-            flaggedCount: items.filter((i) => i.state === "ready" && i.needsReview).length,
+            // G14: cùng quy tắc với trang đề (bỏ câu chỉ còn lý do "đang chờ" hệ thống kiểm tra)
+            flaggedCount: items.filter((i) => i.state === "ready" && needsReviewNow(i)).length,
             totalScore,
             scoreOff: typeof totalScore === "number" && Math.abs(totalScore - 10) > 1e-9,
         };
@@ -127,9 +131,9 @@ export default function ExportWordDialog({ open, examId, detail, onClose }: Expo
                 message.info(`${scaled} công thức dài đã được thu nhỏ cho vừa trang`, 8);
             }
             if (failed > 0) {
-                // failedAt: "I.8" = câu 8 phần I
-                const where = failedAt.map((p) => { const [part, no] = p.split("."); return `${no} (phần ${part})`; });
-                message.warning(`${failed} công thức không chuyển được${where.length > 0 ? `, ở câu ${where.join(", ")}` : ""}`, 8);
+                // failedAt: "I.8" = câu 8 phần I; ghi vị trí theo cách thống nhất "Phần I – Câu 8"
+                const where = failedAt.map((p) => { const [part, no] = p.split("."); return `Phần ${part} – Câu ${no}`; });
+                message.warning(`${failed} công thức không chuyển được${where.length > 0 ? `, ở ${where.join(", ")}` : ""}`, 8);
             }
             onClose();
         } catch (err: unknown) {
@@ -153,6 +157,8 @@ export default function ExportWordDialog({ open, examId, detail, onClose }: Expo
         <Modal
             open={open}
             title="Xuất file Word"
+            centered
+            styles={{ body: { maxHeight: "calc(100dvh - 200px)", overflowY: "auto" } }}
             onCancel={exporting ? undefined : onClose}
             closable={!exporting}
             mask={{ closable: !exporting }}
@@ -178,7 +184,28 @@ export default function ExportWordDialog({ open, examId, detail, onClose }: Expo
                         <ul className="export-word-dialog-warning-list">
                             {failedCount > 0 && <li>{failedCount} câu chưa soạn được (file ghi "Chưa có câu").</li>}
                             {generatingCount > 0 && <li>{generatingCount} câu đang soạn (file ghi "Chưa có câu").</li>}
-                            {flaggedCount > 0 && <li>{flaggedCount} câu cần xem kỹ chưa được xử lý.</li>}
+                            {flaggedCount > 0 && (
+                                <li>
+                                    {flaggedCount} câu cần xem kỹ chưa được xử lý.
+                                    {/* Đóng hộp, lọc "Chỉ hiện câu cần xem" và cuộn tới câu đầu (phác thảo 7.5) */}
+                                    {onShowFlagged && (
+                                        <>
+                                            {" "}
+                                            <Button
+                                                type="link"
+                                                className="export-word-dialog-show-flagged"
+                                                disabled={exporting}
+                                                onClick={() => {
+                                                    onClose();
+                                                    onShowFlagged();
+                                                }}
+                                            >
+                                                Xem các câu này
+                                            </Button>
+                                        </>
+                                    )}
+                                </li>
+                            )}
                             {scoreOff && (
                                 <li>
                                     Tổng điểm phần trắc nghiệm là {formatScore(totalScore!)} điểm, khác 10 điểm.
@@ -191,7 +218,16 @@ export default function ExportWordDialog({ open, examId, detail, onClose }: Expo
             )}
 
             <Form form={form} layout="vertical" disabled={exporting} requiredMark={false}>
-                <Form.Item label="Thời gian làm bài (phút)" extra='Để trống thì file in "……" để thầy/cô điền tay.'>
+                <Form.Item
+                    label={
+                        <span>
+                            Thời gian làm bài (phút){" "}
+                            <Text type="secondary" className="export-word-dialog-label-note">
+                                (để trống thì file in "……" để thầy/cô điền tay)
+                            </Text>
+                        </span>
+                    }
+                >
                     <Space wrap>
                         {QUICK_DURATIONS.map((m) => (
                             <Button
@@ -227,8 +263,14 @@ export default function ExportWordDialog({ open, examId, detail, onClose }: Expo
 
                 <Form.Item
                     name="examCode"
-                    label="Mã đề"
-                    extra="In ở đầu đề, chân trang và trang đáp án."
+                    label={
+                        <span>
+                            Mã đề{" "}
+                            <Text type="secondary" className="export-word-dialog-label-note">
+                                (in ở đầu đề, chân trang và trang đáp án)
+                            </Text>
+                        </span>
+                    }
                     rules={[{
                         pattern: /^\s*[1-9]\d{2}\s*$/,
                         message: "Mã đề là số có 3 chữ số, từ 100 đến 999.",
@@ -237,7 +279,17 @@ export default function ExportWordDialog({ open, examId, detail, onClose }: Expo
                     <Input inputMode="numeric" maxLength={3} className="export-word-dialog-code" />
                 </Form.Item>
 
-                <Form.Item name="fileName" label="Tên file" extra="Đuôi .docx được thêm tự động.">
+                <Form.Item
+                    name="fileName"
+                    label={
+                        <span>
+                            Tên file{" "}
+                            <Text type="secondary" className="export-word-dialog-label-note">
+                                (đuôi .docx được thêm tự động)
+                            </Text>
+                        </span>
+                    }
+                >
                     <Input maxLength={150} />
                 </Form.Item>
 

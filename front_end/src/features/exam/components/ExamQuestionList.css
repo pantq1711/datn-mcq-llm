@@ -39,9 +39,18 @@
     margin-bottom: 0;
 }
 
+/* G26: thẻ câu là lưới. Màn rộng: dòng đầu (số câu, mức, cờ) bên trái, nhóm nút bên phải, nội dung câu bên dưới.
+   Màn ≤768px: nhóm nút xuống cuối thẻ (xem media query cuối file). */
 .exam-question-item-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "header actions"
+        "body body";
+    column-gap: 12px;
     width: 100%;
     min-width: 0;
+    box-sizing: border-box;
     padding: 16px;
     border: 1px solid #f0f0f0;
     border-radius: 8px;
@@ -51,6 +60,37 @@
 .exam-question-item-needs-review {
     border-color: #ffbb96;
     background: #fff7f0;
+}
+
+/* G14: dòng trạng thái "hệ thống đang kiểm tra / tạm hoãn", tách khỏi nhóm lý do cần xem kỹ */
+.exam-question-pending {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.exam-question-pending .anticon {
+    margin-top: 4px;
+}
+
+/* Đang kiểm tra: xanh (chữ #0958d9 trên #e6f4ff khoảng 5,6:1) */
+.exam-question-pending-checking,
+.exam-question-pending-grounding {
+    border: 1px solid #91caff;
+    background: #e6f4ff;
+    color: #0958d9;
+}
+
+/* Tạm hoãn: cam nâu, vẫn lưu được */
+.exam-question-pending-deferred {
+    border: 1px solid #ffd591;
+    background: #fff7e6;
+    color: #ad4e00;
 }
 
 /* Khối lý do cần xem kỹ: nhãn một dòng, bên dưới mỗi lý do một dòng (G3) */
@@ -84,6 +124,17 @@
     font-weight: 600;
     text-decoration: underline;
     vertical-align: baseline;
+}
+
+/* Câu đang sửa ngay trên thẻ (CT-2): viền xanh đậm, nền trắng để đọc ô nhập rõ */
+.exam-question-item-content.exam-question-item-editing {
+    border: 2px solid #0958d9;
+    background: #ffffff;
+}
+
+.exam-question-editing-note {
+    color: #0958d9;
+    font-weight: 600;
 }
 
 /* Câu vừa nhảy tới (mục lục hoặc liên kết trong lý do): viền xanh đậm rồi mờ dần */
@@ -122,15 +173,34 @@
 }
 
 .exam-question-item-header {
+    grid-area: header;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    min-width: 0;
+    min-height: 40px;
     margin-bottom: 12px;
 }
 
+/* Nhóm nút: được xuống dòng thay vì bóp chữ ở dòng đầu thẻ */
+.exam-question-item-actions {
+    grid-area: actions;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    align-self: start;
+    justify-content: flex-end;
+    gap: 4px;
+    max-width: 100%;
+    margin-bottom: 12px;
+}
+
+.exam-question-item-body {
+    grid-area: body;
+    min-width: 0;
+}
+
 /* Nút trên mỗi câu đủ cao để bấm dễ (≥ 36px) */
-.exam-question-item-header .ant-btn,
+.exam-question-item-actions .ant-btn,
 .exam-explanation-toggle {
     min-height: 36px;
 }
@@ -276,9 +346,9 @@
 }
 
 /* G2: ba nút trên thẻ câu cao 40px, chữ 15px (mục 7.4) */
-.exam-question-item-header .exam-action-btn-keep.ant-btn,
-.exam-question-item-header .exam-action-btn-change.ant-btn,
-.exam-question-item-header .exam-action-btn-edit.ant-btn {
+.exam-question-item-actions .exam-action-btn-keep.ant-btn,
+.exam-question-item-actions .exam-action-btn-change.ant-btn,
+.exam-question-item-actions .exam-action-btn-edit.ant-btn {
     min-height: 40px;
     padding-inline: 14px;
     font-size: 15px;
@@ -291,11 +361,18 @@
     color: #ffffff;
 }
 
-.exam-question-item-header .exam-action-btn-keep.ant-btn.ant-btn-primary:not(:disabled):hover,
-.exam-question-item-header .exam-action-btn-keep.ant-btn.ant-btn-primary:not(:disabled):focus-visible {
+.exam-question-item-actions .exam-action-btn-keep.ant-btn.ant-btn-primary:not(:disabled):hover,
+.exam-question-item-actions .exam-action-btn-keep.ant-btn.ant-btn-primary:not(:disabled):focus-visible {
     background-color: #135200;
     border-color: #135200;
     color: #ffffff;
+}
+
+/* Nút Lưu bị khóa khi hệ thống đang kiểm tra (G14): xám rõ ràng là chưa bấm được */
+.exam-question-item-actions .exam-action-btn-keep.ant-btn.ant-btn-primary:disabled {
+    background-color: #f5f5f5;
+    border-color: #bfbfbf;
+    color: rgba(0, 0, 0, 0.45);
 }
 
 /* Nút phụ "Đổi câu khác"/"Soạn lại", "Sửa": nền trắng, viền xám #8c8c8c (3,3:1), chữ đen; rê chuột thì xanh đậm */
@@ -306,8 +383,8 @@
     color: rgba(0, 0, 0, 0.88);
 }
 
-.exam-question-item-header .exam-action-btn-change.ant-btn:not(:disabled):hover,
-.exam-question-item-header .exam-action-btn-edit.ant-btn:not(:disabled):hover {
+.exam-question-item-actions .exam-action-btn-change.ant-btn:not(:disabled):hover,
+.exam-question-item-actions .exam-action-btn-edit.ant-btn:not(:disabled):hover {
     background-color: #ffffff;
     border-color: #0958d9;
     color: #0958d9;
@@ -319,6 +396,54 @@
 
 .exam-action-btn-delete:hover {
     background-color: #fff1f0 !important;
+}
+
+/* G26: màn ≤768px một cột; nhóm nút xuống cuối thẻ, sau nội dung câu và "Xem lời giải".
+   "Lưu vào ngân hàng" chiếm cả hàng; "Đổi câu khác"/"Soạn lại" và "Sửa" chia đôi hàng sau (còn một nút thì chiếm cả hàng);
+   nút Xóa (biểu tượng) đứng cuối hàng đó. Nút giữ cao 40px, chữ dài được xuống dòng trong nút. */
+@media (max-width: 768px) {
+    .exam-question-item-content {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "header"
+            "body"
+            "actions";
+    }
+
+    .exam-question-item-actions {
+        justify-content: stretch;
+        gap: 8px;
+        margin-top: 16px;
+        margin-bottom: 0;
+    }
+
+    .exam-action-keep-wrap {
+        display: block;
+        flex: 1 1 100%;
+    }
+
+    .exam-question-item-actions .exam-action-btn-keep.ant-btn {
+        width: 100%;
+    }
+
+    .exam-question-item-actions .exam-action-btn-change.ant-btn,
+    .exam-question-item-actions .exam-action-btn-edit.ant-btn {
+        flex: 1 1 40%;
+        min-width: 0;
+    }
+
+    .exam-question-item-actions .exam-action-btn-keep.ant-btn,
+    .exam-question-item-actions .exam-action-btn-change.ant-btn,
+    .exam-question-item-actions .exam-action-btn-edit.ant-btn {
+        height: auto;
+        white-space: normal;
+    }
+
+    .exam-question-item-actions .exam-action-btn-delete.ant-btn {
+        flex: 0 0 auto;
+        min-width: 40px;
+        min-height: 40px;
+    }
 }
 
 @media (max-width: 576px) {
