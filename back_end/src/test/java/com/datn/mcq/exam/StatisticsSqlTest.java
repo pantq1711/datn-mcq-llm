@@ -286,7 +286,7 @@ class StatisticsSqlTest extends ExamFlowTestBase {
             list.filter(p -> p.toString().endsWith(".sql")).forEach(files::add);
         }
         files.add(Path.of("..", "docs", "experiments", "trial", "queries.sql"));
-        assertEquals(9, files.size());
+        assertEquals(10, files.size());
         for (Path p : files) {
             String raw = Files.readString(p, StandardCharsets.UTF_8);
             assertTrue(raw.contains("\\set dev_emails ''"), p + ": khai báo mặc định rỗng");
@@ -303,7 +303,7 @@ class StatisticsSqlTest extends ExamFlowTestBase {
     void coMotCauLenhSelectDocLapMoiFile() throws IOException {
         try (var files = Files.list(DIR)) {
             List<Path> sqlFiles = files.filter(p -> p.toString().endsWith(".sql")).sorted().toList();
-            assertEquals(8, sqlFiles.size());
+            assertEquals(9, sqlFiles.size());
             for (Path p : sqlFiles) {
                 // bỏ phần chú thích (-- ...) trước khi kiểm
                 String sql = Files.readString(p, StandardCharsets.UTF_8).lines()

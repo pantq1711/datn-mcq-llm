@@ -292,16 +292,20 @@ ls -lh /var/backups/datn/
 - File `datn-<ngày-giờ>.dump` (định dạng custom của `pg_dump`), giữ 14 ngày (`KEEP_DAYS`).
 - **Bản sao lưu cùng ổ đĩa với DB không đủ an toàn.** Làm ít nhất một trong hai: bật snapshot/backup của nhà cung cấp,
   hoặc đặt `RCLONE_REMOTE` (ví dụ `gdrive:datn-backup`, cài và cấu hình `rclone` trước) để chép ra ngoài.
-- **Bản ở xa cũng xoay vòng 14 ngày** (quyết định 16/11, rà soát an ninh 07, VH-02). `backup.sh` chỉ xóa bản cục bộ; `rclone
-  copy` chỉ thêm nên bản ở xa không bao giờ tự mất. Từ khi có bài làm của học sinh (bài giao trực tuyến, V32), bản dump chứa
-  dữ liệu học sinh: giáo viên xóa bài giao thì dữ liệu chỉ thật sự hết khỏi bản ở xa sau 14 ngày. Người vận hành thêm vào
-  cron, sau dòng sao lưu (script chưa tự làm việc này):
-
-  ```bash
-  rclone delete --min-age 14d "$RCLONE_REMOTE"   # xóa bản ở xa cũ hơn 14 ngày
-  ```
-
+- **Bản ở xa cũng xoay vòng 14 ngày** (quyết định 16/11, rà soát an ninh 07, VH-02). Khi có `RCLONE_REMOTE`, `backup.sh` sau
+  khi chép sẽ tự chạy `rclone delete --min-age <KEEP_DAYS>d --include 'datn-*.dump*'` (chỉ đụng file sao lưu của mình, không
+  đụng file khác trong cùng thư mục). Từ khi có bài làm của học sinh (bài giao trực tuyến, V32), bản dump chứa dữ liệu học
+  sinh: giáo viên xóa bài giao thì dữ liệu chỉ thật sự hết khỏi bản ở xa sau 14 ngày. Chép hoặc xóa ở xa lỗi (ví dụ rclone hết
+  hạn đăng nhập) thì `backup.sh` thoát mã khác 0 và báo `/fail` (xem "Cảnh báo" bên dưới).
   Bài làm của học sinh giữ trong DB tới khi giáo viên xóa bài giao (không tự xóa theo hạn).
+- **Mã hóa bản dump bằng `age` (tùy chọn, `BACKUP_AGE_RECIPIENT`).** Cài `age` (`apt install age`), sinh cặp khóa **trên máy
+  của bạn, không phải trên máy chủ**: `age-keygen -o datn-age.key` (in ra dòng `Public key: age1...`). Chỉ khóa công khai
+  `age1...` đặt vào `deploy/.env` (`BACKUP_AGE_RECIPIENT`); file khóa riêng `datn-age.key` cất trong trình quản lý mật khẩu của
+  nhóm (mục "Người thứ hai"), **mất khóa riêng là mất mọi bản sao lưu đã mã hóa**. Khi bật, file thành
+  `datn-<ngày-giờ>.dump.age` và không còn bản rõ nào trên đĩa. Khôi phục: chép tạm khóa riêng lên máy chủ, chạy
+  `AGE_IDENTITY=/đường/dẫn/datn-age.key bash scripts/restore.sh <file>.dump.age --into datn_restore_test` (hoặc `--yes`), rồi
+  xóa khóa khỏi máy chủ. Chưa bật thì sao lưu giữ nguyên là file `.dump` rõ như cũ. Nếu dùng remote `rclone crypt` thì đã được
+  mã hóa khi lên remote; `age` bảo vệ thêm cả bản cục bộ và snapshot đĩa.
 - **Thử khôi phục định kỳ (mỗi tháng và trước ngày giáo viên dùng thử)** vào DB tạm, không đụng DB đang chạy:
 
 ```bash
@@ -374,6 +378,97 @@ docker compose up -d
   `datn_gemini_*` cần gọi Gemini thật hoặc giả (`LLM_BASE_URL`).
 - **Tắt:** bỏ `compose.monitoring.yaml` khỏi `COMPOSE_FILE` rồi `docker compose up -d --remove-orphans`. Volume `prom_data`,
   `grafana_data` giữ lại cho tới khi xóa tay.
+
+## 6c. Cảnh báo (healthchecks.io và UptimeRobot)
+
+Mục tiêu (rà soát an ninh 07, VH-02 và VH-04): site chết, đĩa đầy hoặc sao lưu lỗi phải tới điện thoại của người trực, không
+chờ ai mở file log. Dùng hai dịch vụ ngoài, đều có gói miễn phí; **kiểm lại giới hạn gói khi đăng ký** (giới hạn có thể đổi).
+Không cần cài gì thêm trên máy chủ ngoài `curl` (đã có).
+
+**1. healthchecks.io: hai check** (kiểu "máy chủ tự báo", vắng tín hiệu thì báo động)
+
+| Check | Chu kỳ (Period) | Ân hạn (Grace) | Ai ping |
+|---|---|---|---|
+| `datn-backup` (sao lưu hằng ngày) | 1 ngày | 2 giờ | `backup.sh`: `/start` khi bắt đầu, URL khi xong, `/fail` khi lỗi |
+| `datn-disk` (đĩa mỗi giờ) | 1 giờ | 15 phút | `check-disk.sh`: URL khi đĩa dưới ngưỡng, `/fail` khi dùng quá 80% |
+
+1. Đăng ký, tạo hai check như bảng (tên tùy ý), vào **Integrations** thêm kênh nhận báo (thư, Telegram...) và gắn vào cả hai.
+   Nên gắn cho cả người thứ hai (mục 6d), để người vắng không làm mất cảnh báo.
+2. Mỗi check có một **ping URL** dạng `https://hc-ping.com/<uuid>`. Dán vào `deploy/.env` trên máy chủ (cả hai biến mặc định
+   để trống, nghĩa là tắt): `HEALTHCHECK_URL=` (check sao lưu) và `HEALTHCHECK_DISK_URL=` (check đĩa). Giữ `chmod 600`. URL là
+   bí mật nhỏ: không dán vào chat, issue hay commit. (Do `app` nạp cả `.env` làm biến môi trường, hai URL này cũng nằm trong
+   container `app`; app không dùng. Muốn tách hẳn thì đặt chúng trực tiếp trong dòng cron thay vì `.env`.)
+3. Cron (cùng user chạy `backup.sh`; cần quyền ghi file log). `check-disk.sh` gọi bằng `bash` nên không phụ thuộc quyền thực thi:
+
+   ```bash
+   # Sao lưu 02:00 hằng ngày: đã có ở mục "Sao lưu và khôi phục"; biến HEALTHCHECK_URL, RCLONE_REMOTE, BACKUP_AGE_RECIPIENT
+   # tự đọc từ deploy/.env, không cần sửa dòng cron đó.
+   # Kiểm tra đĩa mỗi giờ (phút 0):
+   ( crontab -l 2>/dev/null; echo '0 * * * * bash /opt/datn/deploy/scripts/check-disk.sh >> /var/log/datn-check-disk.log 2>&1' ) | crontab -
+   ```
+
+   Ngưỡng mặc định 80% của `/`; đổi bằng `DISK_THRESHOLD_PCT=85` hoặc `DISK_PATH=/var` đặt ngay trước `bash` trong dòng cron.
+4. **Thử một lần cho mỗi check** (sau khi dán URL): `bash scripts/backup.sh` rồi xem check `datn-backup` chuyển xanh (có
+   thời gian chạy từ `/start`). Với đĩa: `DISK_THRESHOLD_PCT=1 bash scripts/check-disk.sh` phải in CẢNH BÁO, thoát mã 1,
+   check `datn-disk` đỏ và có thư/tin báo tới; chạy lại không đặt ngưỡng để về xanh.
+5. Lỗi ping (mạng, URL sai) chỉ in một dòng cảnh báo vào log, **không** làm hỏng sao lưu. Hệ quả: nếu URL sai, chỉ có
+   healthchecks.io báo "vắng tín hiệu" sau chu kỳ + ân hạn, nên bước thử ở mục 4 là bắt buộc.
+
+**2. UptimeRobot: kiểm tra từ ngoài** (bắt trường hợp cả máy chủ hoặc Caddy chết, lúc đó cron cũng chết nên healthchecks.io
+chỉ báo sau chu kỳ + ân hạn)
+
+- Tạo monitor loại **HTTP(s)**, URL `https://soande.app`, chu kỳ **5 phút** (mức nhanh nhất của gói miễn phí tại thời điểm viết;
+  kiểm lại khi đăng ký), gắn cùng kênh báo như trên. Nên thêm cả người thứ hai.
+- Chỉ kiểm trang chủ. **Không** trỏ monitor vào `/actuator/*` (Caddy chặn, trả 404 là bình thường, xem mục 10).
+- Chứng chỉ sắp hết hạn: bật cảnh báo hết hạn SSL trong monitor nếu gói có.
+
+**Giới hạn đã biết:** hai dịch vụ này không thấy Gemini hết hạn mức (VH-06) hay `app` hỏng nhưng Caddy vẫn trả trang chủ
+(frontend tĩnh). Ca đó vẫn phải xem Grafana (mục 6b). Chưa kiểm trên máy chủ thật.
+
+## 6d. Người thứ hai (cấp quyền SSH)
+
+Mục tiêu (VH-05): có ít nhất hai người vào được máy chủ để khởi động lại, quay lại bản cũ hay khôi phục. Mỗi người **khóa
+riêng**, không dùng chung một khóa. Cấp theo hướng dẫn tài khoản/SSH ở mục 4.1. Bên dưới ghi `Đang` là người thứ hai; **không
+ghi khóa thật vào repo hay chat**, chỉ chuyển file `.pub`.
+
+1. **Đang tự sinh khóa trên máy của mình** (khóa riêng không rời máy đó, đặt passphrase):
+
+   ```bash
+   ssh-keygen -t ed25519 -C "dang-datn" -f ~/.ssh/datn_deploy
+   ssh-keygen -lf ~/.ssh/datn_deploy.pub     # in dấu vân tay (fingerprint): đọc cho người cấp quyền ở bước 2
+   ```
+
+   Chỉ gửi file `datn_deploy.pub` (một dòng `ssh-ed25519 ... dang-datn`). **Không bao giờ gửi file không có đuôi `.pub`.**
+2. **Người đang có quyền (người cấp) nhận file `.pub`, đối chiếu dấu vân tay qua kênh khác** (gọi điện hoặc gặp trực tiếp,
+   không chỉ qua chat đã nhận file), rồi thêm vào máy chủ bằng phiên SSH đang có:
+
+   ```bash
+   # trên máy chủ, với user deploy (mỗi khóa một dòng, nhận dạng bằng chú thích cuối dòng)
+   echo '<dán nguyên dòng trong file datn_deploy.pub>' >> /home/deploy/.ssh/authorized_keys
+   chmod 700 /home/deploy/.ssh && chmod 600 /home/deploy/.ssh/authorized_keys
+   ```
+
+   Ví dụ dòng hợp lệ (giá trị minh họa, không phải khóa thật): `ssh-ed25519 AAAA...<chuỗi dài> dang-datn`.
+3. **Đang thử đăng nhập ở phiên MỚI** (người cấp giữ nguyên phiên cũ phòng sai quyền thư mục): `ssh -i ~/.ssh/datn_deploy deploy@<máy chủ>`,
+   rồi `docker compose -f /opt/datn/deploy/compose.prod.yaml ps` phải chạy được (user `deploy` thuộc nhóm `docker`).
+4. **Đang tự chạy một lần mỗi việc** (ngoài giờ có bài giao đang mở; xem quy ước dưới):
+
+   ```bash
+   cd /opt/datn/deploy
+   bash scripts/update.sh                 # cập nhật cùng tag hiện tại (sao lưu, kéo image, up -d, chờ healthy)
+   bash scripts/backup.sh                 # sao lưu tay
+   bash scripts/restore.sh /var/backups/datn/<file mới nhất> --into datn_restore_test   # thêm AGE_IDENTITY=... nếu file .age
+   docker compose -f compose.prod.yaml exec db sh -c 'dropdb -U "$POSTGRES_USER" datn_restore_test'
+   ```
+5. **Cất `deploy/.env` thật** trong trình quản lý mật khẩu dùng chung của nhóm (cả khóa riêng `age` nếu bật mã hóa), không gửi
+   qua chat. Máy chủ mất thì dựng lại cần đúng file này; `backup.sh` chỉ sao lưu database, không có `.env`. Ghi lại ở đó
+   **tên** các biến phải có (xem `deploy/.env.example`), không cần ghi giá trị vào tài liệu.
+6. **Thêm Đang vào kênh nhận báo** (mục 6c: healthchecks.io và UptimeRobot) và cho biết ai gọi khi site chết.
+7. **Thu hồi khi không còn cần:** xóa đúng dòng của khóa đó trong `authorized_keys` (nhận dạng bằng chú thích cuối dòng) rồi
+   `ssh deploy@<máy chủ>` bằng khóa đó phải bị từ chối.
+
+**Quy ước:** không chạy `update.sh` trong khung giờ có bài giao trực tuyến đang mở (cập nhật khởi động lại `app`, học sinh
+đang làm bài sẽ gặp lỗi). Hai người cùng quản trị thì báo nhau trước khi cập nhật hoặc khôi phục.
 
 ## 7. CI/CD
 

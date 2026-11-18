@@ -16,8 +16,8 @@ export const NotFoundPage = () => {
         >
             <Result
                 status="404"
-                title="404"
-                subTitle="Trang bạn tìm không tồn tại hoặc đã bị di chuyển."
+                title="Không tìm thấy trang"
+                subTitle="Trang này không có hoặc đã được chuyển chỗ. Thầy/cô kiểm tra lại đường dẫn."
                 extra={
                     <Button type="primary" onClick={() => navigate("/")}>
                         Về trang chủ

@@ -287,6 +287,8 @@ Xác nhận: không chạy lệnh thuộc M-27 / không gọi API tính phí / k
   riêng của người Giữ (`visible_to_user_id`); câu không cờ giữ nguyên (dùng chung, trừ đề có tài liệu).
 - 2026-11-16: thêm "Quyết định ngày 16/11/2026 – logic nghiệp vụ sau rà soát 05"; Q-4c chốt một phần (gỡ khỏi ngân hàng).
   Không đổi số phiên bản tài liệu.
+- 2026-11-17: thêm "Quyết định ngày 17/11/2026 – câu đúng/sai nhập từ Word (NV-52)": giữ quy tắc khớp mức từng ý, không sửa
+  code. Không đổi số phiên bản tài liệu.
 
 ## Quyết định ngày 16/11/2026 – logic nghiệp vụ sau rà soát 05
 
@@ -305,6 +307,19 @@ Chủ dự án chốt theo `.local/review/05-logic-nghiep-vu.md`. Không đổi 
 5. **NV-40/NV-41:** giao diện hỏi lại trước khi xuất Word khi đề còn chỗ hỏng / đang soạn / câu có cờ chưa xử lý, hoặc tổng
    điểm trắc nghiệm khác 10; file Word ghi chú tổng điểm trắc nghiệm, dưới 10 thêm dòng phần tự luận do giáo viên bổ sung.
    Không đổi thang điểm.
+
+## Quyết định ngày 17/11/2026 – câu đúng/sai nhập từ Word (NV-52)
+
+Chủ dự án chốt theo `.local/review/05-logic-nghiep-vu.md` mục NV-52. Không sửa code trong đợt này.
+
+1. **Giữ nguyên quy tắc chọn câu ngân hàng cho ô đúng/sai:** chuỗi mức bốn ý a–d phải trùng khít ô ma trận
+   (`ExamSlotRepository.findBankCandidates`, nhánh `tf` của `BankSearchRepository`), kể cả câu `origin = 'import'`. Không
+   bỏ hay nới điều kiện mức cho câu nhập, vì như vậy làm sai phân bố mức theo ý của ô đúng/sai trong ma trận theo Công văn
+   7991.
+2. **Hệ quả chấp nhận:** câu đúng/sai nhập từ Word chỉ có một mức chung cho cả bốn ý (quyết định 3/11 mục 3) nên gần như
+   không được tự lấy vào đề theo ma trận; câu vẫn nằm trong ngân hàng, xem và tìm được.
+3. **Hướng phát triển (chưa làm):** gán mức từng ý khi nhập; chọn câu ngân hàng bằng tay cho một chỗ (NV-32). Giới hạn ghi ở
+   `docs/design/nhap-ngan-hang-word.md`.
 
 ## Quyết định ngày 21/10/2026 (thay thế các comment xung đột trong V1__init_schema.sql)
 

@@ -92,6 +92,8 @@ class SecurityRouteAccessTest {
         RULES.put("DELETE /api/exams/{examId}/assignments/{assignmentId}/attempts/{attemptId}", Access.TEACHER);
         RULES.put("POST /api/exams/{examId}/assignments/{assignmentId}/attempts/bulk-delete", Access.TEACHER);
         RULES.put("DELETE /api/exams/{examId}/assignments/{assignmentId}", Access.TEACHER);
+        RULES.put("GET /api/exams/{examId}/assignments/{assignmentId}/item-stats", Access.TEACHER);
+        RULES.put("POST /api/exams/{examId}/assignments/{assignmentId}/item-stats/recompute", Access.TEACHER);
         RULES.put("GET /api/public/assignments/{code}", Access.PUBLIC);
         RULES.put("POST /api/public/assignments/{code}/attempts", Access.PUBLIC);
         RULES.put("GET /api/public/attempts/current", Access.PUBLIC);

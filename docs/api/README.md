@@ -1613,7 +1613,8 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
   `ASSIGN_SA_KEY_UNSUPPORTED` (đáp số Trả lời ngắn không phải số nguyên/thập phân, `errors` như trên).
 - Bài giao: `{assignmentId, publicCode, title, status (open|closed), durationMinutes, closesAt, closedAt?, showScore,
   showSolutions, createdAt, classes: [{classLabel, size}], questionCount, maxScore, maxAttempts (2 × tổng sĩ số), startedCount,
-  submittedCount, duplicateCount, attempts?}`. Link học sinh do frontend ghép: `<origin>/lam-bai/<publicCode>`.
+  submittedCount, duplicateCount, statsComputedAt?, attempts?}`. Link học sinh do frontend ghép: `<origin>/lam-bai/<publicCode>`.
+  `statsComputedAt` (V33): lúc tính thống kê câu gần nhất (mục 11.3); không có khi chưa tính hoặc đã bị vô hiệu do xóa lượt.
 - `GET /api/exams/{examId}/assignments` → danh sách bài giao (không có `attempts`), mới nhất trước.
 - `GET /api/exams/{examId}/assignments/{id}` → bài giao kèm `attempts: [{attemptId, classLabel, seatNo, state (in_progress |
   submitted | expired), duplicate, startedAt, submittedAt?, score?, score10?, parts?: [{part, correct, total, score}]}]`, theo
@@ -1622,7 +1623,7 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
 - `POST …/{id}/close` → 200 bài giao; đã đóng thì trả nguyên trạng. Lượt chưa nộp không nộp được nữa.
 - `DELETE …/{id}/attempts/{attemptId}` → 204; 404. Ở mọi trạng thái, kể cả sau khi đóng (dữ liệu giữ tới khi giáo viên xóa).
 - `POST …/{id}/attempts/bulk-delete` thân `{attemptIds: [..]}` (1–500) → 200 `{deleted}`; id không thuộc bài giao bị bỏ qua.
-  Ở mọi trạng thái; 400 `INVALID_REQUEST`.
+  Ở mọi trạng thái; 400 `INVALID_REQUEST`. Xóa lượt (một hoặc nhiều) làm thống kê câu đã tính bị vô hiệu (mục 11.3).
 - `DELETE …/{id}` → 204, xóa bài giao cùng mọi lượt làm và câu trả lời, ở mọi trạng thái.
 - `DELETE /api/exams/{examId}` khi đề còn bài giao: 409 `EXAM_HAS_ASSIGNMENTS`, không đổi gì.
 
@@ -1650,3 +1651,23 @@ Token lượt làm gửi ở header `X-Attempt-Token`, không bao giờ trong UR
   429 (theo lượt).
 - Hạn mức mặc định (biến môi trường `APP_PUBLIC_LIMIT_*`): tạo lượt 200/phút mỗi IP; mở lại 30/phút và nộp 20/phút mỗi lượt,
   hai bộ đếm riêng. Bộ đếm trong bộ nhớ một tiến trình.
+
+### 11.3. Phân tích câu (V33, PR B 17/11; thiết kế mục 5 và 14)
+
+Vai trò, quyền và lỗi 404 như 11.1.
+
+- `GET /api/exams/{examId}/assignments/{id}/item-stats` (B1) → thống kê; lần đọc đầu (hoặc đầu tiên sau khi bị vô hiệu) thì
+  tính và lưu. `POST …/{id}/item-stats/recompute` (B2) → tính lại rồi trả như B1.
+- Chỉ có khi bài đã đóng **và** đã qua 2 phút ân hạn nộp tính từ lúc đóng. Lỗi: 409 `ASSIGNMENT_OPEN` (bài còn mở); 409
+  `STATS_NOT_READY` (còn ân hạn; `errors[0]` là lúc có thống kê, ISO).
+- Chỉ tính lượt **đã nộp** và **không trùng** lớp + số thứ tự (cùng quy tắc `duplicate` của bảng điểm, xét cả lượt bỏ dở).
+  Xóa một hoặc nhiều lượt (T5, bulk-delete) thì thống kê bị vô hiệu; lần đọc sau tính lại.
+- Phản hồi: `{assignmentId, n, groupSize, computedAt, sampleSufficient, minSampleSize (20), sampleNote, excluded: {duplicate,
+  notSubmitted}, items: [{slotId, part, number, questionType, bankItemId, answerKey, p, d, choiceCounts, flags, slotChanged}]}`.
+  `groupSize` = k = round(0,27 × n). `d` null khi k = 0. `sampleSufficient = false` (n < 20): D và cờ chưa đáng tin,
+  `flags = ["insufficient_sample"]`, `sampleNote` nói rõ; giao diện phải hiện câu này. `answerKey`: đáp án mcq, nhãn bốn ý tf
+  (`"TFFT"`), đáp số sa. `slotChanged`: chỗ đó trên đề đã Đổi câu sau lúc giao (`bankItemId` vẫn là câu học sinh đã làm).
+  `excluded.duplicate`: lượt đã nộp bị loại vì trùng; `excluded.notSubmitted`: lượt chưa nộp. `items` theo thứ tự trang đề.
+- `choiceCounts`: mcq `{"A": {all, high, low}, …, "D": …, "blank": …}`; tf `{"a": {T, F, blank, correct, p, d}, …}`; sa
+  `{correct, blank, topWrong: [{value, count}]}` (tối đa 5 đáp số sai hay gặp, gom theo giá trị, đáp số không phân tích được
+  gom theo chuỗi). Mã cờ: `docs/contract/enums.md`, mục "Mã cờ hậu kiểm".

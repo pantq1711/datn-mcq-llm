@@ -1,4 +1,4 @@
-import { Button, Space, Table, Tag, Tooltip, Typography, Card, Select } from "antd";
+import { Button, Empty, Space, Table, Tag, Tooltip, Typography, Card, Select } from "antd";
 import type { TableColumnsType, TablePaginationConfig } from "antd";
 import { EyeOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -19,6 +19,10 @@ interface QuestionTableProps {
     onSortChange?: (sort: BankSort) => void;
     onPageChange?: (page: number, pageSize: number) => void;
     onView?: (question: QuestionTableItem) => void;
+    /** Đang có điều kiện lọc: bảng rỗng thì gợi ý bỏ bớt điều kiện. */
+    hasFilters?: boolean;
+    /** Nút "Xóa điều kiện lọc" ở trạng thái rỗng. */
+    onClearFilters?: () => void;
 }
 
 // Đúng giá trị docs/api "Ngân hàng câu hỏi"; giá trị lạ backend trả 400
@@ -38,25 +42,18 @@ export default function QuestionTable({
     sort = "newest",
     onSortChange,
     onPageChange,
-    onView
+    onView,
+    hasFilters = false,
+    onClearFilters,
 }: QuestionTableProps) {
+    // Bỏ cột "Mã" và phần "Môn" để bảng vừa khung ở chữ 16px; mã câu, môn vẫn xem trong ngăn chi tiết (rà soát giao diện H5)
     const columns: TableColumnsType<QuestionTableItem> = [
-        {
-            title: "Mã",
-            dataIndex: "id",
-            key: "id",
-            width: 80,
-            align: "center",
-            render: (id: number) => (
-                <Text strong>#{id}</Text>
-            ),
-        },
         {
             title: "Câu hỏi",
             dataIndex: "questionText",
             key: "questionText",
-            // Đủ rộng để thấy công thức đầu câu, không bị ép còn vài chữ
-            width: 280,
+            // Cột co giãn: đủ rộng để thấy công thức đầu câu, không bị ép còn vài chữ
+            minWidth: 240,
             ellipsis: {
                 showTitle: false,
             },
@@ -69,17 +66,12 @@ export default function QuestionTable({
             ),
         },
         {
-            title: "Môn / Khối",
-            key: "subjectAndGrade",
-            width: 140,
-            render: (_, record) => (
-                <Space direction="vertical" size={2}>
-                    <Text strong>{record.subject || "—"}</Text>
-                    {record.gradeLevel && (
-                        <Text type="secondary">Khối {record.gradeLevel}</Text>
-                    )}
-                </Space>
-            ),
+            // Môn xem trong ngăn chi tiết; bảng chỉ giữ lớp để cột "Câu hỏi" đủ rộng
+            title: "Lớp",
+            key: "gradeLevel",
+            width: 80,
+            align: "center",
+            render: (_, record) => (record.gradeLevel ? <Text>Lớp {record.gradeLevel}</Text> : "—"),
         },
         {
             title: "Dạng câu",
@@ -88,23 +80,23 @@ export default function QuestionTable({
             width: 130,
             align: "center",
             render: (type?: QuestionType) => {
-                if (type === "tf") return <Text>Đúng / Sai</Text>;
+                if (type === "tf") return <Text>Trắc nghiệm đúng/sai</Text>;
                 if (type === "sa") return <Text>Trả lời ngắn</Text>;
-                return <Text>Trắc nghiệm</Text>;
+                return <Text>Trắc nghiệm nhiều phương án</Text>;
             },
         },
         {
             title: "Chủ đề / Bài",
             dataIndex: "topic",
             key: "topic",
-            width: 160,
+            width: 150,
             ellipsis: true,
             render: (topic?: string) => topic ? <Text type="secondary">{topic}</Text> : "—",
         },
         {
             title: "Mức độ",
             key: "difficulty",
-            width: 130,
+            width: 105,
             align: "center",
             render: (_, record) => {
                 if (record.questionType === "tf") {
@@ -123,7 +115,7 @@ export default function QuestionTable({
             ),
             dataIndex: "visibility",
             key: "visibility",
-            width: 100,
+            width: 95,
             align: "center",
             render: (visibility?: QuestionTableItem["visibility"]) => visibility === "private"
                 ? <Tag color="purple">Riêng</Tag>
@@ -137,7 +129,7 @@ export default function QuestionTable({
             ),
             dataIndex: "usageCount",
             key: "usageCount",
-            width: 150,
+            width: 130,
             align: "center",
             render: (usageCount: number, record) => (
                 <Space direction="vertical" size={0} align="center">
@@ -150,7 +142,7 @@ export default function QuestionTable({
                         )}
                     </Space>
                     {/* Cho thấy lý do thứ tự khi sắp "Dùng gần đây" (backend xếp theo lastUsedAt) */}
-                    <Text type="secondary" style={{ fontSize: 11 }}>
+                    <Text type="secondary" style={{ fontSize: 14 }}>
                         {record.lastUsedAt ? `Gần nhất ${dayjs(record.lastUsedAt).format("DD/MM/YYYY")}` : "Chưa dùng"}
                     </Text>
                 </Space>
@@ -160,7 +152,7 @@ export default function QuestionTable({
             title: "Ngày tạo",
             dataIndex: "createdAt",
             key: "createdAt",
-            width: 140,
+            width: 115,
             render: (val: string) => {
                 if (!val) return "—";
                 const d = dayjs(val);
@@ -170,18 +162,19 @@ export default function QuestionTable({
         {
             title: "Thao tác",
             key: "action",
-            width: 80,
+            width: 100,
             align: "center",
             render: (_, record) => (
-                <Space size={0}>
-                    <Tooltip title="Xem chi tiết">
-                        <Button
-                            type="text"
-                            icon={<EyeOutlined />}
-                            onClick={() => onView?.(record)}
-                        />
-                    </Tooltip>
-                </Space>
+                <Button
+                    icon={<EyeOutlined />}
+                    onClick={(event) => {
+                        // Không tính thêm lần bấm dòng
+                        event.stopPropagation();
+                        onView?.(record);
+                    }}
+                >
+                    Xem
+                </Button>
             ),
         },
     ];
@@ -205,13 +198,12 @@ export default function QuestionTable({
                 bordered={false}
                 extra={
                     <Space size={8}>
-                        <Text type="secondary" style={{ fontSize: 13 }}>Sắp xếp:</Text>
+                        <Text type="secondary">Sắp xếp:</Text>
                         <Select
                             value={sort}
                             onChange={(val) => onSortChange?.(val)}
                             options={sortOptions}
-                            style={{ width: 160 }}
-                            size="small"
+                            style={{ width: 190 }}
                         />
                     </Space>
                 }
@@ -223,6 +215,25 @@ export default function QuestionTable({
                     loading={loading}
                     pagination={pagination}
                     scroll={{ x: 1100 }}
+                    // Bấm cả dòng để mở chi tiết (rà soát giao diện H5)
+                    onRow={(record) => ({
+                        onClick: () => onView?.(record),
+                        className: onView ? "question-table-row-clickable" : undefined,
+                    })}
+                    locale={{
+                        emptyText: hasFilters ? (
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description="Không có câu nào khớp. Thầy/cô thử bỏ bớt điều kiện lọc."
+                            >
+                                {onClearFilters && (
+                                    <Button onClick={onClearFilters}>Xóa điều kiện lọc</Button>
+                                )}
+                            </Empty>
+                        ) : (
+                            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Ngân hàng chưa có câu nào." />
+                        ),
+                    }}
                 />
             </Card>
         </div>

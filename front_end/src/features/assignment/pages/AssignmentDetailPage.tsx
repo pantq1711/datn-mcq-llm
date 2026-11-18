@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Alert, Button, Card, Descriptions, Modal, Space, Spin, Table, Tag, Typography, message } from "antd";
+import { Alert, Button, Card, Descriptions, Modal, Space, Spin, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { ArrowLeftOutlined, DeleteOutlined, LockOutlined, ReloadOutlined } from "@ant-design/icons";
 
 import AssignmentLinkCard from "../components/AssignmentLinkCard";
+import ItemStatsTab from "../components/ItemStatsTab";
 import { AssignmentStatusTag } from "../components/assignmentLabels";
 import { attemptStateLabel, classSummary } from "../utils/labels";
 import { bulkDeleteAttempts, closeAssignment, deleteAssignment, getAssignment } from "../services/assignmentApi";
@@ -37,6 +38,7 @@ export default function AssignmentDetailPage() {
     const [notFound, setNotFound] = useState(false);
     const [selected, setSelected] = useState<number[]>([]);
     const [busy, setBusy] = useState(false);
+    const [tab, setTab] = useState<"scores" | "items">("scores");
 
     // Mỗi lần tăng reloadTick là tải lại bài giao; lần làm mới tự động (silent) không báo lỗi để khỏi làm phiền
     const [reloadTick, setReloadTick] = useState(0);
@@ -193,7 +195,7 @@ export default function AssignmentDetailPage() {
         []
     );
 
-    if (loading && !data) return <Spin tip="Đang tải bài giao…" />;
+    if (loading && !data) return <Spin description="Đang tải bài giao…" />;
 
     if (notFound || !data) {
         return (
@@ -261,70 +263,87 @@ export default function AssignmentDetailPage() {
                 </Card>
             </div>
 
-            <Card
-                className="assignment-scores"
-                title="Bảng điểm"
-                extra={
-                    <Button icon={<ReloadOutlined />} onClick={load}>
-                        Làm mới
-                    </Button>
-                }
-            >
-                {data.duplicateCount > 0 && (
-                    <Alert
-                        type="warning"
-                        showIcon
-                        style={{ marginBottom: 12 }}
-                        message={`Có ${data.duplicateCount} lượt trùng số thứ tự`}
-                        description={
-                            data.status === "open"
-                                ? "Hai học sinh nhập cùng lớp và số thứ tự thì cả hai lượt đều được giữ và đánh dấu “Trùng STT”. Thầy/cô xem lại rồi xóa lượt nhập nhầm; lượt còn lại sẽ hết dấu trùng."
-                                : "Bài đã đóng nên không xóa được lượt. Các lượt trùng được đánh dấu để thầy/cô đối chiếu với sổ điểm."
-                        }
-                        action={
-                            data.status === "open" ? (
-                                <Button size="small" onClick={() => setSelected(duplicates.map((a) => a.attemptId))}>
-                                    Chọn các lượt trùng
-                                </Button>
-                            ) : undefined
-                        }
-                    />
-                )}
+            <Tabs
+                activeKey={tab}
+                onChange={(key) => setTab(key === "items" ? "items" : "scores")}
+                items={[
+                    { key: "scores", label: "Bảng điểm" },
+                    { key: "items", label: "Phân tích câu" },
+                ]}
+            />
 
-                {data.status === "open" && (
-                    <div className="assignment-bulk">
-                        <Text type="secondary">
-                            {selected.length > 0 ? `Đã chọn ${selected.length} lượt` : "Tích chọn các lượt cần xóa (ví dụ lượt nhập nhầm số)."}
-                        </Text>
-                        <Button danger disabled={selected.length === 0} loading={busy} onClick={handleBulkDelete}>
-                            Xóa các lượt đã chọn
+            {tab === "items" && (
+                <Card className="assignment-scores" title="Phân tích câu">
+                    <ItemStatsTab examId={examId} assignmentId={assignmentId} status={data.status} />
+                </Card>
+            )}
+
+            {tab === "scores" && (
+                <Card
+                    className="assignment-scores"
+                    title="Bảng điểm"
+                    extra={
+                        <Button icon={<ReloadOutlined />} onClick={load}>
+                            Làm mới
                         </Button>
-                    </div>
-                )}
-
-                <Table<AttemptRow>
-                    rowKey="attemptId"
-                    size="small"
-                    columns={columns}
-                    dataSource={attempts}
-                    pagination={attempts.length > 50 ? { pageSize: 50, showSizeChanger: false } : false}
-                    scroll={{ x: 760 }}
-                    rowClassName={(row) => (row.duplicate ? "assignment-row-duplicate" : "")}
-                    rowSelection={
-                        data.status === "open"
-                            ? {
-                                selectedRowKeys: selected,
-                                onChange: (keys) => setSelected(keys.map(Number)),
-                            }
-                            : undefined
                     }
-                    locale={{ emptyText: "Chưa có học sinh nào vào làm." }}
-                />
-                <p className="assignment-hint">
-                    Bảng điểm không có tên học sinh: thầy/cô đối chiếu theo lớp và số thứ tự. Ô điểm phần ghi điểm và (số câu đúng/tổng);
-                    phần II đếm theo ý.
-                </p>
-            </Card>
+                >
+                    {data.duplicateCount > 0 && (
+                        <Alert
+                            type="warning"
+                            showIcon
+                            style={{ marginBottom: 12 }}
+                            message={`Có ${data.duplicateCount} lượt trùng số thứ tự`}
+                            description={
+                                data.status === "open"
+                                    ? "Hai học sinh nhập cùng lớp và số thứ tự thì cả hai lượt đều được giữ và đánh dấu “Trùng STT”. Thầy/cô xem lại rồi xóa lượt nhập nhầm; lượt còn lại sẽ hết dấu trùng."
+                                    : "Bài đã đóng nên không xóa được lượt. Các lượt trùng được đánh dấu để thầy/cô đối chiếu với sổ điểm."
+                            }
+                            action={
+                                data.status === "open" ? (
+                                    <Button size="small" onClick={() => setSelected(duplicates.map((a) => a.attemptId))}>
+                                        Chọn các lượt trùng
+                                    </Button>
+                                ) : undefined
+                            }
+                        />
+                    )}
+
+                    {data.status === "open" && (
+                        <div className="assignment-bulk">
+                            <Text type="secondary">
+                                {selected.length > 0 ? `Đã chọn ${selected.length} lượt` : "Tích chọn các lượt cần xóa (ví dụ lượt nhập nhầm số)."}
+                            </Text>
+                            <Button danger disabled={selected.length === 0} loading={busy} onClick={handleBulkDelete}>
+                                Xóa các lượt đã chọn
+                            </Button>
+                        </div>
+                    )}
+
+                    <Table<AttemptRow>
+                        rowKey="attemptId"
+                        size="small"
+                        columns={columns}
+                        dataSource={attempts}
+                        pagination={attempts.length > 50 ? { pageSize: 50, showSizeChanger: false } : false}
+                        scroll={{ x: 760 }}
+                        rowClassName={(row) => (row.duplicate ? "assignment-row-duplicate" : "")}
+                        rowSelection={
+                            data.status === "open"
+                                ? {
+                                    selectedRowKeys: selected,
+                                    onChange: (keys) => setSelected(keys.map(Number)),
+                                }
+                                : undefined
+                        }
+                        locale={{ emptyText: "Chưa có học sinh nào vào làm." }}
+                    />
+                    <p className="assignment-hint">
+                        Bảng điểm không có tên học sinh: thầy/cô đối chiếu theo lớp và số thứ tự. Ô điểm phần ghi điểm và (số câu đúng/tổng);
+                        phần II đếm theo ý.
+                    </p>
+                </Card>
+            )}
         </div>
     );
 }

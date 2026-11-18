@@ -8,7 +8,12 @@ import "./Sidebar.css";
 
 type MenuItem = Required<MenuProps>["items"][number];
 
-export default function Sidebar() {
+interface SidebarProps {
+    /** Gọi sau khi chuyển trang (màn hẹp: đóng thanh bên). */
+    onNavigate?: () => void;
+}
+
+export default function Sidebar({ onNavigate }: SidebarProps) {
     const navigate = useNavigate();
     const location = useLocation();
     const { user } = useAuth();
@@ -54,6 +59,7 @@ export default function Sidebar() {
 
     const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
         navigate(key);
+        onNavigate?.();
     };
 
     // Lấy danh sách các key hợp lệ từ menu hiện tại

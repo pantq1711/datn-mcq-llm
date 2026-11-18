@@ -147,6 +147,11 @@ export default function QuestionBankPage() {
         fetchQuestions(1, pageSize, initialFilters, "newest");
     };
 
+    // Có điều kiện lọc nào khác mặc định: bảng rỗng thì gợi ý bỏ bớt điều kiện thay vì chỉ ghi "Trống"
+    const hasFilters = Object.values(filters).some((v) =>
+        Array.isArray(v) ? v.some((item) => item != null) : v != null && v !== ""
+    );
+
     return (
         <div className="question-bank-page">
             <div className="question-bank-page-header">
@@ -157,11 +162,10 @@ export default function QuestionBankPage() {
                     </Title>
                     {/* NV-30: cột "Phạm vi" cho biết từng câu là Chung hay Riêng */}
                     <Paragraph type="secondary" className="question-bank-page-note">
-                        Danh sách gồm câu dùng chung và câu riêng của thầy/cô (cột "Phạm vi"). Câu riêng chỉ thầy/cô
-                        thấy và dùng lại.
+                        Gồm câu dùng chung và câu riêng của thầy/cô (cột "Phạm vi"). Câu riêng chỉ thầy/cô thấy.
                     </Paragraph>
                 </div>
-                <Tooltip title="Chưa hỗ trợ: cần API nhập câu vào ngân hàng ở backend.">
+                <Tooltip title="Sắp có: nhập câu từ file Word của thầy/cô.">
                     <Button icon={<FileWordOutlined />} disabled>
                         Nhập từ Word
                     </Button>
@@ -192,6 +196,8 @@ export default function QuestionBankPage() {
                     onSortChange={handleSortChange}
                     onPageChange={handlePageChange}
                     onView={handleViewQuestion}
+                    hasFilters={hasFilters}
+                    onClearFilters={handleReset}
                 />
             </div>
 

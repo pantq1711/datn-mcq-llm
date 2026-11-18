@@ -1,19 +1,74 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Form, Input, message, Modal, Select, Space, Tag, Typography } from "antd";
+import { Alert, Button, ConfigProvider, Form, Input, message, Modal, Radio, Space, Tag, Typography } from "antd";
+import type { FormInstance } from "antd";
 import { EditOutlined } from "@ant-design/icons";
 
 import type {
     ExamItemDto, ExamOption, ExamQuestionItem, StatementKey, TruthLabel, UpdateSlotQuestionPayload,
 } from "../types/exam.types";
 import { updateQuestion } from "../services/examApi";
-import { describeFormatIssueList, describeLevel } from "../../../utils/exam.utils";
+import { describeFormatIssue, describeLevel } from "../../../utils/exam.utils";
+import { MathField, MathInputProvider, MathSymbolBar } from "./MathInput";
+import { READABLE_MODAL_THEME } from "./readableModalTheme";
 
 import "./EditQuestionModal.css";
 
 const { Text } = Typography;
-const { TextArea } = Input;
 
 const STATEMENT_KEYS: StatementKey[] = ["a", "b", "c", "d"];
+const OPTION_KEYS = ["A", "B", "C", "D"] as const;
+
+type FieldName = string | (string | number)[];
+
+/** Tên trường trong lỗi FORMAT_INVALID của backend ("answer: …") → ô tương ứng trong form (rà soát G11). */
+const FIELD_OF_ERROR: Record<string, FieldName> = {
+    question_text: "questionText",
+    option_a: "optionA",
+    option_b: "optionB",
+    option_c: "optionC",
+    option_d: "optionD",
+    answer: "saAnswer",
+    explanation: "explanation",
+    ...Object.fromEntries(STATEMENT_KEYS.flatMap((key, i) => [
+        [`statement_${key}`, ["statements", i, "text"]],
+        [`label_${key}`, ["statements", i, "label"]],
+    ])),
+};
+
+// Lỗi dạng đáp số: nói kèm ví dụ, bỏ cụm "vừa khung" khó hiểu (rà soát G11)
+const ANSWER_FORMAT_START = /^đáp (?:số|án) phải là/i;
+const ANSWER_FORMAT_MESSAGE =
+    "Đáp số phải là số nguyên hoặc số thập phân, tối đa 4 kí tự kể cả dấu trừ và dấu phẩy (ví dụ 12; -3,5; 0,25).";
+
+/**
+ * Đặt lỗi của backend xuống dưới đúng ô và cuộn tới ô đầu tiên. Trả về các lỗi không gắn được vào ô nào
+ * (ví dụ "4 ý cùng nhãn") để báo bằng thông báo chung.
+ */
+function showFieldErrors(form: FormInstance, errors: string[]): { placed: boolean; rest: string[] } {
+    const byField = new Map<string, { name: FieldName; messages: string[] }>();
+    const rest: string[] = [];
+    for (const raw of errors) {
+        const match = /^([a-z_]+):\s*([\s\S]*)$/.exec(raw.trim());
+        const name = match ? FIELD_OF_ERROR[match[1]] : undefined;
+        if (!match || !name) {
+            rest.push(describeFormatIssue(raw));
+            continue;
+        }
+        const text = match[1] === "answer" && ANSWER_FORMAT_START.test(match[2])
+            ? ANSWER_FORMAT_MESSAGE
+            : describeFormatIssue(raw);
+        const key = JSON.stringify(name);
+        const entry = byField.get(key) ?? { name, messages: [] };
+        if (!entry.messages.includes(text)) entry.messages.push(text);
+        byField.set(key, entry);
+    }
+    const fields = [...byField.values()];
+    if (fields.length > 0) {
+        form.setFields(fields.map(({ name, messages }) => ({ name, errors: messages })));
+        form.scrollToField(fields[0].name, { block: "center", behavior: "smooth" });
+    }
+    return { placed: fields.length > 0, rest: [...new Set(rest)] };
+}
 
 interface EditQuestionFormValues {
     questionText: string;
@@ -36,18 +91,32 @@ interface EditQuestionModalProps {
     loading?: boolean;
 }
 
-/** Thông báo lỗi theo docs/api mục 7.5a: FORMAT_INVALID có thêm danh sách errors. */
-function extractErrorMessage(e: any): string {
-    const data = e?.response?.data;
-    const base = data?.error || data?.message || e?.message || "Gặp lỗi khi cập nhật câu hỏi";
+interface SaveErrorBody {
+    error?: string;
+    message?: string;
+    code?: string;
+    errors?: unknown;
+}
+
+/**
+ * Thông báo lỗi theo docs/api mục 7.5a: FORMAT_INVALID có thêm danh sách errors. Lỗi gắn được vào ô thì hiện đỏ dưới ô
+ * đó; thông báo chung chỉ nhắc xem chỗ báo đỏ và nêu các lỗi còn lại.
+ */
+function handleSaveError(e: unknown, form: FormInstance): string {
+    const err = e as { message?: string; response?: { data?: SaveErrorBody } } | undefined;
+    const data = err?.response?.data;
+    const base = data?.error || data?.message || err?.message || "Chưa lưu được bản sửa. Thầy/cô thử lại sau ít phút.";
     if (Array.isArray(data?.errors) && data.errors.length > 0) {
-        // `error` của backend đã chứa sẵn các lỗi này: chỉ hiện danh sách lỗi một lần, bỏ tiền tố tên trường ("answer: …")
-        // Gộp lỗi cùng mẫu ở nhiều chỗ thành một dòng, bỏ dòng trùng (G4)
-        const lines = describeFormatIssueList(data.errors as string[]);
-        return `Bản sửa chưa đạt: ${lines.join("; ")}`;
+        const { placed, rest } = showFieldErrors(form, data.errors as string[]);
+        if (!placed) {
+            return `Bản sửa chưa lưu được: ${rest.join(" ")}`;
+        }
+        return rest.length > 0
+            ? `Bản sửa chưa lưu được. Thầy/cô xem chỗ báo đỏ trong hộp. ${rest.join(" ")}`
+            : "Bản sửa chưa lưu được. Thầy/cô xem chỗ báo đỏ trong hộp.";
     }
     if (data?.code === "VERSION_CONFLICT") {
-        return `${base}. Hãy tải lại trang rồi sửa tiếp.`;
+        return `${base}. Thầy/cô tải lại trang rồi sửa tiếp.`;
     }
     return base;
 }
@@ -62,6 +131,8 @@ export default function EditQuestionModal({
 }: EditQuestionModalProps) {
     const [form] = Form.useForm<EditQuestionFormValues>();
     const [submitting, setSubmitting] = useState(false);
+    // Hộp hỏi lại dùng chung cỡ chữ 16px của hộp Sửa (Modal.confirm tĩnh không nhận ConfigProvider bọc hộp)
+    const [modal, modalContextHolder] = Modal.useModal();
 
     const isBusy = loading || submitting;
     const questionType = question?.questionType ?? "mcq";
@@ -140,12 +211,12 @@ export default function EditQuestionModal({
             message.success(
                 saved.qcState === "checking"
                     ? "Đã lưu bản sửa. Hệ thống đang tự kiểm tra lại đáp án."
-                    : "Cập nhật câu hỏi thành công"
+                    : "Đã lưu bản sửa."
             );
             await onSave(saved);
         } catch (e) {
             console.error(e);
-            message.error(extractErrorMessage(e));
+            message.error({ content: handleSaveError(e, form), duration: 8 });
         } finally {
             setSubmitting(false);
         }
@@ -160,7 +231,7 @@ export default function EditQuestionModal({
         if (isBusy) return;
         // Đã gõ gì đó mà chưa lưu thì hỏi lại, tránh mất công sửa vì lỡ bấm ra ngoài
         if (form.isFieldsTouched()) {
-            Modal.confirm({
+            modal.confirm({
                 title: "Bỏ các thay đổi chưa lưu?",
                 okText: "Bỏ thay đổi",
                 cancelText: "Tiếp tục sửa",
@@ -173,16 +244,20 @@ export default function EditQuestionModal({
     };
 
     return (
+        <ConfigProvider theme={READABLE_MODAL_THEME}>
+        {modalContextHolder}
         <Modal
             open={open}
             title={
                 <Space size={10}>
                     <EditOutlined className="edit-question-modal-title-icon" />
-                    <span>Chỉnh sửa câu hỏi</span>
+                    <span>Sửa câu hỏi</span>
                 </Space>
             }
-            width={720}
+            width={800}
             style={{ top: 20 }}
+            // Nội dung dài thì cuộn trong hộp; nút Lưu ở đáy luôn thấy được, kể cả câu đúng/sai ở màn 1366×768 (G12)
+            styles={{ body: { maxHeight: "calc(100vh - 170px)", overflowY: "auto" } }}
             onCancel={handleCancel}
             closable={!isBusy}
             // Bấm ra ngoài cũng đóng; đã gõ mà chưa lưu thì handleCancel hỏi lại, đang lưu thì không đóng
@@ -212,9 +287,10 @@ export default function EditQuestionModal({
                     type="warning"
                     showIcon
                     message="Chưa chọn câu hỏi"
-                    description="Hãy chọn một câu hỏi để chỉnh sửa."
+                    description="Thầy/cô chọn một câu trong đề rồi bấm Sửa."
                 />
             ) : (
+                <MathInputProvider>
                 <Form
                     form={form}
                     layout="vertical"
@@ -223,54 +299,53 @@ export default function EditQuestionModal({
                 >
                     {/* Mức độ do ô ma trận quyết định, không sửa được (docs/api mục 7.5a) */}
                     {questionType !== "tf" && (
-                        <div style={{ marginBottom: 16 }}>
-                            <Text strong>Mức độ nhận thức: </Text>
-                            <Tag>{describeLevel(question.difficulty).label}</Tag>
+                        <div className="edit-question-level">
+                            <Text strong>Mức độ:</Text>
+                            <Tag className="edit-question-level-tag">{describeLevel(question.difficulty).label}</Tag>
+                            <Text type="secondary">(theo ma trận, không đổi ở đây)</Text>
                         </div>
                     )}
 
-                    <Form.Item
+                    <MathSymbolBar disabled={isBusy} />
+
+                    <MathField
                         name="questionText"
-                        label={<Text strong>Nội dung câu hỏi</Text>}
-                        rules={[
-                            { required: true, whitespace: true, message: "Vui lòng nhập nội dung câu hỏi." },
-                        ]}
-                    >
-                        <TextArea
-                            placeholder="Nhập nội dung câu hỏi..."
-                            autoSize={{ minRows: 3, maxRows: 6 }}
-                            disabled={isBusy}
-                        />
-                    </Form.Item>
+                        label={<Text strong>Câu dẫn</Text>}
+                        fieldLabel="Câu dẫn"
+                        requiredMessage="Thầy/cô chưa nhập câu dẫn."
+                        placeholder="Nhập câu dẫn. Công thức đặt giữa hai dấu $, ví dụ $x^2 + 1$"
+                        minRows={3}
+                        maxRows={8}
+                        disabled={isBusy}
+                    />
 
                     {questionType === "mcq" && (
                         <>
                             <div className="edit-question-options-grid">
-                                {(["A", "B", "C", "D"] as const).map((label) => (
-                                    <Form.Item
+                                {OPTION_KEYS.map((label) => (
+                                    <MathField
                                         key={label}
                                         name={`option${label}`}
                                         label={<Text strong>Phương án {label}</Text>}
-                                        rules={[{ required: true, whitespace: true, message: `Nhập đáp án ${label}.` }]}
-                                    >
-                                        <Input placeholder={`Nội dung đáp án ${label}`} disabled={isBusy} />
-                                    </Form.Item>
+                                        fieldLabel={`Phương án ${label}`}
+                                        requiredMessage={`Thầy/cô chưa nhập phương án ${label}.`}
+                                        maxRows={4}
+                                        disabled={isBusy}
+                                    />
                                 ))}
                             </div>
 
                             <Form.Item
                                 name="correctOption"
                                 label={<Text strong>Đáp án đúng</Text>}
-                                rules={[{ required: true, message: "Vui lòng chọn đáp án đúng." }]}
+                                rules={[{ required: true, message: "Thầy/cô chưa chọn đáp án đúng." }]}
                             >
-                                <Select
+                                <Radio.Group
                                     disabled={isBusy}
-                                    options={[
-                                        { value: "A", label: "Phương án A" },
-                                        { value: "B", label: "Phương án B" },
-                                        { value: "C", label: "Phương án C" },
-                                        { value: "D", label: "Phương án D" },
-                                    ]}
+                                    optionType="button"
+                                    buttonStyle="solid"
+                                    className="edit-question-answer-choice"
+                                    options={OPTION_KEYS.map((key) => ({ value: key, label: key }))}
                                 />
                             </Form.Item>
                         </>
@@ -280,56 +355,70 @@ export default function EditQuestionModal({
                         <Form.Item
                             name="saAnswer"
                             label={<Text strong>Đáp số</Text>}
-                            extra="Số nguyên hoặc số thập phân, tối đa 4 ký tự kể cả dấu - và dấu phẩy. Ví dụ: 12 ; -3,5 ; 0,25"
-                            rules={[{ required: true, whitespace: true, message: "Vui lòng nhập đáp số." }]}
+                            extra="Số nguyên hoặc số thập phân, tối đa 4 kí tự kể cả dấu trừ và dấu phẩy. Ví dụ: 12; -3,5; 0,25"
+                            rules={[{ required: true, whitespace: true, message: "Thầy/cô chưa nhập đáp số." }]}
+                            className="edit-question-sa-answer"
                         >
-                            <Input placeholder="Nhập đáp số" disabled={isBusy} />
+                            <Input placeholder="Ví dụ: 12" disabled={isBusy} />
                         </Form.Item>
                     )}
 
                     {questionType === "tf" &&
-                        STATEMENT_KEYS.map((key, i) => (
-                            <div key={key} className="edit-question-statement-grid">
-                                <Form.Item
-                                    name={["statements", i, "text"]}
-                                    label={<Text strong>Ý {key})</Text>}
-                                    rules={[{ required: true, whitespace: true, message: `Nhập nội dung ý ${key}.` }]}
-                                >
-                                    <TextArea autoSize={{ minRows: 1, maxRows: 4 }} disabled={isBusy} />
-                                </Form.Item>
-                                <Form.Item
-                                    name={["statements", i, "label"]}
-                                    label={<Text strong>Nhãn</Text>}
-                                    rules={[{ required: true, message: "Chọn nhãn." }]}
-                                >
-                                    <Select
+                        STATEMENT_KEYS.map((key, i) => {
+                            const level = question.statements?.find((s) => s.key === key)?.difficulty;
+                            return (
+                                <div key={key} className="edit-question-statement-grid">
+                                    <MathField
+                                        name={["statements", i, "text"]}
+                                        label={
+                                            <Space size={8}>
+                                                <Text strong>Ý {key})</Text>
+                                                {level && <Text type="secondary">Mức độ: {describeLevel(level).label}</Text>}
+                                            </Space>
+                                        }
+                                        fieldLabel={`Ý ${key})`}
+                                        requiredMessage={`Thầy/cô chưa nhập ý ${key}).`}
+                                        maxRows={4}
                                         disabled={isBusy}
-                                        options={[
-                                            { value: "T", label: "Đúng" },
-                                            { value: "F", label: "Sai" },
-                                        ]}
                                     />
-                                </Form.Item>
-                            </div>
-                        ))}
+                                    <Form.Item
+                                        name={["statements", i, "label"]}
+                                        label={<Text strong>Ý {key}) là</Text>}
+                                        rules={[{ required: true, message: "Thầy/cô chọn Đúng hoặc Sai." }]}
+                                    >
+                                        <Radio.Group
+                                            disabled={isBusy}
+                                            optionType="button"
+                                            buttonStyle="solid"
+                                            className="edit-question-truth-choice"
+                                            options={[
+                                                { value: "T", label: "Đúng" },
+                                                { value: "F", label: "Sai" },
+                                            ]}
+                                        />
+                                    </Form.Item>
+                                </div>
+                            );
+                        })}
 
-                    <Form.Item
+                    <MathField
                         name="explanation"
                         label={
-                            <Space size={4}>
-                                <Text strong>Lời giải chi tiết</Text>
-                                <Text type="secondary" style={{ fontSize: "12px" }}>(Không bắt buộc)</Text>
+                            <Space size={6}>
+                                <Text strong>Lời giải</Text>
+                                <Text type="secondary">(không bắt buộc)</Text>
                             </Space>
                         }
-                    >
-                        <TextArea
-                            placeholder="Nhập giải thích chi tiết cho đáp án..."
-                            autoSize={{ minRows: 2, maxRows: 5 }}
-                            disabled={isBusy}
-                        />
-                    </Form.Item>
+                        fieldLabel="Lời giải"
+                        placeholder="Nhập lời giải để đối chiếu khi chấm"
+                        minRows={2}
+                        maxRows={8}
+                        disabled={isBusy}
+                    />
                 </Form>
+                </MathInputProvider>
             )}
         </Modal>
+        </ConfigProvider>
     );
 }

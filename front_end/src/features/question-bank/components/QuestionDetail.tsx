@@ -20,8 +20,8 @@ interface QuestionDetailProps {
 }
 
 const questionTypeMap: Record<QuestionType, { label: string; color: string }> = {
-    mcq: { label: "Trắc nghiệm", color: "blue" },
-    tf: { label: "Đúng / Sai", color: "cyan" },
+    mcq: { label: "Trắc nghiệm nhiều phương án", color: "blue" },
+    tf: { label: "Trắc nghiệm đúng/sai", color: "cyan" },
     sa: { label: "Trả lời ngắn", color: "purple" },
 };
 
@@ -85,7 +85,7 @@ export default function QuestionDetail({
         >
             {loading ? (
                 <div style={{ textAlign: "center", padding: "60px 0" }}>
-                    <Spin size="large" tip="Đang tải chi tiết câu hỏi..." />
+                    <Spin size="large" description="Đang tải chi tiết câu hỏi..." />
                 </div>
             ) : !question ? null : (
                 <Space
@@ -133,8 +133,8 @@ export default function QuestionDetail({
                             )}
                         </Descriptions.Item>
 
-                        <Descriptions.Item label="Khối – Chủ đề" span={2}>
-                            {[question.gradeLevel ? `Khối ${question.gradeLevel}` : null, question.topic]
+                        <Descriptions.Item label="Lớp – Chủ đề" span={2}>
+                            {[question.gradeLevel ? `Lớp ${question.gradeLevel}` : null, question.topic]
                                 .filter(Boolean)
                                 .join(" – ") || "—"}
                         </Descriptions.Item>

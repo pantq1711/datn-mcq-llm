@@ -81,6 +81,21 @@ public class ExamAssignmentSource {
         return new ExamForAssignment(exam.getId(), exam.getTitle(), List.copyOf(out));
     }
 
+    /**
+     * Câu ngân hàng hiện tại của từng chỗ trong đề (chỗ chưa có câu ngân hàng: không có khóa). Để bài giao biết chỗ nào đã
+     * Đổi sang câu khác sau lúc giao. Không kiểm chủ đề: nơi gọi đã kiểm. Chỉ đọc.
+     */
+    @Transactional(readOnly = true)
+    public Map<Integer, Integer> currentBankItems(Integer examId) {
+        Map<Integer, Integer> out = new HashMap<>();
+        for (ExamSlot slot : slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(examId)) {
+            if (slot.getBankItemId() != null) {
+                out.put(slot.getId(), slot.getBankItemId());
+            }
+        }
+        return out;
+    }
+
     private static int partRank(String part) {
         int i = PART_ORDER.indexOf(part);
         return i < 0 ? PART_ORDER.size() : i;

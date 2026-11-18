@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
  * lệnh của psql (bắt đầu bằng "\", ví dụ {@code \if}, {@code \set}) và thay biến {@code :'ten'} bằng chuỗi SQL. Giá trị
  * lấy từ {@code vars} (như {@code psql -v ten=...}), không có thì lấy mặc định ở dòng {@code \set ten '...'} của file.
  */
-final class PsqlFile {
+public final class PsqlFile {
 
     private static final Pattern SET = Pattern.compile("^\\s*\\\\set\\s+(\\w+)\\s+'([^']*)'\\s*$");
     private static final Pattern VAR = Pattern.compile(":'(\\w+)'");
@@ -22,11 +22,11 @@ final class PsqlFile {
     private PsqlFile() {
     }
 
-    static String load(Path file) throws IOException {
+    public static String load(Path file) throws IOException {
         return load(file, Map.of());
     }
 
-    static String load(Path file, Map<String, String> vars) throws IOException {
+    public static String load(Path file, Map<String, String> vars) throws IOException {
         Map<String, String> values = new HashMap<>();
         StringBuilder sql = new StringBuilder();
         for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {

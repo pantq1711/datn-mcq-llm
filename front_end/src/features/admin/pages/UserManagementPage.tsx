@@ -97,7 +97,7 @@ export default function UserManagementPage() {
             <div className="user-management-header">
                 <div>
                     <Title level={2} className="user-management-title">
-                        Quản lý tài khoản người dùng
+                        Quản trị tài khoản
                     </Title>
                 </div>
 

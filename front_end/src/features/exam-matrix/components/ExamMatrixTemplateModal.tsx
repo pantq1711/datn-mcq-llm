@@ -68,7 +68,7 @@ export function ExamMatrixTemplateModal({
             normalizeSearchValue(
                 [
                     sample.name,
-                    sample.gradeLevel == null ? '' : `khoi ${sample.gradeLevel}`,
+                    sample.gradeLevel == null ? '' : `lop ${sample.gradeLevel} khoi ${sample.gradeLevel}`,
                     sample.source ?? '',
                     ...(sample.notes ?? []),
                 ].join(' '),
@@ -99,7 +99,7 @@ export function ExamMatrixTemplateModal({
             <div className="exam-matrix-template-modal__content">
                 <div className="exam-matrix-template-modal__intro">
                     <Text type="secondary">
-                        Chọn một mẫu để tạo ma trận mới (môn mặc định: Toán). Sau khi tạo, bạn có thể chỉnh sửa ma trận như bình thường.
+                        Chọn một mẫu để tạo ma trận mới (môn Toán). Sau khi tạo, thầy/cô sửa ma trận như bình thường.
                     </Text>
                 </div>
 
@@ -107,7 +107,7 @@ export function ExamMatrixTemplateModal({
                     allowClear
                     value={searchText}
                     onChange={(event) => setSearchText(event.target.value)}
-                    placeholder="Tìm theo tên mẫu, khối, nguồn, ghi chú..."
+                    placeholder="Tìm theo tên mẫu, lớp, nguồn, ghi chú..."
                     prefix={<SearchOutlined />}
                 />
 
@@ -141,7 +141,7 @@ export function ExamMatrixTemplateModal({
                                         <Space size={8} wrap>
                                             <span>{item.name}</span>
                                             {item.gradeLevel != null && (
-                                                <Tag color="geekblue">Khối {item.gradeLevel}</Tag>
+                                                <Tag color="geekblue">Lớp {item.gradeLevel}</Tag>
                                             )}
                                         </Space>
                                     }

@@ -73,12 +73,12 @@
 }
 
 .app-header-user-name {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 500;
 }
 
 .app-header-user-role {
-    font-size: 12px;
+    font-size: 14px;
 }
 
 @media (max-width: 768px) {

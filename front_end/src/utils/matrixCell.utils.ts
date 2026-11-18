@@ -4,8 +4,9 @@ import type { ExamMatrixCellInput, ExamMatrixCellPayload, MatrixDifficulty, Matr
 export const PART_BY_TYPE: Record<MatrixQuestionType, MatrixPart> = { mcq: "I", tf: "II", sa: "III" };
 
 export const MATRIX_TYPE_LABELS: Record<MatrixQuestionType, string> = {
-    mcq: "Trắc nghiệm (Phần I)",
-    tf: "Đúng/Sai (Phần II)",
+    // Tên ba Phần theo cấu trúc đề 2025, dùng giống nhau ở mọi trang
+    mcq: "Trắc nghiệm nhiều phương án (Phần I)",
+    tf: "Trắc nghiệm đúng/sai (Phần II)",
     sa: "Trả lời ngắn (Phần III)",
 };
 

@@ -66,6 +66,46 @@ export interface CreateAssignmentPayload {
 /** Mã lỗi backend dùng khi xóa đề còn bài giao. */
 export const EXAM_HAS_ASSIGNMENTS = "EXAM_HAS_ASSIGNMENTS";
 
+// ---------- Phân tích câu (docs/api mục 11.3, B1/B2) ----------
+
+/** Mã lỗi 409 của B1/B2: bài còn mở; bài đã đóng nhưng còn ân hạn nộp (errors[0] là lúc có thống kê). */
+export const ASSIGNMENT_OPEN = "ASSIGNMENT_OPEN";
+export const STATS_NOT_READY = "STATS_NOT_READY";
+
+/** Một câu của bảng phân tích. `choiceCounts` có dạng riêng theo `questionType` (xem utils/itemStats). */
+export interface ItemStat {
+    slotId: number | null;
+    part: PartCode;
+    /** Số câu trong phần (đánh số lại từ 1 mỗi phần, khớp file Word). */
+    number: number;
+    questionType: QuestionType;
+    bankItemId: number | null;
+    /** mcq "B"; tf nhãn bốn ý "TFFT"; sa đáp số. */
+    answerKey: string | null;
+    /** Tỉ lệ làm đúng, 0..1. */
+    p: number | null;
+    /** Độ phân biệt, -1..1; null khi nhóm cao/thấp rỗng. */
+    d: number | null;
+    choiceCounts: Record<string, unknown>;
+    flags: string[];
+    /** Chỗ này trên đề đã Đổi câu sau lúc giao. */
+    slotChanged: boolean;
+}
+
+export interface ItemStats {
+    assignmentId: number;
+    /** Số lượt hợp lệ được tính. */
+    n: number;
+    /** Số lượt mỗi nhóm cao/thấp (27%). */
+    groupSize: number;
+    computedAt: string;
+    sampleSufficient: boolean;
+    minSampleSize: number;
+    sampleNote?: string | null;
+    excluded: { duplicate: number; notSubmitted: number };
+    items: ItemStat[];
+}
+
 // ---------- Học sinh (công khai) ----------
 
 export interface PublicAssignmentInfo {

@@ -60,7 +60,7 @@ export default function ChangePasswordForm() {
                 type="info"
                 showIcon
                 style={{ marginBottom: 16 }}
-                message="Đổi mật khẩu sẽ đăng xuất mọi phiên, kể cả phiên này."
+                message="Sau khi đổi, thầy/cô cần đăng nhập lại bằng mật khẩu mới."
             />
 
             <Form.Item
