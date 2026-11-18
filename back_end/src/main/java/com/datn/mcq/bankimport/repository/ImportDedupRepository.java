@@ -23,7 +23,11 @@ public class ImportDedupRepository {
             SELECT b.source_question_id, b.question_type, b.question_text, b.option_a, b.option_b, b.option_c,
                    b.option_d, b.sa_answer,
                    ARRAY(SELECT s.statement_text FROM bank_item_statement s WHERE s.bank_item_id = b.id
-                         ORDER BY s.position) AS statements
+                         ORDER BY s.position) AS statements,
+                   COALESCE((SELECT string_agg(qi.sha256, ',' ORDER BY qi.role, qi.ordinal)
+                             FROM question_image qi
+                             WHERE qi.generated_question_id = g.id
+                               AND qi.role != 'solution'), '') AS image_key
             FROM bank_item b
             JOIN generated_question g ON g.id = b.source_question_id
             JOIN question_template t ON t.id = g.template_id
@@ -43,16 +47,17 @@ public class ImportDedupRepository {
             int id = rs.getInt("source_question_id");
             String type = rs.getString("question_type");
             String text = rs.getString("question_text");
+            String imageKey = rs.getString("image_key");
             if (QuestionType.SA.getDbValue().equals(type)) {
-                return DedupCandidate.shortAnswer(id, text, rs.getString("sa_answer"));
+                return DedupCandidate.shortAnswer(id, text, rs.getString("sa_answer"), imageKey);
             }
             if (QuestionType.TF.getDbValue().equals(type)) {
                 Array arr = rs.getArray("statements");
                 List<String> statements = arr == null ? List.of() : Arrays.asList((String[]) arr.getArray());
-                return DedupCandidate.trueFalse(id, text, statements);
+                return DedupCandidate.trueFalse(id, text, statements, imageKey);
             }
             return new DedupCandidate(id, text, rs.getString("option_a"), rs.getString("option_b"),
-                    rs.getString("option_c"), rs.getString("option_d"));
+                    rs.getString("option_c"), rs.getString("option_d"), imageKey);
         });
     }
 }

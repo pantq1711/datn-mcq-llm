@@ -84,10 +84,15 @@ public class Question {
     public static final class ImageRef {
         public String id;
         public String kind;           // figure | formula_image | ole_drawing
-        public String role;           // stem | option_A | statement_a | answer | solution
+        public String role;           // stem | option_a..d | statement_a..d | answer | solution
         public String sourceExt;
         public Double widthCm;
         public Double heightCm;
         public String sourceRef;
+        public byte[] rawData;
+        /** SHA-256 của byte gốc trong .docx (tính trước khi LibreOffice đổi EMF sang PNG). */
+        public String originalSha256;
+        /** Định dạng gốc trong .docx khi byte đã bị thay (EMF đổi sang PNG); null thì lấy định dạng do bộ chuẩn hóa nhận. */
+        public String originalFormat;
     }
 }

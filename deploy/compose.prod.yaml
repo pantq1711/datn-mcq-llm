@@ -47,6 +47,7 @@ services:
   app:
     image: ${IMAGE_PREFIX:-ghcr.io/pantq1711/datn-mcq-llm}/backend:${APP_TAG:-latest}
     restart: unless-stopped
+    init: true
     depends_on:
       db:
         condition: service_healthy
@@ -62,6 +63,9 @@ services:
       MATERIAL_MAX_CONCURRENT: ${MATERIAL_MAX_CONCURRENT:-1}
       MATERIAL_QUEUE_WAIT: ${MATERIAL_QUEUE_WAIT:-30s}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}   # chỉ đặt false khi chạy thử qua http (xem README mục 9)
+      # Trần bộ nhớ ảo của soffice khi đổi EMF (prlimit --as). Đo 18/11/2026: lô 20 EMF thật VSZ đỉnh 481 MiB, RSS ~210 MiB;
+      # vượt trần thì soffice dừng (mã 134), ảnh nhận CONVERTER_FAILED, JVM không bị ảnh hưởng.
+      QUESTION_IMAGE_SOFFICE_MAX_AS: ${QUESTION_IMAGE_SOFFICE_MAX_AS:-1GB}
     expose:
       - "8080"
     mem_limit: ${APP_MEM_LIMIT:-1536m}   # VPS 4 GB: app 1,5 GB + db 768 MB + web 128 MB + hệ điều hành; VPS 2 GB: đặt APP_MEM_LIMIT=1g

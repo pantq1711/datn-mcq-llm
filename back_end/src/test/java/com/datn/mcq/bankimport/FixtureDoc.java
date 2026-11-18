@@ -43,7 +43,9 @@ public final class FixtureDoc {
     /** Đoạn văn chỉ có trong đề câu 1 phần I (để kiểm nội dung câu không lọt vào log). */
     public static final String Q1_MARKER = "Câu hỏi giả một có";
 
-    private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10};
+    private static final byte[] PNG = java.util.Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    );
     private static final byte[] WMF = {(byte) 0xD7, (byte) 0xCD, (byte) 0xC6, (byte) 0x9A};
 
     private FixtureDoc() {}

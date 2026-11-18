@@ -61,6 +61,7 @@ class SecurityRouteAccessTest {
         RULES.put("POST /api/auth/login", Access.PUBLIC);
         RULES.put("POST /api/auth/refresh", Access.PUBLIC);
         RULES.put("POST /api/auth/logout", Access.PUBLIC);
+        RULES.put("GET /api/question-images/{id}", Access.PUBLIC);
         RULES.put("GET /api/auth/me", Access.AUTHENTICATED);
         RULES.put("POST /api/auth/password", Access.AUTHENTICATED);
 

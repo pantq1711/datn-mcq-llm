@@ -35,11 +35,30 @@ public final class BankImportDtos {
      * @param blockReasons  (16/11, NV-51) lý do bằng lời của từng cờ chặn ({@code ImportFlags#describe}), ví dụ "Chưa thấy đáp
      *                      án: tô vàng (highlight màu vàng) phương án đúng."; rỗng khi không chặn. Lô lưu trước 16/11 có thể
      *                      thiếu trường này (null)
+     * @param images        (PR I3) hình vẽ thật của câu kèm URL có chữ ký; chỉ có trong JSON khi câu có hình
      */
-    public record ImportItem(String key, String type, String locator, String levelRaw, String level, String stem,
-                             List<ItemOption> options, String correctOption, List<ItemStatement> statements,
-                             String saAnswer, String explanation, List<String> flags, boolean blocking,
-                             List<String> blockReasons) {}
+    public record ImportItem(
+            String key, String type, String locator, String levelRaw, String level, String stem,
+            List<ItemOption> options, String correctOption, List<ItemStatement> statements,
+            String saAnswer, String explanation, List<String> flags, boolean blocking,
+            List<String> blockReasons,
+            @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY)
+            List<com.datn.mcq.questionimage.dto.QuestionImageDto> images
+    ) {
+        /** Câu không có hình (PR I3): {@code images} rỗng. */
+        public ImportItem(String key, String type, String locator, String levelRaw, String level, String stem,
+                          List<ItemOption> options, String correctOption, List<ItemStatement> statements,
+                          String saAnswer, String explanation, List<String> flags, boolean blocking,
+                          List<String> blockReasons) {
+            this(key, type, locator, levelRaw, level, stem, options, correctOption, statements, saAnswer, explanation,
+                    flags, blocking, blockReasons, List.of());
+        }
+
+        public ImportItem {
+            // blockReasons giữ null cho lô lưu trước 16/11 (NV-51); images null (lô trước PR I3) thành rỗng.
+            images = images == null ? List.of() : List.copyOf(images);
+        }
+    }
 
     /** Câu bị bỏ (không nhập được ở bản đầu): chỉ vị trí và lý do, không có nội dung. */
     public record SkippedItem(String locator, String type, String reason) {}

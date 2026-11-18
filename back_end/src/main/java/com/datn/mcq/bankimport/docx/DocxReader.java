@@ -68,18 +68,30 @@ public final class DocxReader {
      * @param maxXmlBytes            dung lượng tối đa của word/document.xml và tệp quan hệ (byte, sau giải nén)
      * @param maxEmbeddingBytes      dung lượng tối đa của một tệp embedding công thức
      * @param maxEmbeddingTotalBytes tổng dung lượng tối đa các embedding được nạp
+     * @param maxImageBytes          dung lượng tối đa của một tệp ảnh nhúng trong docx
+     * @param maxImageTotalBytes     tổng dung lượng tối đa các ảnh được nạp
      */
-    public record Limits(long maxXmlBytes, int maxEmbeddingBytes, long maxEmbeddingTotalBytes) {
+    public record Limits(long maxXmlBytes, int maxEmbeddingBytes, long maxEmbeddingTotalBytes,
+                         int maxImageBytes, long maxImageTotalBytes) {
+        public Limits(long maxXmlBytes, int maxEmbeddingBytes, long maxEmbeddingTotalBytes) {
+            this(maxXmlBytes, maxEmbeddingBytes, maxEmbeddingTotalBytes, 2 << 20, 24L << 20);
+        }
+
         public static Limits defaults() {
-            return new Limits(16L << 20, 1 << 20, 64L << 20);
+            return new Limits(16L << 20, 1 << 20, 64L << 20, 2 << 20, 24L << 20);
         }
     }
 
-    /** Nội dung đã đọc. {@code embeddings}: tệp OLE của công thức theo đường dẫn trong zip (chỉ tệp đọc được). */
-    public record Result(List<Block> blocks, Map<String, byte[]> embeddings) {}
+    /** Nội dung đã đọc. {@code embeddings}: tệp OLE của công thức. {@code media}: tệp ảnh nhúng theo đường dẫn zip. */
+    public record Result(List<Block> blocks, Map<String, byte[]> embeddings, Map<String, byte[]> media) {
+        public Result(List<Block> blocks, Map<String, byte[]> embeddings) {
+            this(blocks, embeddings, Map.of());
+        }
+    }
 
     private final Map<String, String> rels = new HashMap<>();
     private final Set<String> equationRefs = new LinkedHashSet<>();
+    private final Set<String> mediaRefs = new LinkedHashSet<>();
 
     public static Result read(Path file, Limits limits) throws IOException {
         try (ZipFile zip = new ZipFile(file.toFile())) {
@@ -93,7 +105,7 @@ public final class DocxReader {
                 throw new InvalidDocxException("Không có word/document.xml");
             }
             List<Block> blocks = reader.body(parse(zip, docEntry, limits.maxXmlBytes()));
-            return new Result(blocks, reader.loadEquations(zip, limits));
+            return new Result(blocks, reader.loadEquations(zip, limits), reader.loadMedia(zip, limits));
         } catch (InvalidDocxException e) {
             throw e;
         } catch (IOException | RuntimeException e) {
@@ -155,6 +167,28 @@ public final class DocxReader {
             total += bytes.length;
             if (total > limits.maxEmbeddingTotalBytes()) {
                 throw new InvalidDocxException("File Word có quá nhiều dữ liệu công thức nhúng");
+            }
+            out.put(ref, bytes);
+        }
+        return out;
+    }
+
+    /** Nạp tệp ảnh nhúng trong thân tài liệu theo giới hạn từng tệp và tổng. */
+    private Map<String, byte[]> loadMedia(ZipFile zip, Limits limits) throws IOException {
+        Map<String, byte[]> out = new LinkedHashMap<>();
+        long total = 0;
+        for (String ref : mediaRefs) {
+            ZipEntry e = zip.getEntry(ref);
+            if (e == null || e.isDirectory()) {
+                continue;
+            }
+            byte[] bytes;
+            try (InputStream in = zip.getInputStream(e)) {
+                bytes = in.readNBytes(limits.maxImageBytes() + 1);
+            }
+            total += bytes.length;
+            if (total > limits.maxImageTotalBytes()) {
+                throw new InvalidDocxException("File Word có quá nhiều dữ liệu hình ảnh nhúng");
             }
             out.put(ref, bytes);
         }
@@ -302,6 +336,7 @@ public final class DocxReader {
             return;
         }
         if (preview != null) {
+            mediaRefs.add(preview);
             b.obj(new Obj(false, preview, null, null, ext(preview), size[0], size[1]), yellow, cyan);
         }
     }
@@ -309,6 +344,9 @@ public final class DocxReader {
     private void drawing(Element d, RichText.Builder b, boolean yellow, boolean cyan) {
         Element blip = firstDesc(d, A, "blip");
         String ref = blip == null ? null : rels.get(blip.getAttributeNS(R, "embed"));
+        if (ref != null) {
+            mediaRefs.add(ref);
+        }
         Double w = null;
         Double h = null;
         Element extent = firstDesc(d, WP, "extent");
@@ -327,6 +365,7 @@ public final class DocxReader {
         if (ref == null) {
             return;
         }
+        mediaRefs.add(ref);
         Double[] size = shapeSize(firstDesc(pict, V, "shape"));
         b.obj(new Obj(false, ref, null, null, ext(ref), size[0], size[1]), yellow, cyan);
     }

@@ -16,6 +16,10 @@ public final class ImportFlags {
     public static final String SKIP_FORMULA_UNSUPPORTED = "formula_unsupported";
     /** Câu có bảng dữ liệu trong đề (ngân hàng chưa lưu được bảng). */
     public static final String SKIP_HAS_TABLE = "has_table";
+    /** Câu vượt quá giới hạn số ảnh hoặc dung lượng ảnh (H4). */
+    public static final String SKIP_IMAGE_LIMIT = "image_limit";
+    /** Câu có ảnh chuyển đổi thất bại hoặc lỗi định dạng/kích thước (H4). */
+    public static final String SKIP_IMAGE_CONVERT_FAILED = "image_convert_failed";
 
     // ---------- cờ chặn ----------
     /**
@@ -37,6 +41,7 @@ public final class ImportFlags {
     public static final String LEVEL_DEFAULT = "level_default";
     public static final String NO_SOLUTION = "no_solution";
     public static final String STEM_EXTRA_TEXT = "stem_extra_text";
+    public static final String HAS_FIGURE = "has_figure";
     public static final String FIGURE_FROM_PREVIOUS_QUESTION = "figure_from_previous_question";
     public static final String MENTIONS_FIGURE_NO_IMAGE = "mentions_figure_no_image";
     public static final String SHARED_CONTEXT = "shared_context";

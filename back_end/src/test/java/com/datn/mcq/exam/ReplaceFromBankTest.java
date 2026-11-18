@@ -331,4 +331,13 @@ class ReplaceFromBankTest extends ExamFlowTestBase {
         assertEquals(second, replaceBank(examId, slot).get("bankItemId").asInt());
         assertNotNull(second);
     }
+
+    @Test
+    void doiBangNganHangKhongLayCauCoHinh() throws Exception {
+        int[] e = generatedExam(1);
+        int withImage = bankMcq(TOPIC, "easy", "Cho hình vẽ sau.\n⟦img:1⟧");
+        attachImageToBankItem(withImage);
+
+        assertExhausted(e[0], e[1]);
+    }
 }

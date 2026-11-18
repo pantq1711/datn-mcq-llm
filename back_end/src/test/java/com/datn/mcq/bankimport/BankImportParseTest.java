@@ -81,12 +81,12 @@ class BankImportParseTest {
     void demDungSoCauTheoDangVaCauBiBoTheoLyDo() throws IOException {
         PreviewData p = preview(FixtureDoc.full());
         Map<String, Long> byType = p.items().stream().collect(Collectors.groupingBy(ImportItem::type, Collectors.counting()));
-        assertEquals(10L, byType.get("mcq"), "12 mcq, 2 câu có ảnh bị bỏ");
+        assertEquals(11L, byType.get("mcq"), "12 mcq, 1 câu có ảnh wmf bị bỏ, 1 câu có hình thật được nhập");
         assertEquals(6L, byType.get("tf"));
-        assertEquals(2L, byType.get("sa"), "4 sa, 1 có ảnh, 1 công thức chưa hỗ trợ");
+        assertEquals(2L, byType.get("sa"), "4 sa, 1 có ảnh ole bị bỏ, 1 công thức chưa hỗ trợ");
         Map<String, Long> skipped = p.skipped().stream()
                 .collect(Collectors.groupingBy(SkippedItem::reason, Collectors.counting()));
-        assertEquals(Map.of(ImportFlags.SKIP_HAS_IMAGE, 3L, ImportFlags.SKIP_FORMULA_UNSUPPORTED, 1L), skipped);
+        assertEquals(Map.of(ImportFlags.SKIP_HAS_IMAGE, 2L, ImportFlags.SKIP_FORMULA_UNSUPPORTED, 1L), skipped);
         assertEquals(22, p.items().size() + p.skipped().size());
         for (SkippedItem s : p.skipped()) {
             assertTrue(s.locator().startsWith("Phần "), "chỉ vị trí, không nội dung: " + s.locator());
@@ -255,5 +255,114 @@ class BankImportParseTest {
         ParsedDoc doc = parse(FixtureDoc.full(), FixtureDoc.FILE_NAME);
         assertNotNull(doc.source());
         assertEquals(22, doc.questions().size());
+    }
+
+    // ---------- tính năng câu có hình (PR I3) ----------
+
+    private static final byte[] VALID_PNG_1X1 = {
+            (byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 'I', 'H', 'D', 'R',
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, (byte) 0xC4, (byte) 0x89,
+            0x00, 0x00, 0x00, 0x0A, 'I', 'D', 'A', 'T',
+            0x78, (byte) 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01,
+            0x0D, 0x0A, 0x2D, (byte) 0xB4,
+            0x00, 0x00, 0x00, 0x00, 'I', 'E', 'N', 'D',
+            (byte) 0xAE, 0x42, 0x60, (byte) 0x82
+    };
+
+    @Test
+    void cauCoHinhThatKhongBiSkipVaCoCoHasFigure() throws IOException {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Cho hình vẽ sau."));
+        d.p(d.drawing("png", VALID_PNG_1X1, 5.0, 4.0));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+        byte[] docx = d.bytes();
+        ParsedDoc doc = parse(docx, FixtureDoc.FILE_NAME);
+        assertEquals(1, doc.questions().size());
+        com.datn.mcq.bankimport.model.Question q = doc.questions().get(0);
+        assertEquals(1, q.images.size());
+        assertEquals("figure", q.images.get(0).kind);
+        assertEquals("stem", q.images.get(0).role);
+
+        PreviewData p = preview(docx);
+        assertEquals(0, p.skipped().size(), "Câu chỉ có figure thật không bị skip");
+        assertEquals(1, p.items().size());
+        ImportItem item = p.items().get(0);
+        assertTrue(item.flags().contains(ImportFlags.HAS_FIGURE), "Phải có cờ has_figure");
+    }
+
+    @Test
+    void kyTuNgoacVuongKepTrongWordBiThoatThanhNgoacVuongDon() throws IOException {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Tìm ⟦img:999⟧ giá trị của x."));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+        ParsedDoc doc = parse(d.bytes(), FixtureDoc.FILE_NAME);
+        com.datn.mcq.bankimport.model.Question q = doc.questions().get(0);
+        assertFalse(q.stem.contains("⟦img:999⟧"), "Không được giữ ký tự ngoặc kép giả mạo token");
+        assertTrue(q.stem.contains("[img:999]"), "Phải được thoát thành [img:999]");
+    }
+
+    @Test
+    void phuongAnCoHinhMangRoleChuThuong() throws IOException {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[TH]"), DocxBuilder.t(" Đồ thị nào dưới đây là của hàm số?"));
+        d.p(DocxBuilder.t("A. "), d.drawing("png", VALID_PNG_1X1, 3.0, 3.0));
+        d.p(DocxBuilder.t("B. "), DocxBuilder.y("đúng")).p("C. sai").p("D. sai");
+
+        ParsedDoc doc = parse(d.bytes(), FixtureDoc.FILE_NAME);
+        com.datn.mcq.bankimport.model.Question q = doc.questions().get(0);
+        assertEquals(1, q.images.size());
+        assertEquals("option_a", q.images.get(0).role, "Vai trò phương án phải là option_a (chữ thường)");
+    }
+
+    @Test
+    void cauCoAnhCongThucWmfVanBiSkipHasImage() throws IOException {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Câu có ảnh công thức WMF: "), d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+        PreviewData p = preview(d.bytes());
+        assertEquals(1, p.skipped().size());
+        assertEquals(ImportFlags.SKIP_HAS_IMAGE, p.skipped().get(0).reason());
+    }
+
+    @Test
+    void cauSaCoAnhTrongDongDapSoBiSkipHasImage() throws IOException {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN III. CÂU TRẮC NGHIỆM TRẢ LỜI NGẮN");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Tính giá trị biểu thức."));
+        d.p(DocxBuilder.t("Trả lời: "));
+        d.p(DocxBuilder.t("Đáp số: "), d.drawing("png", VALID_PNG_1X1, 2.0, 2.0), DocxBuilder.y("5"));
+
+        PreviewData p = preview(d.bytes());
+        assertEquals(1, p.skipped().size(), "Câu SA có ảnh trong đáp số phải bị skip");
+        assertEquals(ImportFlags.SKIP_HAS_IMAGE, p.skipped().get(0).reason());
+    }
+
+    @Test
+    void cauCoBayAnhCongThucWmfBiBoHasImageKhongPhaiImageLimit() throws IOException {
+        DocxBuilder d = new DocxBuilder();
+        d.p("PHẦN I. CÂU TRẮC NGHIỆM");
+        d.numbered(DocxBuilder.cy("[NB]"), DocxBuilder.t(" Câu có 7 ảnh công thức WMF: "),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5),
+                d.pict("wmf", new byte[]{1, 0, 9, 0}, 0.6, 0.5));
+        d.p(DocxBuilder.t("A. "), DocxBuilder.y("1")).p("B. 2").p("C. 3").p("D. 4");
+
+        PreviewData p = preview(d.bytes());
+        assertEquals(1, p.skipped().size());
+        assertEquals(ImportFlags.SKIP_HAS_IMAGE, p.skipped().get(0).reason(),
+                "Chỉ đếm figure trong skipReason; 7 ảnh công thức WMF phải là has_image chứ không phải image_limit");
     }
 }

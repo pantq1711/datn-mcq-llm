@@ -15,8 +15,13 @@ import com.datn.mcq.qc.dto.DedupCandidate;
 import com.datn.mcq.qc.dto.DedupOutcome;
 import com.datn.mcq.qc.dto.DedupStatus;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -68,7 +73,8 @@ public final class ImportPreviewBuilder {
                 continue;
             }
             ImportItem item = item(q, leakNeedles, defaultLevel);
-            DedupCandidate self = candidate(item, -(items.size() + 1));
+            String imageKey = computeImageKey(q);
+            DedupCandidate self = candidate(item, -(items.size() + 1), imageKey);
             List<String> flags = new ArrayList<>(item.flags());
             if (self != null) {
                 if (isDuplicate(self, bankCandidates)) {
@@ -85,7 +91,15 @@ public final class ImportPreviewBuilder {
     }
 
     private static String skipReason(Question q) {
-        if (q.hasImage || !q.images.isEmpty()) {
+        long figureCount = q.images == null ? 0
+                : q.images.stream().filter(im -> "figure".equals(im.kind)).count();
+        if (q.flags.contains(ImportFlags.SKIP_IMAGE_LIMIT) || figureCount > 6) {
+            return ImportFlags.SKIP_IMAGE_LIMIT;
+        }
+        if (q.flags.contains(ImportFlags.SKIP_IMAGE_CONVERT_FAILED)) {
+            return ImportFlags.SKIP_IMAGE_CONVERT_FAILED;
+        }
+        if (q.flags.contains("image_in_answer") || hasNonFigureImages(q)) {
             return ImportFlags.SKIP_HAS_IMAGE;
         }
         if (q.flags.contains("formula_unsupported") || containsFormulaToken(q)) {
@@ -95,6 +109,13 @@ public final class ImportPreviewBuilder {
             return ImportFlags.SKIP_HAS_TABLE;
         }
         return null;
+    }
+
+    private static boolean hasNonFigureImages(Question q) {
+        if (q.images == null || q.images.isEmpty()) {
+            return q.hasImage;
+        }
+        return q.images.stream().anyMatch(im -> !"figure".equals(im.kind));
     }
 
     private static boolean containsFormulaToken(Question q) {
@@ -216,10 +237,13 @@ public final class ImportPreviewBuilder {
         if (containsAny(all, leakNeedles)) {
             flags.add(ImportFlags.LEAK_SUSPECT);
         }
+        if (q.images != null && q.images.stream().anyMatch(im -> "figure".equals(im.kind))) {
+            flags.add(ImportFlags.HAS_FIGURE);
+        }
         return new ImportItem(q.id, type.getDbValue(), q.locator, q.levelRaw, level, stem,
                 options == null ? null : List.copyOf(options), correct,
                 statements == null ? null : List.copyOf(statements), saAnswer, explanation, List.copyOf(flags),
-                false, List.of());
+                false, List.of(), List.of());
     }
 
     private static ImportItem withFlags(ImportItem i, List<String> flags) {
@@ -227,11 +251,12 @@ public final class ImportPreviewBuilder {
         List<String> reasons = distinct.stream().filter(ImportFlags::isBlocking)
                 .map(f -> ImportFlags.describe(f, i.type())).distinct().toList();
         return new ImportItem(i.key(), i.type(), i.locator(), i.levelRaw(), i.level(), i.stem(), i.options(),
-                i.correctOption(), i.statements(), i.saAnswer(), i.explanation(), distinct, !reasons.isEmpty(), reasons);
+                i.correctOption(), i.statements(), i.saAnswer(), i.explanation(), distinct, !reasons.isEmpty(),
+                reasons, i.images());
     }
 
     /** Nội dung để so trùng; null khi câu thiếu nội dung (đã có cờ chặn, không so). */
-    static DedupCandidate candidate(ImportItem i, int syntheticId) {
+    static DedupCandidate candidate(ImportItem i, int syntheticId, String imageKey) {
         DedupCandidate c;
         switch (i.type()) {
             case "mcq" -> {
@@ -239,18 +264,51 @@ public final class ImportPreviewBuilder {
                     return null;
                 }
                 c = new DedupCandidate(syntheticId, i.stem(), i.options().get(0).text(), i.options().get(1).text(),
-                        i.options().get(2).text(), i.options().get(3).text());
+                        i.options().get(2).text(), i.options().get(3).text(), imageKey);
             }
             case "tf" -> {
                 if (i.statements() == null || i.statements().size() != 4) {
                     return null;
                 }
                 c = DedupCandidate.trueFalse(syntheticId, i.stem(),
-                        i.statements().stream().map(ItemStatement::text).toList());
+                        i.statements().stream().map(ItemStatement::text).toList(), imageKey);
             }
-            default -> c = DedupCandidate.shortAnswer(syntheticId, i.stem(), i.saAnswer());
+            default -> c = DedupCandidate.shortAnswer(syntheticId, i.stem(), i.saAnswer(), imageKey);
         }
         return c.hasContent() ? c : null;
+    }
+
+    static String computeImageKey(Question q) {
+        if (q.images == null || q.images.isEmpty()) {
+            return "";
+        }
+        List<Question.ImageRef> filtered = q.images.stream()
+                .filter(im -> "figure".equals(im.kind) && !"solution".equals(im.role) && !"answer".equals(im.role))
+                .sorted(Comparator.comparing((Question.ImageRef im) -> im.role != null ? im.role : "")
+                        .thenComparing(im -> im.id != null ? im.id : ""))
+                .toList();
+        if (filtered.isEmpty()) {
+            return "";
+        }
+        List<String> hashes = new ArrayList<>();
+        for (Question.ImageRef im : filtered) {
+            if (im.originalSha256 != null && !im.originalSha256.isEmpty()) {
+                hashes.add(im.originalSha256);
+            } else if (im.rawData != null && im.rawData.length > 0) {
+                hashes.add(sha256(im.rawData));
+            } else if (im.sourceRef != null) {
+                hashes.add(sha256(im.sourceRef.getBytes(StandardCharsets.UTF_8)));
+            }
+        }
+        return String.join(",", hashes);
+    }
+
+    private static String sha256(byte[] data) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static boolean isDuplicate(DedupCandidate subject, List<DedupCandidate> candidates) {

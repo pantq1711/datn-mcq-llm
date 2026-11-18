@@ -230,6 +230,8 @@ bảng dữ liệu; hình trong đáp số sa; chữ bọc quanh hình.
 1. Tiếp tục bỏ câu có ảnh công thức WMF (16/161 câu) và hình vẽ OLE (2 câu); lý do hiển thị "công thức dạng ảnh, chưa nhập được".
 2. Dùng LibreOffice: chỉ khi nhập, một tiến trình mỗi lô, trong permit `PandocLimiter`, có timeout; câu đổi lỗi bỏ với
    `image_convert_failed`.
-3. Migration câu có hình là V27.
+3. Migration câu có hình là V27. *(Ghi chú 15/11/2026: thực tế là `V30__question_image.sql`, vì V27 đã thuộc `exam_challenge`; số V27 trong tài liệu này là số lúc thiết kế.
+   Ghi chú 17/11/2026: đổi thành `V34__question_image.sql` khi merge `main`, vì main đã dùng V30–V32 và V33 thuộc PR #93
+   (`item_stat`).)*
 4. Câu ngân hàng có hình chỉ hiện nhãn "Có hình", không vào `reviewReasons`.
 5. Nhập cả hình ở lời giải.

@@ -29,6 +29,10 @@ public class BankImportProperties {
     private int maxEmbeddingBytes = 1024 * 1024;
     /** Tổng dung lượng tối đa các tệp công thức nhúng được nạp; quá thì 422 INVALID_FILE. */
     private long maxEmbeddingTotalBytes = 64L * 1024 * 1024;
+    /** Dung lượng tối đa của một tệp ảnh nhúng trong docx (byte). */
+    private int maxImageBytes = 2 * 1024 * 1024;
+    /** Tổng dung lượng tối đa các tệp ảnh nhúng được nạp từ docx (byte); quá thì 422 INVALID_FILE. */
+    private long maxImageTotalBytes = 24L * 1024 * 1024;
     /** Chờ chỗ xử lý file nặng (dùng chung PandocLimiter) tối đa bao lâu trước khi 503 EXTRACTOR_BUSY. */
     private Duration queueWait = Duration.ofSeconds(30);
 
@@ -49,6 +53,8 @@ public class BankImportProperties {
         maxXmlBytes = other.maxXmlBytes;
         maxEmbeddingBytes = other.maxEmbeddingBytes;
         maxEmbeddingTotalBytes = other.maxEmbeddingTotalBytes;
+        maxImageBytes = other.maxImageBytes;
+        maxImageTotalBytes = other.maxImageTotalBytes;
         queueWait = other.queueWait;
     }
 
@@ -114,6 +120,22 @@ public class BankImportProperties {
 
     public void setMaxEmbeddingTotalBytes(long maxEmbeddingTotalBytes) {
         this.maxEmbeddingTotalBytes = maxEmbeddingTotalBytes;
+    }
+
+    public int getMaxImageBytes() {
+        return maxImageBytes;
+    }
+
+    public void setMaxImageBytes(int maxImageBytes) {
+        this.maxImageBytes = maxImageBytes;
+    }
+
+    public long getMaxImageTotalBytes() {
+        return maxImageTotalBytes;
+    }
+
+    public void setMaxImageTotalBytes(long maxImageTotalBytes) {
+        this.maxImageTotalBytes = maxImageTotalBytes;
     }
 
     public Duration getQueueWait() {

@@ -50,6 +50,10 @@ app:
     model: ""
   worker:
     enabled: false        # Tắt poller worker khi chạy test
+  question-images:
+    # Khóa giả CHỈ dùng cho test (Base64 của 32 bytes), không phải secret thật.
+    url-signing-key: "dGVzdC1vbmx5LXF1ZXN0aW9uLWltYWdlLXVybC1zaWduaW5nLWtleS1ub3QtcHJvZA=="
+    url-ttl: 1h
   security:
     jwt:
       # Khóa giả CHỈ dùng cho test (trùng AuthTestSupport.TEST_JWT_SECRET_BASE64), không phải secret thật.

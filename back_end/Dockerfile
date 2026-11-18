@@ -23,10 +23,14 @@ ARG PANDOC_SHA256=b4217ac7c54067c442f9d4cd38bcd0c184a43f3e7053431a12263a6f92a33b
 
 # curl: healthcheck. tzdata: múi giờ Asia/Bangkok. fontconfig + libfreetype6 + font: AWT headless cho JLaTeXMath
 # (xuất MathType) và OptionLayout (đo phương án bằng Liberation Serif, tương đương metric Times New Roman); font có
-# tiếng Việt: DejaVu và Liberation.
+# tiếng Việt: DejaVu và Liberation. libreoffice-draw: đổi ảnh EMF sang PNG headless (I2, PR #61); thiếu module Draw thì
+# soffice báo "source file could not be loaded" (đo 15/11/2026). libreoffice-writer-nogui kéo theo lõi LibreOffice.
+# util-linux: prlimit đặt trần bộ nhớ cho soffice (QUESTION_IMAGE_SOFFICE_MAX_AS); image nền đã có sẵn (2.39.3, kiểm 18/11/2026),
+# ghi rõ để không mất khi đổi image nền, vì thiếu prlimit thì không đổi được EMF (fail closed).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        curl ca-certificates tzdata fontconfig libfreetype6 fonts-dejavu-core fonts-liberation2 \
+        curl ca-certificates tzdata fontconfig libfreetype6 fonts-dejavu-core fonts-liberation2 libreoffice-writer-nogui libreoffice-draw \
+        util-linux \
     && curl -fsSL -o /tmp/pandoc.deb \
         "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-amd64.deb" \
     && echo "${PANDOC_SHA256}  /tmp/pandoc.deb" | sha256sum -c - \
