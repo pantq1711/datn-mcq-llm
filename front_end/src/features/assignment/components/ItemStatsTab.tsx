@@ -352,7 +352,7 @@ function TfDetail({ item }: { item: ItemStat }) {
         <table className="item-stat-detail-table">
             <thead>
                 <tr>
-                    <th>Ý</th>
+                    <th className="item-stat-nowrap">Ý</th>
                     <th>Nhãn đúng</th>
                     <th>Chọn Đúng</th>
                     <th>Chọn Sai</th>
@@ -365,7 +365,8 @@ function TfDetail({ item }: { item: ItemStat }) {
             <tbody>
                 {rows.map((r) => (
                     <tr key={r.key}>
-                        <td>{`Ý ${r.key}`}</td>
+                        {/* Chữ 16px: "Ý b" không được xuống dòng thành "Ý" / "b" */}
+                        <td className="item-stat-nowrap">{`Ý ${r.key}`}</td>
                         <td>{r.label === null ? "—" : r.label ? "Đúng" : "Sai"}</td>
                         <td>{r.t}</td>
                         <td>{r.f}</td>
