@@ -294,31 +294,32 @@ export default function AssignmentDetailPage() {
                             showIcon
                             style={{ marginBottom: 12 }}
                             message={`Có ${data.duplicateCount} lượt trùng số thứ tự`}
-                            description={
-                                data.status === "open"
-                                    ? "Hai học sinh nhập cùng lớp và số thứ tự thì cả hai lượt đều được giữ và đánh dấu “Trùng STT”. Thầy/cô xem lại rồi xóa lượt nhập nhầm; lượt còn lại sẽ hết dấu trùng."
-                                    : "Bài đã đóng nên không xóa được lượt. Các lượt trùng được đánh dấu để thầy/cô đối chiếu với sổ điểm."
-                            }
+                            description="Hai học sinh nhập cùng lớp và số thứ tự thì cả hai lượt đều được giữ và đánh dấu “Trùng STT”. Thầy/cô xem lại rồi xóa lượt nhập nhầm; lượt còn lại sẽ hết dấu trùng."
                             action={
-                                data.status === "open" ? (
-                                    <Button size="small" onClick={() => setSelected(duplicates.map((a) => a.attemptId))}>
-                                        Chọn các lượt trùng
-                                    </Button>
-                                ) : undefined
+                                <Button size="small" onClick={() => setSelected(duplicates.map((a) => a.attemptId))}>
+                                    Chọn các lượt trùng
+                                </Button>
                             }
                         />
                     )}
 
-                    {data.status === "open" && (
-                        <div className="assignment-bulk">
+                    <div className="assignment-bulk">
+                        <div>
                             <Text type="secondary">
-                                {selected.length > 0 ? `Đã chọn ${selected.length} lượt` : "Tích chọn các lượt cần xóa (ví dụ lượt nhập nhầm số)."}
+                                {selected.length > 0
+                                    ? `Đã chọn ${selected.length} lượt`
+                                    : "Tích chọn các lượt cần xóa (ví dụ lượt nhập nhầm số)."}
                             </Text>
-                            <Button danger disabled={selected.length === 0} loading={busy} onClick={handleBulkDelete}>
-                                Xóa các lượt đã chọn
-                            </Button>
+                            {data.status === "closed" && (
+                                <div>
+                                    <Text type="secondary">Xóa lượt sẽ tính lại phần Phân tích câu.</Text>
+                                </div>
+                            )}
                         </div>
-                    )}
+                        <Button danger disabled={selected.length === 0} loading={busy} onClick={handleBulkDelete}>
+                            Xóa các lượt đã chọn
+                        </Button>
+                    </div>
 
                     <Table<AttemptRow>
                         rowKey="attemptId"
@@ -328,14 +329,10 @@ export default function AssignmentDetailPage() {
                         pagination={attempts.length > 50 ? { pageSize: 50, showSizeChanger: false } : false}
                         scroll={{ x: 760 }}
                         rowClassName={(row) => (row.duplicate ? "assignment-row-duplicate" : "")}
-                        rowSelection={
-                            data.status === "open"
-                                ? {
-                                    selectedRowKeys: selected,
-                                    onChange: (keys) => setSelected(keys.map(Number)),
-                                }
-                                : undefined
-                        }
+                        rowSelection={{
+                            selectedRowKeys: selected,
+                            onChange: (keys) => setSelected(keys.map(Number)),
+                        }}
                         locale={{ emptyText: "Chưa có học sinh nào vào làm." }}
                     />
                     <p className="assignment-hint">

@@ -131,6 +131,47 @@ describe("StudentAssignmentPage: mở lại bài (AN-06)", () => {
         expect(screen.queryByText(/Điểm thô/)).not.toBeInTheDocument();
     });
 
+    it("đã nộp, bài còn mở: bấm 'Xem kết quả' khi chưa có kết quả thì báo giờ có kết quả, không im lặng", async () => {
+        const user = userEvent.setup();
+        mocked.getCurrentAttempt.mockResolvedValue(
+            makeAttemptView({ submitted: true, submittedAt: "2026-11-20T09:30:00", parts: undefined })
+        );
+        renderPage();
+
+        await user.click(await screen.findByRole("button", { name: "Đúng, xem tiếp" }));
+        await user.click(await screen.findByRole("button", { name: "Xem kết quả" }));
+
+        expect(await screen.findByText("Kết quả có sau 17:02 ngày 20/11/2026")).toBeInTheDocument();
+        expect(mocked.getCurrentAttempt).toHaveBeenCalledTimes(2);
+        // Vẫn ở màn đã nộp, không lộ điểm
+        expect(screen.getByRole("heading", { name: /Đã nộp, kết quả có sau/ })).toBeInTheDocument();
+        expect(screen.queryByText(/Điểm thô/)).not.toBeInTheDocument();
+    });
+
+    it("đã nộp: bấm 'Xem kết quả' khi kết quả đã có thì hiện kết quả, không báo 'có sau'", async () => {
+        const user = userEvent.setup();
+        mocked.getCurrentAttempt
+            .mockResolvedValueOnce(makeAttemptView({ submitted: true, submittedAt: "2026-11-20T09:30:00", parts: undefined }))
+            .mockResolvedValueOnce(
+                makeAttemptView({
+                    submitted: true,
+                    submittedAt: "2026-11-20T09:30:00",
+                    parts: undefined,
+                    resultsReleased: true,
+                    result: { score: 5.25, maxScore: 7, score10: 7.5, parts: [{ part: "I", correct: 10, total: 12, score: 2.5 }] },
+                })
+            );
+        renderPage();
+
+        await user.click(await screen.findByRole("button", { name: "Đúng, xem tiếp" }));
+        // Thông báo antd nằm ngoài vùng RTL dọn nên có thể còn sót từ test trước: đếm trước/sau thay vì tìm theo chữ
+        const noticesBefore = document.querySelectorAll(".ant-message-notice").length;
+        await user.click(await screen.findByRole("button", { name: "Xem kết quả" }));
+
+        expect(await screen.findByText("7,5")).toBeInTheDocument();
+        expect(document.querySelectorAll(".ant-message-notice").length).toBeLessThanOrEqual(noticesBefore);
+    });
+
     it("đã nộp, bài đã đóng và bật hiện điểm: hiện điểm theo phần", async () => {
         const user = userEvent.setup();
         mocked.getCurrentAttempt.mockResolvedValue(
