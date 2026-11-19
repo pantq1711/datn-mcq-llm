@@ -207,7 +207,7 @@ export default function ExamSession({
                                     key={q.slotId}
                                     type="button"
                                     className={`student-palette-item${isAnswered(q, draft) ? " is-done" : ""}`}
-                                    aria-label={`Câu ${q.number} phần ${p.part}${isAnswered(q, draft) ? ", đã làm" : ""}`}
+                                    aria-label={`Phần ${p.part} – Câu ${q.number}${isAnswered(q, draft) ? ", đã làm" : ""}`}
                                     onClick={() => scrollTo(q.slotId)}
                                 >
                                     {q.number}

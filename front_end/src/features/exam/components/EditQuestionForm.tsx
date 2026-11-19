@@ -133,6 +133,8 @@ function toFormValues(question: ExamQuestionItem): EditQuestionFormValues {
 
 interface EditQuestionFormProps {
     question: ExamQuestionItem;
+    /** Vị trí câu trong đề ("Phần I – Câu 3"), ghi trong thông báo lưu xong. */
+    positionLabel?: string;
     examId: number;
     /** Lưu xong (backend trả câu của chỗ sau khi sửa). */
     onSaved: (saved: ExamItemDto) => void | Promise<void>;
@@ -147,7 +149,7 @@ interface EditQuestionFormProps {
  * ô; thanh nút Hủy/Lưu dính đáy màn hình. Giá trị ban đầu chỉ đổ một lần khi mở: trang tự tải lại đề không xóa chữ đang
  * gõ (trang gắn `key` theo chỗ để đổi câu thì mở form mới).
  */
-export default function EditQuestionForm({ question, examId, onSaved, onCancel, onDirtyChange }: EditQuestionFormProps) {
+export default function EditQuestionForm({ question, positionLabel, examId, onSaved, onCancel, onDirtyChange }: EditQuestionFormProps) {
     const [form] = Form.useForm<EditQuestionFormValues>();
     const slotId = question.slotId;
     const questionId = question.questionId;
@@ -230,10 +232,11 @@ export default function EditQuestionForm({ question, examId, onSaved, onCancel, 
         setSubmitting(true);
         try {
             const saved = await updateQuestion(examId, question.slotId, buildPayload(values, question.questionId));
+            const savedWhat = positionLabel ? `Đã lưu bản sửa ${positionLabel}.` : "Đã lưu bản sửa.";
             message.success(
                 saved.qcState === "checking"
-                    ? "Đã lưu bản sửa. Hệ thống đang tự kiểm tra lại đáp án."
-                    : "Đã lưu bản sửa."
+                    ? `${savedWhat} Hệ thống đang tự kiểm tra lại đáp án.`
+                    : savedWhat
             );
             forgetDraft();
             onDirtyChange?.(false);

@@ -197,6 +197,23 @@
 .exam-question-item-body {
     grid-area: body;
     min-width: 0;
+    /* Chữ dài liền (đường dẫn, dãy số) được ngắt để không đẩy thẻ rộng hơn màn hình */
+    overflow-wrap: anywhere;
+}
+
+/* Công thức riêng dòng ($$...$$) rộng hơn thẻ thì cuộn ngang trong khung công thức, không làm cả trang tràn
+   (giống trang học sinh và ô xem trước công thức) */
+.exam-question-item-content .katex-display {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 4px 0;
+}
+
+/* Thẻ chữ (trạng thái, nguồn, cờ thông tin) mặc định không xuống dòng: cho xuống dòng trong bề rộng thẻ câu */
+.exam-question-item-content .ant-tag {
+    max-width: 100%;
+    white-space: normal;
 }
 
 /* Nút trên mỗi câu đủ cao để bấm dễ (≥ 36px) */
