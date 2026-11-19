@@ -155,6 +155,12 @@ export default function StudentAssignmentPage() {
             try {
                 const view = await getCurrentAttempt(token);
                 setPhase({ name: "outcome", view, token, anchorServer: view.serverNow, anchorLocalMs: Date.now() });
+                // Em bấm "Xem kết quả" mà chưa tới giờ: màn hình không đổi nên phải báo, kẻo em tưởng nút hỏng
+                if (!quiet && view.submitted && !view.resultsReleased) {
+                    message.info(
+                        view.resultsAt ? `Kết quả có sau ${formatServerTime(view.resultsAt)}` : "Chưa có kết quả. Em thử lại sau ít phút."
+                    );
+                }
                 return true;
             } catch (error) {
                 if (!quiet) message.warning(errorText(error, "Chưa xem được kết quả. Em thử lại sau ít phút."));
