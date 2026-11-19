@@ -1482,6 +1482,82 @@ class ExamBuildTest {
         assertTrue(body.contains("all") && body.contains("exam"), "thông báo nêu giá trị hợp lệ: " + body);
     }
 
+    /**
+     * Bản đặc tả (18/11, mẫu Phụ lục 2 CV 7991, D1–D7): content=spec trả file Word một section ngang trang, tên file cùng quy
+     * tắc với file đề; đầu đề không có ô mã đề, điểm, mã phách (examCode bị bỏ qua); chỗ hỏng vẫn được đếm; câu Đúng – Sai đếm
+     * theo ý. Đề của người khác 404.
+     */
+    @Test
+    void xuatBanDacTaDeTheoMaTran() throws Exception {
+        generator.brokenMcq = 6;
+        int examId = readyExam();
+        progress(examId);
+        assertTrue(count("SELECT count(*) FROM exam_slot WHERE exam_id = ? AND question_type = 'mcq' AND state = 'failed'",
+                examId) > 0, "đề có chỗ hỏng ở phần I");
+        String code = jdbc.queryForObject("SELECT exam_code FROM exam WHERE id = ?", String.class, examId);
+        String base = "/api/exams/" + examId + "/export/docx";
+        for (String query : List.of("?content=spec", "?content=SPEC&equation=mathtype&examCode=205&durationMinutes=45")) {
+            var response = perform(get(base + query)).andReturn().getResponse();
+            if (!PandocTestSupport.find().isPresent()) {
+                assertEquals(503, response.getStatus(), query);
+                continue;
+            }
+            assertEquals(200, response.getStatus(), response.getContentAsString(StandardCharsets.UTF_8));
+            assertTrue(response.getHeader("Content-Disposition").contains("filename=\"" + code + ".docx\""),
+                    "tên file cùng quy tắc với file đề: " + query);
+            String xml = PandocTestSupport.documentXml(response.getContentAsByteArray());
+            for (String part : List.of("BẢN ĐẶC TẢ ĐỀ KIỂM TRA ĐỊNH KÌ", "ĐỀ KIỂM TRA ĐỀ THỬ MA TRẬN", "Môn: Toán, Lớp: 8.",
+                    "Đa thức", "Đơn thức, đa thức", "- Biết: Nhận biết được đơn thức, đa thức.", "Hằng đẳng thức",
+                    "- Hiểu: Khai triển.", "Tứ giác, hình thang cân", "- Hiểu: Tính được góc trong tứ giác.",
+                    "2 (C1, C2)", "2 (C1a, C1b)", "1 (C1c)", "1 (C1d)", "1 (C1)", "Tổng số câu", "Tổng số điểm",
+                    "Tỉ lệ %")) {
+                assertTrue(xml.contains(part), "bản đặc tả thiếu: " + part + " (" + query + ")");
+            }
+            for (String absent : List.of("Mã phách", "Điểm bài thi", ">205<", "ĐÁP ÁN", "Chưa có câu", "PHẦN I.")) {
+                assertFalse(xml.contains(absent), "bản đặc tả không có: " + absent + " (" + query + ")");
+            }
+            assertEquals(1, xml.split("<w:sectPr", -1).length - 1, "một section: " + query);
+            assertTrue(xml.contains("w:orient=\"landscape\""), "ngang trang: " + query);
+            String footers = footersXml(response.getContentAsByteArray());
+            assertTrue(footers.contains("Bản đặc tả") && !footers.contains("Mã đề"), footers);
+        }
+        int other = insert("INSERT INTO users (name, email, role) VALUES ('GV2', 'gv2.spec@test', 'teacher')");
+        mockMvc.perform(get(base + "?content=spec").with(AuthTestSupport.teacher(other)))
+                .andExpect(status().isNotFound());
+        var bad = perform(get(base + "?content=dacta")).andReturn().getResponse();
+        assertEquals(400, bad.getStatus());
+        assertTrue(bad.getContentAsString(StandardCharsets.UTF_8).contains("spec"), "thông báo nêu giá trị spec");
+    }
+
+    /**
+     * Bản đặc tả của đề sinh theo bài (ma trận ẩn kind = lesson): chủ đề là tên bài, yêu cầu cần đạt mặc định in nguyên văn;
+     * chưa chạy job nên mọi chỗ đang soạn, vẫn được đếm.
+     */
+    @Test
+    void xuatBanDacTaDeTheoBaiChuaCoCau() throws Exception {
+        String lesson = "Bài 3. Hằng đẳng thức đáng nhớ";
+        JsonNode built = json(postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject
+                + ", \"gradeLevel\": 8, \"lesson\": \"" + lesson + "\", \"useBank\": false, \"cells\": ["
+                + "{\"questionType\": \"mcq\", \"difficulty\": \"easy\", \"questionCount\": 3},"
+                + "{\"questionType\": \"tf\", \"questionCount\": 1}]}").andExpect(status().isOk()));
+        int examId = built.get("examId").asInt();
+        assertEquals("lesson", built.get("kind").asText());
+        assertEquals(4, count("SELECT count(*) FROM exam_slot WHERE exam_id = ? AND state NOT IN ('ready', 'kept', 'edited')",
+                examId), "chưa chạy job: mọi chỗ chưa có câu");
+        var response = perform(get("/api/exams/" + examId + "/export/docx?content=spec")).andReturn().getResponse();
+        if (!PandocTestSupport.find().isPresent()) {
+            assertEquals(503, response.getStatus());
+            return;
+        }
+        assertEquals(200, response.getStatus(), response.getContentAsString(StandardCharsets.UTF_8));
+        String xml = PandocTestSupport.documentXml(response.getContentAsByteArray());
+        for (String part : List.of(lesson, "- Biết: Nhận biết được kiến thức cơ bản của bài: " + lesson + ".",
+                "- Hiểu: Hiểu và vận dụng trực tiếp kiến thức của bài: " + lesson + ".", "- Vận dụng: ",
+                "3 (C1–C3)", "2 (C1a, C1b)", "1 (C1c)", "1 (C1d)")) {
+            assertTrue(xml.contains(part), "bản đặc tả đề theo bài thiếu: " + part);
+        }
+    }
+
     /** ?equation=mathtype: công thức thành đối tượng MathType OLE; header báo số công thức giữ Equation của Word. */
     @Test
     void xuatDeRaWordCongThucMathType() throws Exception {

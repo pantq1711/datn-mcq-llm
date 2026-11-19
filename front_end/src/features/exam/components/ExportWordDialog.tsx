@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Space, Typography, message } from "antd";
+import { Alert, Button, Form, Input, InputNumber, Modal, Radio, Space, Typography, message } from "antd";
 import { DownloadOutlined } from "@ant-design/icons";
 
 import type { ExamDetail } from "../types/exam.types";
-import { getExamExportDocx, type ExportEquationFormat } from "../services/examApi";
+import { getExamExportDocx, type ExportContent, type ExportEquationFormat } from "../services/examApi";
 import { needsReviewNow } from "../../../utils/exam.utils";
 
 import "./ExportWordDialog.css";
@@ -30,13 +30,26 @@ function formatScore(value: number): string {
     return value.toLocaleString("vi-VN", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 }
 
-/** Tên file mặc định: tên đề + ngày xuất ("Giữa kì I – Toán 8 – 16-11-2026"; tên file không chứa được "/"). */
-function defaultFileName(title: string | undefined): string {
+const SPEC_SUFFIX = "Bản đặc tả";
+
+/** Câu giải thích dưới nhóm "Nội dung file", theo lựa chọn. */
+const CONTENT_HINTS: Record<ExportContent, string> = {
+    all: "File có đề, rồi sang trang mới là đáp án và lời giải chi tiết.",
+    exam: "File chỉ có đề, dừng ở dòng HẾT.",
+    spec: "Bảng ngang trang theo mẫu Phụ lục 2, Công văn 7991: số câu theo dạng và mức của từng nội dung, kèm câu số mấy trong đề.",
+};
+
+/**
+ * Tên file mặc định: tên đề + ngày xuất ("Giữa kì I – Toán 8 – 16-11-2026"; tên file không chứa được "/"); bản đặc tả thêm
+ * " – Bản đặc tả" sau tên đề ("Giữa kì I – Toán 8 – Bản đặc tả – 18-11-2026").
+ */
+function defaultFileName(title: string | undefined, content: ExportContent = "all"): string {
     const d = new Date();
     const pad = (n: number) => String(n).padStart(2, "0");
     const date = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
     const name = toFileName(title, "");
-    return name ? `${name} – ${date}` : date;
+    const base = content === "spec" ? (name ? `${name} – ${SPEC_SUFFIX}` : SPEC_SUFFIX) : name;
+    return base ? `${base} – ${date}` : date;
 }
 
 interface FormValues {
@@ -44,7 +57,7 @@ interface FormValues {
     examCode?: string;
     fileName?: string;
     equation: ExportEquationFormat;
-    examOnly: boolean;
+    content: ExportContent;
 }
 
 interface ExportWordDialogProps {
@@ -58,13 +71,16 @@ interface ExportWordDialogProps {
 
 /**
  * Hộp xuất Word (16/11, NV-43/NV-44, rà soát giao diện G19/G23 và mục 7.5): bấm "Xuất file Word" luôn mở hộp này. Chọn thời
- * gian làm bài, mã đề, tên file, cách ghi công thức, chỉ đề hay đề kèm đáp án; nếu đề chưa hoàn chỉnh thì nhắc ngay trong
- * hộp (nội dung cảnh báo như hộp xác nhận của NV-40/NV-41, không chặn).
+ * gian làm bài, mã đề, tên file, cách ghi công thức, nội dung file (đề kèm đáp án, chỉ đề, hoặc bản đặc tả từ 18/11); nếu đề
+ * chưa hoàn chỉnh thì nhắc ngay trong hộp (nội dung cảnh báo như hộp xác nhận của NV-40/NV-41, không chặn). Bản đặc tả không
+ * có ô mã đề nên ô Mã đề ẩn khi chọn.
  */
 export default function ExportWordDialog({ open, examId, detail, onClose, onShowFlagged }: ExportWordDialogProps) {
     const [form] = Form.useForm<FormValues>();
     const [exporting, setExporting] = useState(false);
     const duration = Form.useWatch("durationMinutes", form);
+    const content = Form.useWatch("content", form) ?? "all";
+    const isSpec = content === "spec";
 
     // Mở hộp: điền lại giá trị mặc định (tên file theo ngày hiện tại)
     useEffect(() => {
@@ -74,9 +90,19 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
             examCode: DEFAULT_EXAM_CODE,
             fileName: defaultFileName(detail.title),
             equation: "mathtype",
-            examOnly: false,
+            content: "all",
         });
     }, [open, detail.title, form]);
+
+    // Đổi nội dung file: tên file còn là tên mặc định của lựa chọn cũ thì đổi theo (tên giáo viên tự gõ thì giữ)
+    const handleValuesChange = (changed: Partial<FormValues>) => {
+        if (!changed.content) return;
+        const current = form.getFieldValue("fileName");
+        const defaults = (["all", "exam", "spec"] as ExportContent[]).map((c) => defaultFileName(detail.title, c));
+        if (!current || defaults.includes(current)) {
+            form.setFieldValue("fileName", defaultFileName(detail.title, changed.content));
+        }
+    };
 
     // NV-40/NV-41: đề còn chỗ chưa soạn được, chỗ đang soạn, câu có cảnh báo chưa lưu, hoặc tổng điểm phần trắc nghiệm khác 10
     const warnings = useMemo(() => {
@@ -102,18 +128,20 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
             return; // antd đã hiện lỗi dưới ô
         }
         const equation = values.equation;
-        const examCode = values.examCode?.trim() || DEFAULT_EXAM_CODE;
+        const fileContent = values.content ?? "all";
+        // Bản đặc tả không có ô mã đề: không gửi examCode
+        const examCode = fileContent === "spec" ? DEFAULT_EXAM_CODE : values.examCode?.trim() || DEFAULT_EXAM_CODE;
         try {
             setExporting(true);
             const { blob, keptOmml, scaled, failed, failedAt, filename } = await getExamExportDocx(examId, equation, {
                 durationMinutes: values.durationMinutes ?? undefined,
                 examCode: examCode === DEFAULT_EXAM_CODE ? undefined : examCode,
-                content: values.examOnly ? "exam" : undefined,
+                content: fileContent === "all" ? undefined : fileContent,
             });
             // Tên giáo viên nhập (bỏ đuôi .docx nếu có gõ); trống thì tên đề + ngày, rồi tên backend gửi, rồi mã hệ thống
             const typed = toFileName(values.fileName?.replace(/\.docx$/i, ""), "");
             const name = typed
-                || toFileName(defaultFileName(detail.title), "")
+                || toFileName(defaultFileName(detail.title, fileContent), "")
                 || filename?.replace(/\.docx$/i, "")
                 || toFileName(undefined, detail.examCode ?? `exam-${examId}`);
             const url = window.URL.createObjectURL(blob);
@@ -182,8 +210,19 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
                     title="Xuất file Word khi đề chưa hoàn chỉnh?"
                     description={
                         <ul className="export-word-dialog-warning-list">
-                            {failedCount > 0 && <li>{failedCount} câu chưa soạn được (file ghi "Chưa có câu").</li>}
-                            {generatingCount > 0 && <li>{generatingCount} câu đang soạn (file ghi "Chưa có câu").</li>}
+                            {/* Bản đặc tả không in câu: chỗ chưa có câu vẫn được đếm theo ma trận */}
+                            {failedCount > 0 && (
+                                <li>
+                                    {failedCount} câu chưa soạn được
+                                    {isSpec ? " (bản đặc tả vẫn đếm các chỗ này theo ma trận)." : ' (file ghi "Chưa có câu").'}
+                                </li>
+                            )}
+                            {generatingCount > 0 && (
+                                <li>
+                                    {generatingCount} câu đang soạn
+                                    {isSpec ? " (bản đặc tả vẫn đếm các chỗ này theo ma trận)." : ' (file ghi "Chưa có câu").'}
+                                </li>
+                            )}
                             {flaggedCount > 0 && (
                                 <li>
                                     {flaggedCount} câu cần xem kỹ chưa được xử lý.
@@ -217,7 +256,7 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
                 />
             )}
 
-            <Form form={form} layout="vertical" disabled={exporting} requiredMark={false}>
+            <Form form={form} layout="vertical" disabled={exporting} requiredMark={false} onValuesChange={handleValuesChange}>
                 <Form.Item
                     label={
                         <span>
@@ -261,8 +300,10 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
                     </Space>
                 </Form.Item>
 
+                {/* Bản đặc tả không có ô mã đề: ẩn ô (giữ giá trị, không kiểm) */}
                 <Form.Item
                     name="examCode"
+                    hidden={isSpec}
                     label={
                         <span>
                             Mã đề{" "}
@@ -271,7 +312,7 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
                             </Text>
                         </span>
                     }
-                    rules={[{
+                    rules={isSpec ? [] : [{
                         pattern: /^\s*[1-9]\d{2}\s*$/,
                         message: "Mã đề là số có 3 chữ số, từ 100 đến 999.",
                     }]}
@@ -302,12 +343,16 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
                     </Radio.Group>
                 </Form.Item>
 
-                <Form.Item name="examOnly" valuePropName="checked" className="export-word-dialog-last">
-                    <Checkbox>Chỉ đề (không kèm đáp án)</Checkbox>
+                <Form.Item name="content" label="Nội dung file" className="export-word-dialog-last">
+                    <Radio.Group>
+                        <Space orientation="vertical" size={4}>
+                            <Radio value="all">Đề kèm đáp án và lời giải (mặc định)</Radio>
+                            <Radio value="exam">Chỉ đề (không kèm đáp án)</Radio>
+                            <Radio value="spec">Bản đặc tả đề</Radio>
+                        </Space>
+                    </Radio.Group>
                 </Form.Item>
-                <Text type="secondary">
-                    Không chọn thì file có đề, rồi sang trang mới là đáp án và lời giải chi tiết.
-                </Text>
+                <Text type="secondary">{CONTENT_HINTS[content]}</Text>
             </Form>
         </Modal>
     );

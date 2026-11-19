@@ -114,7 +114,8 @@ public class ExamController {
      *
      * <p>{@code examCode} (tùy chọn, 16/11): mã đề in ở ô mã đề, tiêu đề trang đáp án và chân trang, số nguyên 100–999;
      * không truyền là 101; giá trị khác 400. {@code content} (tùy chọn, 16/11): {@code all} (mặc định, đề kèm đáp án và lời
-     * giải) hoặc {@code exam} (file dừng ở dòng HẾT); giá trị khác 400.
+     * giải) hoặc {@code exam} (file dừng ở dòng HẾT); từ 18/11 thêm {@code spec}: bản đặc tả đề theo mẫu Phụ lục 2 Công văn
+     * 7991 (A4 ngang, không có ô mã đề nên {@code examCode} bị bỏ qua; tên file như file đề); giá trị khác 400.
      */
     @GetMapping("/{examId}/export/docx")
     public ResponseEntity<byte[]> exportDocx(CurrentUser user, @PathVariable Integer examId,

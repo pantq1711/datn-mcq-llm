@@ -884,6 +884,37 @@
             "type" : "integer",
             "format" : "int32"
           }
+        }, {
+          "name" : "equation",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "omml", "mathtype" ]
+          }
+        }, {
+          "name" : "durationMinutes",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "examCode",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "content",
+          "in" : "query",
+          "required" : false,
+          "description" : "all (mặc định), exam (chỉ đề) hoặc spec (bản đặc tả đề, 18/11); xem docs/api/README.md mục 7.6",
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "all", "exam", "spec" ]
+          }
         } ],
         "responses" : {
           "200" : {

@@ -134,9 +134,15 @@ export interface ExportDocxOptions {
     durationMinutes?: number;
     /** Mã đề 100–999 in ở ô mã đề, chân trang, trang đáp án; không có thì 101. */
     examCode?: string;
-    /** "exam": file dừng ở dòng HẾT, không kèm đáp án và lời giải; không có thì "all". */
-    content?: 'all' | 'exam';
+    /**
+     * "exam": file dừng ở dòng HẾT, không kèm đáp án và lời giải; "spec": bản đặc tả đề (mẫu Phụ lục 2 CV 7991, A4 ngang,
+     * không dùng mã đề); không có thì "all".
+     */
+    content?: ExportContent;
 }
+
+/** Nội dung file Word (tham số content của docs/api mục 7.6). */
+export type ExportContent = 'all' | 'exam' | 'spec';
 
 export const getExamExportDocx = async (
     examId: string,
@@ -147,7 +153,7 @@ export const getExamExportDocx = async (
     if (equation === 'mathtype') params.equation = equation;
     if (options.durationMinutes !== undefined) params.durationMinutes = options.durationMinutes;
     if (options.examCode) params.examCode = options.examCode;
-    if (options.content === 'exam') params.content = options.content;
+    if (options.content === 'exam' || options.content === 'spec') params.content = options.content;
     const resp = await axiosInstance.get(
         `/api/exams/${examId}/export/docx`,
         {

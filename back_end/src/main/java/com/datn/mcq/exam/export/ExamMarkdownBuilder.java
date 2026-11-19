@@ -543,7 +543,7 @@ public final class ExamMarkdownBuilder {
                 + "```";
     }
 
-    private static String headerParagraph(String text, boolean bold, boolean italic) {
+    static String headerParagraph(String text, boolean bold, boolean italic) {
         return "<w:p><w:pPr><w:pStyle w:val=\"ExamHeaderCell\"/></w:pPr>" + run(text, bold, italic) + "</w:p>";
     }
 
@@ -559,13 +559,14 @@ public final class ExamMarkdownBuilder {
     }
 
     /** Khoảng trống giữa hai bảng đầu đề (Word gộp hai bảng kề nhau nếu giữa không có đoạn nào). */
-    private static String gap() {
+    static String gap() {
         return "<w:p><w:pPr><w:pStyle w:val=\"ExamGap\"/></w:pPr></w:p>";
     }
 
     // ---------------------------------------------------------------- khối openxml: đoạn, bảng
+    // raw, spacer, run, TABLE_BORDERS, headerParagraph, gap dùng chung với bản đặc tả (ExamSpecBuilder, 18/11).
 
-    private static String raw(String xml) {
+    static String raw(String xml) {
         return "```{=openxml}\n" + xml + "\n```";
     }
 
@@ -579,7 +580,7 @@ public final class ExamMarkdownBuilder {
                 + "</w:pPr>" + plainRun(text) + "</w:p>";
     }
 
-    private static String spacer() {
+    static String spacer() {
         return "<w:p><w:pPr><w:pStyle w:val=\"ExamSpacer\"/></w:pPr></w:p>";
     }
 
@@ -589,13 +590,13 @@ public final class ExamMarkdownBuilder {
         return "<w:r><w:t" + (edge ? " xml:space=\"preserve\"" : "") + ">" + t + "</w:t></w:r>";
     }
 
-    private static String run(String text, boolean bold, boolean italic) {
+    static String run(String text, boolean bold, boolean italic) {
         String rPr = (bold ? "<w:b/><w:bCs/>" : "") + (italic ? "<w:i/><w:iCs/>" : "");
         return "<w:r>" + (rPr.isEmpty() ? "" : "<w:rPr>" + rPr + "</w:rPr>") + "<w:t xml:space=\"preserve\">" + xml(text)
                 + "</w:t></w:r>";
     }
 
-    private static final String TABLE_BORDERS = "<w:tblBorders>"
+    static final String TABLE_BORDERS = "<w:tblBorders>"
             + "<w:top w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>"
             + "<w:left w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>"
             + "<w:bottom w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>"
