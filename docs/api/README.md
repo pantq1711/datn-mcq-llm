@@ -33,7 +33,7 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 | 401 | Chưa đăng nhập (`UNAUTHENTICATED`), token hết hạn (`TOKEN_EXPIRED`), token sai (`TOKEN_INVALID`), đăng nhập sai (`INVALID_CREDENTIALS`), refresh không hợp lệ (`REFRESH_INVALID`), refresh bị tab khác vượt trước (`REFRESH_RACE`: chờ 1 giây, thử lại một lần; mục 8) |
 | 403 | Sai vai trò (`FORBIDDEN`), ví dụ giáo viên gọi API quản trị, admin gọi API của giáo viên |
 | 404 | Không tìm thấy bản ghi, ví dụ `subjectId` hoặc `templateId` không tồn tại. Ma trận, đề của giáo viên khác cũng trả 404 (giống id không tồn tại) |
-| 409 | Xung đột trạng thái, ví dụ nộp đánh giá cho câu `duplicate` hoặc nộp lại câu experiment. Có mã máy đọc được ở một số luồng: `MATRIX_IN_USE`, `BANK_EXHAUSTED`, `SLOT_*`, `VERSION_CONFLICT`, `QC_CHECKING`. W1-4 (K-5): hai thao tác đồng thời làm vi phạm khóa ngoại hoặc khóa duy nhất trả 409 `FOREIGN_KEY_CONFLICT` / `UNIQUE_CONFLICT` ("hãy tải lại rồi thử lại"), không lộ tên ràng buộc |
+| 409 | Xung đột trạng thái, ví dụ nộp đánh giá cho câu `duplicate` hoặc nộp lại câu experiment. Có mã máy đọc được ở một số luồng: `MATRIX_IN_USE`, `BANK_EXHAUSTED`, `SLOT_*`, `VERSION_CONFLICT`, `QC_CHECKING`, `SPEC_UNAVAILABLE` (bản đặc tả của đề không gắn ma trận, mục 7.6). W1-4 (K-5): hai thao tác đồng thời làm vi phạm khóa ngoại hoặc khóa duy nhất trả 409 `FOREIGN_KEY_CONFLICT` / `UNIQUE_CONFLICT` ("hãy tải lại rồi thử lại"), không lộ tên ràng buộc |
 | 429 | Gemini đang giới hạn tần suất gọi; chờ khoảng một phút rồi thử lại. Hoặc đăng nhập sai quá nhiều lần (`TOO_MANY_ATTEMPTS`, header `Retry-After`, mục 8.2). Hoặc chạm hạn mức ngày của Gemini (`LLM_DAILY_QUOTA_EXHAUSTED`, header `Retry-After`) |
 | 503 | Gemini tạm thời quá tải hoặc bảo trì |
 | 500 | Lỗi khác chưa được phân loại, body theo định dạng mặc định của Spring. Lỗi toàn vẹn dữ liệu khác (CHECK, NOT NULL: lỗi của chương trình) có `{"code": "DATA_INTEGRITY"}` |
@@ -102,7 +102,7 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | POST | `/api/exams/{id}/slots/{slotId}/keep` | Giữ câu (vào ngân hàng) |
 | POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác: `source = generate` (mặc định) sinh lại đúng ô, có thể kèm yêu cầu của giáo viên; `source = bank` lấy câu ngân hàng khớp ô, hết thì 409 `BANK_EXHAUSTED` (mục 7.5) |
 | PUT | `/api/exams/{id}/slots/{slotId}/question` | Sửa câu của chỗ chưa Giữ (mục 7.5a); QC chạy lại, Solver qua hàng đợi |
-| GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; `?equation=omml` (mặc định) hoặc `mathtype` (mục 7.6); cần pandoc trên máy chủ |
+| GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; `?equation=omml` (mặc định) hoặc `mathtype`; `?content=exam` chỉ đề, `?content=spec` bản đặc tả đề (18/11) (mục 7.6); cần pandoc trên máy chủ |
 
 Chạy lại QC cho câu `generated` (quy tắc QC-RERUN, quyết định 6 ngày 22/10) đã có ở tầng service (`QcRerunService`, cả ba
 dạng) cho công cụ thí nghiệm, không có endpoint HTTP.
@@ -1012,15 +1012,40 @@ GET /api/exams/12/export/docx?equation=mathtype  → 200, công thức là đố
 GET /api/exams/12/export/docx?equation=abc       → 400
 GET /api/exams/12/export/docx?examCode=205&durationMinutes=45  → 200, mã đề 205, thời gian 45 phút
 GET /api/exams/12/export/docx?content=exam       → 200, chỉ đề (dừng ở dòng HẾT)
+GET /api/exams/12/export/docx?content=spec       → 200, bản đặc tả đề (A4 ngang, mẫu Phụ lục 2 CV 7991)
 GET /api/exams/12/export/docx?examCode=99        → 400
 ```
+
+- **Bản đặc tả đề (18/11, `content=spec`; thiết kế `docs/design/ban-dac-ta.md`):** bảng theo mẫu Phụ lục 2 Công văn
+  7991/BGDĐT-GDTrH ngày 17/12/2024, một section A4 ngang (16838 × 11906 twips, cùng lề như file đề), chân trang "Bản đặc tả
+  đề kiểm tra" + "Trang x/y". Không có đề, đáp án, lời giải.
+  - Đầu đề như file đề nhưng **không có** dòng "Thứ… ngày…" và bảng "Mã đề | Điểm bài thi | Mã phách"; `examCode` được nhận
+    (vẫn kiểm 100–999) nhưng không in ở đâu. `durationMinutes` và `equation` như file đề (bảng không có công thức: chữ $...$
+    trong yêu cầu cần đạt, nếu có, in nguyên dạng chữ). Tên file (`Content-Disposition`) cùng quy tắc với file đề (mã hệ
+    thống `MT….docx`); giao diện đặt tên "<tên đề> – Bản đặc tả – <dd-mm-yyyy>".
+  - Cột: TT | Chủ đề/Chương | Nội dung/đơn vị kiến thức | Yêu cầu cần đạt | "Số câu hỏi ở các mức độ đánh giá" gồm TNKQ
+    (Nhiều lựa chọn, "Đúng – Sai", Trả lời ngắn) và Tự luận, mỗi dạng Biết / Hiểu / Vận dụng (= `easy` / `medium` / `hard`).
+    3 cột Tự luận để trống. Tiêu đề bảng lặp lại ở mỗi trang.
+  - Mỗi hàng là một (chủ đề, nội dung) của ma trận của đề (kể cả ma trận ẩn của đề sinh theo bài: chủ đề là tên bài),
+    theo lần xuất hiện đầu trong thứ tự ô; ô chủ đề gộp dọc, TT đánh theo chủ đề; nội dung trống để trống. Ô yêu cầu cần đạt
+    liệt kê "- Biết: …", "- Hiểu: …", "- Vận dụng: …" cho các mức hàng có câu (`learning_outcome_*` của các ô; câu trùng hệt
+    nhau ghi một lần; thiếu thì "—").
+  - Ô số câu: "số câu (C…)", ví dụ "4 (C1–C4)", "2 (C6, C7)": câu đánh lại từ 1 mỗi phần như file đề (cột Nhiều lựa chọn là
+    Phần I, "Đúng – Sai" Phần II, Trả lời ngắn Phần III), 3 câu liên tiếp trở lên ghi dải. Câu Đúng – Sai đếm theo ý ở mức
+    của ý (`statement_difficulties` của ô): "2 (C1a, C1b)". Mức lấy từ ô ma trận. Chỗ chưa có câu (đang soạn, hỏng) vẫn được
+    đếm.
+  - Chân bảng: Tổng số câu theo cột; Tổng số điểm và Tỉ lệ % theo dạng (điểm một câu × số chỗ như tiêu đề phần của file đề;
+    tỉ lệ = điểm × 10); dạng không có câu và Tự luận để trống. Dưới bảng: ghi chú cách đọc chỉ định câu, cách đếm ý Đúng –
+    Sai, và nếu tổng dưới 10 thì "Phần tự luận (nếu có) do giáo viên bổ sung."
+  - Đề không gắn ma trận (dữ liệu cũ; đề chế độ giáo viên luôn có ma trận theo V7): 409 `SPEC_UNAVAILABLE`. Đề của người
+    khác: 404 như các tham số khác.
 
 - **Tham số tùy chọn mới (16/11, NV-43/NV-44):** không truyền thì file như trước.
   - `examCode`: mã đề, số nguyên 100–999 (chữ số ASCII; ngoài khoảng hoặc không phải số là 400, thông báo nêu khoảng
     100–999); không truyền hoặc trống là `101`. In ở ô mã đề của đầu đề, tiêu đề "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ <mã>" và
     chân trang hai section ("Mã đề <mã>", "Đáp án mã đề <mã>"). Tên file (`Content-Disposition`) vẫn theo mã hệ thống `MT…`.
-  - `content`: `all` (mặc định: đề, rồi section đáp án và lời giải) hoặc `exam` (không phân biệt hoa thường; giá trị khác
-    400). `exam`: file dừng ở dòng "------ HẾT ------", không có trang đáp án, ghi chú thang điểm và lời giải; một section
+  - `content`: `all` (mặc định: đề, rồi section đáp án và lời giải), `exam` hoặc (18/11) `spec` (bản đặc tả, mục trên)
+    (không phân biệt hoa thường; giá trị khác 400). `exam`: file dừng ở dòng "------ HẾT ------", không có trang đáp án, ghi chú thang điểm và lời giải; một section
     duy nhất (cùng khổ, lề như section đề), chân trang "Mã đề <mã>", số trang từ 1, không đánh số lại.
 - **Khuôn đề kiểm tra THCS (4/11, theo mẫu của một trường):** tham số tùy chọn `durationMinutes` (số nguyên 5–180, chỉ chữ số
   ASCII từ 16/11; ngoài khoảng hoặc không phải số là 400) điền "(Thời gian làm bài N phút không kể thời gian giao đề)"; không truyền thì "……". File khổ A4
@@ -1047,7 +1072,8 @@ GET /api/exams/12/export/docx?examCode=99        → 400
 - **Cảnh báo trước khi xuất (giao diện, 16/11, NV-40/NV-41):** đề còn chỗ chưa soạn được, chỗ đang soạn, câu "cần xem kỹ"
   chưa lưu, hoặc `totalScore` khác 10 thì hộp xuất Word (mục Frontend dưới) hiện khung cảnh báo "Xuất file Word khi đề
   chưa hoàn chỉnh?" liệt kê số lượng và tổng điểm; không chặn. Còn chỗ đang soạn vẫn xuất được (file ghi "[Chưa có câu –
-  đang sinh]" ở chỗ đó). Backend không đổi: API xuất không kiểm các điều kiện này.
+  đang sinh]" ở chỗ đó). Chọn "Bản đặc tả đề" (18/11) thì hai dòng chỗ hỏng / đang soạn ghi "(bản đặc tả vẫn đếm các chỗ
+  này theo ma trận)" thay cho "(file ghi "Chưa có câu")". Backend không đổi: API xuất không kiểm các điều kiện này.
 - **Đầu đề (theo mẫu trường, 4/11):** bảng 2 cột không viền (cột 4194 : 6011 twips). Cột trái, đậm, căn giữa: "UBND PHƯỜNG
   ……………" và "TRƯỜNG THCS ……………". Cột phải, căn giữa: "Thứ..... ngày........ tháng..... năm <năm hiện tại>" (nghiêng), "ĐỀ KIỂM
   TRA <tên kì in hoa>" (đậm; từ 16/11 (NV-42) là tên đề giáo viên nhập cho mọi loại đề, trước đó đề theo ma trận dùng tên ma
@@ -1126,8 +1152,10 @@ GET /api/exams/12/export/docx?examCode=99        → 400
   - Frontend (trang đề, 16/11, `ExportWordDialog`): bấm "Xuất file Word" luôn mở hộp (không còn menu mũi tên): thời gian
     làm bài (chọn sẵn 90; nút 45 / 60 / 90 hoặc nhập 5–180; xóa trống thì không gửi, file in "……"), mã đề (mặc định 101, gửi `examCode` khi
     khác 101), tên file (mặc định "<tên đề> – <dd-mm-yyyy>", đuôi `.docx` tự thêm), công thức "MathType (mặc định)" (gửi
-    `?equation=mathtype`) / "Công thức Word (Equation)", ô "Chỉ đề (không kèm đáp án)" (gửi `content=exam`), khung cảnh báo
-    đề chưa hoàn chỉnh (mục trên); nút "Tải về" / "Quay lại". Trong lúc tạo, nút chính ghi "Đang tạo file Word… (khoảng 10
+    `?equation=mathtype`) / "Công thức Word (Equation)", nhóm chọn "Nội dung file" (18/11, thay ô "Chỉ đề"): "Đề kèm đáp
+    án và lời giải (mặc định)" / "Chỉ đề (không kèm đáp án)" (gửi `content=exam`) / "Bản đặc tả đề" (gửi `content=spec`;
+    ẩn ô Mã đề, không gửi `examCode`; tên file mặc định "<tên đề> – Bản đặc tả – <dd-mm-yyyy>", tên mặc định đổi theo lựa
+    chọn, tên tự gõ thì giữ), khung cảnh báo đề chưa hoàn chỉnh (mục trên); nút "Tải về" / "Quay lại". Trong lúc tạo, nút chính ghi "Đang tạo file Word… (khoảng 10
     giây)"; xong báo "Đã tải file Word về máy." và đóng hộp. Đề còn câu đang soạn: cạnh nút có dòng chữ thường trực (không
     khóa nút). Sau khi tải: `X-Equation-Kept-Omml > 0` hiện "N công thức không
     chuyển được sang MathType, vẫn ở dạng công thức Word"; `X-Equation-Scaled > 0` hiện "N công thức dài đã được thu nhỏ
@@ -1144,7 +1172,8 @@ GET /api/exams/12/export/docx?examCode=99        → 400
   w:val="15"/></w:compat>` (trước `<w:rsids>`) để Word không mở file ở Compatibility Mode (lệnh Convert Equations của
   MathType mới chạy), và đặt font mặc định cùng kiểu Normal là Times New Roman 13 trong `word/styles.xml`. Tiêu đề
   (Heading) vẫn dùng font theo theme của pandoc.
-- Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; khi hệ thống đang bận (tiến trình trích xuất tài liệu hoặc xuất Word khác đang giữ Semaphore) và chờ quá thời gian xếp hàng (`queue-wait`, mặc định 30s) trả 503 kèm mã `EXPORT_BUSY` và header `Retry-After`; pandoc báo lỗi trả 500 kèm `error` chung "Lỗi khi xuất file, thầy cô thử lại sau" (11/11, A-07: log của pandoc chỉ ghi ở log máy chủ).
+- Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; khi hệ thống đang bận (tiến trình trích xuất tài liệu hoặc xuất Word khác đang giữ Semaphore) và chờ quá thời gian xếp hàng (`queue-wait`, mặc định 30s) trả 503 kèm mã `EXPORT_BUSY` và header `Retry-After`; pandoc báo lỗi trả 500 kèm `error` chung "Lỗi khi xuất file, thầy cô thử lại sau" (11/11, A-07: log của pandoc chỉ ghi ở log máy chủ). `content=spec` với đề không
+  gắn ma trận (dữ liệu cũ) trả 409 kèm mã `SPEC_UNAVAILABLE` ("Đề không gắn ma trận nên không xuất được bản đặc tả.").
   trả 500.
 - **Cài pandoc** (backend không tự cài):
   - Windows: tải bộ cài `.msi` ở <https://pandoc.org/installing.html> (hoặc `winget install --id JohnMacFarlane.Pandoc`),

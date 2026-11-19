@@ -6,7 +6,8 @@ package com.datn.mcq.exam.export;
  *
  * @param examCode mã đề in ở chân trang ("Mã đề 205", "Đáp án mã đề 205"); null hoặc trống là {@link ExamHeader#ORIGINAL_CODE}
  * @param content  {@link ExportContent#EXAM} thì file chỉ có section đề (chân trang "Mã đề …", không đánh số lại trang);
- *                 null là {@link ExportContent#ALL}
+ *                 {@link ExportContent#SPEC} (18/11) thì một section A4 ngang, chân trang "Bản đặc tả đề kiểm tra", mã đề
+ *                 không dùng; null là {@link ExportContent#ALL}
  */
 public record ExamDocxOptions(String examCode, ExportContent content) {
 
@@ -20,5 +21,9 @@ public record ExamDocxOptions(String examCode, ExportContent content) {
 
     boolean examOnly() {
         return content == ExportContent.EXAM;
+    }
+
+    boolean spec() {
+        return content == ExportContent.SPEC;
     }
 }

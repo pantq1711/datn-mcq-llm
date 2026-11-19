@@ -109,20 +109,24 @@ public class ExamExportService {
 
     /**
      * @param examCode mã đề in ra (16/11, NV-43; 100–999, nơi gọi kiểm bằng {@link ExamHeader#parseExamCode}); null là 101
-     * @param content  {@link ExportContent#EXAM} thì file dừng ở dòng HẾT (NV-44); null là {@link ExportContent#ALL}
+     * @param content  {@link ExportContent#EXAM} thì file dừng ở dòng HẾT (NV-44); {@link ExportContent#SPEC} (18/11) thì
+     *                 bản đặc tả ({@link ExamSpecBuilder}, mã đề bỏ qua, tên file như file đề); null là
+     *                 {@link ExportContent#ALL}
      */
     public DocxFile docx(Integer examId, Integer actorId, EquationFormat format, Integer durationMinutes, String examCode,
                          ExportContent content) {
         ExamViewDto view = viewService.view(examId, actorId);
-        ExamHeader header = header(view, durationMinutes).withExamCode(examCode);
+        boolean spec = content == ExportContent.SPEC;
+        ExamHeader header = header(view, durationMinutes).withExamCode(spec ? null : examCode);
         ExamDocxOptions options = new ExamDocxOptions(header.examCode(), content);
-        String markdown = ExamMarkdownBuilder.build(view, header, scoring, options.content());
+        String markdown = spec ? ExamSpecBuilder.build(view, specCells(view), header, scoring)
+                : ExamMarkdownBuilder.build(view, header, scoring, options.content());
         PandocRunner.Docx docx = exportMetrics == null
                 ? pandocRunner.markdownToDocx(markdown, format, options)
                 : exportMetrics.measure(format == null ? "omml" : format.name().toLowerCase(java.util.Locale.ROOT),
                         () -> pandocRunner.markdownToDocx(markdown, format, options));
         List<String> failedAt = List.of();
-        if (docx.equationsFailed() != null && docx.equationsFailed() > 0) {
+        if (!spec && docx.equationsFailed() != null && docx.equationsFailed() > 0) {
             failedAt = logFailed(view, docx.equationsFailed(), docx.failedLatex());
         }
         return new DocxFile(fileName(view), docx.content(), docx.equationsKeptOmml(),
@@ -214,6 +218,19 @@ public class ExamExportService {
         ExamMatrix matrix = matrixService.getMatrix(exam.getMatrixId());
         String subject = catalogService.getSubjectById(matrix.getSubjectId()).getName();
         return ExamHeader.of(view.title(), subject, matrix.getGradeLevel(), durationMinutes);
+    }
+
+    /**
+     * Các ô ma trận của đề (kể cả ma trận ẩn của đề sinh theo bài) cho bản đặc tả. Đề không gắn ma trận (dữ liệu cũ, không có
+     * ở đề chế độ giáo viên vì V7 bắt buộc matrix_id): 409 SPEC_UNAVAILABLE.
+     */
+    private List<ExamSpecBuilder.SpecCell> specCells(ExamViewDto view) {
+        Exam exam = examRepository.findById(view.examId()).orElse(null);
+        if (exam == null || exam.getMatrixId() == null) {
+            throw new DocumentExportException(409, "SPEC_UNAVAILABLE",
+                    "Đề không gắn ma trận nên không xuất được bản đặc tả.");
+        }
+        return matrixService.cells(exam.getMatrixId()).stream().map(ExamSpecBuilder.SpecCell::of).toList();
     }
 
     static String fileName(ExamViewDto view) {

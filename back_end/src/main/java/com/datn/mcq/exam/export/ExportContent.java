@@ -9,7 +9,13 @@ public enum ExportContent {
     ALL,
 
     /** Chỉ đề: file dừng ở dòng "------ HẾT ------", một section, không có đáp án và lời giải. */
-    EXAM;
+    EXAM,
+
+    /**
+     * Bản đặc tả đề kiểm tra (18/11) theo mẫu Phụ lục 2 Công văn 7991/BGDĐT-GDTrH: một section A4 ngang, không có đề, đáp án
+     * hay mã đề ({@link ExamSpecBuilder}).
+     */
+    SPEC;
 
     /** Không phân biệt hoa thường; null hoặc rỗng là {@link #ALL}; giá trị khác ném IllegalArgumentException (400). */
     public static ExportContent parse(String value) {
@@ -21,6 +27,6 @@ public enum ExportContent {
                 return c;
             }
         }
-        throw new IllegalArgumentException("Tham số content chỉ nhận all hoặc exam");
+        throw new IllegalArgumentException("Tham số content chỉ nhận all, exam hoặc spec");
     }
 }

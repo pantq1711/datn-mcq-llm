@@ -25,6 +25,11 @@ public final class ExamPage {
     /** Bề rộng chữ giữa hai lề (twips): 10205 = 510,25 pt. */
     public static final int TEXT_WIDTH_TWIPS = PAGE_WIDTH_TWIPS - MARGIN_LEFT_TWIPS - MARGIN_RIGHT_TWIPS;
 
+    /** A4 ngang (bản đặc tả, 18/11): cùng lề như trang dọc; bề rộng chữ 15137 twips. */
+    public static final int LANDSCAPE_WIDTH_TWIPS = PAGE_HEIGHT_TWIPS;
+    public static final int LANDSCAPE_HEIGHT_TWIPS = PAGE_WIDTH_TWIPS;
+    public static final int LANDSCAPE_TEXT_WIDTH_TWIPS = LANDSCAPE_WIDTH_TWIPS - MARGIN_LEFT_TWIPS - MARGIN_RIGHT_TWIPS;
+
     /** Cỡ chữ (pt) và phông của toàn bộ file, kể cả tiêu đề. */
     public static final int FONT_SIZE_PT = 12;
     public static final String FONT = "Times New Roman";
@@ -48,9 +53,17 @@ public final class ExamPage {
      * sectPr cuối thân tài liệu). Section đáp án đánh số trang lại từ 1.
      */
     static String sectionProperties(String footerRelId, boolean restartPageNumbers) {
+        return sectionProperties(footerRelId, restartPageNumbers, false);
+    }
+
+    /** {@code landscape} (bản đặc tả, 18/11): A4 ngang, cùng lề. */
+    static String sectionProperties(String footerRelId, boolean restartPageNumbers, boolean landscape) {
+        String size = landscape
+                ? "<w:pgSz w:w=\"" + LANDSCAPE_WIDTH_TWIPS + "\" w:h=\"" + LANDSCAPE_HEIGHT_TWIPS + "\" w:orient=\"landscape\"/>"
+                : "<w:pgSz w:w=\"" + PAGE_WIDTH_TWIPS + "\" w:h=\"" + PAGE_HEIGHT_TWIPS + "\"/>";
         return "<w:sectPr><w:footerReference w:type=\"default\" r:id=\"" + footerRelId + "\"/>"
                 + "<w:footnotePr><w:numRestart w:val=\"eachSect\"/></w:footnotePr>"
-                + "<w:pgSz w:w=\"" + PAGE_WIDTH_TWIPS + "\" w:h=\"" + PAGE_HEIGHT_TWIPS + "\"/>"
+                + size
                 + "<w:pgMar w:top=\"" + MARGIN_TOP_TWIPS + "\" w:right=\"" + MARGIN_RIGHT_TWIPS
                 + "\" w:bottom=\"" + MARGIN_BOTTOM_TWIPS + "\" w:left=\"" + MARGIN_LEFT_TWIPS
                 + "\" w:header=\"" + HEADER_DISTANCE_TWIPS + "\" w:footer=\"" + FOOTER_DISTANCE_TWIPS

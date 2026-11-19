@@ -59,12 +59,15 @@ public final class ExamReferenceDoc {
         // ExamMarkdownBuilder đóng bằng sectPr trong đoạn HẾT, chân trang của nó do ExamSections thêm sau pandoc.
         // Id riêng: "rIdMT<n>" là Id của bộ chuyển MathType (đối tượng OLE, ảnh) và pandoc giữ nguyên Id của chân trang.
         // Chỉ đề (16/11): đoạn HẾT không có sectPr, nên sectPr cuối (vẫn part và Id này) là section đề: chân trang
-        // "Mã đề …", không đánh số lại trang.
-        String left = o.examOnly() ? examFooterLeft(o.examCode()) : answerFooterLeft(o.examCode());
-        pkg.put("word/footerAnswer.xml", footerXml(left).getBytes(StandardCharsets.UTF_8));
+        // "Mã đề …", không đánh số lại trang. Bản đặc tả (18/11): sectPr cuối là section duy nhất, A4 ngang, chân trang
+        // "Bản đặc tả đề kiểm tra" với tab phải ở lề phải của trang ngang.
+        String left = o.spec() ? SPEC_FOOTER_LEFT
+                : o.examOnly() ? examFooterLeft(o.examCode()) : answerFooterLeft(o.examCode());
+        int rightTab = o.spec() ? ExamPage.LANDSCAPE_TEXT_WIDTH_TWIPS : ExamPage.TEXT_WIDTH_TWIPS;
+        pkg.put("word/footerAnswer.xml", footerXml(left, rightTab).getBytes(StandardCharsets.UTF_8));
         pkg.ensureOverrideContentType("/word/footerAnswer.xml", FOOTER_TYPE);
         pkg.addRelationship(ExamPage.ANSWER_FOOTER_REL_ID, FOOTER_REL, "footerAnswer.xml");
-        patchSection(pkg.document(), !o.examOnly());
+        patchSection(pkg.document(), !o.examOnly() && !o.spec(), o.spec());
         return pkg.write();
     }
 
@@ -74,6 +77,7 @@ public final class ExamReferenceDoc {
     static final String ANSWER_FOOTER_LEFT = answerFooterLeft(ExamHeader.ORIGINAL_CODE);
     static final String FOOTER_REL_TYPE = FOOTER_REL;
     static final String FOOTER_CONTENT_TYPE = FOOTER_TYPE;
+    static final String SPEC_FOOTER_LEFT = "Bản đặc tả đề kiểm tra";
 
     /** "Mã đề 205": chữ trái chân trang section đề. */
     static String examFooterLeft(String examCode) {
@@ -85,9 +89,10 @@ public final class ExamReferenceDoc {
         return "Đáp án mã đề " + examCode;
     }
 
-    private static void patchSection(Document doc, boolean restartPageNumbers) {
+    private static void patchSection(Document doc, boolean restartPageNumbers, boolean landscape) {
         Element body = (Element) doc.getElementsByTagNameNS(W, "body").item(0);
-        Element sect = fragment(doc, ExamPage.sectionProperties(ExamPage.ANSWER_FOOTER_REL_ID, restartPageNumbers));
+        Element sect = fragment(doc, ExamPage.sectionProperties(ExamPage.ANSWER_FOOTER_REL_ID, restartPageNumbers,
+                landscape));
         Node old = null;
         for (Node c = body.getFirstChild(); c != null; c = c.getNextSibling()) {
             if (c instanceof Element e && W.equals(e.getNamespaceURI()) && "sectPr".equals(e.getLocalName())) {
@@ -106,10 +111,15 @@ public final class ExamReferenceDoc {
      * (x = PAGE, y = SECTIONPAGES: số trang của riêng section), giãn dòng đơn.
      */
     static String footerXml(String left) {
+        return footerXml(left, ExamPage.TEXT_WIDTH_TWIPS);
+    }
+
+    /** @param rightTab vị trí tab phải (twips): bề rộng chữ của trang (dọc, hoặc ngang với bản đặc tả) */
+    static String footerXml(String left, int rightTab) {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
                 + "<w:ftr xmlns:w=\"" + W + "\" xmlns:r=\"" + R + "\"><w:p><w:pPr><w:pStyle w:val=\"ExamFooter\"/>"
                 + "<w:pBdr><w:top w:val=\"single\" w:sz=\"6\" w:space=\"1\" w:color=\"auto\"/></w:pBdr>"
-                + "<w:tabs><w:tab w:val=\"right\" w:pos=\"" + ExamPage.TEXT_WIDTH_TWIPS + "\"/></w:tabs>"
+                + "<w:tabs><w:tab w:val=\"right\" w:pos=\"" + rightTab + "\"/></w:tabs>"
                 + "<w:spacing w:line=\"240\" w:lineRule=\"auto\"/></w:pPr>"
                 + "<w:r><w:t>" + left + "</w:t></w:r>"
                 + "<w:r><w:tab/><w:t xml:space=\"preserve\">Trang </w:t></w:r>" + field("PAGE")
@@ -256,6 +266,11 @@ public final class ExamReferenceDoc {
                 style("ExamSpacer", "<w:spacing w:before=\"0\" w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/>",
                         "<w:sz w:val=\"8\"/><w:szCs w:val=\"8\"/>"),
                 style("ExamFooter", "<w:spacing w:before=\"0\" w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/>", ""),
+                // bản đặc tả (18/11): chữ 10 pt cho vừa 16 cột của trang ngang; ô số câu căn giữa, ô chữ căn trái
+                style("ExamSpecCell", "<w:spacing w:before=\"20\" w:after=\"20\" w:line=\"240\" w:lineRule=\"auto\"/>"
+                        + "<w:jc w:val=\"center\"/>", "<w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/>"),
+                style("ExamSpecText", "<w:spacing w:before=\"20\" w:after=\"20\" w:line=\"240\" w:lineRule=\"auto\"/>",
+                        "<w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/>"),
         };
     }
 
