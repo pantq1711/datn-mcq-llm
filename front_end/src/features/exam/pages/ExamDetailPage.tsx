@@ -331,6 +331,8 @@ export default function ExamDetailPage() {
         (question: ExamQuestionItem, index: number) => questionNumbers.get(question.slotId ?? question.id) ?? index + 1,
         [questionNumbers]
     );
+    // Vị trí câu ghi thống nhất "Phần II – Câu 3" ở hộp xác nhận, thông báo, tiêu đề hộp đổi câu
+    const describePosition = (q: ExamQuestionItem) => `Phần ${q.part} – Câu ${getNumber(q, 0)}`;
 
     // Câu vừa nhảy tới: viền nổi 1,5 giây (G5); đặt lại về undefined trước để bấm lại cùng câu vẫn chạy hiệu ứng
     const [flashSlotId, setFlashSlotId] = useState<number | undefined>(undefined);
@@ -471,12 +473,13 @@ export default function ExamDetailPage() {
                 ...(source === "generate" && request.requestCodes ? { requestCodes: request.requestCodes } : {}),
                 ...(request.reason ? { reason: request.reason } : {}),
             });
+            const position = describePosition(request.question);
             message.success(
                 source === "bank"
-                    ? "Đã đổi câu hỏi từ ngân hàng thành công!"
+                    ? `Đã đổi ${position} bằng câu từ ngân hàng.`
                     : request.question.state === "failed"
-                        ? "Đã yêu cầu soạn lại câu."
-                        : "Đã yêu cầu soạn câu thay thế!"
+                        ? `Đã yêu cầu soạn lại ${position}.`
+                        : `Đã yêu cầu soạn câu thay thế cho ${position}.`
             );
             setChangeQuestion(null);
             await loadDetail();
@@ -505,8 +508,8 @@ export default function ExamDetailPage() {
             // NV-28: backend báo câu vừa lưu vào ngân hàng nào (cờ, tài liệu, hoặc cấu hình lưu riêng)
             const isPrivate = kept?.bankVisibility ? kept.bankVisibility === "private" : flagged;
             message.success(isPrivate
-                ? "Đã lưu vào ngân hàng riêng của thầy/cô (chỉ thầy/cô thấy và dùng lại)."
-                : "Đã lưu vào ngân hàng chung (các giáo viên khác cũng dùng lại được).");
+                ? `Đã lưu ${describePosition(question)} vào ngân hàng riêng của thầy/cô (chỉ thầy/cô thấy và dùng lại).`
+                : `Đã lưu ${describePosition(question)} vào ngân hàng chung (các giáo viên khác cũng dùng lại được).`);
             await loadDetail();
         } catch (e: any) {
             const code = e?.response?.data?.code;
@@ -538,7 +541,7 @@ export default function ExamDetailPage() {
         const deferred = pendingCheckOf(question) === "deferred";
         // G8: chữ theo bảng thuật ngữ ("Lưu", "Cần xem kỹ"); nút được chọn sẵn là nút an toàn
         Modal.confirm({
-            title: "Lưu câu cần xem kỹ?",
+            title: `Lưu ${describePosition(question)} (cần xem kỹ)?`,
             content: (
                 <div>
                     {reasons.length > 0 && (
@@ -572,8 +575,6 @@ export default function ExamDetailPage() {
     const bulkCandidates = allQuestions.filter(
         (q) => q.slotId !== undefined && q.slotId !== editingSlotId && isBulkKeepCandidate(q)
     );
-    const describePosition = (q: ExamQuestionItem) => `Phần ${q.part} – Câu ${getNumber(q, 0)}`;
-
     const runBulkKeep = async (targets: ExamQuestionItem[]) => {
         if (!examId) return;
         const progressKey = "bulk-keep";
@@ -969,6 +970,7 @@ export default function ExamDetailPage() {
                                         // Đổi chỗ thì mở form mới; trang tự tải lại đề không xóa chữ đang gõ
                                         key={question.slotId}
                                         question={question}
+                                        positionLabel={describePosition(question)}
                                         examId={Number(examId)}
                                         onSaved={handleSaveEditedQuestion}
                                         onCancel={closeEditor}
@@ -985,6 +987,7 @@ export default function ExamDetailPage() {
                     <ChangeQuestionModal
                         open={changeQuestion !== null}
                         question={changeQuestion}
+                        positionLabel={changeQuestion ? describePosition(changeQuestion) : undefined}
                         loading={false}
                         onCancel={() => setChangeQuestion(null)}
                         onGenerate={handleGenerateReplacement}

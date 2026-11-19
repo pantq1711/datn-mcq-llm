@@ -84,6 +84,27 @@
     margin-left: auto;
 }
 
+/* Màn điện thoại: khung bớt đệm; nút "Lưu N câu không có cảnh báo", "Soạn lại N câu (hệ thống bận)" được xuống dòng
+   trong nút thay vì đẩy trang rộng hơn màn hình */
+@media (max-width: 576px) {
+    .exam-summary-bar {
+        padding: 12px;
+    }
+
+    .exam-summary-toggles {
+        min-width: 0;
+        max-width: 100%;
+        margin-left: 0;
+    }
+
+    .exam-summary-toggles .ant-btn {
+        max-width: 100%;
+        height: auto;
+        min-height: 36px;
+        white-space: normal;
+    }
+}
+
 .exam-summary-pending {
     font-size: 14px;
 }

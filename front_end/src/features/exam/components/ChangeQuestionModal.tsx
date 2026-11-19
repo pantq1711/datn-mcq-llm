@@ -32,6 +32,8 @@ export type ChangeQuestionResult = void | "bank_exhausted";
 interface ChangeQuestionModalProps {
     open: boolean;
     question: ExamQuestionItem | null;
+    /** Vị trí câu trong đề ("Phần I – Câu 3"), ghi ở tiêu đề hộp. */
+    positionLabel?: string;
     onCancel: () => void;
     onGenerate: (request: ChangeQuestionRequest) => ChangeQuestionResult | Promise<ChangeQuestionResult>;
     loading?: boolean;
@@ -45,6 +47,7 @@ interface FormValues {
 export default function ChangeQuestionModal({
     open,
     question,
+    positionLabel,
     onCancel,
     onGenerate,
     loading = false,
@@ -167,7 +170,10 @@ export default function ChangeQuestionModal({
             title={
                 <Space size={10}>
                     <SwapOutlined className="change-question-modal-title-icon" />
-                    <span>{isFailed ? "Soạn lại câu" : "Đổi câu khác"}</span>
+                    <span>
+                        {isFailed ? "Soạn lại câu" : "Đổi câu khác"}
+                        {positionLabel && `: ${positionLabel}`}
+                    </span>
                 </Space>
             }
             width={760}
