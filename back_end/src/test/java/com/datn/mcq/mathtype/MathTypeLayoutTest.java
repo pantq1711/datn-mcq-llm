@@ -317,7 +317,9 @@ class MathTypeLayoutTest {
         assertEquals("Cho .", textOf(ps.get(0)));
         double natural = Double.parseDouble(((Element) doc.getElementsByTagNameNS(W, "object").item(0))
                 .getAttributeNS(W, "dxaOrig")) / 20.0;
-        assertEquals(natural, shapeWidths(doc).get(0), 0.01, "không thu nhỏ");
+        // dxaOrig làm tròn đến 1/20 pt: sai số tối đa nửa đơn vị (từ 22/11 ảnh cắt sát nét chữ nên bề rộng không còn
+        // tình cờ là bội của 1/20 pt)
+        assertEquals(natural, shapeWidths(doc).get(0), 0.025 + 1e-9, "không thu nhỏ");
     }
 
     // ---------------------------------------------------------------- giữa câu

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ExamQuestionItem } from "../features/exam/types/exam.types";
+import { describeInfoReason } from "../features/exam/types/exam.types";
 import {
     describeBuildProgress,
     describeFailureReason,
@@ -14,6 +15,7 @@ import {
     needsReviewNow,
     parseSimilarInExam,
     pendingCheckOf,
+    summarizeQc,
 } from "./exam.utils";
 
 describe("lý do đang chờ (G14)", () => {
@@ -147,6 +149,11 @@ describe("isBulkKeepCandidate (Lưu hàng loạt, CT-7)", () => {
         expect(isBulkKeepCandidate({ ...clean, needsReview: true, reviewReasons: ["similar_in_exam: I.3"] })).toBe(false);
     });
 
+    it("22/11: câu chỉ cùng dạng với câu khác trong đề (cờ thông tin) vẫn được lưu", () => {
+        const sameType = { ...clean, infoReasons: ["similar_in_exam: I.3"] };
+        expect(isBulkKeepCandidate(sameType)).toBe(true);
+    });
+
     it("câu đang tự kiểm tra lại bản sửa thì không lưu", () => {
         expect(isBulkKeepCandidate({ ...clean, qcState: "checking" })).toBe(false);
     });
@@ -155,5 +162,27 @@ describe("isBulkKeepCandidate (Lưu hàng loạt, CT-7)", () => {
         for (const state of ["kept", "edited", "pending", "generating", "failed"] as const) {
             expect(isBulkKeepCandidate({ ...clean, state })).toBe(false);
         }
+    });
+});
+
+describe("câu cùng dạng trong đề là cờ thông tin (22/11)", () => {
+    const generated = (infoReasons: string[], reviewReasons: string[] = []) => ({
+        source: "generated", state: "ready", qcState: "passed", needsReview: false, reviewReasons, infoReasons,
+    }) as unknown as ExamQuestionItem;
+
+    it("thẻ thông tin ghi vị trí theo Phần, không bảo phải đổi", () => {
+        expect(describeInfoReason("similar_in_exam: I.7")).toBe("Cùng dạng với Phần I – Câu 7 trong đề");
+        expect(describeInfoReason("similar_in_exam: 14")).toBe("Cùng dạng với một câu khác trong đề");
+    });
+
+    it("dòng tóm tắt: không tô lỗi, chỉ ghi chú", () => {
+        const line = summarizeQc(generated(["similar_in_exam: I.7"]))?.find((l) => l.label === "Trùng câu khác");
+        expect(line).toEqual({ label: "Trùng câu khác", value: "không (có câu cùng dạng trong đề)", ok: true });
+    });
+
+    it("trùng thật (duplicate) vẫn là lỗi", () => {
+        const line = summarizeQc(generated(["similar_in_exam: I.7"], ["duplicate: 12"]))
+            ?.find((l) => l.label === "Trùng câu khác");
+        expect(line).toEqual({ label: "Trùng câu khác", value: "có câu gần giống", ok: false });
     });
 });

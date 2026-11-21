@@ -71,6 +71,13 @@ class ExamSimilarInExamTest extends ExamFlowTestBase {
         return out;
     }
 
+    /** Cờ thông tin; từ 22/11 similar_in_exam nằm ở đây, không còn là lý do cần xem kỹ. */
+    private static List<String> info(JsonNode item) {
+        List<String> out = new ArrayList<>();
+        item.get("infoReasons").forEach(r -> out.add(r.asText()));
+        return out;
+    }
+
     // ---------- Lớp 1: prompt sinh câu ----------
 
     @Test
@@ -160,13 +167,15 @@ class ExamSimilarInExamTest extends ExamFlowTestBase {
 
         JsonNode view = view();
         List<JsonNode> items = items(view);
-        // 2/11: lý do ghi Phần và số trong Phần (trang đề đánh số theo Phần); mỗi cặp chỉ câu sau bị gắn.
-        assertEquals(List.of(), reasons(items.get(0)), "câu đứng trước không bị gắn");
+        // 2/11: cờ ghi Phần và số trong Phần (trang đề đánh số theo Phần); mỗi cặp chỉ câu sau bị gắn.
+        // 22/11: là cờ thông tin: không bật needsReview, không đổi qcState, không tính vào needsReviewCount.
+        assertEquals(List.of(), info(items.get(0)), "câu đứng trước không bị gắn");
         assertFalse(items.get(0).get("needsReview").asBoolean());
-        assertEquals(List.of("similar_in_exam: I.1"), reasons(items.get(1)));
-        assertTrue(items.get(1).get("needsReview").asBoolean());
-        assertEquals("needs_review", items.get(1).get("qcState").asText());
-        assertEquals(1, view.get("needsReviewCount").asInt());
+        assertEquals(List.of("similar_in_exam: I.1"), info(items.get(1)));
+        assertEquals(List.of(), reasons(items.get(1)), "không còn là lý do cần xem kỹ");
+        assertFalse(items.get(1).get("needsReview").asBoolean());
+        assertEquals("passed", items.get(1).get("qcState").asText());
+        assertEquals(0, view.get("needsReviewCount").asInt());
 
         view();
         assertEquals(List.of("qc_passed", "qc_passed"), jdbc.queryForList(
@@ -187,7 +196,7 @@ class ExamSimilarInExamTest extends ExamFlowTestBase {
         assertFalse(items.get(0).get("needsReview").asBoolean(), "câu ngân hàng không bị gắn cờ");
         assertEquals(List.of(), reasons(items.get(0)));
         assertEquals("generated", items.get(1).get("source").asText());
-        assertEquals(List.of("similar_in_exam: I.1"), reasons(items.get(1)));
+        assertEquals(List.of("similar_in_exam: I.1"), info(items.get(1)));
     }
 
     /**
@@ -208,10 +217,10 @@ class ExamSimilarInExamTest extends ExamFlowTestBase {
         assertEquals("bank", items.get(0).get("source").asText());
         assertEquals("bank", items.get(1).get("source").asText());
         assertEquals("ready", items.get(1).get("state").asText());
-        assertEquals(List.of(), reasons(items.get(0)), "câu đứng trước không bị gắn");
-        assertEquals(List.of("similar_in_exam: I.1"), reasons(items.get(1)));
-        assertTrue(items.get(1).get("needsReview").asBoolean());
-        assertEquals(1, view().get("needsReviewCount").asInt());
+        assertEquals(List.of(), info(items.get(0)), "câu đứng trước không bị gắn");
+        assertEquals(List.of("similar_in_exam: I.1"), info(items.get(1)));
+        assertFalse(items.get(1).get("needsReview").asBoolean(), "22/11: cờ thông tin, không phải cần xem kỹ");
+        assertEquals(0, view().get("needsReviewCount").asInt());
     }
 
     @Test
@@ -222,10 +231,10 @@ class ExamSimilarInExamTest extends ExamFlowTestBase {
         settle(examId);
 
         List<JsonNode> items = items(view());
-        assertEquals(List.of(), reasons(items.get(0)));
-        assertEquals(List.of("similar_in_exam: I.1"), reasons(items.get(1)));
-        assertEquals(List.of("similar_in_exam: I.1", "similar_in_exam: I.2"), reasons(items.get(2)));
-        assertEquals(2, view().get("needsReviewCount").asInt());
+        assertEquals(List.of(), info(items.get(0)));
+        assertEquals(List.of("similar_in_exam: I.1"), info(items.get(1)));
+        assertEquals(List.of("similar_in_exam: I.1", "similar_in_exam: I.2"), info(items.get(2)));
+        assertEquals(0, view().get("needsReviewCount").asInt(), "22/11: cờ thông tin không tính vào số cần xem kỹ");
     }
 
     /**
@@ -244,8 +253,9 @@ class ExamSimilarInExamTest extends ExamFlowTestBase {
 
         List<JsonNode> items = items(view());
         JsonNode similar = items.get(1);
-        assertEquals(List.of("similar_in_exam: I.1"), reasons(similar), "chỉ có lý do cùng khuôn");
-        assertTrue(similar.get("needsReview").asBoolean());
+        assertEquals(List.of("similar_in_exam: I.1"), info(similar), "chỉ có cờ cùng khuôn");
+        assertEquals(List.of(), reasons(similar));
+        assertFalse(similar.get("needsReview").asBoolean(), "22/11: cờ thông tin");
         JsonNode sa = items.get(2);
         assertEquals("sa", sa.get("questionType").asText());
         assertTrue(sa.get("needsReview").asBoolean(), "câu sa lệch Solver có cờ");

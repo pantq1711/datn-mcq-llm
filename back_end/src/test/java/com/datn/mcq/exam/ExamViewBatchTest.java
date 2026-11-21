@@ -40,7 +40,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *       câu sinh, câu ngân hàng, câu đã sửa, câu đã Giữ; "bám tài liệu"; cờ similar_in_exam; chỗ hỏng; chỗ đang sinh) bằng
  *       đúng file {@code exam-view-batch/golden.json}, chụp từ code TRƯỚC khi gộp truy vấn (id, createdAt, examCode được
  *       chuẩn hóa). Riêng {@code needsReviewSlots} của danh sách không so với ảnh chụp: số cũ thiếu cờ similar_in_exam, được
- *       sửa cho khớp trang chi tiết và có test riêng.</li>
+ *       sửa cho khớp trang chi tiết và có test riêng. 22/11: ảnh chụp sửa tay đúng một chỗ: similar_in_exam chuyển từ
+ *       {@code reviewReasons} sang {@code infoReasons} (needsReview/qcState/needsReviewCount theo đó).</li>
  *   <li>Đếm truy vấn bằng Hibernate Statistics: số truy vấn không tăng theo số câu (xem đề) hay số đề (danh sách).</li>
  * </ul>
  * LLM sinh câu, Solver và judge "bám tài liệu" đều giả (không gọi mạng).
@@ -325,7 +326,7 @@ class ExamViewBatchTest extends ExamFlowTestBase {
         assertTrue(items.stream().anyMatch(i -> "kept".equals(i.get("state").asText())));
         assertTrue(items.stream().anyMatch(i -> "failed".equals(i.get("state").asText())));
         assertTrue(items.stream().anyMatch(i -> "generating".equals(i.get("state").asText())));
-        assertTrue(items.stream().anyMatch(i -> i.get("reviewReasons").toString().contains("similar_in_exam")));
+        assertTrue(items.stream().anyMatch(i -> i.get("infoReasons").toString().contains("similar_in_exam")));
         assertTrue(viewLesson.toString().contains("grounding_not_supported"));
         assertTrue(viewLesson.toString().contains("grounding_pending"));
         assertTrue(viewLesson.toString().contains("grounding_failed"));
@@ -364,7 +365,8 @@ class ExamViewBatchTest extends ExamFlowTestBase {
 
     @Test
     void needsReviewSlotsOGDanhSachBangSoCauCanXemKyOTrangChiTiet() throws Exception {
-        // hai câu mcq sinh ra cùng khuôn: trang chi tiết gắn similar_in_exam cho câu sau, danh sách cũng phải đếm
+        // hai câu mcq sinh ra cùng khuôn: trang chi tiết gắn similar_in_exam cho câu sau; từ 22/11 đó là cờ thông tin nên
+        // cả hai nơi đều không đếm
         int matrix = createMatrix(mcqCell("Đa thức", "Đơn thức", 1), mcqCell("Phân thức", "Rút gọn", 1));
         int similar = build(matrix).get("examId").asInt();
         settle(similar);
@@ -376,8 +378,8 @@ class ExamViewBatchTest extends ExamFlowTestBase {
             assertEquals(view(examId).get("needsReviewCount").asInt(), itemOf(list, examId).get("needsReviewSlots").asInt(),
                     "đề " + examId);
         }
-        assertEquals(1, itemOf(list, similar).get("needsReviewSlots").asInt());
-        assertTrue(itemOf(list, rich).get("needsReviewSlots").asInt() > 0);
+        assertEquals(0, itemOf(list, similar).get("needsReviewSlots").asInt());
+        assertTrue(itemOf(list, lesson).get("needsReviewSlots").asInt() > 0, "cờ cần xem kỹ thật (grounding) vẫn được đếm");
     }
 
     private JsonNode golden() throws IOException {

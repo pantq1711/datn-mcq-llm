@@ -481,8 +481,9 @@ GET /api/exams?page=0&size=10[&kind=lesson|matrix]
 - Chỉ đề do người gọi tạo, CHƯA XÓA (V31), mới nhất trước. `page` từ 0 (mặc định 0), `size` từ 1 đến 50 (mặc định 10);
   sai thì 400.
 - `readySlots`: chỗ đã có câu, chưa Giữ (`ready`); `keptSlots`: đã Giữ (`kept`, `edited`); `needsReviewSlots`: số chỗ có
-  `needsReview = true` trong `GET /api/exams/{id}` của cùng đề (từ 4/11 dùng CHUNG một hàm dựng mục với trang chi tiết, nên gồm
-  cả cờ `similar_in_exam` và luôn bằng `needsReviewCount` của trang chi tiết); `generatingSlots`: `pending`, `generating`;
+  `needsReview = true` trong `GET /api/exams/{id}` của cùng đề (từ 4/11 dùng CHUNG một hàm dựng mục với trang chi tiết, nên
+  luôn bằng `needsReviewCount` của trang chi tiết; 4/11–21/11 gồm cả cờ `similar_in_exam`, từ 22/11 cờ đó là cờ thông tin
+  nên không đếm); `generatingSlots`: `pending`, `generating`;
   `failedSlots`: `failed`.
 - Danh sách chỉ đọc, KHÔNG đối soát job (khác 7.3/7.4): số liệu theo lần đối soát gần nhất. Muốn số mới nhất của một đề
   thì gọi `GET /api/exams/{id}/progress`.
@@ -835,7 +836,13 @@ khác để sinh lại).
   cũng không phải lý do (vẫn lưu trong `warnings` và hiện trong vết QC), ví dụ ở trên chỉ còn các cảnh báo khác. `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
   `solver_pending` (Solver đang kiểm lại, thay `solver_not_run`), `solver_failed` (kiểm lại thất bại) và
   `duplicate: <id>` (bản sửa trùng câu khác).
-- `similar_in_exam: <Phần>.<số>` (thẩm định 31/10; **đổi dạng 2/11**): câu hệ thống sinh cùng khuôn (chỉ khác số hoặc tên
+- **Từ 22/11 `similar_in_exam` KHÔNG còn ở `reviewReasons` mà ở `infoReasons` (cờ thông tin, xem dưới):** không bật
+  `needsReview`, không đổi `qcState`, không tính vào `needsReviewCount`/`needsReviewSlots`, không chặn "Lưu hàng loạt".
+  Lý do: góp ý giáo viên 21/11, đề hình học mức Biết theo yêu cầu đơn giản dễ có câu cùng dạng, bị báo "cần xem kỹ … nên
+  đổi" là không hợp lý; giáo viên tự chọn giữ cả hai hay Đổi câu khác. Chuỗi hiển thị: "Cùng dạng với Phần {Phần} – Câu
+  {số} trong đề" (thẻ thông tin, vị trí bấm được). Mô tả dưới đây (dạng, phạm vi so, ngưỡng) vẫn đúng, trừ các câu về
+  `needsReview`/`qcState`/số đếm.
+- `similar_in_exam: <Phần>.<số>` (thẩm định 31/10; **đổi dạng 2/11**; **là cờ thông tin từ 22/11**): câu hệ thống sinh cùng khuôn (chỉ khác số hoặc tên
   điểm/hình) với câu đứng TRƯỚC nó trong chính đề này, hoặc câu trắc nghiệm làm lộ đáp án một ý của câu đúng/sai. `<Phần>`
   là `I`, `II` hoặc `III` và `<số>` là số "Câu k" trong Phần đó, đúng cách đánh số của trang đề và file Word (ví dụ
   `similar_in_exam: II.3` là Phần II, Câu 3; trước 2/11 là số thứ tự toàn đề như `similar_in_exam: 14`, dễ nhầm với trang đề).
@@ -858,7 +865,9 @@ khác để sinh lại).
     án; `met` không có cờ. D-05 (15/11): `request_unchecked` ("Chưa kiểm được yêu cầu") khi lượt kiểm yêu cầu (Solver lượt 2)
     lỗi hoặc trả kết quả hỏng; không thử lại. Không bật `needsReview`, không tính vào `needsReviewCount`/`needsReviewSlots`, không đổi `qcState`;
     Giữ câu chỉ có `infoReasons` thì câu vào ngân hàng **dùng chung**. Mỗi giá trị có dạng `<mã>` hoặc `<mã>: <chi tiết>`
-    (sau này thêm "Có hình", lỗi phương án nhiễu); frontend hiện giá trị lạ nguyên văn. Câu ngân hàng, câu đã Giữ: `[]`.
+    (sau này thêm "Có hình", lỗi phương án nhiễu); frontend hiện giá trị lạ nguyên văn. Câu ngân hàng, câu đã Giữ: `[]`,
+    trừ `similar_in_exam: <Phần>.<số>` (từ 22/11, tính lúc xem đề, nối sau các cờ trên; câu ngân hàng chưa Giữ trong đề
+    cũng có thể có, xem mục lý do cần xem kỹ ở trên).
   - `requests` (vắng khi câu không có yêu cầu): `{"codes": [...], "text": "..." | null, "scope": "replace" | "cell" | "exam"}`
     là yêu cầu mà câu đang ở chỗ được sinh theo (`scope` là mức lấy yêu cầu; `replace` là lượt Đổi câu tự đặt).
   - `inheritedRequests` (vắng khi ô và đề không có yêu cầu áp cho chỗ): `{"codes", "text", "scope": "cell" | "exam"}` là yêu

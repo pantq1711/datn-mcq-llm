@@ -257,8 +257,8 @@ public class ExamViewService {
         List<Integer> ids = exams.getContent().stream().map(Exam::getId).toList();
         Map<Integer, List<ExamSlot>> slotsByExam = ids.isEmpty() ? Map.of()
                 : slotRepository.findByExamIdIn(ids).stream().collect(Collectors.groupingBy(ExamSlot::getExamId));
-        // F-07: số "cần xem lại" lấy từ ĐÚNG các mục mà trang chi tiết dựng (cùng buildParts, gồm cả cờ similar_in_exam),
-        // nạp theo lô cho mọi đề của trang.
+        // F-07: số "cần xem lại" lấy từ ĐÚNG các mục mà trang chi tiết dựng (cùng buildParts), nạp theo lô cho mọi đề của
+        // trang. Từ 22/11 cờ similar_in_exam là cờ thông tin nên không tính vào số này.
         Map<Integer, Map<String, List<ExamItemDto>>> partsByExam = buildParts(slotsByExam);
         List<ExamSummaryDto> items = new ArrayList<>();
         for (Exam e : exams.getContent()) {
@@ -314,8 +314,8 @@ public class ExamViewService {
     }
 
     /**
-     * Thẩm định 31/10 (lớp 2): gắn lý do {@code similar_in_exam: <Phần>.<số>} cho câu hệ thống sinh cùng khuôn với một câu
-     * ĐỨNG TRƯỚC nó trong CHÍNH đề này; từ 2/11 mỗi cặp chỉ câu sau bị gắn, và số đếm theo Phần như trang đề ("Câu k" của
+     * Thẩm định 31/10 (lớp 2): gắn cờ thông tin (22/11; trước đó lý do cần xem kỹ) {@code similar_in_exam: <Phần>.<số>} cho
+     * câu cùng khuôn với một câu ĐỨNG TRƯỚC nó trong CHÍNH đề này; từ 2/11 mỗi cặp chỉ câu sau bị gắn, và số đếm theo Phần như trang đề ("Câu k" của
      * từng Phần), xem {@link ExamQuestionSimilarity#flag}. Tính lúc xem, không ghi DB, không đổi trạng thái câu.
      */
     private void flagSimilarInExam(Map<String, List<ExamItemDto>> byPart) {
