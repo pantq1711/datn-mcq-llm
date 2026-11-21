@@ -175,6 +175,12 @@ public class LlmClient {
                 rateLimiter.onRateLimited(parseRetryDelay(response.body()).orElse(null));
                 if (indicatesDailyQuota(response.body())) {
                     rateLimiter.markDailyQuotaExhausted();
+                    if (rateLimiter.getDailyQuota() > 0) {
+                        // NS-2: hết hạn mức NGÀY không phải lỗi của job/lượt gọi: ném như khi chạm trần daily-quota để
+                        // worker hoãn job tới mốc đặt lại (không tính lượt lỗi), API trả 429 LLM_DAILY_QUOTA_EXHAUSTED.
+                        LOG.warn("Gemini trả HTTP 429 hết hạn mức ngày: {}", abbreviate(response.body()));
+                        throw new QuotaExhaustedException(rateLimiter.getDailyQuota(), rateLimiter.nextResetAt());
+                    }
                 }
             }
             throw errorForStatus(status, response.body());

@@ -107,7 +107,12 @@ public class GenerationJobPoller {
             markDueJobsDeferredByQuota();
             return new ProcessedJobSummary(false, null, null, "quota_exhausted", null, null);
         }
-        Optional<GenerationJobProcessor.ClaimedJobContext> claimedOpt = processor.claimNextPendingJob(runAnswerCheck);
+        Optional<GenerationJobProcessor.ClaimedJobContext> claimedOpt;
+        try {
+            claimedOpt = processor.claimNextPendingJob(runAnswerCheck);
+        } catch (JobClaimException ex) {
+            return recordClaimFailure(ex);
+        }
         if (claimedOpt.isEmpty()) {
             return new ProcessedJobSummary(false, null, null, "idle", null, null);
         }
@@ -127,6 +132,19 @@ public class GenerationJobPoller {
                         outcome, System.nanoTime() - startNanos);
             }
         }
+    }
+
+    /**
+     * NS-1: lỗi ở bước nhận job (transaction nhận job đã rollback, job vẫn pending): tính một lượt lỗi và lùi lịch cho đúng
+     * job đó để worker nhận job khác thay vì nhận lại nó mãi; hết lượt thì job failed.
+     */
+    private ProcessedJobSummary recordClaimFailure(JobClaimException ex) {
+        String error = "claim: " + ex.getMessage();
+        LOG.warn("Job {}: lỗi khi nhận job: {}", ex.jobId(), ex.getMessage(), ex.getCause());
+        String status = processor.recordClaimFailure(ex.jobId(), ex.claimSeq(), error, maxAttempts)
+                .map(job -> job.getStatus().getDbValue())
+                .orElse("stale");
+        return new ProcessedJobSummary(true, ex.jobId(), null, status, null, error);
     }
 
     /**

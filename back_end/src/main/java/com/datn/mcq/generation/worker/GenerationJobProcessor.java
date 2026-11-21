@@ -191,6 +191,20 @@ public class GenerationJobProcessor {
         job.setUpdatedAt(now);
         generationJobRepository.save(job);
 
+        // NS-1: lỗi sau khi đã khóa job (đọc run/template, dựng prompt...) làm cả transaction rollback, job vẫn pending với
+        // next_run_at cũ. Gắn jobId vào lỗi để poller ghi lỗi cho job này trong transaction riêng, không nhận lại nó mãi.
+        try {
+            return buildClaimedContext(job, nextAttempt, claimSeq, includeAnswerCheck, now);
+        } catch (JobClaimException ex) {
+            // Lỗi của job khác (nhánh job cũ bên dưới nhận tiếp job kế tiếp): giữ nguyên.
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new JobClaimException(job.getId(), claimSeq - 1, ex);
+        }
+    }
+
+    private Optional<ClaimedJobContext> buildClaimedContext(GenerationJob job, int nextAttempt, int claimSeq,
+                                                            boolean includeAnswerCheck, LocalDateTime now) {
         QuestionType jobQuestionType = job.getQuestionType() != null ? job.getQuestionType() : QuestionType.MCQ;
         if (GenerationJob.TYPE_ANSWER_CHECK.equals(job.getJobType())) {
             // W1-2: job chạy lại Solver cho bản giáo viên sửa, không dựng prompt sinh câu.
@@ -732,6 +746,40 @@ public class GenerationJobProcessor {
             job.setStatus(JobStatus.FAILED);
         }
         return generationJobRepository.save(job);
+    }
+
+    /**
+     * NS-1: ghi lỗi ở bước nhận job ({@link JobClaimException}) trong transaction riêng, vì transaction nhận job đã rollback
+     * (job vẫn pending, attempt chưa tăng). Tính một lượt như {@link #recordJobFailure}: còn lượt thì pending và lùi
+     * {@code next_run_at} 15s × lượt (lỗi DB tạm thời vẫn được thử lại), hết lượt thì failed. Khóa dòng job; chỉ ghi khi job
+     * vẫn pending với đúng {@code claim_seq} lúc bị khóa (chưa bị worker khác nhận), không thì không đổi gì.
+     *
+     * @return job sau khi ghi; rỗng khi job không còn hoặc đã bị worker khác nhận/đổi trạng thái
+     */
+    @Transactional
+    public Optional<GenerationJob> recordClaimFailure(Integer jobId, int claimSeq, String errorMsg, int maxAttempts) {
+        Optional<GenerationJob> locked = generationJobRepository.lockById(jobId);
+        if (locked.isEmpty()) {
+            return Optional.empty();
+        }
+        GenerationJob job = locked.get();
+        int currentClaimSeq = job.getClaimSeq() != null ? job.getClaimSeq() : 0;
+        if (job.getStatus() != JobStatus.PENDING || currentClaimSeq != claimSeq) {
+            LOG.warn("Job {}: không ghi lỗi nhận job vì job đã đổi (status {}, claim_seq {} khác {}): {}", jobId,
+                    job.getStatus(), currentClaimSeq, claimSeq, errorMsg);
+            return Optional.empty();
+        }
+        int attempt = (job.getAttempt() != null ? job.getAttempt() : 0) + 1;
+        LocalDateTime now = LocalDateTime.now();
+        job.setAttempt(attempt);
+        job.setLastError(TextClip.clip(errorMsg, MAX_SOLVER_ERROR));
+        job.setUpdatedAt(now);
+        if (attempt < maxAttempts) {
+            job.setNextRunAt(now.plusSeconds(15L * attempt));
+        } else {
+            job.setStatus(JobStatus.FAILED);
+        }
+        return Optional.of(generationJobRepository.save(job));
     }
 
     /**

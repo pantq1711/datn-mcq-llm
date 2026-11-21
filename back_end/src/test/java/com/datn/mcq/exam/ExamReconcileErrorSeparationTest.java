@@ -2,16 +2,22 @@ package com.datn.mcq.exam;
 
 import com.datn.mcq.config.TestSafetyConfiguration;
 import com.datn.mcq.generation.worker.GenerationJobPoller;
+import com.datn.mcq.llm.client.GeminiRateLimiter;
 import com.datn.mcq.llm.client.LlmClient;
 import com.datn.mcq.llm.dto.LlmCallResult;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -401,6 +407,114 @@ class ExamReconcileErrorSeparationTest extends ExamFlowTestBase {
         JsonNode item = firstItem(examId);
         assertTrue(item.get("needsReview").asBoolean());
         assertEquals(List.of("grounding_failed"), reasons(item));
+    }
+
+    // ---------- 6. Hạn mức NGÀY của Gemini (NS-2) và lỗi ở bước nhận job (NS-1) ----------
+
+    private static final String GEMINI_DAILY_429 = """
+            {"error":{"code":429,"message":"You exceeded your current quota","status":"RESOURCE_EXHAUSTED","details":[
+            {"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":
+            "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}
+            """;
+
+    /**
+     * NS-2: Gemini trả 429 "hết hạn mức NGÀY" đúng lúc job sinh câu đang ở lượt cuối (lượt 3 = max-attempts). Đây không phải
+     * lỗi của job: job trả về pending tới mốc đặt lại, attempt không tăng, chỗ trong đề vẫn đang soạn (không failed/llm_error).
+     * Gemini giả chạy trên loopback.
+     */
+    @Test
+    void jobSinhCauOLuot3Gap429HetHanMucNgayThiHoanJobKhongTinhLuotVaChoKhongFailed() throws Exception {
+        int examId = build(matrixId).get("examId").asInt();
+        int slot = slotId(examId, cell1, 1);
+        int job = count("SELECT id FROM generation_job WHERE exam_slot_id = ?", slot);
+        // Job đã lỗi kỹ thuật 2 lượt: lần nhận tới là lượt 3, cũng là lượt cuối.
+        jdbc.update("UPDATE generation_job SET attempt = 2, last_error = 'Lỗi mạng',"
+                + " next_run_at = now() - interval '1 minute' WHERE id = ?", job);
+
+        HttpServer gemini = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        gemini.createContext("/", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            byte[] bytes = GEMINI_DAILY_429.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(429, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        gemini.start();
+        GeminiRateLimiter limiter = new GeminiRateLimiter(0L, 480, 60_000L, Clock.systemDefaultZone(), d -> { }, s -> 0);
+        GenerationJobPoller.ProcessedJobSummary summary;
+        try {
+            LlmClient client = new LlmClient("FAKE_KEY_FOR_TESTS", "fake-generator-model", "http://"
+                    + InetAddress.getLoopbackAddress().getHostAddress() + ":" + gemini.getAddress().getPort()
+                    + "/v1beta/models/", limiter);
+            summary = new GenerationJobPoller(jobProcessor, client, qcOrchestrator, dedupScopeResolver, 3, limiter)
+                    .processNextJob(true);
+        } finally {
+            gemini.stop(0);
+        }
+
+        assertEquals(job, summary.jobId());
+        assertEquals("pending", summary.jobStatus());
+        Map<String, Object> row = jdbc.queryForMap("SELECT status, attempt, last_error, next_run_at FROM generation_job"
+                + " WHERE id = ?", job);
+        assertEquals("pending", row.get("status"));
+        assertEquals(2, row.get("attempt"), "hết hạn mức ngày không tính vào lượt thử");
+        assertTrue(String.valueOf(row.get("last_error")).startsWith("quota:"), String.valueOf(row.get("last_error")));
+        assertEquals(limiter.nextResetAt(), ((Timestamp) row.get("next_run_at")).toLocalDateTime());
+
+        progress(examId);
+        Map<String, Object> s = jdbc.queryForMap("SELECT state, failure_reason FROM exam_slot WHERE id = ?", slot);
+        assertEquals("generating", s.get("state"));
+        assertNull(s.get("failure_reason"));
+    }
+
+    /**
+     * NS-1: lỗi ở bước nhận job (ở đây hyperparams của run có loại câu lạ) không được làm worker nhận lại đúng job đó mãi:
+     * job bị tính một lượt lỗi và lùi next_run_at, job khác vẫn chạy; hết lượt thì job failed và chỗ của nó failed.
+     */
+    @Test
+    void loiKhiNhanJobKhongChanHangDoiVaHetLuotThiJobFailed() throws Exception {
+        int matrix2 = createMatrix(mcqCell("Đa thức", "Đơn thức", 1), mcqCell("Phân thức", "Rút gọn", 1));
+        int examId = build(matrix2).get("examId").asInt();
+        int badSlot = slotId(examId, cellId(matrix2, 1), 1);
+        int goodSlot = slotId(examId, cellId(matrix2, 2), 1);
+        int badJob = count("SELECT id FROM generation_job WHERE exam_slot_id = ?", badSlot);
+        int goodJob = count("SELECT id FROM generation_job WHERE exam_slot_id = ?", goodSlot);
+        jdbc.update("UPDATE experiment_run SET hyperparams = jsonb_set(hyperparams, '{questionType}', '\"khong-co\"')"
+                + " WHERE id = (SELECT run_id FROM generation_job WHERE id = ?)", badJob);
+        // Job hỏng đứng đầu hàng đợi.
+        jdbc.update("UPDATE generation_job SET next_run_at = now() - interval '2 minutes' WHERE id = ?", badJob);
+        jdbc.update("UPDATE generation_job SET next_run_at = now() - interval '1 minute' WHERE id = ?", goodJob);
+        GenerationJobPoller p = poller();
+
+        GenerationJobPoller.ProcessedJobSummary first = p.processNextJob(true);
+        assertEquals(badJob, first.jobId());
+        assertEquals("pending", first.jobStatus());
+        Map<String, Object> bad = jdbc.queryForMap("SELECT status, attempt, last_error, next_run_at > now() AS later"
+                + " FROM generation_job WHERE id = ?", badJob);
+        assertEquals("pending", bad.get("status"));
+        assertEquals(1, bad.get("attempt"), "lỗi khi nhận job tính một lượt thử");
+        assertTrue(String.valueOf(bad.get("last_error")).startsWith("claim:"), String.valueOf(bad.get("last_error")));
+        assertEquals(Boolean.TRUE, bad.get("later"), "job lỗi lùi next_run_at (backoff) để job khác được nhận");
+
+        GenerationJobPoller.ProcessedJobSummary second = p.processNextJob(true);
+        assertEquals(goodJob, second.jobId(), "job tốt không bị job hỏng chặn");
+        assertEquals("done", second.jobStatus());
+
+        for (int i = 0; i < 2; i++) {
+            jdbc.update("UPDATE generation_job SET next_run_at = now() - interval '1 minute' WHERE id = ?", badJob);
+            assertEquals(badJob, p.processNextJob(true).jobId());
+        }
+        bad = jdbc.queryForMap("SELECT status, attempt FROM generation_job WHERE id = ?", badJob);
+        assertEquals("failed", bad.get("status"));
+        assertEquals(3, bad.get("attempt"));
+        assertFalse(p.processNextJob(true).processed(), "hàng đợi không còn job nào bị nhận lại");
+
+        progress(examId);
+        Map<String, Object> s = jdbc.queryForMap("SELECT state, failure_reason FROM exam_slot WHERE id = ?", badSlot);
+        assertEquals("failed", s.get("state"));
+        assertEquals("llm_error", s.get("failure_reason"));
+        assertEquals("ready", slotState(goodSlot));
     }
 }
 
