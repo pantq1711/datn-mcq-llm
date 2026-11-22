@@ -7,7 +7,7 @@ import type { BankVisibility, ExamQuestionItem } from "../types/exam.types";
 import { describeInfoReason, teacherRequestLabel } from "../types/exam.types";
 import {
     contentReviewReasons, describeFailureReason, describeLevel, describeReviewReasonList, examSlotAnchorId, hasContentFlag,
-    isKeepBlockedByCheck, needsReviewNow, pendingCheckOf, resolveQuestionType, summarizeQc,
+    isKeepBlockedByCheck, needsReviewNow, parseSimilarInExam, pendingCheckOf, resolveQuestionType, summarizeQc,
 } from "../../../utils/exam.utils";
 import QuestionContent from "./QuestionContent";
 
@@ -346,11 +346,30 @@ export default function ExamQuestionList({
                                 )}
                                 {(question.infoReasons ?? []).length > 0 && (
                                     <Space size={[6, 4]} wrap>
-                                        {(question.infoReasons ?? []).map((info) => (
-                                            <Tag key={info} color="blue" icon={<InfoCircleOutlined />}>
-                                                {describeInfoReason(info)}
-                                            </Tag>
-                                        ))}
+                                        {(question.infoReasons ?? []).map((info) => {
+                                            // 22/11: câu cùng dạng trong đề là cờ thông tin; vị trí bấm được để xem câu kia
+                                            const similarTo = parseSimilarInExam(info);
+                                            return (
+                                                <Tag key={info} color="blue" icon={<InfoCircleOutlined />}>
+                                                    {similarTo && onJumpTo ? (
+                                                        <>
+                                                            Cùng dạng với{" "}
+                                                            <Button
+                                                                type="link"
+                                                                size="small"
+                                                                className="exam-question-review-jump"
+                                                                onClick={() => onJumpTo(similarTo.part, similarTo.number)}
+                                                            >
+                                                                Phần {similarTo.part} – Câu {similarTo.number}
+                                                            </Button>{" "}
+                                                            trong đề
+                                                        </>
+                                                    ) : (
+                                                        describeInfoReason(info)
+                                                    )}
+                                                </Tag>
+                                            );
+                                        })}
                                     </Space>
                                 )}
 

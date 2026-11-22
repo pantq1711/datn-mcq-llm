@@ -517,7 +517,10 @@ class ExamTeacherRequestTest extends ExamFlowTestBase {
         JsonNode withReq = item(examId, slotId(examId, cellId(matrixId, 1), 1));
         assertEquals(List.of("request_partial: Chỉ một bước"), texts(withReq.get("infoReasons")));
         JsonNode plain = item(examId, slotId(examId, cellId(matrixId, 2), 1));
-        assertEquals(0, plain.get("infoReasons").size());
+        // 22/11: hai câu mcq của FakeGenerator cùng khuôn nên câu sau có cờ thông tin similar_in_exam; ở đây chỉ xét cờ
+        // về yêu cầu
+        assertEquals(List.of(), texts(plain.get("infoReasons")).stream()
+                .filter(r -> !r.startsWith("similar_in_exam: ")).toList());
         assertEquals(3, SOLVER.calls, "câu có yêu cầu 2 lượt, câu không yêu cầu 1 lượt");
         long plainPrompts = SOLVER.prompts.stream().filter(p -> !p.contains(TeacherRequestPrompt.SOLVER_HEADER)).count();
         assertEquals(2, plainPrompts, "lượt giải của mọi câu dùng prompt cũ");

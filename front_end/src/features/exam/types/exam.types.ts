@@ -92,6 +92,12 @@ export function describeInfoReason(reason: string): string {
     if (code === "request_not_met") return `Chưa đúng yêu cầu${detail ? `: ${detail}` : ""}`;
     // D-05: lượt kiểm yêu cầu của hệ thống bị lỗi, yêu cầu chưa được kiểm (không phải "cần xem kỹ")
     if (code === "request_unchecked") return "Chưa kiểm được yêu cầu";
+    // 22/11 (góp ý giáo viên 21/11): câu cùng dạng trong đề là lưu ý, không phải "cần xem kỹ"; giáo viên tự chọn giữ
+    // cả hai hay Đổi câu khác
+    if (code === "similar_in_exam") {
+        const position = /^(I{1,3})\.(\d+)$/.exec(detail.trim());
+        return position ? `Cùng dạng với Phần ${position[1]} – Câu ${position[2]} trong đề` : "Cùng dạng với một câu khác trong đề";
+    }
     return reason;
 }
 
