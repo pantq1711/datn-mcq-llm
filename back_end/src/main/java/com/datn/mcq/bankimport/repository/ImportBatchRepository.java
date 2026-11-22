@@ -24,6 +24,10 @@ public interface ImportBatchRepository extends JpaRepository<ImportBatch, Intege
     /** Số lô đang chờ xác nhận và chưa hết hạn của một giáo viên. */
     long countByOwnerIdAndStatusAndExpiresAtAfter(Integer ownerId, String status, LocalDateTime now);
 
+    /** Các lô đang chờ xác nhận và chưa hết hạn của một giáo viên, mới tạo trước (B1). */
+    java.util.List<ImportBatch> findByOwnerIdAndStatusAndExpiresAtAfterOrderByCreatedAtDescIdDesc(
+            Integer ownerId, String status, LocalDateTime now);
+
     /** Lô chờ quá hạn thành expired và bỏ nội dung bản xem trước; trả số lô đã đổi. */
     @Transactional
     @Modifying(flushAutomatically = true, clearAutomatically = true)

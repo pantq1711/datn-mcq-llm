@@ -456,6 +456,123 @@ class BankImportApiTest {
         assertEquals(2, rows("SELECT count(*) FROM import_batch WHERE status = 'expired'"));
     }
 
+    // ---------- danh sách lô chờ (B1) ----------
+
+    private JsonNode listPending(int owner) throws Exception {
+        return json(mockMvc.perform(get("/api/bank-imports").param("status", "preview")
+                .with(AuthTestSupport.teacher(owner))).andExpect(status().isOk()));
+    }
+
+    @Test
+    void danhSachLoChoChiCoLoCuaToiVaKhongKemNoiDung() throws Exception {
+        JsonNode a = previewOk(teacher, FixtureDoc.full());
+        JsonNode b = previewOk(teacher, FixtureDoc.simpleMcq(2));
+        JsonNode o = previewOk(other, FixtureDoc.simpleMcq(3));
+
+        JsonNode mine = listPending(teacher);
+        assertTrue(mine.isArray(), mine.toString());
+        assertEquals(2, mine.size(), mine.toString());
+        // mới nhất trước
+        assertEquals(b.path("id").asInt(), mine.get(0).path("id").asInt());
+        assertEquals(a.path("id").asInt(), mine.get(1).path("id").asInt());
+        JsonNode[] uploaded = {b, a};
+        for (int i = 0; i < 2; i++) {
+            JsonNode row = mine.get(i);
+            JsonNode up = uploaded[i];
+            assertEquals("preview", row.path("status").asText());
+            for (String field : List.of("displayName", "gradeLevel", "topic", "questionCount", "importableCount",
+                    "blockedCount")) {
+                assertEquals(up.path(field), row.path(field), field);
+            }
+            // lúc tải lên là giá trị trong bộ nhớ (nano giây), lúc liệt kê là giá trị đã lưu (micro giây): so tới mili giây
+            for (String field : List.of("createdAt", "expiresAt")) {
+                assertEquals(LocalDateTime.parse(up.path(field).asText()).truncatedTo(java.time.temporal.ChronoUnit.MILLIS),
+                        LocalDateTime.parse(row.path(field).asText()).truncatedTo(java.time.temporal.ChronoUnit.MILLIS),
+                        field);
+            }
+            assertEquals(up.path("skipped"), row.path("skipped"));
+            // không kèm nội dung câu, câu bị bỏ, ảnh, URL ký
+            assertEquals(0, row.path("items").size(), "items");
+            assertEquals(0, row.path("skippedItems").size(), "skippedItems");
+            assertFalse(row.has("ownerId"), "không lộ chủ sở hữu");
+        }
+        String text = mine.toString();
+        for (String bad : FixtureDoc.FORBIDDEN) {
+            assertFalse(text.contains(bad), "lọt: " + bad);
+        }
+        assertFalse(text.contains("sig="), "không có URL ảnh có chữ ký");
+        assertFalse(text.contains("\"stem\""), "không có nội dung câu");
+
+        // lô của người khác không lộ, và ngược lại
+        JsonNode theirs = listPending(other);
+        assertEquals(1, theirs.size(), theirs.toString());
+        assertEquals(o.path("id").asInt(), theirs.get(0).path("id").asInt());
+    }
+
+    @Test
+    void danhSachLoChoBoLoHetHanDaXacNhanVaDaHuy() throws Exception {
+        int kept = previewOk(teacher, FixtureDoc.simpleMcq(2)).path("id").asInt();
+        int expiredLot = previewOk(teacher, FixtureDoc.simpleMcq(2)).path("id").asInt();
+        JsonNode toConfirm = previewOk(teacher, FixtureDoc.simpleMcq(2));
+        assertEquals(3, listPending(teacher).size());
+
+        // hết hạn nhưng chưa bị dọn (status vẫn preview) cũng không có trong danh sách
+        expire("id = ?", expiredLot);
+        assertEquals(List.of(toConfirm.path("id").asInt(), kept), ids(listPending(teacher)));
+
+        List<String> keys = keys(toConfirm, false);
+        assertFalse(keys.isEmpty());
+        confirm(teacher, toConfirm.path("id").asInt(), keys).andExpect(status().isOk());
+        assertEquals(List.of(kept), ids(listPending(teacher)));
+
+        int cancelled = previewOk(teacher, FixtureDoc.simpleMcq(2)).path("id").asInt();
+        assertEquals(2, listPending(teacher).size());
+        mockMvc.perform(delete("/api/bank-imports/" + cancelled).with(AuthTestSupport.teacher(teacher)))
+                .andExpect(status().isNoContent());
+        assertEquals(List.of(kept), ids(listPending(teacher)));
+
+        // sau khi bị dọn (status expired) vẫn không có
+        service.purgeExpired();
+        assertEquals(List.of(kept), ids(listPending(teacher)));
+    }
+
+    @Test
+    void danhSachLoChoChiNhanStatusPreviewVaCanDangNhapGiaoVien() throws Exception {
+        int id = previewOk(teacher, FixtureDoc.simpleMcq(2)).path("id").asInt();
+        for (String bad : List.of("confirmed", "expired", "all", "")) {
+            assertError(mockMvc.perform(get("/api/bank-imports").param("status", bad)
+                    .with(AuthTestSupport.teacher(teacher))), 400, "IMPORT_STATUS_INVALID");
+        }
+        // không gửi status: coi như preview
+        JsonNode noParam = json(mockMvc.perform(get("/api/bank-imports").with(AuthTestSupport.teacher(teacher)))
+                .andExpect(status().isOk()));
+        assertEquals(List.of(id), ids(noParam));
+        mockMvc.perform(get("/api/bank-imports")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/bank-imports").with(AuthTestSupport.admin(1))).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void matIdLoThiMoLaiQuaDanhSachDeHuyRoiTaiTiep() throws Exception {
+        for (int i = 0; i < 3; i++) {
+            previewOk(teacher, FixtureDoc.simpleMcq(2));
+        }
+        assertError(upload(teacher, FixtureDoc.FILE_NAME, FixtureDoc.simpleMcq(2)), 409, "IMPORT_PENDING_LIMIT");
+        JsonNode pending = listPending(teacher);
+        assertEquals(3, pending.size());
+        mockMvc.perform(delete("/api/bank-imports/" + pending.get(0).path("id").asInt())
+                .with(AuthTestSupport.teacher(teacher))).andExpect(status().isNoContent());
+        assertEquals(2, listPending(teacher).size());
+        previewOk(teacher, FixtureDoc.simpleMcq(2));
+    }
+
+    private static List<Integer> ids(JsonNode batches) {
+        List<Integer> out = new ArrayList<>();
+        for (JsonNode b : batches) {
+            out.add(b.path("id").asInt());
+        }
+        return out;
+    }
+
     @Test
     void trungVoiNganHangNguoiTaiThayLaCoKhongChan() throws Exception {
         JsonNode first = previewOk(teacher, FixtureDoc.duplicatedInFile());
