@@ -1,3 +1,7 @@
+import type { QuestionImageInfo } from "../../../components/common/MathText/questionImage.types";
+
+export type { QuestionImageInfo };
+
 export type ExamQuestionDifficulty = "easy" | "medium" | "hard";
 export type ExamKind = "matrix" | "lesson" | "manual";
 export type ExamStatus = "draft" | "confirmed";
@@ -52,6 +56,8 @@ export interface ExamQuestionItem {
     infoReasons?: string[];
     requests?: TeacherRequests;
     inheritedRequests?: TeacherRequests;
+    /** Ảnh của chỗ lấy từ ngân hàng mà câu nguồn có hình (G0 H3); token ⟦img:id⟧ trong chữ trỏ tới `id`. Vắng khi không có hình. */
+    images?: QuestionImageInfo[];
 }
 
 /** Chip yêu cầu của giáo viên (PR B, docs/contract/enums.md TeacherRequest). */
@@ -211,6 +217,8 @@ export interface ExamItemDto {
     inheritedRequests?: TeacherRequests;
     /** Chỉ có trong kết quả Giữ câu (docs/api mục 7.5): câu vừa lưu vào ngân hàng chung hay riêng của thầy/cô. */
     bankVisibility?: BankVisibility;
+    /** Ảnh có URL ký ngắn hạn cho người xem đề; chỉ chỗ `source = "bank"` có hình (G0 H3). Vắng khi rỗng. */
+    images?: QuestionImageInfo[];
 }
 
 /** Ngân hàng chung (mọi giáo viên dùng lại được) hoặc riêng (chỉ người lưu thấy). */
