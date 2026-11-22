@@ -65,7 +65,7 @@ matrix      ──► catalog
 material    ──► (chỉ common; passage/PassageSelector là hàm thuần)   (W2-3 bước 4: exam ──► material qua MaterialService; material khai báo MaterialUsageLookup, exam cài đặt)
 bankimport  ──► bank, catalog, generation, review, material.extract (chỉ DocxInputGuard), mtef, qc (DedupChecker/DedupCandidate thuần, không gọi mạng), questionimage   (V26, quyết định 3/11; 11/11: questionimage; không bao giờ ──► llm)
 review      ──► generation, bank, catalog, experiment, user   (25/10: chỉ còn AssistedKeepService)
-generation  ──► qc, llm
+generation  ──► qc, llm, questionimage   (22/11: chỉ QuestionImageToken, hàm thuần: parser xóa token ⟦img:⟧ khỏi đầu ra LLM, sửa câu chặn token; H2 thiết kế G0)
 experiment  ──► generation, catalog
 goldset     ──► qc, user
 qc          ──► llm   (GroundingChecker và AnswerSolverChecker gọi LlmClient)

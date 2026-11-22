@@ -6,6 +6,7 @@ import com.datn.mcq.common.util.InlineArtifacts;
 import com.datn.mcq.common.util.LatexValidationRules;
 import com.datn.mcq.common.util.LiteralNewlines;
 import com.datn.mcq.common.util.MissingLatexBackslash;
+import com.datn.mcq.questionimage.service.QuestionImageToken;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -861,7 +862,8 @@ public final class LlmOutputRepair {
         if (val == null) {
             return null;
         }
-        String s = String.valueOf(val);
+        // H2 (thiết kế G0): đầu ra LLM không được mang token hình; xóa ở mọi trường, mọi chế độ, trước mọi bước chuẩn hóa.
+        String s = QuestionImageToken.removeTokens(String.valueOf(val));
         if (!repair) {
             return (newlines ? McqJsonParser.normalizeLiteralNewlines(s) : s).trim();
         }

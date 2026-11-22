@@ -61,6 +61,18 @@ class QuestionImageTokenTest {
     }
 
     @Test
+    @DisplayName("removeTokens: xóa token đủ và cả tiền tố ⟦img: dở dang, không trim, không đụng ngoặc thường")
+    void removeTokensXoaTokenVaTienToDoDang() {
+        assertEquals("Cho hình  vẽ.", QuestionImageToken.removeTokens("Cho hình ⟦img:812⟧ vẽ."));
+        assertEquals("A  B ", QuestionImageToken.removeTokens("A ⟦img:1⟧ B ⟦img:22⟧"));
+        assertEquals("Dở dang 12", QuestionImageToken.removeTokens("Dở dang ⟦img:12"));
+        assertEquals("abc⟧", QuestionImageToken.removeTokens("⟦img:abc⟧"));
+        assertEquals("Giữ [img:5] và ⟦1, 2⟧", QuestionImageToken.removeTokens("Giữ [img:5] và ⟦1, 2⟧"));
+        assertEquals("", QuestionImageToken.removeTokens(""));
+        assertEquals(null, QuestionImageToken.removeTokens(null));
+    }
+
+    @Test
     @DisplayName("sanitizeWordText: thoát ký tự ⟦ và ⟧ thành [ và ]")
     void sanitizeWordTextThoatKyTuDacBiet() {
         String raw = "Ký hiệu tập hợp ⟦1, 2, 3⟧ trong Word";

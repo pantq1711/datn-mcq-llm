@@ -992,7 +992,7 @@ PUT /api/exams/12/slots/101/question
 
 | Mã | `code` | Khi nào |
 |---|---|---|
-| 400 | `INVALID_REQUEST` | Thiếu trường (kể cả `baseQuestionId`), gửi trường của dạng khác, `correctOption` ngoài A-D, nhãn ý ngoài T/F, `tf` không đủ 4 ý a-d |
+| 400 | `INVALID_REQUEST` | Thiếu trường (kể cả `baseQuestionId`), gửi trường của dạng khác, `correctOption` ngoài A-D, nhãn ý ngoài T/F, `tf` không đủ 4 ý a-d; **từ 22/11** mọi trường văn bản (đề, phương án, ý, lời giải, đáp số) chứa `⟦img:` (token hình của hệ thống, chỉ bộ nhập Word được tạo; H2 thiết kế G0), thông báo nêu trường vi phạm, không tạo bản sửa. `[img:1]` với ngoặc vuông thường vẫn hợp lệ |
 | 400 | `FORMAT_INVALID` | Bản sửa không qua kiểm tra định dạng; `errors` liệt kê từng lỗi, ví dụ `["option_a: nội dung trống"]` |
 | 404 | — | Đề không có hoặc của giáo viên khác; chỗ không thuộc đề |
 | 409 | `SLOT_KEPT` | Chỗ đã Giữ (sửa câu ngân hàng chưa hỗ trợ) |
