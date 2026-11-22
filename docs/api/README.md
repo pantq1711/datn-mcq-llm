@@ -1685,7 +1685,10 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
   ngày), showScore, showSolutions (mặc định false), consentConfirmed: true, classes: [{classLabel, size}]}` → 201 bài giao.
   `classes`: 1–10 lớp, nhãn chuẩn hóa (bỏ khoảng trắng, viết hoa; chữ không dấu, số, `/ . -`; 1–10 ký tự), sĩ số 1–99, không
   trùng. Lỗi: 400 `INVALID_REQUEST`; 409 `ASSIGN_NOT_ALL_KEPT` (còn chỗ chưa Giữ/Sửa, `errors: ["Phần I, Câu 2", …]`),
-  `ASSIGN_SA_KEY_UNSUPPORTED` (đáp số Trả lời ngắn không phải số nguyên/thập phân, `errors` như trên).
+  `ASSIGN_HAS_FIGURE` (23/11: đề có ít nhất một chỗ ngân hàng mà câu nguồn có ảnh, mọi role, kể cả câu đã gỡ khỏi ngân hàng;
+  `errors` như trên liệt kê các chỗ có hình; chưa ghi gì vào DB; học sinh chưa có đường xem ảnh, sẽ gỡ ở PR A2),
+  `ASSIGN_SA_KEY_UNSUPPORTED` (đáp số Trả lời ngắn không phải số nguyên/thập phân, `errors` như trên). Thứ tự kiểm:
+  `ASSIGN_NOT_ALL_KEPT`, rồi `ASSIGN_HAS_FIGURE`, rồi `ASSIGN_SA_KEY_UNSUPPORTED`.
 - Bài giao: `{assignmentId, publicCode, title, status (open|closed), durationMinutes, closesAt, closedAt?, showScore,
   showSolutions, createdAt, classes: [{classLabel, size}], questionCount, maxScore, maxAttempts (2 × tổng sĩ số), startedCount,
   submittedCount, duplicateCount, statsComputedAt?, attempts?}`. Link học sinh do frontend ghép: `<origin>/lam-bai/<publicCode>`.

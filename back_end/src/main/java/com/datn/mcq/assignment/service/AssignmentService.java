@@ -53,6 +53,7 @@ public class AssignmentService {
 
     public static final String ASSIGN_NOT_ALL_KEPT = "ASSIGN_NOT_ALL_KEPT";
     public static final String ASSIGN_SA_KEY_UNSUPPORTED = "ASSIGN_SA_KEY_UNSUPPORTED";
+    public static final String ASSIGN_HAS_FIGURE = "ASSIGN_HAS_FIGURE";
     public static final String ASSIGNMENT_CLOSED = "ASSIGNMENT_CLOSED";
     static final String INVALID_REQUEST = "INVALID_REQUEST";
 
@@ -95,8 +96,9 @@ public class AssignmentService {
 
     /**
      * Giao đề {@code examId}. Kiểm yêu cầu (400) trước mọi truy cập DB; rồi khóa chia sẻ hàng đề (404 khi không phải đề của
-     * người gọi), kiểm mọi chỗ đã chốt (409 {@value #ASSIGN_NOT_ALL_KEPT}) và khóa Trả lời ngắn gõ được trên điện thoại
-     * (409 {@value #ASSIGN_SA_KEY_UNSUPPORTED}); không ghi gì khi có lỗi.
+     * người gọi), kiểm mọi chỗ đã chốt (409 {@value #ASSIGN_NOT_ALL_KEPT}), đề không có chỗ nào có hình (409
+     * {@value #ASSIGN_HAS_FIGURE}) và khóa Trả lời ngắn gõ được trên điện thoại (409 {@value #ASSIGN_SA_KEY_UNSUPPORTED});
+     * không ghi gì khi có lỗi.
      */
     @Transactional
     public AssignmentDto create(Integer examId, Integer actorId, CreateAssignmentRequest request) {
@@ -137,6 +139,17 @@ public class AssignmentService {
                     "Còn " + notKept.size() + " câu chưa Giữ. Giữ hoặc Sửa mọi câu rồi mới giao bài.", notKept);
         }
         Map<Integer, BankItemDto> bank = bankService.getItems(slots.stream().map(AssignableSlot::bankItemId).toList());
+        // Học sinh chưa có đường xem ảnh (cau-co-hinh.md mục 4, A1): đề có chỗ nào có ảnh thì chưa giao được. Câu đã gỡ
+        // khỏi ngân hàng vẫn nằm trong đề nên vẫn tính; gỡ điều kiện này ở A2 sau khi S1, S2, X1 xong.
+        Set<Integer> withFigure = bankService.sourceQuestionsWithImages(
+                bank.values().stream().map(BankItemDto::sourceQuestionId).toList());
+        List<String> figureSlots = slots.stream()
+                .filter(s -> withFigure.contains(bank.get(s.bankItemId()).sourceQuestionId()))
+                .map(AssignmentService::label).toList();
+        if (!figureSlots.isEmpty()) {
+            throw new ApiErrorException(HttpStatus.CONFLICT, ASSIGN_HAS_FIGURE,
+                    "Có " + figureSlots.size() + " câu có hình. Giao bài online chưa hỗ trợ câu có hình.", figureSlots);
+        }
         List<String> badSa = slots.stream().filter(s -> s.questionType() == QuestionType.SA)
                 .filter(s -> ShortAnswerValue.normalizedStrictAnswer(bank.get(s.bankItemId()).saAnswer()) == null)
                 .map(AssignmentService::label).toList();

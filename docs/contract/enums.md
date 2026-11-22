@@ -301,6 +301,11 @@ Trạng thái của một lượt làm KHÔNG lưu DB, tính lúc đọc (`Attem
 `submitted`, `expired` (chưa nộp, hết hạn + ân hạn 2 phút, hoặc giáo viên đóng bài trước hạn của lượt). Cờ "trùng" của lượt
 (cùng lớp + số thứ tự với lượt khác của bài giao) cũng tính lúc đọc.
 
+Mã lỗi 409 khi giao bài (`POST /api/exams/{examId}/assignments`, kèm `errors` là danh sách chỗ, ví dụ `"Phần I, Câu 2"`), kiểm theo
+thứ tự này và không ghi gì vào DB khi có lỗi: `ASSIGN_NOT_ALL_KEPT` (đề trống hoặc còn chỗ chưa Giữ/Sửa), `ASSIGN_HAS_FIGURE` (23/11:
+có chỗ ngân hàng mà câu nguồn có ảnh `question_image`, mọi role; tạm thời vì học sinh chưa có đường xem ảnh, gỡ ở PR A2),
+`ASSIGN_SA_KEY_UNSUPPORTED` (đáp số Trả lời ngắn không gõ được trên điện thoại).
+
 ### Mã cờ hậu kiểm (V33, `item_stat.flags`, PR B 17/11)
 
 Mảng JSON chuỗi, chưa có enum Java (hằng ở `ItemStatCalculator`). Cùng mã ở cột `flags` của `docs/thong-ke/11-hau-kiem.sql`.

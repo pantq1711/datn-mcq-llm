@@ -115,6 +115,22 @@ public class QuestionImageService {
         return out;
     }
 
+    /**
+     * Trong {@code questionIds} (câu nguồn, {@code generated_question.id}), những câu có ít nhất một ảnh (mọi role). Một
+     * truy vấn, không nạp bytes; không có câu thì không truy vấn. Không kiểm quyền xem: chỉ để biết câu "có hình hay không".
+     */
+    @Transactional(readOnly = true)
+    public Set<Integer> sourceQuestionsWithImages(Collection<Integer> questionIds) {
+        Set<Integer> ids = new LinkedHashSet<>();
+        if (questionIds != null) {
+            questionIds.stream().filter(Objects::nonNull).forEach(ids::add);
+        }
+        if (ids.isEmpty()) {
+            return Set.of();
+        }
+        return new LinkedHashSet<>(repository.findGeneratedQuestionIdsWithImages(ids));
+    }
+
     private boolean isUserActive(int userId) {
         try {
             Boolean enabled = jdbcTemplate.queryForObject(

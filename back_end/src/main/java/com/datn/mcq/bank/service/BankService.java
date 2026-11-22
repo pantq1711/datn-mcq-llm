@@ -323,6 +323,15 @@ public class BankService {
         return out;
     }
 
+    /**
+     * Trong {@code sourceQuestionIds} (câu nguồn của câu ngân hàng), những câu có ít nhất một ảnh, mọi role, kể cả câu đã gỡ
+     * khỏi ngân hàng. Cửa cho module {@code assignment} (D3 ngày 23/11: không thêm phụ thuộc vào {@code questionimage}).
+     */
+    @Transactional(readOnly = true)
+    public java.util.Set<Integer> sourceQuestionsWithImages(java.util.Collection<Integer> sourceQuestionIds) {
+        return questionImageService.sourceQuestionsWithImages(sourceQuestionIds);
+    }
+
     @Transactional
     public BankItem createOrUpdateFromReview(
             Integer sourceQuestionId,
