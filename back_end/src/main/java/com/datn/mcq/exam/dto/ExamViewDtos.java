@@ -6,6 +6,7 @@ import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.StatementKey;
 import com.datn.mcq.enums.TruthValue;
+import com.datn.mcq.questionimage.dto.QuestionImageDto;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.math.BigDecimal;
@@ -53,6 +54,9 @@ public final class ExamViewDtos {
      *                      Đổi câu điền sẵn; vắng khi ô và đề không có yêu cầu áp cho chỗ này
      * @param bankVisibility (16/11, NV-28) CHỈ có trong kết quả Giữ câu: câu vừa lưu vào ngân hàng chung ("shared") hay
      *                      riêng của người Giữ ("private"); vắng ở mọi API khác
+     * @param images        (22/11, G0 H3) ảnh của câu nhập từ Word có hình, CHỈ ở chỗ lấy từ ngân hàng ({@code source = "bank"});
+     *                      mỗi ảnh có URL ký ngắn hạn cho đúng người xem đề, giao diện đặt ảnh theo token
+     *                      {@code ⟦img:<id>⟧} trong chữ. Vắng khỏi JSON khi chỗ không có hình
      */
     public record ExamItemDto(
             Integer slotId,
@@ -84,7 +88,8 @@ public final class ExamViewDtos {
             List<String> infoReasons,
             @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto requests,
             @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto inheritedRequests,
-            @JsonInclude(JsonInclude.Include.NON_NULL) String bankVisibility
+            @JsonInclude(JsonInclude.Include.NON_NULL) String bankVisibility,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<QuestionImageDto> images
     ) {
         public static final String QC_CHECKING = "checking";
         public static final String QC_PASSED = "passed";
@@ -92,6 +97,32 @@ public final class ExamViewDtos {
 
         public ExamItemDto {
             infoReasons = infoReasons == null ? List.of() : List.copyOf(infoReasons);
+            images = images == null ? List.of() : List.copyOf(images);
+        }
+
+        /** Chữ ký trước G0 H3 (không có ảnh). */
+        public ExamItemDto(Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
+                           QuestionType questionType, String state, String source, Integer bankItemId,
+                           Integer questionId, String questionText, String optionA, String optionB, String optionC,
+                           String optionD, Option correctOption, String saAnswer, List<ItemStatementDto> statements,
+                           String explanation, Difficulty difficulty, boolean needsReview, List<String> reviewReasons,
+                           String qcState, boolean edited, Integer originalQuestionId, String failureReason,
+                           List<String> infoReasons, RequestsDto requests, RequestsDto inheritedRequests,
+                           String bankVisibility) {
+            this(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId, questionText,
+                    optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation, difficulty,
+                    needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, infoReasons,
+                    requests, inheritedRequests, bankVisibility, null);
+        }
+
+        /**
+         * Bản sao kèm ảnh của câu (G0 H3): chỉ chỗ lấy từ ngân hàng mà câu nguồn có hình; chỗ khác để rỗng (vắng khỏi JSON).
+         */
+        public ExamItemDto withImages(List<QuestionImageDto> images) {
+            return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
+                    questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
+                    difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, infoReasons,
+                    requests, inheritedRequests, bankVisibility, images);
         }
 
         /** Chữ ký trước PR B (không có cờ thông tin và yêu cầu). */
@@ -116,7 +147,7 @@ public final class ExamViewDtos {
             return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
                     questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
                     difficulty, true, all, QC_CHECKING.equals(qcState) ? qcState : QC_NEEDS_REVIEW, edited,
-                    originalQuestionId, failureReason, infoReasons, requests, inheritedRequests, bankVisibility);
+                    originalQuestionId, failureReason, infoReasons, requests, inheritedRequests, bankVisibility, images);
         }
 
         /** Bản sao kèm cờ thông tin và yêu cầu (PR B). */
@@ -124,7 +155,7 @@ public final class ExamViewDtos {
             return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
                     questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
                     difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, info, own,
-                    inherited, bankVisibility);
+                    inherited, bankVisibility, images);
         }
 
         /** Bản sao kèm nơi câu vừa được Giữ vào ("shared" hoặc "private"), chỉ dùng cho kết quả Giữ (NV-28). */
@@ -132,7 +163,7 @@ public final class ExamViewDtos {
             return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
                     questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
                     difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, infoReasons,
-                    requests, inheritedRequests, visibility);
+                    requests, inheritedRequests, visibility, images);
         }
 
         /** Chữ ký trước W2-4b (chỗ đã có câu, không có failureReason). */

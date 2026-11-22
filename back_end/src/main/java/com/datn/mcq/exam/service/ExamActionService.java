@@ -138,7 +138,7 @@ public class ExamActionService {
             // needsReview của API xem đề. Giữ vẫn được; chỉ khác là câu có cờ vào ngân hàng riêng của người Giữ.
             // A-03 (11/11): item() không gắn similar_in_exam (cờ về đề, không về nội dung) nên câu chỉ có lý do đó vào
             // ngân hàng dùng chung, có chủ ý (ExamSimilarInExamTest, docs/api/README.md mục 7.5).
-            boolean flagged = viewService.item(slot, matrixService.getCell(slot.getCellId())).needsReview();
+            boolean flagged = viewService.item(slot, matrixService.getCell(slot.getCellId()), actorId).needsReview();
             Integer bankItemId = assistedKeepService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
             slot.setBankItemId(bankItemId);
             // W2-3 (quyết định E): câu sinh từ tài liệu của giáo viên vào ngân hàng nhưng chỉ chính họ thấy và dùng lại.
@@ -155,7 +155,7 @@ public class ExamActionService {
         actionRepository.save(new ExamSlotAction(slot.getId(), ExamSlotAction.KEEP, slot.getGeneratedQuestionId(),
                 slot.getBankItemId(), null, actorId));
         // NV-28: kết quả Giữ nói rõ câu nằm ở ngân hàng chung hay riêng (câu lấy từ ngân hàng giữ nguyên chỗ của nó).
-        return viewService.item(slot, matrixService.getCell(slot.getCellId()))
+        return viewService.item(slot, matrixService.getCell(slot.getCellId()), actorId)
                 .withBankVisibility(bankService.visibility(slot.getBankItemId()));
     }
 
@@ -266,7 +266,7 @@ public class ExamActionService {
             buildService.enqueueReplace(slot, cleanInstruction, cleanReason, oldQuestion, oldSaAnswer, cleanCodes);
         }
         slotRepository.save(slot);
-        return viewService.item(slot, matrixService.getCell(slot.getCellId()));
+        return viewService.item(slot, matrixService.getCell(slot.getCellId()), actorId);
     }
 
     private static boolean isActive(GenerationJob job) {
@@ -394,7 +394,7 @@ public class ExamActionService {
             log.setChangedFields(JsonStringArray.write(outcome.changedFields()));
             actionRepository.save(log);
         }
-        return viewService.item(slot, matrixService.getCell(slot.getCellId()));
+        return viewService.item(slot, matrixService.getCell(slot.getCellId()), actorId);
     }
 
     private static QuestionEditInput toInput(EditQuestionRequest r) {

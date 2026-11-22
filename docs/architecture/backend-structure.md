@@ -60,7 +60,7 @@ com.datn.mcq
 ## Hướng phụ thuộc (không được tạo vòng)
 
 ```
-exam        ──► matrix, generation, qc, review, bank, catalog, user, material, mathtype   (V7: tạo đề theo ma trận; W2-3: material; 30/10: mathtype)
+exam        ──► matrix, generation, qc, review, bank, catalog, user, material, mathtype, questionimage   (V7: tạo đề theo ma trận; W2-3: material; 30/10: mathtype; 22/11: questionimage, chỉ QuestionImageService.signedImagesBySourceQuestion để xem đề trả images, H3)
 matrix      ──► catalog
 material    ──► (chỉ common; passage/PassageSelector là hàm thuần)   (W2-3 bước 4: exam ──► material qua MaterialService; material khai báo MaterialUsageLookup, exam cài đặt)
 bankimport  ──► bank, catalog, generation, review, material.extract (chỉ DocxInputGuard), mtef, qc (DedupChecker/DedupCandidate thuần, không gọi mạng), questionimage   (V26, quyết định 3/11; 11/11: questionimage; không bao giờ ──► llm)
@@ -71,7 +71,8 @@ goldset     ──► qc, user
 qc          ──► llm   (GroundingChecker và AnswerSolverChecker gọi LlmClient)
 auth        ──► user                                   (W1-1, duyệt ngày 24/10)
 questionimage ──► user                                 (V34, PR #61: module lá, chỉ kiểm trạng thái user; native SQL chỉ đọc)
-bank, catalog, user, llm ──► (chỉ common/config)
+bank        ──► questionimage                          (22/11, H3: chỉ QuestionImageService.signedImagesBySourceQuestion và QuestionImageDto để danh sách và chi tiết ngân hàng trả images)
+catalog, user, llm ──► (chỉ common/config)
 mathtype    ──► (không module nào; chỉ JDK, Apache POI, JLaTeXMath)
 assignment  ──► exam (chỉ ExamAssignmentSource, ExamDeletionGuard), bank (BankService.getItems), config   (V32, 16/11; exam không biết assignment)
 ```

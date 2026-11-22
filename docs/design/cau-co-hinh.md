@@ -150,6 +150,16 @@ diện dùng nguyên, không tự ghép tham số:
 `image_convert_failed`, `image_limit`. `has_image` giữ cho ảnh công thức WMF và hình vẽ OLE, giao diện hiện "công thức dạng
 ảnh, chưa nhập được" (quyết định 1).
 
+*Cài đặt `images` ở ngân hàng và xem đề (22/11/2026, sau E2E 22/11 B8):* một hàm duy nhất
+`QuestionImageService.signedImagesBySourceQuestion(questionIds, viewerId)` nạp metadata ảnh của nhiều câu nguồn bằng MỘT truy vấn
+(chiếu không có cột `data`) và ký URL cho người xem. `BankService` gọi một lần mỗi trang danh sách và mỗi lần xem chi tiết (câu
+riêng của người khác đã bị lọc trước đó nên không có URL); `ExamViewService` gọi một lần cho cả đề (danh sách đề chỉ cần số đếm nên truyền
+người xem null: không ký URL, không truy vấn ảnh), chỉ với các chỗ `source = "bank"` (ảnh thuộc câu nguồn của `bank_item`, H5), bỏ qua truy vấn khi đề không có chỗ ngân hàng; người
+xem là chủ đề (`actorId`, đã đi qua tới `ExamViewService.item` cho 4 thao tác trong `ExamActionService`). `images` bỏ khỏi JSON khi
+rỗng nên JSON của câu không hình và ảnh chụp `golden.json` không đổi. Thêm phụ thuộc `bank ──► questionimage` và
+`exam ──► questionimage` (`docs/architecture/backend-structure.md`). Còn lại của H5 (đường đưa câu có hình vào đề) vẫn chưa làm:
+tạo đề và Đổi câu hiện không chọn câu ngân hàng có hình, nên `images` của mục đề chưa xuất hiện trong luồng thường.
+
 **H4. Chuẩn hóa khi nhập.** Kiểm magic bytes, không tin đuôi file: PNG `89 50 4E 47`, JPEG `FF D8 FF`, GIF `GIF8`, BMP `BM`,
 EMF (bản ghi 1 + ` EMF` ở offset 40). Đọc kích thước từ header trước khi giải mã. Mọi ảnh giải mã rồi mã hóa lại
 (bỏ metadata): JPEG giữ JPEG, còn lại thành PNG.

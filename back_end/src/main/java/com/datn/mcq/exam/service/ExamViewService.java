@@ -28,6 +28,8 @@ import com.datn.mcq.matrix.entity.ExamMatrixCell;
 import com.datn.mcq.matrix.service.MatrixService;
 import com.datn.mcq.qc.service.QcSummaryService;
 import com.datn.mcq.qc.service.QcSummaryService.QcSummary;
+import com.datn.mcq.questionimage.dto.QuestionImageDto;
+import com.datn.mcq.questionimage.service.QuestionImageService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -62,6 +64,7 @@ public class ExamViewService {
     private final BankService bankService;
     private final QcSummaryService qcSummaryService;
     private final ExamContextService contextService;
+    private final QuestionImageService questionImageService;
 
     private final double similarThreshold;
     private final BankProperties bankProperties;
@@ -72,7 +75,8 @@ public class ExamViewService {
                            GenerationService generationService, BankService bankService,
                            QcSummaryService qcSummaryService, ExamContextService contextService,
                            @Value("${app.exam.similar-threshold:0.82}") double similarThreshold,
-                           BankProperties bankProperties, ExamScoringProperties scoring) {
+                           BankProperties bankProperties, ExamScoringProperties scoring,
+                           QuestionImageService questionImageService) {
         if (!(similarThreshold > 0.0 && similarThreshold <= 1.0)) {
             throw new IllegalArgumentException("app.exam.similar-threshold phải nằm trong (0, 1], nhận " + similarThreshold);
         }
@@ -80,6 +84,7 @@ public class ExamViewService {
         this.bankProperties = bankProperties;
         this.scoring = scoring;
         this.contextService = contextService;
+        this.questionImageService = questionImageService;
         this.buildService = buildService;
         this.examRepository = examRepository;
         this.slotRepository = slotRepository;
@@ -142,13 +147,15 @@ public class ExamViewService {
      * @param qc         tóm tắt QC của {@code questions}
      * @param scopes     (PR B) mức lấy yêu cầu của job đã sinh ra câu (theo id câu gốc LLM)
      * @param requests   (PR B) yêu cầu của đề và các ô theo id đề, để tính yêu cầu thừa hưởng của từng chỗ
+     * @param images     (G0 H3) ảnh của câu nguồn các câu ngân hàng trong {@code bank}, theo id câu nguồn, URL ký cho người xem
      */
     private record Loaded(Map<Integer, BankItemDto> bank, Map<Integer, GeneratedQuestion> questions,
                           Map<Integer, List<GeneratedQuestionStatement>> statements, Map<Integer, Integer> originals,
                           GenerationService.CheckJobs jobs, Map<Integer, QcSummary> qc, Map<Integer, String> scopes,
-                          Map<Integer, ExamContextService.Resolved> requests) {}
+                          Map<Integer, ExamContextService.Resolved> requests,
+                          Map<Integer, List<QuestionImageDto>> images) {}
 
-    private Loaded load(Collection<ExamSlot> slots) {
+    private Loaded load(Collection<ExamSlot> slots, Integer actorId) {
         Set<Integer> bankIds = new LinkedHashSet<>();
         Set<Integer> generatedIds = new LinkedHashSet<>();
         Set<Integer> originalIds = new LinkedHashSet<>();
@@ -182,7 +189,20 @@ public class ExamViewService {
         slots.forEach(s -> examIds.add(s.getExamId()));
         return new Loaded(bank, questions, generationService.statementsByQuestionIds(tfIds), originals,
                 generationService.latestCheckJobs(generatedIds), qcSummaryService.summarizeAll(generatedIds),
-                generationService.requestScopes(scopeIds), contextService.requestsOf(examIds));
+                generationService.requestScopes(scopeIds), contextService.requestsOf(examIds),
+                bankImages(bank.values(), actorId));
+    }
+
+    /**
+     * G0 H3 (O1): ảnh của các câu ngân hàng trong đề, một truy vấn theo lô cho mọi chỗ; không có chỗ ngân hàng thì không
+     * truy vấn. Ảnh thuộc câu nguồn của bank_item (H5), URL ký cho người xem đề.
+     */
+    private Map<Integer, List<QuestionImageDto>> bankImages(Collection<BankItemDto> bankItems, Integer actorId) {
+        if (bankItems.isEmpty() || actorId == null) {
+            return Map.of();
+        }
+        return questionImageService.signedImagesBySourceQuestion(
+                bankItems.stream().map(BankItemDto::sourceQuestionId).toList(), actorId);
     }
 
     /** PR B: yêu cầu thừa hưởng của chỗ (mã đã lọc theo dạng câu); null khi không có. */
@@ -210,11 +230,12 @@ public class ExamViewService {
      * Các phần I-III (có thể thêm Phần khác) của từng đề, theo thứ tự hiển thị, đã gắn cờ similar_in_exam. MỘT hàm cho xem
      * đề và danh sách đề, nên số "cần xem lại" của hai nơi cùng một nguồn. Nạp dữ liệu của mọi chỗ một lần.
      */
-    private Map<Integer, Map<String, List<ExamItemDto>>> buildParts(Map<Integer, List<ExamSlot>> slotsByExam) {
+    private Map<Integer, Map<String, List<ExamItemDto>>> buildParts(Map<Integer, List<ExamSlot>> slotsByExam,
+                                                                    Integer actorId) {
         List<ExamSlot> all = slotsByExam.values().stream().flatMap(List::stream).toList();
         Map<Integer, ExamMatrixCell> cells = matrixService.cellsByIds(
                 all.stream().map(ExamSlot::getCellId).collect(Collectors.toCollection(LinkedHashSet::new)));
-        Loaded loaded = load(all);
+        Loaded loaded = load(all, actorId);
         Map<Integer, Map<String, List<ExamItemDto>>> out = new LinkedHashMap<>();
         for (Map.Entry<Integer, List<ExamSlot>> entry : slotsByExam.entrySet()) {
             List<ExamSlot> slots = new ArrayList<>(entry.getValue());
@@ -259,7 +280,8 @@ public class ExamViewService {
                 : slotRepository.findByExamIdIn(ids).stream().collect(Collectors.groupingBy(ExamSlot::getExamId));
         // F-07: số "cần xem lại" lấy từ ĐÚNG các mục mà trang chi tiết dựng (cùng buildParts, gồm cả cờ similar_in_exam),
         // nạp theo lô cho mọi đề của trang.
-        Map<Integer, Map<String, List<ExamItemDto>>> partsByExam = buildParts(slotsByExam);
+        // G0 H3: danh sách đề chỉ lấy số đếm từ các mục, không trả ảnh, nên truyền null để không ký URL và không truy vấn ảnh.
+        Map<Integer, Map<String, List<ExamItemDto>>> partsByExam = buildParts(slotsByExam, null);
         List<ExamSummaryDto> items = new ArrayList<>();
         for (Exam e : exams.getContent()) {
             List<ExamSlot> slots = slotsByExam.getOrDefault(e.getId(), List.of());
@@ -288,7 +310,7 @@ public class ExamViewService {
         Exam exam = buildService.getOwnedExam(examId, actorId);
         buildService.reconcile(examId);
         List<ExamSlot> slots = slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(examId);
-        Map<String, List<ExamItemDto>> byPart = buildParts(Map.of(examId, slots)).get(examId);
+        Map<String, List<ExamItemDto>> byPart = buildParts(Map.of(examId, slots), actorId).get(examId);
         int generating = 0;
         int failed = 0;
         for (ExamSlot slot : slots) {
@@ -340,9 +362,12 @@ public class ExamViewService {
         return ExamMatrix.KIND_LESSON.equals(kind) ? null : exam.getMatrixId();
     }
 
-    /** Mục của một chỗ (ExamActionService trả sau mỗi thao tác); cùng logic với xem đề, nạp dữ liệu của riêng chỗ này. */
-    ExamItemDto item(ExamSlot slot, ExamMatrixCell cell) {
-        return toItem(slot, cell, load(List.of(slot)));
+    /**
+     * Mục của một chỗ (ExamActionService trả sau mỗi thao tác); cùng logic với xem đề, nạp dữ liệu của riêng chỗ này.
+     * {@code actorId} là người thao tác (chủ đề): URL ảnh của chỗ ngân hàng có hình được ký cho họ.
+     */
+    ExamItemDto item(ExamSlot slot, ExamMatrixCell cell, Integer actorId) {
+        return toItem(slot, cell, load(List.of(slot), actorId));
     }
 
     private ExamItemDto toItem(ExamSlot slot, ExamMatrixCell cell, Loaded data) {
@@ -371,7 +396,7 @@ public class ExamViewService {
                     slot.getQuestionType(), slot.getState(), source, slot.getBankItemId(), slot.getGeneratedQuestionId(),
                     b.questionText(), b.optionA(), b.optionB(), b.optionC(), b.optionD(), b.correctOption(),
                     b.saAnswer(), statements, b.explanation(), b.difficulty(), false, List.of(), null, edited,
-                    edited ? original : null);
+                    edited ? original : null).withImages(data.images().get(b.sourceQuestionId()));
         }
         if (hasQuestion && slot.getGeneratedQuestionId() != null) {
             GeneratedQuestion q = data.questions().get(slot.getGeneratedQuestionId());

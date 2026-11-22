@@ -307,6 +307,10 @@ questionText, optionA..optionD, correctOption, explanation, difficulty, createdA
 - `usageCount`: số đề khác nhau (của mọi giáo viên) đang có câu này; `lastUsedAt`: ngày tạo đề mới nhất trong số đó, `null`
   nếu chưa dùng. Câu bị Đổi ra khỏi một chỗ thì đề đó không còn tính.
 - `content` có thể `null` (câu không sinh từ ô ma trận).
+- `images` (22/11, G0 H3; ở cả danh sách và chi tiết, vắng khi câu không có hình): ảnh của câu nhập từ Word có hình, mảng
+  `{id, role, ordinal, mime, widthPx, heightPx, displayWidthMm, url}` như mục 10.3, `url` ký cho người gọi (hợp lệ khoảng một
+  giờ, hết hạn thì tải lại danh sách). Chữ của câu vẫn chứa token `⟦img:<id>⟧`. Một truy vấn ảnh theo lô cho cả trang, không
+  nạp byte ảnh. Câu riêng của người khác không hiện, nên ảnh của nó cũng không lộ.
 
 **Chi tiết một câu:**
 
@@ -865,6 +869,11 @@ khác để sinh lại).
     cầu thừa hưởng của chỗ (của ô nếu ô có mã hoặc văn bản, không thì của đề; mã và văn bản luôn cùng một mức), mã đã lọc theo
     dạng câu của chỗ (`[]` khi mức đó chỉ có văn bản), `text` nguyên văn đã lưu (null khi mức đó chỉ có mã). Hộp Đổi câu dùng
     trường này để chọn sẵn chip và điền sẵn văn bản.
+  - `images` (22/11, G0 H3; vắng khi chỗ không có hình): chỉ ở chỗ lấy từ ngân hàng (`source = "bank"`) mà câu nhập từ Word có
+    hình, mảng `{id, role, ordinal, mime, widthPx, heightPx, displayWidthMm, url}` như mục 10.3; `url` ký cho người xem đề (người
+    gọi). Chữ của câu vẫn chứa token `⟦img:<id>⟧`; giao diện đặt ảnh theo token. Có ở xem đề và kết quả Giữ/Đổi/Sửa của chỗ đó.
+    Một truy vấn ảnh theo lô cho cả đề, bỏ qua khi đề không có chỗ ngân hàng. (Đường tạo đề và Đổi câu hiện chưa chọn câu ngân
+    hàng có hình, nên trường này chưa xuất hiện trong luồng thường.)
 
 ### 7.5. Giữ / Đổi câu khác
 
@@ -1656,6 +1665,8 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
   ảnh công thức WMF, hình vẽ OLE và ảnh trong "Đáp số".
 - Xác nhận: hình của câu được chọn gắn vào câu trong ngân hàng, hình của câu không chọn bị xóa trong cùng transaction.
   Hủy lô hoặc lô quá hạn thì hình chưa gắn bị xóa.
+- Sau khi vào ngân hàng (22/11): `images[]` có ở `GET /api/bank-items`, `GET /api/bank-items/{id}` (mục "Ngân hàng câu hỏi") và ở
+  mục đề của chỗ lấy từ ngân hàng (mục 7.4), cùng dạng như trên, `url` ký cho người gọi.
 
 ## 11. Bài giao trực tuyến (V32, thiết kế `docs/design/lam-bai-truc-tuyen.md`, quyết định 14/11 và 16/11)
 
