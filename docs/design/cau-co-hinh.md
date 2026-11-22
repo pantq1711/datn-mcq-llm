@@ -248,7 +248,7 @@ Migration: 1 file, **V27 thuộc câu có hình** (quyết định 3); PR phươ
 Ngoài phạm vi: AI vẽ hình; giáo viên tải hình mới; đồ thị vẽ từ dữ liệu; sửa câu có hình; ảnh công thức WMF và hình vẽ OLE;
 bảng dữ liệu; hình trong đáp số sa; chữ bọc quanh hình.
 
-## 4. Bổ sung 23/11/2026 – đưa câu có hình vào đề (ĐỀ XUẤT, chờ chủ dự án duyệt)
+## 4. Bổ sung 23/11/2026 – đưa câu có hình vào đề (đã duyệt 23/11)
 
 Trạng thái: **thiết kế, chưa sửa mã, chưa chạy gì** (không Maven, Docker, DB, Gemini). Căn cứ: đọc mã `origin/main` 96087d1
 (PR #101) và nhánh giao diện `fe/figure-display` 8a3f3ff; số dòng dưới đây theo hai bản đó. Mục này bổ sung cho H5, H8, H9; nếu
@@ -394,15 +394,15 @@ Giờ O2 lớn hơn H9 (6 giờ) vì H9 chỉ tính builder và đếm; thêm b�
 
 ### 4.6 Việc chờ chủ dự án quyết (chưa tự chọn)
 
-| ID | Câu hỏi | Đề xuất |
-|---|---|---|
-| D1 | Học sinh xem ảnh bằng cách nào (A/B/C/D, mục 4.1) | A; C là dự phòng |
-| D2 | Người có chỗ đề dùng câu ngân hàng đã gỡ có được xem ảnh (H3(b), 22/11)? | Có, theo quyết định 16/11 |
-| D3 | Thêm cạnh `assignment ──► questionimage` hay đi qua `BankService` (**Q-8, M-35**) | Đi qua `BankService`, không thêm cạnh mới |
-| D4 | Đổi bằng sinh mới từ chỗ có hình: bỏ chữ câu cũ khỏi prompt | Bỏ, giữ lý do |
-| D5 | Trần dung lượng ảnh khi xuất Word | 24 MB, chốt sau số đo container |
-| D6 | Cache ảnh học sinh: `private, max-age` hay `no-store` | `private` |
-| D7 | Có thêm dòng xác nhận quyền dùng hình ở hộp Giao bài không | Cho chủ dự án quyết (chính sách) |
+| ID | Câu hỏi | Đề xuất | Đã chốt 23/11 |
+|---|---|---|---|
+| D1 | Học sinh xem ảnh bằng cách nào (A/B/C/D, mục 4.1) | A; C là dự phòng | **A** (URL ký theo lượt làm); C để dự phòng |
+| D2 | Người có chỗ đề dùng câu ngân hàng đã gỡ có được xem ảnh (H3(b), 22/11)? | Có, theo quyết định 16/11 | **Có** |
+| D3 | Thêm cạnh `assignment ──► questionimage` hay đi qua `BankService` (**Q-8, M-35**) | Đi qua `BankService`, không thêm cạnh mới | **Đi qua `BankService`**, không thêm phụ thuộc module mới; Q-8 giữ nguyên |
+| D4 | Đổi bằng sinh mới từ chỗ có hình: bỏ chữ câu cũ khỏi prompt | Bỏ, giữ lý do | **Bỏ chữ câu cũ, giữ lý do** |
+| D5 | Trần dung lượng ảnh khi xuất Word | 24 MB, chốt sau số đo container | **24 MB**; chốt lại sau khi đo trong container |
+| D6 | Cache ảnh học sinh: `private, max-age` hay `no-store` | `private` | **`private`** |
+| D7 | Có thêm dòng xác nhận quyền dùng hình ở hộp Giao bài không | Cho chủ dự án quyết (chính sách) | **Không thêm** |
 
 **Chưa xác minh** (ghi rõ để không coi là sự thật): `descr` của `wp:docPr` lấy từ alt của pandoc; heap pandoc 256 MB đủ cho ảnh 19–24 MB; `ExamSpecBuilder` không in chữ câu hỏi;
 `MatrixPromptDraftV0.replaceReasonBlock` xử lý được `oldQuestion = null` cho nhánh D4.
