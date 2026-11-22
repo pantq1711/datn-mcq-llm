@@ -1,0 +1,57 @@
+.bank-import-page {
+    width: 100%;
+    max-width: 960px;
+    padding: 24px 24px 96px;
+}
+
+.bank-import-title.ant-typography {
+    margin: 0 0 4px;
+}
+
+.bank-import-steps {
+    margin: 16px 0 24px;
+}
+
+.bank-import-center {
+    display: flex;
+    justify-content: center;
+    padding: 48px 0;
+}
+
+.bank-import-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+/* Nút xác nhận luôn nằm trong tầm nhìn khi cuộn qua danh sách dài */
+.bank-import-confirm-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 12px 16px;
+    border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+    border-radius: 8px;
+    background: var(--ant-color-bg-container, #fff);
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.import-upload-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px 16px;
+    margin-top: 16px;
+}
+
+.import-upload-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}

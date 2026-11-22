@@ -1,0 +1,78 @@
+.import-item {
+    margin-bottom: 12px;
+}
+
+.import-item--blocked {
+    border-color: var(--ant-color-error-border, #ffccc7);
+    background: var(--ant-color-error-bg, #fff2f0);
+}
+
+.import-item-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.import-item-head .ant-tag {
+    margin-inline-end: 0;
+}
+
+.import-item-alert {
+    margin-bottom: 8px;
+}
+
+.import-item-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+/* Cờ liên quan hình hiện ngay trên thẻ để giáo viên soát hình có đúng câu không */
+.import-item-figure-flags {
+    margin-bottom: 8px;
+}
+
+.import-item-figure-flag {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.import-item-figure-flag .ant-tag {
+    margin-inline-end: 0;
+}
+
+.import-item-stem {
+    margin-bottom: 8px;
+    overflow-wrap: anywhere;
+}
+
+.import-item-options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.import-item-option {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.import-item-option .ant-tag {
+    margin-inline-end: 0;
+}
+
+.import-item-solution summary {
+    cursor: pointer;
+    color: var(--ant-color-text-secondary, #8c8c8c);
+}
+
+.import-item-solution {
+    overflow-wrap: anywhere;
+}
