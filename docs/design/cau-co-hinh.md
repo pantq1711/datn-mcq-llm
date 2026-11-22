@@ -248,6 +248,165 @@ Migration: 1 file, **V27 thuộc câu có hình** (quyết định 3); PR phươ
 Ngoài phạm vi: AI vẽ hình; giáo viên tải hình mới; đồ thị vẽ từ dữ liệu; sửa câu có hình; ảnh công thức WMF và hình vẽ OLE;
 bảng dữ liệu; hình trong đáp số sa; chữ bọc quanh hình.
 
+## 4. Bổ sung 23/11/2026 – đưa câu có hình vào đề (ĐỀ XUẤT, chờ chủ dự án duyệt)
+
+Trạng thái: **thiết kế, chưa sửa mã, chưa chạy gì** (không Maven, Docker, DB, Gemini). Căn cứ: đọc mã `origin/main` 96087d1
+(PR #101) và nhánh giao diện `fe/figure-display` 8a3f3ff; số dòng dưới đây theo hai bản đó. Mục này bổ sung cho H5, H8, H9; nếu
+mâu thuẫn với H9 thì mục này thắng, nhưng chỉ sau khi chủ dự án duyệt mục 4.6.
+
+### 4.0 Hiện trạng đã kiểm
+
+| Chỗ | Tình trạng | Bằng chứng |
+|---|---|---|
+| Ứng viên ngân hàng cho tạo đề, Đổi | Loại câu có hình | `ExamSlotRepository.java:104`; một truy vấn dùng chung `findBankCandidates` (gọi từ `ExamBuildService.java:209-210` và `ExamActionService.java:237-245`) |
+| Xem đề, ngân hàng (giáo viên) | Có `images`, URL ký cho người xem | `ExamViewService.java:196-206`, `BankService.java:124-141` |
+| Giao diện giáo viên | Vẽ ảnh | PR2 (`MathText`, `QuestionImage`) |
+| **Xuất Word** | **Chưa**: `ExamMarkdownBuilder.withoutLiteralNewlines(ExamItemDto)` dựng lại `ExamItemDto` bằng 26 tham số, **rơi `images`** (`ExamMarkdownBuilder.java:185-195`); token `⟦img:id⟧` đi qua `cleanText` và ra file Word thành chữ thường | đọc mã |
+| **Học sinh** | **Chưa**: `AssignmentPaper.publicParts` và `reviewItem` chỉ trả `b.questionText()` (`AssignmentPaper.java:93-114, 218-247`); `PublicQuestionDto`, `ReviewItemDto` không có trường ảnh; 3 màn học sinh gọi `MathText` không truyền `images` nên hiện chữ thay thế | đọc mã |
+| Chặn giao bài có hình | **Chưa có**: `AssignmentService.create` chỉ kiểm `ASSIGN_NOT_ALL_KEPT` và `ASSIGN_SA_KEY_UNSUPPORTED` (`AssignmentService.java:54-55, 98-144`), trong khi `lam-bai-truc-tuyen.md` mục 6 đã ghi TODO `ASSIGN_HAS_FIGURE` (14/11) | đọc mã, đọc tài liệu |
+| `QcVersionCard` | Chỉ dùng `MathText` cho `solverReasoning`; `VersionDto` của vết QC **không có chữ đề, không có ảnh** (`ExamQcTraceDtos`, `qcTrace.types.ts`); Solver không chạy cho câu có hình (H8) | đọc mã |
+| Cờ "giống câu khác trong đề" | `ExamSlotSiblings.fromBank` (`:124-130`) dựng `DedupCandidate` **không có `imageKey`**: phần còn lại của H7 | đọc mã |
+
+**Thứ tự bắt buộc:** bỏ điều kiện ở `ExamSlotRepository.java:104` chỉ được merge sau khi xong (F1) sửa quyền xem ảnh, (O2) xuất
+Word, (A1) chặn giao bài có hình. Thiếu O2 thì file Word ra chữ `⟦img:812⟧` mà không báo lỗi; thiếu A1 thì học sinh nhận câu
+thiếu hình, không trả lời được; thiếu F1 thì đề cũ mất ảnh khi người Giữ gỡ câu (xem H8, "Việc phải xử lý trước...").
+
+### 4.1 Học sinh xem ảnh thế nào
+
+**Ràng buộc rút từ mã:**
+1. Học sinh không có tài khoản. Danh tính duy nhất là token lượt làm ở header `X-Attempt-Token` (`PublicAttemptController.java:30`);
+   `<img>` không gửi header đó. Thiết kế đã chốt "không cookie", nên H3 (`id|exp|userId`, kiểm quyền theo người dùng) không dùng được.
+2. Link bài giao đã cho **bất kỳ ai có link** xem chữ của đề (trần 300 lượt, `PublicAttemptService.start`). Vì vậy ảnh không thể
+   bí mật hơn chữ; mục tiêu thực tế là "không rộng hơn những gì JSON đã trả cho đúng lượt đó".
+3. Thời gian: lượt làm 5–180 phút, nộp trễ ân hạn 2 phút (`AttemptRules.GRACE`); xem lại sau khi đóng có thể nhiều ngày sau (P3 dựng
+   lại DTO mỗi lần). URL H3 sống 1–2 giờ nên không đủ cho lượt 180 phút.
+4. Ảnh `solution` (lời giải) **không được lộ khi còn làm bài**: lời giải chỉ có khi bài đóng + hết ân hạn + `showSolutions`.
+5. Hạn mức hiện có: tạo lượt 200/phút/IP, mở lại 30/phút/lượt, nộp 20/phút/lượt (`PublicLimitProperties`); mọi phản hồi `no-store`.
+
+**So sánh bốn cách** (số liệu kích thước từ mục 1: hình thật trung vị 40 KB, lớn nhất 237 KB PNG; đề 40 câu thật ≈ 13 hình ≈ 0,5 MB;
+cận trên theo số đo = 40 câu × 2 hình × 237 KB ≈ 19 MB):
+
+| | Cách | Ưu | Nhược, rủi ro |
+|---|---|---|---|
+| **A** | **URL ký gắn lượt làm**: `GET /api/public/question-images/{id}?exp=&a=<attemptId>&sig=`; `sig = HMAC(khóa ảnh, "p\|id\|exp\|attemptId")`; P2/P3 trả `images[].url` | `<img>` thường, tận dụng cache; thu hồi theo lượt/bài; cào ảnh phải tạo lượt trước (trần 300, 200/phút/IP, để lại dấu lớp + STT); khóa chung H3, tiền tố `p\|` tách miền chữ ký nên URL giáo viên không dùng được cho học sinh và ngược lại | Thêm một đường `permitAll` (đổi hợp đồng API, M-35); URL là "ai có URL thì xem" tới `exp`; mỗi ảnh một truy vấn kiểm quyền |
+| **B** | Nhúng data URI vào JSON P2/P3 | Không thêm endpoint, không URL bí mật, không phụ thuộc mạng giữa chừng | Cận trên 19 MB (base64 ≈ 25 MB) mỗi lượt; cả lớp 40 em bấm bắt đầu cùng lúc ≈ 1 GB qua một tiến trình có heap 846 MiB (`Dockerfile:51`); `no-store` nên mỗi lần tải lại gửi lại toàn bộ; P3 hạn mức 30/phút |
+| **C** | `fetch` kèm `X-Attempt-Token` rồi dùng blob URL | Không có URL mang quyền; dùng đúng cơ chế token hiện có | Component riêng, bất đồng bộ, mất `loading="lazy"` và cache trình duyệt; H3/U1 đã bỏ cách này cho giáo viên vì phức tạp; blob giữ trong bộ nhớ trang |
+| **D** | URL ký theo **mã bài giao** (không theo lượt) | Một URL cho cả lớp | Không thu hồi theo lượt; **không cần tạo lượt** để cào ảnh, qua mặt trần 300 và hạn mức tạo lượt; không gắn được với quyền xem lời giải |
+
+**Đề xuất: A.** B bị loại vì cận trên; D bị loại vì mở rộng hơn JSON; C là phương án dự phòng nếu chủ dự án không chấp nhận URL mang
+quyền (cách làm: thêm header vào cùng endpoint, bỏ `exp`/`sig`).
+
+**Thiết kế A:**
+- `exp`: khi đang làm bài = `deadline_at + 2 phút` (cố định cả lượt nên URL giữ nguyên qua các lần P3, cache dùng được); sau khi kết quả
+  mở = hết giờ tròn kế tiếp + 1 giờ (như H3), vì P3 ký lại mỗi lần mở.
+- Khi tải ảnh, sau khi chữ ký và hạn đúng, kiểm theo **cùng điều kiện hiển thị với JSON**: (1) lượt `a` còn tồn tại (T5/T6 xóa lượt hoặc
+  bài thì 404 ngay); (2) ảnh thuộc một câu của bài giao của lượt đó, tức `question_image.generated_question_id = bank_item.source_question_id`
+  với `bank_item.id ∈ assignment_item(assignment_id)`; (3) ảnh khác `solution`: `AttemptRules.canSubmit` **hoặc** (`resultsReleased` và
+  `showSolutions`); ảnh `solution`: chỉ khi `resultsReleased` và `showSolutions`. Không đạt thì 404 `IMAGE_NOT_FOUND` (cùng mã H3, không phân biệt lý do).
+- **Không dùng `hasAccessPermission` của H3** cho học sinh: hàm đó đòi `removed_at IS NULL`, còn bài giao đọc câu theo `assignment_item.bank_item_id`
+  và không lọc `removed_at` (`BankService.getItems`); dùng lại sẽ tái hiện đúng lỗi quyền 22/11 ngay trên màn học sinh.
+- DTO mới `PublicImageDto(id, mime, widthPx, heightPx, displayWidthMm, url)` (không `role`, `sha256`, kích thước byte), thêm trường `images`
+  (bỏ khi rỗng) vào `PublicQuestionDto` và `ReviewItemDto`. Khi còn làm bài **không đưa** ảnh role `solution` vào `images`. Nạp theo lô, một truy vấn cho cả đề.
+- Hạn mức: bộ đếm thứ tư theo lượt, `imagePerAttemptPerMinute` mặc định 300 (đề 80 ảnh + tải lại), 429 khi vượt. Header như H3, `Cache-Control: private,
+  max-age=<min(giây còn lại đến exp, 3600)>`.
+- Phụ thuộc module: cần `assignment ──► questionimage` (cạnh mới), hoặc đi qua `BankService` mà `assignment` đã phụ thuộc. **Chạm Q-8 và M-35: chờ chủ dự án.**
+
+**Rủi ro lộ ảnh bộ đề thương mại (đã cân nhắc):**
+1. Người có link: vốn đã thấy chữ, cũng chụp màn hình được; kỹ thuật không chặn được. Không nên hứa hơn mức này trong báo cáo.
+2. URL bị chuyển tiếp: chỉ sống tới `exp`, gắn một lượt, không đổi sang ảnh khác được; mất hiệu lực khi xóa lượt/bài hoặc khi hết quyền hiển thị ở (3).
+3. Cào hàng loạt: phải tạo lượt rồi mới có URL; mỗi lượt để lại lớp + STT, bị trần 300 và hạn mức theo IP. Với D thì không.
+4. Máy phòng tin học dùng chung: ảnh nằm trong cache đĩa trình duyệt tới hết `max-age`; `no-store` chặt hơn nhưng mất cache khi tải lại. Mặc định `private`; chủ dự án quyết.
+5. Bản quyền: đưa hình của bộ đề thương mại cho học sinh là phân phối lại, khác việc giáo viên dùng riêng. Hộp Giao bài có ô đồng ý (`consent_confirmed_at`) nhưng chỉ nói về học sinh và phụ huynh, chưa nói về hình. Đây là quyết định chính sách, không phải kỹ thuật.
+
+**Bài giao đã đóng:** đóng sớm hoặc đóng lười thì lượt chưa nộp không còn `parts` nên ảnh 404 theo (3) (giao diện đã chuyển sang màn "đã đóng"); sau ân hạn,
+`showSolutions = true` thì phần xem lại có ảnh, ký lại mỗi lần P3; `showSolutions = false` thì không có ảnh nào. Câu bị gỡ khỏi ngân hàng sau khi giao: vẫn hiện (đúng 16/11), ảnh đi
+theo `assignment_item` nên vẫn tải được. Ảnh thuộc câu nguồn và ngân hàng chưa sửa được (H5) nên bài đã giao không đổi ảnh; khi mở "sửa câu ngân hàng" phải quyết lại có chụp ảnh khi giao hay không.
+
+### 4.2 O2 – xuất Word theo H9
+
+Ba điều bắt buộc ngay sau bảng H9 giữ nguyên; phần dưới là cách làm cụ thể.
+
+1. **Nạp byte.** `ExamExportService.docx` sau `viewService.view` gom id ảnh từ `images` của view (đã lọc theo quyền người xuất, H3(a)), nạp byte bằng **một** truy vấn
+   chiếu (`id, mime, data, widthPx, heightPx, displayWidthMm`) trong transaction đọc ngắn, **trước** khi vào `PandocRunner` (không giữ transaction lúc chạy pandoc).
+   Không đi qua URL. `withoutLiteralNewlines(ExamItemDto)` phải giữ `images` (đang rơi).
+2. **Data URI trong `ExamMarkdownBuilder`.** Hàm nhận thêm bản đồ id → ảnh. Token riêng một dòng (câu dẫn, ý tf, lời giải) thành một đoạn kiểu `ExamFigure` (căn giữa,
+   thêm vào `ExamReferenceDoc`) chứa `![qimg:812](data:image/png;base64,…){width=<W>mm}` với `W = min(displayWidthMm, 120)`. Ảnh ở phương án: tối đa 40 mm và **ép bố cục 2 cột**
+   khi có phương án chứa ảnh (hiện `OptionLayout.choose` chỉ đo chữ); không thêm dấu chấm sau token (`endWithPeriod`). Ảnh role `solution` chỉ ra ở phần lời giải của file đầy đủ, không ra ở `ExportContent.EXAM`.
+   Alt `qimg:<id>` để đếm lại (bước 3). Token còn lại mà không có ảnh tương ứng: dừng ở bước dựng Markdown, cùng mã lỗi dưới.
+3. **Đếm lại.** Trong `PandocRunner.doMarkdownToDocx`, trên docx **cuối** (sau `finish`, ở cả ba nhánh trả về: Equation, rơi về Equation, MathType) đếm trong `word/document.xml`: số `w:drawing`
+   và số `wp:docPr` có `descr="qimg:<id>"` theo từng id; kỳ vọng = số lần token được chèn theo id (cùng ảnh dùng hai chỗ = 2). Lệch thì ném
+   `DocumentExportException(500, "EXPORT_IMAGE_MISSING", …)`, ghi log id đề, số kỳ vọng, số đếm, danh sách id thiếu (không ghi chữ đề, URL hay `sig`); không trả file. Kỳ vọng tổng `w:drawing` chỉ đúng khi
+   file mẫu không có drawing nào: test khóa số này ở file mẫu khi không có ảnh câu. `ApiExceptionHandler` đã trả `code` của `DocumentExportException`.
+4. **Giới hạn dung lượng** (đề xuất, chờ số đo): tổng ảnh một lần xuất ≤ 24 MB (cận trên đo được 19 MB, cộng 25%), vượt thì `422 EXPORT_IMAGES_TOO_LARGE`. Heap pandoc lấy từ `PandocLimiter.getPandocHeapMb()`, mặc định 256 MB khi không có limiter
+   (`PandocRunner.java:248`; giá trị cấu hình thật khi chạy chưa kiểm); mục 2b chỉ đo 953 KB ảnh (26 MiB), **chưa biết 19–24 MB có vừa 256 MB**. Nếu không vừa: phương án dự phòng là đưa ảnh giữ chỗ 1×1 vào Markdown rồi thay `word/media/*` sau pandoc.
+
+**Chạy lại thử nghiệm 2b trong container Linux (chưa chạy; cần cho phép riêng khi tới lượt):**
+- Dựng image **từ `back_end/Dockerfile` thật** (không dùng image thử `datn-backend:check`), chạy bằng uid 10001 và giới hạn bộ nhớ 1536 MB như `compose.prod.yaml:67`.
+- Fixture **tự sinh**, không dùng ảnh bộ đề thương mại (quyết định 3/11 mục 5): PNG nhiễu ngẫu nhiên (không nén được) cỡ 20 / 237 / 500 KB; file có công thức dùng `DocxBuilder` và `spikes/mathtype-ole/KIEM_TRA_mo_rong.docx`.
+- Đo: (1) data URI dưới `--sandbox` chạy được; (2) đối chứng: ảnh dạng file vẫn exit 0 mà thiếu ảnh (chứng minh cần đếm lại); (3) `descr` của `wp:docPr` có đúng `qimg:<id>` (**giả định, chưa xác minh**); (4) MathType `Kept-Omml = 0` với 12 công thức + 4 ảnh và 165 công thức + 33 ảnh, số `w:drawing` giữ nguyên;
+  (5) RSS đỉnh và thời gian với ba cỡ: ≈ 1 MB (so với số Windows), 10 MB, 24 MB, dưới `+RTS -M256m` như ứng dụng (đọc `memory.peak` của cgroup hoặc `/usr/bin/time -v` nếu có);
+  (6) mở file bằng Word thật: kiểm tay, container không làm được.
+- Khung lệnh (minh họa, chưa kiểm cú pháp, chốt khi viết PR): `docker build -t datn-backend:o2 back_end`, rồi `docker run --rm --user 10001 --memory 1536m -v <thư mục fixture>:/work:ro --entrypoint /bin/sh datn-backend:o2 -c "pandoc --sandbox …"`.
+- Kết quả ghi vào mô tả PR O2 và thay số ở bảng 2b.
+
+**Test chính O2:** docx có đủ ảnh theo từng id (ảnh dùng hai chỗ đếm 2); thiếu ảnh trong DB hoặc token không có ảnh → `EXPORT_IMAGE_MISSING`, không trả file; ảnh phương án 2×2, không dấu chấm sau token; token đi qua `cleanText`
+không đổi; `images` không rơi ở `withoutLiteralNewlines`; MathType `Kept-Omml = 0` với file có ảnh; vượt giới hạn dung lượng → 422; xuất `EXAM` không có ảnh `solution`; MockMvc `/api/exams/{id}/export` trả 500 + `code`.
+
+### 4.3 Bỏ điều kiện loại ở `ExamSlotRepository.java:104`
+
+Đây là **một dòng SQL** nhưng `findBankCandidates` dùng chung cho mọi nơi chọn câu ngân hàng:
+
+| Nơi | Thay đổi khi bỏ điều kiện | Việc cần làm |
+|---|---|---|
+| Tạo đề theo ma trận và theo bài (`ExamBuildService.java:209-210`) | Ô có thể nhận câu có hình; câu mới nhập có `uses = 0` nên **xếp lên đầu** (xếp hạng mềm W1-3), đề có thể dồn câu nhập có hình | Test: đề có câu hình trả `images` đúng; không đổi gì cho câu không hình |
+| Đổi bằng ngân hàng (`ExamActionService.java:237-245`) | Câu thay có thể có hình; câu cũ có hình vào `exam_slot_action` và vào `out_of_reach` như thường | Test Đổi qua lại câu có hình |
+| Đổi bằng **sinh mới** có lý do quá dễ / quá khó (`ExamActionService.java:247-249, 292-300`) | `currentQuestionText` lấy chữ câu ngân hàng **kèm token** rồi đưa vào prompt Gemini; mô hình không thấy hình nên lời nhận xét "quá dễ" vô nghĩa | Đề xuất: câu cũ có hình thì **không** đưa chữ câu cũ vào prompt, vẫn giữ lý do (D4); test khóa |
+| Sửa (`ExamActionService.java:373-377`) | Chỗ ngân hàng vốn 409 `SLOT_FROM_BANK`; không đổi | Mục 4.4 |
+| Giao bài | Học sinh chưa có đường ảnh | A1 (guard) trước, gỡ guard ở A2 sau khi S1+S2 xong |
+| Cờ "giống câu khác trong đề" | Hai câu cùng chữ khác hình bị báo giống (`ExamSlotSiblings.java:124-130`, thiếu `imageKey`); chỉ là cờ thông tin | Làm nốt H7 phía đề: nạp `imageKey` cho câu ngân hàng |
+| Thống kê câu | `item_stat` (p, D) không dùng chữ đề; tab thống kê chỉ hiện Phần + số câu (`ItemStatsTab.tsx`) → không đổi. Thống kê sử dụng ngân hàng (`usageCount`, `lastUsedAt`) tính theo `bank_item_id` → không đổi. Thống kê đầu ra LLM đã lọc `origin = 'llm'` (quyết định 3/11 mục 4) nên câu nhập có hình không lẫn vào | Chỉ thêm test khóa; không sửa mã |
+| Quyền xem ảnh (F1) | Giáo viên B xem đề dùng câu chung của A; A gỡ câu thì B mất ảnh | Đề xuất sửa `hasAccessPermission`: thêm điều kiện "người xem là chủ (`exam.created_by`) của một đề chưa xóa có chỗ dùng câu ngân hàng có `source_question_id` = câu nguồn của ảnh", **không** đòi `removed_at IS NULL` cho trường hợp đó (D2) |
+| `QcVersionCard` | Không hiện chữ đề hay ảnh (xem 4.0); chữ thay thế của `MathText` đã bảo hiểm | **Không sửa**; thêm 1 test khóa chữ thay thế khi thiếu `images` |
+
+Cũng ghi nhận (không sửa trong đợt này): chưa kiểm `ExamSpecBuilder` có in chữ câu hỏi hay không (tìm thấy dùng `cellId`, số câu); nếu có thì cần cùng xử lý token như O2.
+
+### 4.4 Sửa câu có hình: vẫn ngoài phạm vi (xác nhận lại H5)
+
+Giữ nguyên: lý do (i) chỗ ngân hàng không sửa được trong đề, 409 `SLOT_FROM_BANK` (`ExamActionService.java:373-377`: "sửa câu ngân hàng chưa hỗ trợ"); (ii) sửa câu ngân hàng còn chờ ở Q-4c
+(quyết định 16/11 chỉ chốt "Gỡ"); (iii) sửa câu LLM chứa `⟦img:` trả 400, test `QuestionEditImageGuardTest`. Giáo viên gặp hình sai thì dùng Đổi. Không mở lại vì mở nó kéo theo
+"giữ hình / bỏ hình", chụp lại hình khi sửa, và `has_figure_unchecked` (H8), tức một thiết kế riêng. **Không chạm Q-4c.**
+
+### 4.5 Chia PR, giờ, test chính
+
+| PR | Nội dung | Giờ | Sau | Test chính |
+|---|---|---|---|---|
+| **F1** | `hasAccessPermission` theo 16/11 (D2) | 2 | – | Người xem là chủ đề có chỗ dùng câu đã gỡ → 200; người không có chỗ → 404; đề đã xóa → 404; `u` bị khóa → 404 |
+| **A1** | `AssignmentService.create` trả 409 `ASSIGN_HAS_FIGURE` nếu có chỗ ngân hàng nào của đề có ảnh; nút Giao bài mờ kèm lý do | 2 | – | Đề không hình giao được như cũ; đề có một câu hình → 409, không ghi gì |
+| **O2** | Mục 4.2 | 12 (6 mã + 3 test + 3 chạy container) | – | Mục 4.2 |
+| **S1** | Học sinh phía BE: endpoint, ký theo lượt, điều kiện hiển thị, DTO, hạn mức, `SecurityConfig`, tài liệu API | 10 | duyệt D1, D3 | Chữ ký sai/hết hạn/đổi `id`,`a`,`exp` → 404; lượt bị xóa → 404; **ảnh `solution` trong lúc làm bài → 404 và không có trong `images`**; sau ân hạn + `showSolutions` → 200; `showSolutions=false` → 404; câu đã gỡ vẫn tải được; vượt hạn mức → 429; MockMvc không JWT |
+| **S2** | Học sinh phía FE: truyền `images` cho `MathText` ở 3 màn; ảnh lỗi hiện chữ thay thế | 3 | S1 | Token → ảnh; URL hết hạn → chữ thay thế rồi tải lại bằng P3 |
+| **X1** | Bỏ điều kiện dòng 104; không gửi chữ câu cũ có hình vào prompt Đổi; `imageKey` cho `ExamSlotSiblings` | 4 | F1, O2, A1 | Tạo đề, Đổi (ngân hàng và sinh mới) với câu hình; cờ giống không báo khi khác hình; test khóa thống kê |
+| **A2** | Gỡ `ASSIGN_HAS_FIGURE` | 1 | S1, S2, X1 | Đề có hình giao được; học sinh làm được |
+| (nhỏ) | Test khóa `QcVersionCard` | 0,5 | – | Thiếu `images` → chữ thay thế |
+
+Tổng ≈ 34,5 giờ. Thứ tự merge: F1 → (O2 ∥ A1 ∥ S1) → X1 → S2 → A2. Giữa X1 và A2 giáo viên đã tạo, xem và xuất Word được đề có hình nhưng chưa giao được.
+Giờ O2 lớn hơn H9 (6 giờ) vì H9 chỉ tính builder và đếm; thêm bố cục phương án, lời giải, giới hạn dung lượng và chạy container.
+
+### 4.6 Việc chờ chủ dự án quyết (chưa tự chọn)
+
+| ID | Câu hỏi | Đề xuất |
+|---|---|---|
+| D1 | Học sinh xem ảnh bằng cách nào (A/B/C/D, mục 4.1) | A; C là dự phòng |
+| D2 | Người có chỗ đề dùng câu ngân hàng đã gỡ có được xem ảnh (H3(b), 22/11)? | Có, theo quyết định 16/11 |
+| D3 | Thêm cạnh `assignment ──► questionimage` hay đi qua `BankService` (**Q-8, M-35**) | Đi qua `BankService`, không thêm cạnh mới |
+| D4 | Đổi bằng sinh mới từ chỗ có hình: bỏ chữ câu cũ khỏi prompt | Bỏ, giữ lý do |
+| D5 | Trần dung lượng ảnh khi xuất Word | 24 MB, chốt sau số đo container |
+| D6 | Cache ảnh học sinh: `private, max-age` hay `no-store` | `private` |
+| D7 | Có thêm dòng xác nhận quyền dùng hình ở hộp Giao bài không | Cho chủ dự án quyết (chính sách) |
+
+**Chưa xác minh** (ghi rõ để không coi là sự thật): `descr` của `wp:docPr` lấy từ alt của pandoc; heap pandoc 256 MB đủ cho ảnh 19–24 MB; `ExamSpecBuilder` không in chữ câu hỏi;
+`MatrixPromptDraftV0.replaceReasonBlock` xử lý được `oldQuestion = null` cho nhánh D4.
+
 ## Quyết định đã chốt (An, 11/11/2026)
 
 1. Tiếp tục bỏ câu có ảnh công thức WMF (16/161 câu) và hình vẽ OLE (2 câu); lý do hiển thị "công thức dạng ảnh, chưa nhập được".
