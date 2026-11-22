@@ -159,7 +159,22 @@ public class QuestionImageService {
                 image.getGeneratedQuestionId(),
                 userId
         );
-        return count != null && count > 0;
+        if (count != null && count > 0) {
+            return true;
+        }
+
+        // Trường hợp C (D2, quyết định 16/11): câu đã gỡ khỏi ngân hàng vẫn hiển thị ở đề cũ, nên người là chủ một đề
+        // chưa xóa có chỗ dùng câu đó vẫn xem được ảnh. Cố ý không đòi removed_at IS NULL; đề đã xóa không tính.
+        Integer slotCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM exam_slot es " +
+                "JOIN exam e ON e.id = es.exam_id AND e.deleted_at IS NULL AND e.created_by = ? " +
+                "JOIN bank_item bi ON bi.id = es.bank_item_id " +
+                "WHERE bi.source_question_id = ?",
+                Integer.class,
+                userId,
+                image.getGeneratedQuestionId()
+        );
+        return slotCount != null && slotCount > 0;
     }
 
     private boolean matchesEtag(String ifNoneMatch, String etag) {
