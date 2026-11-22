@@ -1,8 +1,10 @@
 package com.datn.mcq.questionimage.service;
 
 import com.datn.mcq.common.exception.ApiErrorException;
+import com.datn.mcq.questionimage.dto.QuestionImageDto;
 import com.datn.mcq.questionimage.model.QuestionImage;
 import com.datn.mcq.questionimage.repository.QuestionImageRepository;
+import com.datn.mcq.questionimage.repository.QuestionImageRepository.MetadataProjection;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -10,7 +12,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 @Service
 public class QuestionImageService {
@@ -75,6 +84,35 @@ public class QuestionImageService {
         }
 
         return new ImagePayload(false, image.getData(), image.getMime(), etag, maxAgeSeconds);
+    }
+
+    /**
+     * H3 (O1): ảnh của các câu nguồn (generated_question) theo lô, mỗi ảnh kèm URL ký cho {@code viewerId}. Đúng một truy
+     * vấn metadata (không nạp cột bytea data) bất kể số câu; không có câu thì không truy vấn. Câu không có hình vắng khỏi kết
+     * quả; ảnh của một câu theo thứ tự {@code ordinal}.
+     *
+     * <p>Không kiểm quyền xem câu: nơi gọi chỉ đưa vào câu mà người xem được thấy (ngân hàng theo visible_to_user_id, xem đề
+     * theo chủ đề). Quyền thật được kiểm lại mỗi lần tải ảnh ({@link #getImagePayload}), nên URL lộ ra ngoài vẫn không mở được
+     * ảnh của câu người khác.</p>
+     */
+    @Transactional(readOnly = true)
+    public Map<Integer, List<QuestionImageDto>> signedImagesBySourceQuestion(Collection<Integer> questionIds,
+                                                                              int viewerId) {
+        Set<Integer> ids = new LinkedHashSet<>();
+        if (questionIds != null) {
+            questionIds.stream().filter(Objects::nonNull).forEach(ids::add);
+        }
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Instant now = Instant.now();
+        Map<Integer, List<QuestionImageDto>> out = new LinkedHashMap<>();
+        for (MetadataProjection m : repository.findMetadataByGeneratedQuestionIdIn(ids)) {
+            out.computeIfAbsent(m.getGeneratedQuestionId(), k -> new ArrayList<>())
+                    .add(new QuestionImageDto(m.getId(), m.getRole(), m.getOrdinal(), m.getMime(), m.getWidthPx(),
+                            m.getHeightPx(), m.getDisplayWidthMm(), signer.buildSignedUrl(m.getId(), viewerId, now)));
+        }
+        return out;
     }
 
     private boolean isUserActive(int userId) {

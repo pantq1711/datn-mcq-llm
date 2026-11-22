@@ -150,6 +150,16 @@ diện dùng nguyên, không tự ghép tham số:
 `image_convert_failed`, `image_limit`. `has_image` giữ cho ảnh công thức WMF và hình vẽ OLE, giao diện hiện "công thức dạng
 ảnh, chưa nhập được" (quyết định 1).
 
+*Cài đặt `images` ở ngân hàng và xem đề (22/11/2026, sau E2E 22/11 B8):* một hàm duy nhất
+`QuestionImageService.signedImagesBySourceQuestion(questionIds, viewerId)` nạp metadata ảnh của nhiều câu nguồn bằng MỘT truy vấn
+(chiếu không có cột `data`) và ký URL cho người xem. `BankService` gọi một lần mỗi trang danh sách và mỗi lần xem chi tiết (câu
+riêng của người khác đã bị lọc trước đó nên không có URL); `ExamViewService` gọi một lần cho cả đề (danh sách đề chỉ cần số đếm nên truyền
+người xem null: không ký URL, không truy vấn ảnh), chỉ với các chỗ `source = "bank"` (ảnh thuộc câu nguồn của `bank_item`, H5), bỏ qua truy vấn khi đề không có chỗ ngân hàng; người
+xem là chủ đề (`actorId`, đã đi qua tới `ExamViewService.item` cho 4 thao tác trong `ExamActionService`). `images` bỏ khỏi JSON khi
+rỗng nên JSON của câu không hình và ảnh chụp `golden.json` không đổi. Thêm phụ thuộc `bank ──► questionimage` và
+`exam ──► questionimage` (`docs/architecture/backend-structure.md`). Còn lại của H5 (đường đưa câu có hình vào đề) vẫn chưa làm:
+tạo đề và Đổi câu hiện không chọn câu ngân hàng có hình, nên `images` của mục đề chưa xuất hiện trong luồng thường.
+
 **H4. Chuẩn hóa khi nhập.** Kiểm magic bytes, không tin đuôi file: PNG `89 50 4E 47`, JPEG `FF D8 FF`, GIF `GIF8`, BMP `BM`,
 EMF (bản ghi 1 + ` EMF` ở offset 40). Đọc kích thước từ header trước khi giải mã. Mọi ảnh giải mã rồi mã hóa lại
 (bỏ metadata): JPEG giữ JPEG, còn lại thành PNG.
@@ -182,8 +192,21 @@ không bao giờ trùng; cùng chữ cùng hình → trùng như cũ. Nơi sửa
 `ExamSlotSiblings.java:126,143`, `DedupService.java:65`, `QcOrchestrator.java:407`.
 
 **H8. QC.** Câu nhập có hình không qua QC và Solver, như mọi câu nhập (M-10, quyết định 3/11 mục 4). Trong phạm vi này không
-đường nào đưa câu có hình vào QC. Chốt phòng ngừa: `QuestionEditService.enqueueAnswerCheck` (`QuestionEditService.java:276`)
+đường nào đưa câu có hình vào QC. Chốt phòng ngừa: `QuestionEditService.enqueueAnswerCheck`
 không xếp Solver cho câu có token ảnh và ghi lý do thông tin `has_figure_unchecked` ("có hình, chưa kiểm đáp án tự động").
+
+*Điều chỉnh 22/11/2026 (sau E2E 22/11, B7 và B10; chủ dự án duyệt):* chỉ làm phần "không xếp Solver"; **bỏ cờ
+`has_figure_unchecked`**. Lý do: sau chốt H2 (sửa câu có `⟦img:` trả 400) không còn bản sửa nào chứa token, nên đường này không
+thể tới được bằng HTTP; cờ thông tin (`infoReasons`) lại lấy từ kết quả QC đã lưu (`QcSummaryService`), không có chỗ lưu cho
+một lý do không đến từ QC. Chốt chặn nằm ở `QuestionEditService.enqueueAnswerCheck`: câu có token ở phần Solver nhìn thấy
+(đề dẫn, phương án, ý Đúng/Sai) thì không xếp job; test khóa ở `QuestionEditImageGuardTest`. Nếu sau này mở "sửa câu có hình"
+(H5) thì phải quyết lại cách báo "chưa kiểm đáp án" cho giáo viên.
+
+**Việc phải xử lý trước khi mở đường đưa câu có hình vào đề** (ghi nhận 22/11, chưa làm; hiện `ExamSlotRepository.java:104` còn
+chặn câu có hình): kiểm quyền tải ảnh của I1 (`QuestionImageService.hasAccessPermission`) lệch với quyết định 16/11 ("câu đã
+gỡ khỏi ngân hàng vẫn hiện ở đề cũ"). Người không phải chủ ảnh chỉ tải được khi câu ngân hàng chưa gỡ (`removed_at IS NULL`), nên
+giáo viên B dùng câu chung của A, A gỡ câu thì đề cũ của B mất ảnh (giao diện hiện chữ thay thế); ngược lại chủ ảnh luôn tải
+được kể cả khi đã gỡ. Cần quyết định: người có chỗ đề đang dùng câu ngân hàng đó có được xem ảnh không (H3(b)).
 
 **H9. Chia PR** (thứ tự merge: I1 → I2, O1, U1 song song → I3, O2 → U2)
 

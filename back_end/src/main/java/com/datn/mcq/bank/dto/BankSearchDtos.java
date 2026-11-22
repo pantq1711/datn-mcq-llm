@@ -4,6 +4,7 @@ import com.datn.mcq.bank.dto.BankItemDto.StatementDto;
 import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionType;
+import com.datn.mcq.questionimage.dto.QuestionImageDto;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.time.LocalDateTime;
@@ -36,6 +37,8 @@ public final class BankSearchDtos {
      *
      * @param visibility (16/11, NV-30) {@code shared} (câu dùng chung) hoặc {@code private} (câu riêng của người xem; câu
      *                   riêng của người khác không bao giờ hiện)
+     * @param images     (22/11, G0 H3) ảnh của câu nhập từ Word có hình, mỗi ảnh có URL ký ngắn hạn cho đúng người xem; giao
+     *                   diện đặt ảnh theo token {@code ⟦img:<id>⟧} trong chữ. Vắng khỏi JSON khi câu không có hình
      */
     public record BankListItemDto(
             Integer id,
@@ -61,8 +64,16 @@ public final class BankSearchDtos {
             OriginDto origin,
             long usageCount,
             LocalDateTime lastUsedAt,
-            String visibility
-    ) {}
+            String visibility,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<QuestionImageDto> images
+    ) {
+        /** Bản sao có {@code images} (nạp theo lô sau khi dựng dòng). */
+        public BankListItemDto withImages(List<QuestionImageDto> images) {
+            return new BankListItemDto(id, sourceQuestionId, reviewId, questionText, optionA, optionB, optionC, optionD,
+                    correctOption, explanation, difficulty, createdAt, questionType, saAnswer, statements, subjectId,
+                    subjectName, gradeLevel, topic, content, origin, usageCount, lastUsedAt, visibility, images);
+        }
+    }
 
     public record BankPageDto(List<BankListItemDto> items, int page, int size, long totalItems, int totalPages) {}
 
@@ -123,7 +134,8 @@ public final class BankSearchDtos {
             ProvenanceDto provenance,
             UsageDto usage,
             String visibility,
-            boolean canRemove
+            boolean canRemove,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<QuestionImageDto> images
     ) {
         public static BankItemDetailDto of(BankListItemDto i, ProvenanceDto provenance, UsageDto usage,
                                            boolean canRemove) {
@@ -131,7 +143,7 @@ public final class BankSearchDtos {
                     i.optionB(), i.optionC(), i.optionD(), i.correctOption(), i.explanation(), i.difficulty(),
                     i.createdAt(), i.questionType(), i.saAnswer(), i.statements(), i.subjectId(), i.subjectName(),
                     i.gradeLevel(), i.topic(), i.content(), i.origin(), i.usageCount(), i.lastUsedAt(), provenance,
-                    usage, i.visibility(), canRemove);
+                    usage, i.visibility(), canRemove, i.images());
         }
     }
 

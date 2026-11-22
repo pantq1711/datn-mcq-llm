@@ -23,6 +23,8 @@ import com.datn.mcq.enums.Difficulty;
 import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionOrigin;
 import com.datn.mcq.enums.QuestionType;
+import com.datn.mcq.questionimage.dto.QuestionImageDto;
+import com.datn.mcq.questionimage.service.QuestionImageService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,11 +43,14 @@ public class BankService {
     private final BankItemRepository bankItemRepository;
     private final BankItemStatementRepository bankItemStatementRepository;
     private final BankSearchRepository searchRepository;
+    private final QuestionImageService questionImageService;
 
     public BankService(BankItemRepository bankItemRepository,
                        BankItemStatementRepository bankItemStatementRepository,
-                       BankSearchRepository searchRepository) {
+                       BankSearchRepository searchRepository,
+                       QuestionImageService questionImageService) {
         this.searchRepository = searchRepository;
+        this.questionImageService = questionImageService;
         this.bankItemRepository = bankItemRepository;
         this.bankItemStatementRepository = bankItemStatementRepository;
     }
@@ -116,9 +121,23 @@ public class BankService {
         long total = searchRepository.count(filter);
         List<BankSearchRepository.Row> rows = searchRepository.search(filter, order, page * size, size);
         Map<Integer, List<BankItemStatement>> statements = statementsOf(rows);
+        Map<Integer, List<QuestionImageDto>> images = imagesOf(rows, viewerId);
         List<BankListItemDto> items = rows.stream()
-                .map(r -> listItem(r, statements.getOrDefault(r.id(), List.of()))).toList();
+                .map(r -> listItem(r, statements.getOrDefault(r.id(), List.of()))
+                        .withImages(images.get(r.sourceQuestionId()))).toList();
         return new BankPageDto(items, page, size, total, (int) ((total + size - 1) / size));
+    }
+
+    /**
+     * G0 H3 (O1): ảnh của các câu trong trang, một truy vấn theo lô (không theo số câu), URL ký cho người xem. Các dòng đã
+     * được lọc theo quyền xem câu (câu riêng của người khác không có mặt); không biết người xem thì không có URL.
+     */
+    private Map<Integer, List<QuestionImageDto>> imagesOf(List<BankSearchRepository.Row> rows, Integer viewerId) {
+        if (viewerId == null || rows.isEmpty()) {
+            return Map.of();
+        }
+        return questionImageService.signedImagesBySourceQuestion(
+                rows.stream().map(BankSearchRepository.Row::sourceQuestionId).toList(), viewerId);
     }
 
     /**
@@ -140,7 +159,8 @@ public class BankService {
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy câu ngân hàng id=" + id));
         BankListItemDto item = listItem(row, row.questionType() == QuestionType.TF
                 ? bankItemStatementRepository.findByBankItemIdInOrderByBankItemIdAscPositionAsc(List.of(id))
-                : List.of());
+                : List.of())
+                .withImages(imagesOf(List.of(row), actorId).get(row.sourceQuestionId()));
         List<VersionDto> rawVersions = searchRepository.versions(row.sourceQuestionId());
         List<VersionDto> versions = rawVersions.stream()
                 .map(v -> new VersionDto(v.questionId(), v.kind(), v.createdAt(),
@@ -255,7 +275,7 @@ public class BankService {
                 statementDtos, r.subjectId(), r.subjectName(), r.gradeLevel(), r.topic(), r.content(),
                 new OriginDto(r.origin() == QuestionOrigin.IMPORT ? "import" : "ai", r.reviewMode(), r.edited()),
                 r.usageCount(), r.lastUsedAt(), r.visibleToUserId() == null ? BankSearchDtos.VISIBILITY_SHARED
-                        : BankSearchDtos.VISIBILITY_PRIVATE);
+                        : BankSearchDtos.VISIBILITY_PRIVATE, null);
     }
 
     private static String blankToNull(String s) {
