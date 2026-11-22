@@ -251,7 +251,7 @@ export default function ChangeQuestionModal({
                             </div>
                         ) : (
                             <div className="change-question-current-line">
-                                <MathText text={question.questionText} />
+                                <MathText text={question.questionText} images={question.images} compact />
                             </div>
                         )}
                         {!isFailed && (

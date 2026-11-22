@@ -19,6 +19,18 @@
     white-space: nowrap !important;
 }
 
+/* Nhãn "Có hình" dưới tên dạng câu */
+.question-table-type {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.question-table-type .ant-tag {
+    margin-inline-end: 0;
+}
+
 /* Bấm cả dòng để mở chi tiết */
 .question-table .question-table-row-clickable {
     cursor: pointer;

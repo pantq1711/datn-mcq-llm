@@ -5,6 +5,7 @@ import dayjs from "dayjs";
 import "./QuestionTable.css";
 import type { BankSort, QuestionTableItem, QuestionType } from "../types/questionBank.types";
 import MathText from "../../../components/common/MathText/MathText";
+import { isBlankMath } from "../../../components/common/MathText/mathSegments";
 import { describeLevel, QUESTION_TYPE_LABELS } from "../../../utils/exam.utils";
 
 const { Text } = Typography;
@@ -57,13 +58,20 @@ export default function QuestionTable({
             ellipsis: {
                 showTitle: false,
             },
-            render: (questionText: string) => (
-                <Tooltip title={<MathText text={questionText} />} placement="topLeft">
-                    <span className="question-table-question">
-                        <MathText text={questionText} />
-                    </span>
-                </Tooltip>
-            ),
+            render: (questionText: string, record) => {
+                // Không để ô trống: nội dung không vẽ ra được gì (chữ rỗng, công thức rỗng) thì hiện dòng dự phòng
+                if (isBlankMath(questionText)) {
+                    return <Text type="secondary">(Không có nội dung hiển thị)</Text>;
+                }
+                // Một dòng: ảnh thành nhãn [Hình] (không tải ảnh cho cả trang); hover mới vẽ ảnh thật
+                return (
+                    <Tooltip title={<MathText text={questionText} images={record.images} />} placement="topLeft">
+                        <span className="question-table-question">
+                            <MathText text={questionText} images={record.images} compact />
+                        </span>
+                    </Tooltip>
+                );
+            },
         },
         {
             // Môn xem trong ngăn chi tiết; bảng chỉ giữ lớp để cột "Câu hỏi" đủ rộng
@@ -79,8 +87,11 @@ export default function QuestionTable({
             key: "questionType",
             width: 130,
             align: "center",
-            render: (type?: QuestionType) => (
-                <Text>{QUESTION_TYPE_LABELS[type ?? "mcq"] ?? QUESTION_TYPE_LABELS.mcq}</Text>
+            render: (type: QuestionType | undefined, record) => (
+                <div className="question-table-type">
+                    <Text>{QUESTION_TYPE_LABELS[type ?? "mcq"] ?? QUESTION_TYPE_LABELS.mcq}</Text>
+                    {record.images?.length ? <Tag color="blue">Có hình</Tag> : null}
+                </div>
             ),
         },
         {
