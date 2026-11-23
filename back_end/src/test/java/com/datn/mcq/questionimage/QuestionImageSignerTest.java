@@ -116,6 +116,28 @@ class QuestionImageSignerTest {
     }
 
     @Test
+    @DisplayName("S1: chữ ký học sinh (tiền tố p|) tách miền với chữ ký giáo viên cùng số")
+    void chuKyHocSinhTachMienVoiGiaoVien() {
+        long imageId = 812L;
+        long exp = 1794409200L;
+        int attemptId = 27;
+        String studentSig = signer.signForAttempt(imageId, exp, attemptId);
+        String teacherSig = signer.sign(imageId, exp, attemptId);
+
+        assertTrue(studentSig.matches("^[0-9a-f]{64}$"));
+        assertNotEquals(teacherSig, studentSig);
+        assertTrue(signer.verifyForAttempt(imageId, exp, attemptId, studentSig));
+        assertFalse(signer.verifyForAttempt(imageId, exp, attemptId, teacherSig), "URL giáo viên không mở được ảnh học sinh");
+        assertFalse(signer.verify(imageId, exp, attemptId, studentSig), "URL học sinh không mở được ảnh giáo viên");
+        assertFalse(signer.verifyForAttempt(imageId + 1, exp, attemptId, studentSig));
+        assertFalse(signer.verifyForAttempt(imageId, exp + 1, attemptId, studentSig));
+        assertFalse(signer.verifyForAttempt(imageId, exp, attemptId + 1, studentSig));
+        assertFalse(signer.verifyForAttempt(imageId, exp, attemptId, null));
+        assertEquals("/api/public/question-images/812?exp=1794409200&a=27&sig=" + studentSig,
+                signer.buildAttemptUrl(imageId, exp, attemptId));
+    }
+
+    @Test
     @DisplayName("validate: từ chối khóa rỗng hoặc < 32 byte")
     void validateTuChoiKhoaKhongHopLe() {
         QuestionImageProperties invalidProps = new QuestionImageProperties();

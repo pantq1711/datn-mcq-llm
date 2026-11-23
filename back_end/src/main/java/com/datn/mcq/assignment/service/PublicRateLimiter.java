@@ -15,6 +15,7 @@ import java.time.Duration;
  *   <li>Bắt đầu lượt: theo IP, gọi TRƯỚC khi đọc DB. Hạn mức rộng vì cả lớp chung một IP.</li>
  *   <li>Mở lại và nộp: theo id lượt làm, hai bộ đếm riêng, gọi SAU khi token đã khớp một lượt (token sai trả 401 và không
  *       tính; token 32 byte nên không dò được). Lượt này gọi quá nhiều chỉ chặn chính nó, không chặn bạn cùng IP.</li>
+ *   <li>Tải ảnh (S1): bộ đếm thứ tư theo id lượt, gọi SAU khi chữ ký URL đúng (URL ký sai trả 404 và không tính).</li>
  * </ul>
  *
  * Dùng {@link SlidingWindowIpLimiter} cho cả khóa IP và khóa lượt (khóa {@code attempt-<id>} không có dấu ':', nên lớp đó
@@ -30,11 +31,13 @@ public class PublicRateLimiter {
     private final SlidingWindowIpLimiter start;
     private final SlidingWindowIpLimiter resume;
     private final SlidingWindowIpLimiter submit;
+    private final SlidingWindowIpLimiter image;
 
     public PublicRateLimiter(PublicLimitProperties properties) {
         this.start = new SlidingWindowIpLimiter(properties.startPerIpPerMinute(), WINDOW);
         this.resume = new SlidingWindowIpLimiter(properties.resumePerAttemptPerMinute(), WINDOW);
         this.submit = new SlidingWindowIpLimiter(properties.submitPerAttemptPerMinute(), WINDOW);
+        this.image = new SlidingWindowIpLimiter(properties.imagePerAttemptPerMinute(), WINDOW);
     }
 
     public void checkStart(String clientIp) {
@@ -47,6 +50,11 @@ public class PublicRateLimiter {
 
     public void checkSubmit(Integer attemptId) {
         check(submit, key(attemptId), "Em bấm nộp quá nhiều lần. Thử lại sau ");
+    }
+
+    /** Tải ảnh câu hỏi (S1): bộ đếm thứ tư theo lượt, gọi SAU khi chữ ký URL đã đúng. */
+    public void checkImage(Integer attemptId) {
+        check(image, key(attemptId), "Em tải hình quá nhanh. Thử lại sau ");
     }
 
     private static String key(Integer attemptId) {

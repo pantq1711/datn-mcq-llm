@@ -96,6 +96,7 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | GET, DELETE | `/api/bank-imports/{id}` | Xem lại / hủy một lần nhập của tôi (mục 10) |
 | POST | `/api/bank-imports/{id}/confirm` | Đưa các câu chọn vào ngân hàng RIÊNG TƯ của tôi (mục 10) |
 | GET | `/api/question-images/{id}?exp=&u=&sig=` | Tải một hình của câu nhập bằng URL có chữ ký, không cần JWT (mục 10.3) |
+| GET | `/api/public/question-images/{id}?exp=&a=&sig=` | Học sinh tải hình của câu bằng URL ký theo lượt làm, không cần JWT (mục 11.2) |
 | GET | `/api/exams/{id}/progress` | Tiến độ theo ô |
 | GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
@@ -1713,7 +1714,7 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
 - `DELETE …/{id}` → 204, xóa bài giao cùng mọi lượt làm và câu trả lời, ở mọi trạng thái.
 - `DELETE /api/exams/{examId}` khi đề còn bài giao: 409 `EXAM_HAS_ASSIGNMENTS`, không đổi gì.
 
-### 11.2. Học sinh (không đăng nhập; phản hồi có `Cache-Control: no-store`)
+### 11.2. Học sinh (không đăng nhập; phản hồi có `Cache-Control: no-store`, trừ tải hình)
 
 Token lượt làm gửi ở header `X-Attempt-Token`, không bao giờ trong URL.
 
@@ -1724,19 +1725,35 @@ Token lượt làm gửi ở header `X-Attempt-Token`, không bao giờ trong UR
   (`duplicateSeat: true`). Lỗi: 404; 409 `ASSIGNMENT_CLOSED`, `ASSIGNMENT_FULL`; 429 `TOO_MANY_REQUESTS` (theo IP).
 - Lượt làm (P2, P3): `{attemptToken?, classLabel, seatNo, duplicateSeat, startedAt, deadlineAt, serverNow, remainingSeconds,
   submitted, submittedAt?, resultsReleased, resultsAt, parts?, result?, review?}`. `parts` (chỉ khi còn nộp được):
-  `[{part, items: [{slotId, number, questionType, questionText, options? {A..D}, statements? [{key, text}]}]}]`, không đáp án.
+  `[{part, items: [{slotId, number, questionType, questionText, options? {A..D}, statements? [{key, text}], images?}]}]`,
+  không đáp án.
   `resultsReleased`: bài đã đóng và qua `closed_at + 2 phút`; trước đó không có `result` và `review`. `result` (khi
   `showScore`, lượt đã nộp): `{score, maxScore, score10, parts}`. `review` (khi `showSolutions`): `[{part, items: [{slotId,
   number, questionType, questionText, options?, yourChoice?, correctOption?, statements? [{key, text, label, yourAnswer?,
-  correct}], yourText?, saAnswer?, correctCount, score, explanation?}]}]`.
+  correct}], yourText?, saAnswer?, correctCount, score, explanation?, images?}]}]`.
+- Hình của câu (S1, 23/11, `docs/design/cau-co-hinh.md` mục 4.1): `images?` là `[{id, mime, widthPx, heightPx, displayWidthMm,
+  url}]` (không có `role`), vắng khi câu không có hình. Chữ câu (đề, phương án, ý, lời giải) giữ token `⟦img:<id>⟧` như mục
+  10.3; giao diện thay token bằng ảnh có cùng `id`, dùng nguyên `url`. Trong `parts` không bao giờ có hình lời giải; trong
+  `review` có mọi hình, kể cả lời giải.
+  `url = /api/public/question-images/{id}?exp=<epoch giây>&a=<id lượt>&sig=<hex>`, `sig = HMAC-SHA256(khóa ảnh,
+  "p|<id>|<exp>|<a>")` viết thường (cùng khóa `QUESTION_IMAGE_URL_KEY` với mục 10.3; tiền tố `p|` nên chữ ký của giáo viên và
+  học sinh không dùng lẫn được). `exp`: trong `parts` là `deadlineAt + 2 phút` (URL giữ nguyên cả lượt); trong `review` là hết
+  giờ tròn kế tiếp + 1 giờ (ký lại mỗi lần mở).
+- `GET /api/public/question-images/{id}?exp=&a=&sig=`: không cần JWT, không token. 200 là byte ảnh với `Content-Type`
+  PNG/JPEG, `Cache-Control: private, max-age=<min(giây còn lại tới exp, 3600)>`, `ETag: "<sha256>"`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`; `If-None-Match` khớp thì 304. Điều kiện giống JSON: lượt
+  còn tồn tại; ảnh thuộc một câu của bài giao (kể cả câu đã gỡ khỏi ngân hàng); hình không phải lời giải khi lượt còn nộp được
+  hoặc khi kết quả đã mở và `showSolutions`; hình lời giải chỉ trong trường hợp sau. Mọi lỗi (thiếu hoặc sai kiểu tham số,
+  `sig` sai, hết hạn, lượt đã xóa, ảnh không thuộc bài, không đủ điều kiện) đều là 404 `IMAGE_NOT_FOUND`; 429
+  `TOO_MANY_REQUESTS` khi vượt hạn mức theo lượt (URL ký sai không tính). Chữ ký không được ghi vào nhật ký.
 - `GET /api/public/attempts/current` → lượt làm. 401 `ATTEMPT_TOKEN_INVALID`; 429 (theo lượt).
 - `POST /api/public/attempts/current/submit` thân `{answers: [{slotId, choice}, {slotId, tf: {"a": "T", "b": "F"}}, {slotId,
   text}]}` → 200 `{submittedAt, resultsAt}` (không có điểm). Câu thiếu là bỏ trống. Lỗi: 400 `INVALID_REQUEST` (nhiều phần tử
   hơn số câu, `slotId` lạ hoặc lặp, sai dạng câu, ngoài A–D / a–d / T,F, đáp số quá 20 ký tự; không ghi gì); 401; 409
   `ATTEMPT_ALREADY_SUBMITTED`, `ASSIGNMENT_CLOSED` (giáo viên đóng trước hạn của lượt), `ATTEMPT_EXPIRED` (quá hạn + 2 phút);
   429 (theo lượt).
-- Hạn mức mặc định (biến môi trường `APP_PUBLIC_LIMIT_*`): tạo lượt 200/phút mỗi IP; mở lại 30/phút và nộp 20/phút mỗi lượt,
-  hai bộ đếm riêng. Bộ đếm trong bộ nhớ một tiến trình.
+- Hạn mức mặc định (biến môi trường `APP_PUBLIC_LIMIT_*`): tạo lượt 200/phút mỗi IP; mở lại 30/phút, nộp 20/phút và tải hình
+  300/phút (`APP_PUBLIC_LIMIT_IMAGE_PER_ATTEMPT_PER_MINUTE`) mỗi lượt, ba bộ đếm riêng. Bộ đếm trong bộ nhớ một tiến trình.
 
 ### 11.3. Phân tích câu (V33, PR B 17/11; thiết kế mục 5 và 14)
 

@@ -74,7 +74,7 @@ questionimage ──► user                                 (V34, PR #61: modul
 bank        ──► questionimage                          (22/11, H3: chỉ QuestionImageService.signedImagesBySourceQuestion và QuestionImageDto để danh sách và chi tiết ngân hàng trả images)
 catalog, user, llm ──► (chỉ common/config)
 mathtype    ──► (không module nào; chỉ JDK, Apache POI, JLaTeXMath)
-assignment  ──► exam (chỉ ExamAssignmentSource, ExamDeletionGuard), bank (BankService.getItems), config   (V32, 16/11; exam không biết assignment)
+assignment  ──► exam (chỉ ExamAssignmentSource, ExamDeletionGuard), bank (BankService.getItems; hình câu qua BankService, D3 23/11, không có cạnh tới questionimage), config   (V32, 16/11; exam không biết assignment)
 ```
 
 Bài giao trực tuyến (V32, quyết định 16/11): `exam` khai báo `ExamAssignmentSource` (đề của người gọi kèm các chỗ theo thứ tự
