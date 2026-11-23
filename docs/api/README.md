@@ -34,6 +34,7 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 | 403 | Sai vai trò (`FORBIDDEN`), ví dụ giáo viên gọi API quản trị, admin gọi API của giáo viên |
 | 404 | Không tìm thấy bản ghi, ví dụ `subjectId` hoặc `templateId` không tồn tại. Ma trận, đề của giáo viên khác cũng trả 404 (giống id không tồn tại) |
 | 409 | Xung đột trạng thái, ví dụ nộp đánh giá cho câu `duplicate` hoặc nộp lại câu experiment. Có mã máy đọc được ở một số luồng: `MATRIX_IN_USE`, `BANK_EXHAUSTED`, `SLOT_*`, `VERSION_CONFLICT`, `QC_CHECKING`, `SPEC_UNAVAILABLE` (bản đặc tả của đề không gắn ma trận, mục 7.6). W1-4 (K-5): hai thao tác đồng thời làm vi phạm khóa ngoại hoặc khóa duy nhất trả 409 `FOREIGN_KEY_CONFLICT` / `UNIQUE_CONFLICT` ("hãy tải lại rồi thử lại"), không lộ tên ràng buộc |
+| 422 | Xuất Word: tổng hình của đề vượt trần (`EXPORT_IMAGES_TOO_LARGE`, mục 7.6) |
 | 429 | Gemini đang giới hạn tần suất gọi; chờ khoảng một phút rồi thử lại. Hoặc đăng nhập sai quá nhiều lần (`TOO_MANY_ATTEMPTS`, header `Retry-After`, mục 8.2). Hoặc chạm hạn mức ngày của Gemini (`LLM_DAILY_QUOTA_EXHAUSTED`, header `Retry-After`) |
 | 503 | Gemini tạm thời quá tải hoặc bảo trì |
 | 500 | Lỗi khác chưa được phân loại, body theo định dạng mặc định của Spring. Lỗi toàn vẹn dữ liệu khác (CHECK, NOT NULL: lỗi của chương trình) có `{"code": "DATA_INTEGRITY"}` |
@@ -1033,7 +1034,26 @@ GET /api/exams/12/export/docx?examCode=205&durationMinutes=45  → 200, mã đ�
 GET /api/exams/12/export/docx?content=exam       → 200, chỉ đề (dừng ở dòng HẾT)
 GET /api/exams/12/export/docx?content=spec       → 200, bản đặc tả đề (A4 ngang, mẫu Phụ lục 2 CV 7991)
 GET /api/exams/12/export/docx?examCode=99        → 400
+GET /api/exams/12/export/docx  (đề có câu ngân hàng có hình)  → 200, hình nhúng trong file; tổng hình quá trần → 422 EXPORT_IMAGES_TOO_LARGE
 ```
+
+- **Câu có hình (23/11, O2; thiết kế `docs/design/cau-co-hinh.md` mục 4.2):** chỗ lấy từ ngân hàng mà câu nguồn có hình
+  (`images` của mục 7.4) được xuất kèm hình. Token `⟦img:<id>⟧` trong chữ câu **không bao giờ** ra Word dưới dạng chữ.
+  - Byte ảnh đọc thẳng từ DB (không qua URL ký), chỉ ảnh có trong `images` của dữ liệu xem đề của người xuất; nhúng vào
+    Markdown dạng data URI (dưới `--sandbox` pandoc bỏ ảnh dạng file mà vẫn exit 0). Bản đặc tả (`content=spec`) không in
+    chữ câu hỏi nên không nạp ảnh.
+  - Token riêng một dòng ở câu dẫn, ý Đúng/Sai, lời giải: đoạn riêng căn giữa (kiểu `ExamFigure`, đi cùng đoạn sau) đúng vị
+    trí token, rộng `min(display_width_mm, 120)` mm. Ý Đúng/Sai có hình: hình đứng ngay sau dòng của ý. Token ở phương án: rộng
+    tối đa 40 mm, không thêm dấu chấm sau hình, bốn phương án luôn xếp 2 dòng 2 cột. Hình ở lời giải (`role = solution`) chỉ có
+    trong file đầy đủ, không có ở `content=exam`.
+  - Đếm lại: sau pandoc và trên file cuối (sau MathType, nếu có), số `w:drawing` và số `wp:docPr descr="qimg:<id>"` (alt của
+    ảnh) theo từng id phải bằng số lần chèn (cùng hình dùng hai chỗ đếm 2). Lệch, hoặc token không có hình được phép xuất,
+    token nằm trong công thức hay trong đáp số trả lời ngắn: 500 kèm `code: "EXPORT_IMAGE_MISSING"` (và `error` chung), không
+    trả file; log máy chủ ghi id đề, số kỳ vọng, số đếm, id thiếu (không ghi chữ đề).
+  - Trần (D5, đo trong container 23/11): tổng dung lượng hình đã lưu, tính theo số lần chèn, của một lần xuất tối đa
+    `app.export.max-image-bytes` (mặc định 10 MB = 10 485 760 byte). Vượt thì **422** `EXPORT_IMAGES_TOO_LARGE`, `error`:
+    "Tổng hình trong đề quá lớn để xuất Word (X MB, tối đa Y MB). Hãy bỏ bớt câu có hình." (X làm tròn lên một chữ số thập
+    phân). Kiểm bằng truy vấn không nạp byte, trước khi nạp byte và trước khi chạy pandoc.
 
 - **Bản đặc tả đề (18/11, `content=spec`; thiết kế `docs/design/ban-dac-ta.md`):** bảng theo mẫu Phụ lục 2 Công văn
   7991/BGDĐT-GDTrH ngày 17/12/2024, một section A4 ngang (16838 × 11906 twips, cùng lề như file đề), chân trang "Bản đặc tả
@@ -1193,7 +1213,8 @@ GET /api/exams/12/export/docx?examCode=99        → 400
   (Heading) vẫn dùng font theo theme của pandoc.
 - Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; khi hệ thống đang bận (tiến trình trích xuất tài liệu hoặc xuất Word khác đang giữ Semaphore) và chờ quá thời gian xếp hàng (`queue-wait`, mặc định 30s) trả 503 kèm mã `EXPORT_BUSY` và header `Retry-After`; pandoc báo lỗi trả 500 kèm `error` chung "Lỗi khi xuất file, thầy cô thử lại sau" (11/11, A-07: log của pandoc chỉ ghi ở log máy chủ). `content=spec` với đề không
   gắn ma trận (dữ liệu cũ) trả 409 kèm mã `SPEC_UNAVAILABLE` ("Đề không gắn ma trận nên không xuất được bản đặc tả.").
-  trả 500.
+  trả 500. Đề có hình (23/11): thiếu hình trong file trả 500 `EXPORT_IMAGE_MISSING`; tổng hình vượt trần trả 422
+  `EXPORT_IMAGES_TOO_LARGE` (mục "Câu có hình" ở trên).
 - **Cài pandoc** (backend không tự cài):
   - Windows: tải bộ cài `.msi` ở <https://pandoc.org/installing.html> (hoặc `winget install --id JohnMacFarlane.Pandoc`),
     rồi mở terminal mới và khởi động lại backend để PATH có pandoc. Bộ cài mặc định đặt ở

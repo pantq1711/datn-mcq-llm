@@ -131,6 +131,40 @@ public class QuestionImageService {
         return new LinkedHashSet<>(repository.findGeneratedQuestionIdsWithImages(ids));
     }
 
+    /** Byte ảnh để nhúng vào file Word (O2); {@code displayWidthMm} là bề rộng trong Word gốc. */
+    public record ExportImage(long id, String mime, byte[] data, int displayWidthMm) {}
+
+    /**
+     * O2: dung lượng đã lưu của các ảnh {@code imageIds}, một truy vấn không nạp cột data (để kiểm trần trước khi nạp byte).
+     * Id không tồn tại vắng khỏi kết quả; không có id thì không truy vấn. Không kiểm quyền: nơi gọi chỉ đưa id ảnh đã có
+     * trong dữ liệu xem đề của người xuất (đã lọc theo quyền, H3(a)).
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, Integer> byteSizes(Collection<Long> imageIds) {
+        if (imageIds == null || imageIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Integer> out = new LinkedHashMap<>();
+        repository.findSizesByIdIn(Set.copyOf(imageIds)).forEach(s -> out.put(s.getId(), s.getByteSize()));
+        return out;
+    }
+
+    /**
+     * O2: byte ảnh để nhúng data URI khi xuất Word, một truy vấn (transaction đọc ngắn, đóng trước khi chạy pandoc). Không
+     * đi qua URL ký. Không kiểm quyền, như {@link #byteSizes}.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, ExportImage> exportImages(Collection<Long> imageIds) {
+        if (imageIds == null || imageIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, ExportImage> out = new LinkedHashMap<>();
+        for (QuestionImageRepository.ExportProjection p : repository.findExportDataByIdIn(Set.copyOf(imageIds))) {
+            out.put(p.getId(), new ExportImage(p.getId(), p.getMime(), p.getData(), p.getDisplayWidthMm()));
+        }
+        return out;
+    }
+
     private boolean isUserActive(int userId) {
         try {
             Boolean enabled = jdbcTemplate.queryForObject(

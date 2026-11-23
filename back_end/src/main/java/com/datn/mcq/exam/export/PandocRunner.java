@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -185,15 +186,19 @@ public class PandocRunner {
         } catch (IOException e) {
             throw new UncheckedIOException("Không tạo được thư mục tạm để xuất đề", e);
         }
+        // O2 (23/11): số lần chèn mỗi ảnh câu hỏi (alt qimg:<id>); pandoc bỏ ảnh mà vẫn exit 0 nên đếm lại sau pandoc và trên
+        // file cuối (sau MathType và hậu xử lý), lệch thì EXPORT_IMAGE_MISSING, không trả file. Không có ảnh thì không đếm.
+        Map<Long, Integer> figures = ExamFigures.expectedInMarkdown(markdown);
         try {
             Files.writeString(dir.resolve("exam.md"), markdown, StandardCharsets.UTF_8);
             copyReferenceDoc(dir.resolve("reference.docx"), options);
             runPandoc(dir, "exam.md", "-f", MARKDOWN_FORMAT, "-t", "docx",
                     "--reference-doc=reference.docx", "-o", "exam.docx");
             byte[] docx = Files.readAllBytes(dir.resolve("exam.docx"));
+            verifyFigures(docx, figures, "sau pandoc");
             String code = options.examCode();
             if (format != EquationFormat.MATHTYPE) {
-                return new Docx(finish(docx, code), 0, null, null);
+                return verifyFigures(new Docx(finish(docx, code), 0, null, null), figures);
             }
             JsonNode ast;
             List<MathRef> refs;
@@ -204,7 +209,8 @@ public class PandocRunner {
             } catch (DocumentExportException | IOException | UncheckedIOException e) {
                 log.warn("Xuất MathType: không lấy được LaTeX bằng pandoc -t json ({}), trả file Equation",
                         e.getMessage());
-                return new Docx(finish(docx, code), 0, MathTypeDocxConverter.countEquations(docx), 0);
+                return verifyFigures(new Docx(finish(docx, code), 0, MathTypeDocxConverter.countEquations(docx), 0),
+                        figures);
             }
             List<String> latex = refs.stream().map(r -> squash(r.latex())).toList();
             List<String> failedLatex = List.of();
@@ -225,8 +231,8 @@ public class PandocRunner {
             }
             // Tab (mã giữ chỗ của ExamMarkdownBuilder) thay SAU bước MathType: bước đó có thể tách đoạn quanh công thức rộng.
             Docx converted = toMathType(docx, latex);
-            return new Docx(finish(converted.content(), code), converted.mathTypeObjects(),
-                    converted.equationsKeptOmml(), converted.equationsScaled(), failed, failedLatex);
+            return verifyFigures(new Docx(finish(converted.content(), code), converted.mathTypeObjects(),
+                    converted.equationsKeptOmml(), converted.equationsScaled(), failed, failedLatex), figures);
         } catch (IOException e) {
             throw new UncheckedIOException("Lỗi đọc/ghi file khi xuất đề", e);
         } catch (InterruptedException e) {
@@ -235,6 +241,19 @@ public class PandocRunner {
         } finally {
             deleteQuietly(dir);
         }
+    }
+
+    /** O2: đếm ảnh câu hỏi trong {@code docx} ({@link ExamFigures#verifyDocx}); đề không có ảnh thì bỏ qua. */
+    private static void verifyFigures(byte[] docx, Map<Long, Integer> figures, String stage) {
+        if (!figures.isEmpty()) {
+            ExamFigures.verifyDocx(docx, figures, stage);
+        }
+    }
+
+    /** O2: đếm ảnh trên file trả về (sau MathType nếu có và sau hậu xử lý), rồi trả nguyên file. */
+    private static Docx verifyFigures(Docx docx, Map<Long, Integer> figures) {
+        verifyFigures(docx.content(), figures, "file cuối");
+        return docx;
     }
 
     /** Bước hậu xử lý riêng của đề, sau pandoc và MathType: thay mã giữ chỗ tab, thêm chân trang section đề. */
