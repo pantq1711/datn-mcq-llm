@@ -212,6 +212,14 @@ abstract class ExamFlowTestBase {
 
     /** Gắn một bản ghi {@code question_image} vào câu nguồn của {@code bankItemId} (mô phỏng câu nhập có hình). */
     void attachImageToBankItem(int bankItemId) {
+        attachImageToBankItem(bankItemId, "b".repeat(64));
+    }
+
+    /**
+     * Như {@link #attachImageToBankItem(int)} với {@code sha256} cho trước (hai câu cùng hình = cùng sha256, H7). Trả id lô
+     * nhập vừa tạo.
+     */
+    int attachImageToBankItem(int bankItemId, String sha256) {
         int gqId = count("SELECT source_question_id FROM bank_item WHERE id = ?", bankItemId);
         int batchId = insert("INSERT INTO import_batch (owner_id, display_name, file_sha256, subject_id, grade_level,"
                 + " topic, status, question_count, imported_count, created_at, expires_at, confirmed_at)"
@@ -221,7 +229,8 @@ abstract class ExamFlowTestBase {
         jdbc.update("INSERT INTO question_image (owner_id, import_batch_id, item_key, generated_question_id, role,"
                 + " ordinal, mime, data, byte_size, width_px, height_px, display_width_mm, sha256, source_format)"
                 + " VALUES (?, ?, 'mcq-001', ?, 'stem', 1, 'image/png', E'\\\\x89504e47', 4, 10, 10, 50, ?, 'png')",
-                teacher, batchId, gqId, "b".repeat(64));
+                teacher, batchId, gqId, sha256);
+        return batchId;
     }
 
     /** Một đề thủ công (exam_question) của {@code owner} dùng câu ngân hàng, tạo lúc {@code createdAt}. */

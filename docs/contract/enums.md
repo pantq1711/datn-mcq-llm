@@ -302,9 +302,9 @@ Trạng thái của một lượt làm KHÔNG lưu DB, tính lúc đọc (`Attem
 (cùng lớp + số thứ tự với lượt khác của bài giao) cũng tính lúc đọc.
 
 Mã lỗi 409 khi giao bài (`POST /api/exams/{examId}/assignments`, kèm `errors` là danh sách chỗ, ví dụ `"Phần I, Câu 2"`), kiểm theo
-thứ tự này và không ghi gì vào DB khi có lỗi: `ASSIGN_NOT_ALL_KEPT` (đề trống hoặc còn chỗ chưa Giữ/Sửa), `ASSIGN_HAS_FIGURE` (23/11:
-có chỗ ngân hàng mà câu nguồn có ảnh `question_image`, mọi role; tạm thời vì học sinh chưa có đường xem ảnh, gỡ ở PR A2),
-`ASSIGN_SA_KEY_UNSUPPORTED` (đáp số Trả lời ngắn không gõ được trên điện thoại).
+thứ tự này và không ghi gì vào DB khi có lỗi: `ASSIGN_NOT_ALL_KEPT` (đề trống hoặc còn chỗ chưa Giữ/Sửa),
+`ASSIGN_SA_KEY_UNSUPPORTED` (đáp số Trả lời ngắn không gõ được trên điện thoại). Mã `ASSIGN_HAS_FIGURE` (A1, 23/11: chặn tạm đề có
+câu có hình) đã gỡ ngày 24/11 (PR A2): đề có câu có hình giao được, học sinh xem hình qua URL ký theo lượt làm.
 
 ### Mã cờ hậu kiểm (V33, `item_stat.flags`, PR B 17/11)
 

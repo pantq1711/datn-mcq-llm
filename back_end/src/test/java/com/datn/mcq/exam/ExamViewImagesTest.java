@@ -19,8 +19,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * ngân hàng mà câu nguồn có hình: URL ký ngắn hạn cho đúng người xem đề. Chỗ khác (câu sinh) và đề không có chỗ ngân hàng
  * giữ nguyên JSON (không có khóa {@code images}) và không phát sinh truy vấn ảnh. Truy vấn ảnh không nạp cột {@code data}.
  *
- * <p>Đường tạo đề và Đổi câu hiện không chọn câu ngân hàng có hình (ExamBankSelectionTest), nên test gán thẳng
- * {@code bank_item_id} vào chỗ như {@code ReplaceFromBankTest} làm; LLM sinh câu và Solver giả, không gọi mạng.
+ * <p>Test gán thẳng {@code bank_item_id} vào chỗ như {@code ReplaceFromBankTest} làm (từ X1 tạo đề và Đổi câu cũng chọn câu
+ * có hình, xem ExamFigureBankTest); LLM sinh câu và Solver giả, không gọi mạng.
  */
 @SpringBootTest(properties = {
         "app.question-images.url-signing-key=dGVzdC1vbmx5LXF1ZXN0aW9uLWltYWdlLXVybC1zaWduaW5nLWtleS1ub3QtcHJvZA==",

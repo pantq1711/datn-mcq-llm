@@ -159,7 +159,7 @@ abstract class AssignmentTestBase {
 
     /**
      * Gắn một ảnh tự tạo ({@link #FAKE_PNG}, sha256 ghi là 64 chữ 'c') vào câu nguồn của câu ngân hàng {@code bankItem};
-     * trả id ảnh. A1 chặn giao bài có hình nên test ảnh của học sinh gắn ảnh SAU khi đã giao bài.
+     * trả id ảnh. Gắn trước hay sau khi giao bài đều được (A2 đã gỡ chặn giao bài có hình).
      */
     long attachImage(int bankItem, String role, int ordinal) {
         int sourceQuestion = jdbc.queryForObject("SELECT source_question_id FROM bank_item WHERE id = ?",

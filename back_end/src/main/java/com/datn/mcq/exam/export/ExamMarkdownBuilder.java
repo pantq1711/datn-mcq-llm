@@ -767,17 +767,21 @@ public final class ExamMarkdownBuilder {
 
     /**
      * Thêm dấu chấm cuối nếu chưa có dấu kết câu (. ? ! …), kể cả khi kết thúc bằng công thức. Chuỗi rỗng giữ nguyên; kết thúc
-     * bằng token ảnh (O2) cũng giữ nguyên, không có dấu chấm sau ảnh.
+     * bằng token ảnh (O2) cũng giữ nguyên, không có dấu chấm sau ảnh. P4 (24/11): công thức cuối mà bên trong đã kết thúc
+     * bằng dấu kết câu ({@code $m = 1.$}, hay gặp ở câu nhập từ Word) cũng giữ nguyên, để file Word không in "m = 1..".
      */
     static String endWithPeriod(String text) {
         String s = text == null ? "" : text.strip();
-        if (s.isEmpty() || ".?!…".indexOf(s.charAt(s.length() - 1)) >= 0 || TRAILING_TOKEN.matcher(s).find()) {
+        if (s.isEmpty() || ".?!…".indexOf(s.charAt(s.length() - 1)) >= 0 || TRAILING_TOKEN.matcher(s).find()
+                || TRAILING_FORMULA_END.matcher(s).find()) {
             return s;
         }
         return s + ".";
     }
 
     private static final Pattern TRAILING_TOKEN = Pattern.compile("⟦img:\\d+⟧$");
+    /** Công thức {@code $...$} cuối chuỗi có dấu kết câu ngay trước dấu {@code $} đóng (bỏ qua khoảng trắng). */
+    private static final Pattern TRAILING_FORMULA_END = Pattern.compile("(?<!\\\\)\\$[^$]*[.?!…]\\s*(?<!\\\\)\\$$");
 
     /**
      * Cắt chuỗi nguồn thành chữ thường và công thức: {@code $...$} (nội dung khác rỗng) là công thức, xuống dòng trong công

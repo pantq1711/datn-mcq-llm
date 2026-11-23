@@ -62,8 +62,13 @@ public class PandocRunner {
      * thành HTML/TeX thô. KHÔNG tắt {@code raw_attribute}: ExamMarkdownBuilder tự dùng khối {@code ```{=openxml}} cho bảng
      * đầu đề và ngắt trang (không có cách khác trong Markdown). Nội dung đề không thể tạo khối đó vì ký tự backtick ngoài
      * công thức bị thoát và xuống dòng trong công thức bị thay bằng khoảng trắng (xem ExamMarkdownBuilder).
+     *
+     * <p>P4 (24/11, chạy thử bằng Word thật): tắt {@code implicit_figures}. Ảnh câu hỏi đứng riêng một đoạn (O2) không được
+     * thành "figure" của pandoc, vì khi đó alt {@code qimg:<id>} (dùng để đếm lại qua {@code wp:docPr descr}) in ra thành dòng
+     * chú thích dưới hình và đoạn ảnh mang kiểu Captioned Figure thay cho ExamFigure (mất căn giữa). Tắt đi thì ảnh là ảnh
+     * trong dòng của đoạn ExamFigure, {@code descr} vẫn lấy từ alt.
      */
-    static final String MARKDOWN_FORMAT = "markdown+tex_math_dollars-raw_html-raw_tex";
+    static final String MARKDOWN_FORMAT = "markdown+tex_math_dollars-raw_html-raw_tex-implicit_figures";
     static final String NOT_INSTALLED_MESSAGE = "Máy chủ chưa cài pandoc nên chưa xuất được file Word. Cài pandoc theo "
             + "hướng dẫn trong docs/api/README.md (mục 7.6 Xuất đề ra Word) rồi khởi động lại backend, hoặc đặt PANDOC_PATH.";
 

@@ -120,36 +120,30 @@ class AssignmentTeacherApiTest extends AssignmentTestBase {
     }
 
     @Test
-    void createRejectsExamWithFigureQuestion() throws Exception {
-        // Học sinh chưa có đường xem ảnh (A1, thiết kế cau-co-hinh.md mục 4): đề có một chỗ có ảnh thì không giao.
+    void createAcceptsExamWithFigureQuestion() throws Exception {
+        // A2 (cau-co-hinh.md mục 4.5): học sinh đã xem được ảnh (S1+S2) nên gỡ ASSIGN_HAS_FIGURE; đề có câu hình giao được.
         attachImage(mcqItem2, "stem");
-        asTeacher(post(base()).contentType(MediaType.APPLICATION_JSON)
+        int id = json(asTeacher(post(base()).contentType(MediaType.APPLICATION_JSON)
                 .content(createBody(45, inTwoHours(), true, true)))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("ASSIGN_HAS_FIGURE"))
-                .andExpect(jsonPath("$.errors.length()").value(1))
-                .andExpect(jsonPath("$.errors[0]").value("Phần I, Câu 2"));
-        // Không ghi gì vào DB.
-        assertEquals(0, count("SELECT count(*) FROM exam_assignment"));
-        assertEquals(0, count("SELECT count(*) FROM assignment_item"));
-        assertEquals(0, count("SELECT count(*) FROM assignment_class"));
+                .andExpect(status().isCreated())).get("assignmentId").asInt();
+        assertEquals(1, count("SELECT count(*) FROM exam_assignment"));
+        assertEquals(4, count("SELECT count(*) FROM assignment_item WHERE assignment_id = ?", id));
+        assertEquals(1, count("SELECT count(*) FROM assignment_item WHERE assignment_id = ? AND bank_item_id = ?", id,
+                mcqItem2));
     }
 
     @Test
-    void createRejectsFigureOnRemovedBankItemAndListsEverySlotWithFigure() throws Exception {
-        // Câu đã gỡ khỏi ngân hàng vẫn nằm trong đề (quyết định 16/11) nên vẫn chặn; ảnh role solution cũng tính.
+    void createAcceptsFigureOnRemovedBankItemAndSolutionOnlyFigure() throws Exception {
+        // Câu đã gỡ khỏi ngân hàng vẫn nằm trong đề (quyết định 16/11); ảnh lời giải và ảnh ý Đúng/Sai: vẫn giao được.
         attachImage(mcqItem1, "solution");
         jdbc.update("UPDATE bank_item SET removed_at = CURRENT_TIMESTAMP, removed_by = ? WHERE id = ?", teacher,
                 mcqItem1);
         attachImage(tfItem, "statement_b");
         asTeacher(post(base()).contentType(MediaType.APPLICATION_JSON)
                 .content(createBody(45, inTwoHours(), true, true)))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("ASSIGN_HAS_FIGURE"))
-                .andExpect(jsonPath("$.errors.length()").value(2))
-                .andExpect(jsonPath("$.errors[0]").value("Phần I, Câu 1"))
-                .andExpect(jsonPath("$.errors[1]").value("Phần II, Câu 1"));
-        assertEquals(0, count("SELECT count(*) FROM exam_assignment"));
+                .andExpect(status().isCreated());
+        assertEquals(1, count("SELECT count(*) FROM exam_assignment"));
+        assertEquals(4, count("SELECT count(*) FROM assignment_item"));
     }
 
     @Test

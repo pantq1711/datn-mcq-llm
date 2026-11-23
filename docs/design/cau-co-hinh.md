@@ -75,7 +75,8 @@ Kept-Omml = 0 với 12 công thức + 4 ảnh và 165 + 33, số `w:drawing` gi�
 `QuestionContent`, `QuestionDetail`, `QuestionTable`, `QcVersionCard`. Giải pháp: `splitMath` thêm loại đoạn `image` cho token
 ảnh (H2) ngoài công thức, vẽ bằng component mới `QuestionImage`. Token Bearer nằm trong header (`apiClient.ts:65-67`) mà
 `<img>` không gửi header đó, nên DTO trả sẵn URL có chữ ký ngắn hạn (H3): `QuestionImage` là `<img src={url}>` (ghép với gốc
-API của `apiClient`), không tải blob. Token riêng một dòng → ảnh khối căn giữa. `front_end/src` trên main chưa có màn nhập (`bank-imports`: 0 kết quả).
+API của `apiClient`), không tải blob. Token riêng một dòng → ảnh khối căn giữa. ~~`front_end/src` trên main chưa có màn nhập~~ (lỗi thời, ghi chú 24/11: màn nhập
+Word đã có trên main từ PR #105, `front_end/src/features/bank-import`).
 
 ## 3. Hợp đồng dùng chung
 
@@ -261,14 +262,14 @@ mâu thuẫn với H9 thì mục này thắng, nhưng chỉ sau khi chủ dự �
 
 | Chỗ | Tình trạng | Bằng chứng |
 |---|---|---|
-| Ứng viên ngân hàng cho tạo đề, Đổi | Loại câu có hình | `ExamSlotRepository.java:104`; một truy vấn dùng chung `findBankCandidates` (gọi từ `ExamBuildService.java:209-210` và `ExamActionService.java:237-245`) |
+| Ứng viên ngân hàng cho tạo đề, Đổi | Loại câu có hình. **X1 đã làm 24/11:** bỏ điều kiện, câu có hình là ứng viên như mọi câu | `ExamSlotRepository.java:104`; một truy vấn dùng chung `findBankCandidates` (gọi từ `ExamBuildService.java:209-210` và `ExamActionService.java:237-245`) |
 | Xem đề, ngân hàng (giáo viên) | Có `images`, URL ký cho người xem | `ExamViewService.java:196-206`, `BankService.java:124-141` |
 | Giao diện giáo viên | Vẽ ảnh | PR2 (`MathText`, `QuestionImage`) |
 | **Xuất Word** | **Chưa**: `ExamMarkdownBuilder.withoutLiteralNewlines(ExamItemDto)` dựng lại `ExamItemDto` bằng 26 tham số, **rơi `images`** (`ExamMarkdownBuilder.java:185-195`); token `⟦img:id⟧` đi qua `cleanText` và ra file Word thành chữ thường | đọc mã |
 | **Học sinh** | **Chưa**: `AssignmentPaper.publicParts` và `reviewItem` chỉ trả `b.questionText()` (`AssignmentPaper.java:93-114, 218-247`); `PublicQuestionDto`, `ReviewItemDto` không có trường ảnh; 3 màn học sinh gọi `MathText` không truyền `images` nên hiện chữ thay thế | đọc mã |
-| Chặn giao bài có hình | **Chưa có**: `AssignmentService.create` chỉ kiểm `ASSIGN_NOT_ALL_KEPT` và `ASSIGN_SA_KEY_UNSUPPORTED` (`AssignmentService.java:54-55, 98-144`), trong khi `lam-bai-truc-tuyen.md` mục 6 đã ghi TODO `ASSIGN_HAS_FIGURE` (14/11) | đọc mã, đọc tài liệu |
+| Chặn giao bài có hình | **Chưa có**: `AssignmentService.create` chỉ kiểm `ASSIGN_NOT_ALL_KEPT` và `ASSIGN_SA_KEY_UNSUPPORTED` (`AssignmentService.java:54-55, 98-144`), trong khi `lam-bai-truc-tuyen.md` mục 6 đã ghi TODO `ASSIGN_HAS_FIGURE` (14/11). A1 thêm chặn 23/11; **A2 đã làm 24/11:** gỡ `ASSIGN_HAS_FIGURE`, đề có hình giao được | đọc mã, đọc tài liệu |
 | `QcVersionCard` | Chỉ dùng `MathText` cho `solverReasoning`; `VersionDto` của vết QC **không có chữ đề, không có ảnh** (`ExamQcTraceDtos`, `qcTrace.types.ts`); Solver không chạy cho câu có hình (H8) | đọc mã |
-| Cờ "giống câu khác trong đề" | `ExamSlotSiblings.fromBank` (`:124-130`) dựng `DedupCandidate` **không có `imageKey`**: phần còn lại của H7 | đọc mã |
+| Cờ "giống câu khác trong đề" | `ExamSlotSiblings.fromBank` (`:124-130`) dựng `DedupCandidate` **không có `imageKey`**: phần còn lại của H7. *Đính chính 24/11 (X1):* `ExamSlotSiblings` là dedup câu sinh mới/câu sửa với các chỗ khác; cờ thông tin `similar_in_exam` tính riêng ở `ExamQuestionSimilarity` lúc xem đề. **X1 đã làm 24/11** ở cả hai: khóa hình một định nghĩa (`QuestionImageService.imageKeysBySourceQuestion`, cũng dùng cho so trùng khi nhập Word), cùng chữ khác hình không báo | đọc mã |
 
 **Thứ tự bắt buộc:** bỏ điều kiện ở `ExamSlotRepository.java:104` chỉ được merge sau khi xong (F1) sửa quyền xem ảnh, (O2) xuất
 Word, (A1) chặn giao bài có hình. Thiếu O2 thì file Word ra chữ `⟦img:812⟧` mà không báo lỗi; thiếu A1 thì học sinh nhận câu
@@ -336,6 +337,13 @@ Ba điều bắt buộc ngay sau bảng H9 giữ nguyên; phần dưới là cá
    thêm vào `ExamReferenceDoc`) chứa `![qimg:812](data:image/png;base64,…){width=<W>mm}` với `W = min(displayWidthMm, 120)`. Ảnh ở phương án: tối đa 40 mm và **ép bố cục 2 cột**
    khi có phương án chứa ảnh (hiện `OptionLayout.choose` chỉ đo chữ); không thêm dấu chấm sau token (`endWithPeriod`). Ảnh role `solution` chỉ ra ở phần lời giải của file đầy đủ, không ra ở `ExportContent.EXAM`.
    Alt `qimg:<id>` để đếm lại (bước 3). Token còn lại mà không có ảnh tương ứng: dừng ở bước dựng Markdown, cùng mã lỗi dưới.
+   *Bổ sung 24/11 (P4, sau khi mở file bằng Word thật):* `PandocRunner.MARKDOWN_FORMAT` tắt `implicit_figures`
+   (`markdown+tex_math_dollars-raw_html-raw_tex-implicit_figures`). Lý do: với extension này pandoc coi ảnh đứng riêng một đoạn
+   là "figure", nên alt `qimg:<id>` in ra thành dòng chú thích dưới mỗi hình và đoạn ảnh mang kiểu Captioned Figure thay cho
+   `ExamFigure` (hình lệch trái). Tắt đi thì ảnh là ảnh trong dòng của đoạn `ExamFigure` (căn giữa), `wp:docPr descr` vẫn lấy từ
+   alt nên bước 3 không đổi; đề không có hình ra như cũ. Khóa bằng `ExamFigureDocxTest`. Cùng đợt: `endWithPeriod` không thêm
+   dấu chấm khi công thức cuối đã kết thúc bằng dấu kết câu bên trong (`$m = 1.$`, hay gặp ở câu nhập từ Word; trước đó in
+   "m = 1..").
 3. **Đếm lại.** Trong `PandocRunner.doMarkdownToDocx`, trên docx **cuối** (sau `finish`, ở cả ba nhánh trả về: Equation, rơi về Equation, MathType) đếm trong `word/document.xml`: số `w:drawing`
    và số `wp:docPr` có `descr="qimg:<id>"` theo từng id; kỳ vọng = số lần token được chèn theo id (cùng ảnh dùng hai chỗ = 2). Lệch thì ném
    `DocumentExportException(500, "EXPORT_IMAGE_MISSING", …)`, ghi log id đề, số kỳ vọng, số đếm, danh sách id thiếu (không ghi chữ đề, URL hay `sig`); không trả file. Kỳ vọng tổng `w:drawing` chỉ đúng khi
@@ -416,8 +424,8 @@ Giữ nguyên: lý do (i) chỗ ngân hàng không sửa được trong đề, 4
 | **O2** | Mục 4.2 | 12 (6 mã + 3 test + 3 chạy container) | – | Mục 4.2 |
 | **S1** | Học sinh phía BE: endpoint, ký theo lượt, điều kiện hiển thị, DTO, hạn mức, `SecurityConfig`, tài liệu API | 10 | duyệt D1, D3 | Chữ ký sai/hết hạn/đổi `id`,`a`,`exp` → 404; lượt bị xóa → 404; **ảnh `solution` trong lúc làm bài → 404 và không có trong `images`**; sau ân hạn + `showSolutions` → 200; `showSolutions=false` → 404; câu đã gỡ vẫn tải được; vượt hạn mức → 429; MockMvc không JWT |
 | **S2** | Học sinh phía FE: truyền `images` cho `MathText` ở 3 màn; ảnh lỗi hiện chữ thay thế | 3 | S1 | Token → ảnh; URL hết hạn → chữ thay thế rồi tải lại bằng P3 |
-| **X1** | Bỏ điều kiện dòng 104; không gửi chữ câu cũ có hình vào prompt Đổi; `imageKey` cho `ExamSlotSiblings` | 4 | F1, O2, A1 | Tạo đề, Đổi (ngân hàng và sinh mới) với câu hình; cờ giống không báo khi khác hình; test khóa thống kê |
-| **A2** | Gỡ `ASSIGN_HAS_FIGURE` | 1 | S1, S2, X1 | Đề có hình giao được; học sinh làm được |
+| **X1** | Bỏ điều kiện dòng 104; không gửi chữ câu cũ có hình vào prompt Đổi; `imageKey` cho `ExamSlotSiblings` (và cờ `similar_in_exam`, xem 4.0). **Đã làm 24/11**, nhánh `feature/figure-enable` | 4 | F1, O2, A1 | Tạo đề, Đổi (ngân hàng và sinh mới) với câu hình; cờ giống không báo khi khác hình; test khóa thống kê (`ExamFigureBankTest`, `ReplaceReasonWithoutOldQuestionTest`) |
+| **A2** | Gỡ `ASSIGN_HAS_FIGURE`. **Đã làm 24/11**, cùng nhánh: gỡ cả `figureGuard.ts` và dòng nhắc "chưa dùng để tạo đề" ở màn nhập Word | 1 | S1, S2, X1 | Đề có hình giao được; học sinh làm được (`AssignmentFigureFlowTest`, `AssignmentTeacherApiTest`) |
 | (nhỏ) | Test khóa `QcVersionCard` | 0,5 | – | Thiếu `images` → chữ thay thế |
 
 Tổng ≈ 34,5 giờ. Thứ tự merge: F1 → (O2 ∥ A1 ∥ S1) → X1 → S2 → A2. Giữa X1 và A2 giáo viên đã tạo, xem và xuất Word được đề có hình nhưng chưa giao được.
@@ -438,6 +446,10 @@ Giờ O2 lớn hơn H9 (6 giờ) vì H9 chỉ tính builder và đếm; thêm b�
 **Chưa xác minh** (ghi rõ để không coi là sự thật): `MatrixPromptDraftV0.replaceReasonBlock` xử lý được `oldQuestion = null` cho nhánh D4.
 *Đã xác minh 23/11 (O2, mục 4.2):* `descr` của `wp:docPr` lấy từ alt của pandoc (đúng); heap pandoc 256 MB **không** đủ cho ảnh 19–24 MB (trần hạ còn
 10 MB, D5); `ExamSpecBuilder` không in chữ câu hỏi (đúng).
+*Đã xác minh 24/11 (X1):* `replaceReasonBlock` với `oldQuestion = null` (`PromptData.neutralize(null)` trả chuỗi rỗng) cho khối
+lý do một dòng, không có đoạn "Câu bị đổi" hay đáp số cũ, cả ba dạng câu; không đổi văn bản hay phiên bản prompt. Khóa bằng
+`ReplaceReasonWithoutOldQuestionTest` và `ExamFigureBankTest`. Với câu sa/tf, khối vẫn nói "khác câu bị đổi" dù không kèm câu
+cũ (văn bản có sẵn, không sửa).
 
 ## Quyết định đã chốt (An, 11/11/2026)
 
