@@ -12,11 +12,14 @@ import com.datn.mcq.generation.entity.GeneratedQuestionStatement;
 import com.datn.mcq.generation.service.GenerationService;
 import com.datn.mcq.generation.service.SlotDedupContext;
 import com.datn.mcq.qc.dto.DedupCandidate;
+import com.datn.mcq.questionimage.service.QuestionImageService;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -26,6 +29,9 @@ import java.util.Optional;
  * <p>Dedup theo run chỉ thấy câu qc_passed/in_bank và câu cùng run; còn thiếu (1) câu ở ô khác chưa qua QC (lệch Solver
  * được dùng kèm cờ, bản sửa đang chờ Solver), (2) văn bản câu ngân hàng đã sửa lúc duyệt (khác câu nguồn). Với câu ngân
  * hàng, ứng viên mang id của câu nguồn (generated_question) để kết quả dedup trỏ được tới bản ghi có thật.
+ *
+ * <p>X1 (H7): ứng viên câu ngân hàng mang khóa hình ({@link QuestionImageService#imageKeysBySourceQuestion}) nên câu khác
+ * hình không bao giờ trùng; câu ngân hàng và khóa hình của mọi chỗ nạp theo lô (số truy vấn không theo số chỗ).
  */
 @Component
 public class ExamSlotSiblings implements SlotDedupContext {
@@ -34,14 +40,33 @@ public class ExamSlotSiblings implements SlotDedupContext {
     private final BankService bankService;
     private final GenerationService generationService;
     private final com.datn.mcq.exam.repository.ExamRepository examRepository;
+    private final QuestionImageService questionImageService;
 
     public ExamSlotSiblings(ExamSlotRepository slotRepository, BankService bankService,
                             GenerationService generationService,
-                            com.datn.mcq.exam.repository.ExamRepository examRepository) {
+                            com.datn.mcq.exam.repository.ExamRepository examRepository,
+                            QuestionImageService questionImageService) {
         this.slotRepository = slotRepository;
         this.bankService = bankService;
         this.generationService = generationService;
         this.examRepository = examRepository;
+        this.questionImageService = questionImageService;
+    }
+
+    /** Câu ngân hàng của các chỗ (theo id bank_item) và khóa hình theo id câu nguồn, nạp theo lô. */
+    private record BankData(Map<Integer, BankItemDto> items, Map<Integer, String> imageKeys) {}
+
+    /** {@code withKeys} false: chỉ cần chữ câu, không truy vấn ảnh. */
+    private BankData bankData(List<ExamSlot> slots, boolean withKeys) {
+        List<Integer> ids = slots.stream().filter(ExamBuildService::hasQuestion).map(ExamSlot::getBankItemId)
+                .filter(Objects::nonNull).toList();
+        if (ids.isEmpty()) {
+            return new BankData(Map.of(), Map.of());
+        }
+        Map<Integer, BankItemDto> items = bankService.getItems(ids);
+        Map<Integer, String> keys = withKeys ? questionImageService.imageKeysBySourceQuestion(
+                items.values().stream().map(BankItemDto::sourceQuestionId).toList()) : Map.of();
+        return new BankData(items, keys);
     }
 
     @Override
@@ -58,12 +83,12 @@ public class ExamSlotSiblings implements SlotDedupContext {
      */
     @Transactional(readOnly = true)
     public List<DedupCandidate> candidates(Integer examId, Integer excludeSlotId, QuestionType type) {
+        List<ExamSlot> others = slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(examId).stream()
+                .filter(other -> !other.getId().equals(excludeSlotId) && other.getQuestionType() == type).toList();
+        BankData bank = bankData(others, true);
         List<DedupCandidate> out = new ArrayList<>();
-        for (ExamSlot other : slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(examId)) {
-            if (other.getId().equals(excludeSlotId) || other.getQuestionType() != type) {
-                continue;
-            }
-            for (DedupCandidate candidate : of(other)) {
+        for (ExamSlot other : others) {
+            for (DedupCandidate candidate : of(other, bank)) {
                 if (candidate != null && candidate.hasContent()) {
                     out.add(candidate);
                 }
@@ -79,12 +104,13 @@ public class ExamSlotSiblings implements SlotDedupContext {
         if (self == null) {
             return List.of();
         }
+        List<ExamSlot> others = slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(self.getExamId()).stream()
+                .filter(other -> !other.getId().equals(self.getId()) && other.getCellId().equals(self.getCellId()))
+                .toList();
+        BankData bank = bankData(others, false);
         List<String> out = new ArrayList<>();
-        for (ExamSlot other : slotRepository.findByExamIdOrderByCellIdAscSlotNoAsc(self.getExamId())) {
-            if (other.getId().equals(self.getId()) || !other.getCellId().equals(self.getCellId())) {
-                continue;
-            }
-            for (DedupCandidate candidate : of(other)) {
+        for (ExamSlot other : others) {
+            for (DedupCandidate candidate : of(other, bank)) {
                 if (candidate != null && candidate.hasContent()) {
                     out.add(candidate.questionText());
                 }
@@ -93,12 +119,12 @@ public class ExamSlotSiblings implements SlotDedupContext {
         return out;
     }
 
-    private List<DedupCandidate> of(ExamSlot slot) {
+    private List<DedupCandidate> of(ExamSlot slot, BankData bankData) {
         if (ExamBuildService.hasQuestion(slot)) {
             if (slot.getBankItemId() != null) {
                 // Câu ngân hàng (lấy từ ngân hàng hoặc đã Giữ): văn bản đang hiển thị trong đề là bản ngân hàng.
-                BankItemDto bank = bankService.getItem(slot.getBankItemId());
-                return List.of(fromBank(bank));
+                BankItemDto bank = bankData.items().get(slot.getBankItemId());
+                return List.of(fromBank(bank, bankData.imageKeys().getOrDefault(bank.sourceQuestionId(), "")));
             }
             return slot.getGeneratedQuestionId() == null ? List.of()
                     : java.util.Collections.singletonList(fromGenerated(slot.getGeneratedQuestionId()));
@@ -121,13 +147,13 @@ public class ExamSlotSiblings implements SlotDedupContext {
         return out;
     }
 
-    private static DedupCandidate fromBank(BankItemDto b) {
+    private static DedupCandidate fromBank(BankItemDto b, String imageKey) {
         return switch (b.questionType()) {
             case MCQ -> new DedupCandidate(b.sourceQuestionId(), b.questionText(), b.optionA(), b.optionB(),
-                    b.optionC(), b.optionD());
-            case SA -> DedupCandidate.shortAnswer(b.sourceQuestionId(), b.questionText(), b.saAnswer());
+                    b.optionC(), b.optionD(), imageKey);
+            case SA -> DedupCandidate.shortAnswer(b.sourceQuestionId(), b.questionText(), b.saAnswer(), imageKey);
             case TF -> DedupCandidate.trueFalse(b.sourceQuestionId(), b.questionText(), b.statements() == null
-                    ? List.of() : b.statements().stream().map(BankItemDto.StatementDto::text).toList());
+                    ? List.of() : b.statements().stream().map(BankItemDto.StatementDto::text).toList(), imageKey);
         };
     }
 

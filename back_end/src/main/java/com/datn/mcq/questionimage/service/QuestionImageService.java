@@ -119,22 +119,92 @@ public class QuestionImageService {
         return imagesBySourceQuestion(questionIds, id -> signer.buildAttemptUrl(id, expiry, attemptId));
     }
 
+    /**
+     * Ảnh (URL ký cho người xem) và khóa hình H7 ({@link #imageKeysBySourceQuestion}) của các câu nguồn, lấy từ CÙNG một truy
+     * vấn metadata. Câu không có hình vắng khỏi cả hai bản đồ; câu chỉ có ảnh lời giải vắng khỏi {@code imageKeys}.
+     */
+    public record SignedImages(Map<Integer, List<QuestionImageDto>> images, Map<Integer, String> imageKeys) {}
+
+    /**
+     * X1: như {@link #signedImagesBySourceQuestion} và trả thêm khóa hình của từng câu (cờ "giống câu khác trong đề" của xem
+     * đề so cả hình), vẫn đúng một truy vấn metadata, không nạp cột data.
+     */
+    @Transactional(readOnly = true)
+    public SignedImages signedImagesAndKeysBySourceQuestion(Collection<Integer> questionIds, int viewerId) {
+        Instant now = Instant.now();
+        List<MetadataProjection> metadata = metadataOf(questionIds);
+        return new SignedImages(toDtos(metadata, id -> signer.buildSignedUrl(id, viewerId, now)), keysOf(metadata));
+    }
+
+    /**
+     * H7 (dedup và cờ giống câu so cả hình): khóa hình của các câu nguồn ({@code generated_question.id}) theo lô, MỘT truy vấn
+     * metadata (không nạp cột data); không có câu thì không truy vấn. Khóa là các {@code sha256} của ảnh khác role
+     * {@code solution}, nối bằng dấu phẩy theo thứ tự {@code role} rồi {@code ordinal}; hai câu cùng khóa là cùng hình. Câu
+     * không có ảnh nào ngoài lời giải vắng khỏi kết quả (nơi gọi coi như khóa rỗng). Đây là định nghĩa DUY NHẤT của khóa hình
+     * cho câu ngân hàng (nhập từ Word so trùng ngân hàng, dedup trong đề, cờ giống câu khi xem đề).
+     */
+    @Transactional(readOnly = true)
+    public Map<Integer, String> imageKeysBySourceQuestion(Collection<Integer> questionIds) {
+        return keysOf(metadataOf(questionIds));
+    }
+
     /** Một truy vấn metadata (không nạp cột data) cho mọi câu; ảnh của một câu theo {@code ordinal}. */
     private Map<Integer, List<QuestionImageDto>> imagesBySourceQuestion(Collection<Integer> questionIds,
                                                                         LongFunction<String> url) {
-        Set<Integer> ids = new LinkedHashSet<>();
-        if (questionIds != null) {
-            questionIds.stream().filter(Objects::nonNull).forEach(ids::add);
-        }
+        return toDtos(metadataOf(questionIds), url);
+    }
+
+    /** Số id câu tối đa của một truy vấn metadata (so trùng khi nhập Word đưa cả ngân hàng của môn vào). */
+    static final int METADATA_CHUNK = 1000;
+
+    /**
+     * Metadata ảnh của các câu (bỏ id null, không trùng); rỗng và không truy vấn khi không có câu. Một truy vấn cho tối đa
+     * {@value #METADATA_CHUNK} câu (xem đề, trang ngân hàng luôn chỉ một truy vấn).
+     */
+    private List<MetadataProjection> metadataOf(Collection<Integer> questionIds) {
+        List<Integer> ids = new ArrayList<>(new LinkedHashSet<>(questionIds == null ? List.of()
+                : questionIds.stream().filter(Objects::nonNull).toList()));
         if (ids.isEmpty()) {
+            return List.of();
+        }
+        if (ids.size() <= METADATA_CHUNK) {
+            return repository.findMetadataByGeneratedQuestionIdIn(ids);
+        }
+        List<MetadataProjection> out = new ArrayList<>();
+        for (int from = 0; from < ids.size(); from += METADATA_CHUNK) {
+            out.addAll(repository.findMetadataByGeneratedQuestionIdIn(
+                    ids.subList(from, Math.min(ids.size(), from + METADATA_CHUNK))));
+        }
+        return out;
+    }
+
+    private static Map<Integer, List<QuestionImageDto>> toDtos(List<MetadataProjection> metadata, LongFunction<String> url) {
+        if (metadata.isEmpty()) {
             return Map.of();
         }
         Map<Integer, List<QuestionImageDto>> out = new LinkedHashMap<>();
-        for (MetadataProjection m : repository.findMetadataByGeneratedQuestionIdIn(ids)) {
+        for (MetadataProjection m : metadata) {
             out.computeIfAbsent(m.getGeneratedQuestionId(), k -> new ArrayList<>())
                     .add(new QuestionImageDto(m.getId(), m.getRole(), m.getOrdinal(), m.getMime(), m.getWidthPx(),
                             m.getHeightPx(), m.getDisplayWidthMm(), url.apply(m.getId())));
         }
+        return out;
+    }
+
+    /** Khóa hình H7 theo câu, xem {@link #imageKeysBySourceQuestion}. */
+    private static Map<Integer, String> keysOf(List<MetadataProjection> metadata) {
+        Map<Integer, List<MetadataProjection>> byQuestion = new LinkedHashMap<>();
+        for (MetadataProjection m : metadata) {
+            if (!"solution".equals(m.getRole())) {
+                byQuestion.computeIfAbsent(m.getGeneratedQuestionId(), k -> new ArrayList<>()).add(m);
+            }
+        }
+        Map<Integer, String> out = new LinkedHashMap<>();
+        byQuestion.forEach((questionId, images) -> out.put(questionId, images.stream()
+                .sorted(java.util.Comparator.comparing(MetadataProjection::getRole)
+                        .thenComparing(MetadataProjection::getOrdinal))
+                .map(MetadataProjection::getSha256)
+                .collect(java.util.stream.Collectors.joining(","))));
         return out;
     }
 

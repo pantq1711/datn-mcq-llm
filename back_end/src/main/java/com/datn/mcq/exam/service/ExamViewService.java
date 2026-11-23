@@ -148,12 +148,13 @@ public class ExamViewService {
      * @param scopes     (PR B) mức lấy yêu cầu của job đã sinh ra câu (theo id câu gốc LLM)
      * @param requests   (PR B) yêu cầu của đề và các ô theo id đề, để tính yêu cầu thừa hưởng của từng chỗ
      * @param images     (G0 H3) ảnh của câu nguồn các câu ngân hàng trong {@code bank}, theo id câu nguồn, URL ký cho người xem
+     * @param imageKeys  (X1, H7) khóa hình của cùng các câu nguồn đó, lấy cùng truy vấn với {@code images}; vắng = không hình
      */
     private record Loaded(Map<Integer, BankItemDto> bank, Map<Integer, GeneratedQuestion> questions,
                           Map<Integer, List<GeneratedQuestionStatement>> statements, Map<Integer, Integer> originals,
                           GenerationService.CheckJobs jobs, Map<Integer, QcSummary> qc, Map<Integer, String> scopes,
                           Map<Integer, ExamContextService.Resolved> requests,
-                          Map<Integer, List<QuestionImageDto>> images) {}
+                          Map<Integer, List<QuestionImageDto>> images, Map<Integer, String> imageKeys) {}
 
     private Loaded load(Collection<ExamSlot> slots, Integer actorId) {
         Set<Integer> bankIds = new LinkedHashSet<>();
@@ -187,22 +188,29 @@ public class ExamViewService {
         questions.values().forEach(q -> scopeIds.add(originals.getOrDefault(q.getId(), q.getId())));
         Set<Integer> examIds = new LinkedHashSet<>();
         slots.forEach(s -> examIds.add(s.getExamId()));
+        QuestionImageService.SignedImages images = bankImages(bank.values(), actorId);
         return new Loaded(bank, questions, generationService.statementsByQuestionIds(tfIds), originals,
                 generationService.latestCheckJobs(generatedIds), qcSummaryService.summarizeAll(generatedIds),
                 generationService.requestScopes(scopeIds), contextService.requestsOf(examIds),
-                bankImages(bank.values(), actorId));
+                images.images(), images.imageKeys());
     }
 
     /**
      * G0 H3 (O1): ảnh của các câu ngân hàng trong đề, một truy vấn theo lô cho mọi chỗ; không có chỗ ngân hàng thì không
-     * truy vấn. Ảnh thuộc câu nguồn của bank_item (H5), URL ký cho người xem đề.
+     * truy vấn. Ảnh thuộc câu nguồn của bank_item (H5), URL ký cho người xem đề. X1: kèm khóa hình (H7) từ cùng truy vấn.
      */
-    private Map<Integer, List<QuestionImageDto>> bankImages(Collection<BankItemDto> bankItems, Integer actorId) {
+    private QuestionImageService.SignedImages bankImages(Collection<BankItemDto> bankItems, Integer actorId) {
         if (bankItems.isEmpty() || actorId == null) {
-            return Map.of();
+            return new QuestionImageService.SignedImages(Map.of(), Map.of());
         }
-        return questionImageService.signedImagesBySourceQuestion(
+        return questionImageService.signedImagesAndKeysBySourceQuestion(
                 bankItems.stream().map(BankItemDto::sourceQuestionId).toList(), actorId);
+    }
+
+    /** X1 (H7): khóa hình của câu đang hiển thị ở một mục (câu ngân hàng; câu sinh không có hình nên rỗng). */
+    private static String imageKeyOf(ExamItemDto item, Loaded data) {
+        BankItemDto b = item.bankItemId() == null ? null : data.bank().get(item.bankItemId());
+        return b == null ? "" : data.imageKeys().getOrDefault(b.sourceQuestionId(), "");
     }
 
     /** PR B: yêu cầu thừa hưởng của chỗ (mã đã lọc theo dạng câu); null khi không có. */
@@ -249,7 +257,7 @@ public class ExamViewService {
                 ExamItemDto item = toItem(slot, cells.get(slot.getCellId()), loaded);
                 byPart.computeIfAbsent(item.part(), k -> new ArrayList<>()).add(item);
             }
-            flagSimilarInExam(byPart);
+            flagSimilarInExam(byPart, loaded);
             out.put(entry.getKey(), byPart);
         }
         return out;
@@ -338,10 +346,12 @@ public class ExamViewService {
     /**
      * Thẩm định 31/10 (lớp 2): gắn cờ thông tin (22/11; trước đó lý do cần xem kỹ) {@code similar_in_exam: <Phần>.<số>} cho
      * câu cùng khuôn với một câu ĐỨNG TRƯỚC nó trong CHÍNH đề này; từ 2/11 mỗi cặp chỉ câu sau bị gắn, và số đếm theo Phần như trang đề ("Câu k" của
-     * từng Phần), xem {@link ExamQuestionSimilarity#flag}. Tính lúc xem, không ghi DB, không đổi trạng thái câu.
+     * từng Phần), xem {@link ExamQuestionSimilarity#flag}. Tính lúc xem, không ghi DB, không đổi trạng thái câu. X1 (H7): cùng
+     * chữ nhưng khác hình thì không gắn (khóa hình từ cùng truy vấn ảnh của xem đề; danh sách đề không nạp ảnh nên chỉ so chữ,
+     * cờ thông tin không vào số đếm nào của danh sách).
      */
-    private void flagSimilarInExam(Map<String, List<ExamItemDto>> byPart) {
-        ExamQuestionSimilarity.flag(byPart, similarThreshold);
+    private void flagSimilarInExam(Map<String, List<ExamItemDto>> byPart, Loaded data) {
+        ExamQuestionSimilarity.flag(byPart, similarThreshold, item -> imageKeyOf(item, data));
     }
 
     /** Số chỗ "cần xem kỹ" của một đề: định nghĩa duy nhất, dùng cho cả trang chi tiết và danh sách đề. */

@@ -9,7 +9,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
@@ -46,6 +48,9 @@ public final class ExamQuestionSimilarity {
     private static final Pattern NUMBER = Pattern.compile("\\d+(?:\\{,\\}\\d+|[.,]\\d+)?");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
+    /** Mọi câu cùng khóa hình rỗng: hành vi trước X1 (chỉ so chữ). */
+    private static final Function<ExamItemDto, String> NO_IMAGE_KEY = item -> "";
+
     private ExamQuestionSimilarity() {}
 
     /**
@@ -62,8 +67,17 @@ public final class ExamQuestionSimilarity {
      * các danh sách của {@code byPart} (theo thứ tự Phần hiển thị; mỗi chỗ một vị trí, kể cả chỗ chưa có câu).
      */
     public static void flag(Map<String, List<ExamItemDto>> byPart, double threshold) {
+        flag(byPart, threshold, NO_IMAGE_KEY);
+    }
+
+    /**
+     * Như {@link #flag(Map, double)}; X1 (H7): hai câu khác khóa hình ({@code imageKey}, rỗng khi không có hình) không bao giờ
+     * cùng khuôn, như quy tắc của {@code DedupChecker}.
+     */
+    public static void flag(Map<String, List<ExamItemDto>> byPart, double threshold,
+                            Function<ExamItemDto, String> imageKey) {
         List<ExamItemDto> flat = byPart.values().stream().flatMap(List::stream).toList();
-        Map<Integer, List<Integer>> similar = findSimilar(flat, threshold);
+        Map<Integer, List<Integer>> similar = findSimilar(flat, threshold, imageKey);
         if (similar.isEmpty()) {
             return;
         }
@@ -123,10 +137,17 @@ public final class ExamQuestionSimilarity {
      *         có trong kết quả
      */
     public static Map<Integer, List<Integer>> findSimilar(List<ExamItemDto> items, double threshold) {
+        return findSimilar(items, threshold, NO_IMAGE_KEY);
+    }
+
+    /** Như {@link #findSimilar(List, double)}, cặp khác khóa hình không tính (X1, H7). */
+    public static Map<Integer, List<Integer>> findSimilar(List<ExamItemDto> items, double threshold,
+                                                          Function<ExamItemDto, String> imageKey) {
         Map<Integer, List<Integer>> out = new TreeMap<>();
         for (int i = 0; i < items.size(); i++) {
             for (int j = i + 1; j < items.size(); j++) {
-                if (similar(items.get(i), items.get(j), threshold)) {
+                if (Objects.equals(imageKey.apply(items.get(i)), imageKey.apply(items.get(j)))
+                        && similar(items.get(i), items.get(j), threshold)) {
                     out.computeIfAbsent(j + 1, k -> new ArrayList<>()).add(i + 1);
                 }
             }

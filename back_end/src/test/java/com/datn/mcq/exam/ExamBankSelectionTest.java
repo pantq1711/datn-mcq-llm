@@ -136,15 +136,16 @@ class ExamBankSelectionTest extends ExamFlowTestBase {
     }
 
     @Test
-    void cauCoHinhTrongNganHangKhongDuocChonKhiTaoDe() throws Exception {
+    void cauCoHinhTrongNganHangDuocChonKhiTaoDe() throws Exception {
+        // X1 (24/11): bỏ điều kiện loại tạm của PR I1–I3; chi tiết ở ExamFigureBankTest.
         int withImage = bankMcq("Đa thức", "easy", "Cho hình vẽ sau.\n⟦img:1⟧");
         attachImageToBankItem(withImage);
         int matrix = createMatrix(mcqCell("Đa thức", null, 1));
 
         JsonNode built = build(matrix);
 
-        assertEquals(0, built.get("fromBank").asInt(), "câu có hình chưa hỗ trợ đầu ra đề thi nên không được chọn");
-        assertEquals(1, built.get("jobsQueued").asInt());
-        assertEquals(List.of(), bankIdsOf(built.get("examId").asInt()));
+        assertEquals(1, built.get("fromBank").asInt(), "câu có hình là ứng viên như mọi câu ngân hàng");
+        assertEquals(0, built.get("jobsQueued").asInt());
+        assertEquals(List.of(withImage), bankIdsOf(built.get("examId").asInt()));
     }
 }
