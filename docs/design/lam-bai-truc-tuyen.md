@@ -421,7 +421,7 @@ trang đề ở frontend nên PR merge sau phải rebase.
 
 ## 11. Không làm (nhắc lại phạm vi)
 
-Tài khoản học sinh, quản lý lớp, chống gian lận, trộn đề / trộn phương án theo học sinh, lưu nháp ở server, tự luận, câu có hình,
+Tài khoản học sinh, quản lý lớp, chống gian lận, trộn đề / trộn phương án theo học sinh, lưu nháp ở server, tự luận,
 xuất bảng điểm ra file, gộp thống kê nhiều bài giao, cột cộng dồn trên `bank_item`, lọc ngân hàng theo cờ hậu kiểm, biểu đồ.
 
 ## 12. Câu hỏi cho An – ĐÃ CHỐT 14/11/2026

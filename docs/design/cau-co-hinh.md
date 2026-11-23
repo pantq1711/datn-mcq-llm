@@ -337,6 +337,13 @@ Ba điều bắt buộc ngay sau bảng H9 giữ nguyên; phần dưới là cá
    thêm vào `ExamReferenceDoc`) chứa `![qimg:812](data:image/png;base64,…){width=<W>mm}` với `W = min(displayWidthMm, 120)`. Ảnh ở phương án: tối đa 40 mm và **ép bố cục 2 cột**
    khi có phương án chứa ảnh (hiện `OptionLayout.choose` chỉ đo chữ); không thêm dấu chấm sau token (`endWithPeriod`). Ảnh role `solution` chỉ ra ở phần lời giải của file đầy đủ, không ra ở `ExportContent.EXAM`.
    Alt `qimg:<id>` để đếm lại (bước 3). Token còn lại mà không có ảnh tương ứng: dừng ở bước dựng Markdown, cùng mã lỗi dưới.
+   *Bổ sung 24/11 (P4, sau khi mở file bằng Word thật):* `PandocRunner.MARKDOWN_FORMAT` tắt `implicit_figures`
+   (`markdown+tex_math_dollars-raw_html-raw_tex-implicit_figures`). Lý do: với extension này pandoc coi ảnh đứng riêng một đoạn
+   là "figure", nên alt `qimg:<id>` in ra thành dòng chú thích dưới mỗi hình và đoạn ảnh mang kiểu Captioned Figure thay cho
+   `ExamFigure` (hình lệch trái). Tắt đi thì ảnh là ảnh trong dòng của đoạn `ExamFigure` (căn giữa), `wp:docPr descr` vẫn lấy từ
+   alt nên bước 3 không đổi; đề không có hình ra như cũ. Khóa bằng `ExamFigureDocxTest`. Cùng đợt: `endWithPeriod` không thêm
+   dấu chấm khi công thức cuối đã kết thúc bằng dấu kết câu bên trong (`$m = 1.$`, hay gặp ở câu nhập từ Word; trước đó in
+   "m = 1..").
 3. **Đếm lại.** Trong `PandocRunner.doMarkdownToDocx`, trên docx **cuối** (sau `finish`, ở cả ba nhánh trả về: Equation, rơi về Equation, MathType) đếm trong `word/document.xml`: số `w:drawing`
    và số `wp:docPr` có `descr="qimg:<id>"` theo từng id; kỳ vọng = số lần token được chèn theo id (cùng ảnh dùng hai chỗ = 2). Lệch thì ném
    `DocumentExportException(500, "EXPORT_IMAGE_MISSING", …)`, ghi log id đề, số kỳ vọng, số đếm, danh sách id thiếu (không ghi chữ đề, URL hay `sig`); không trả file. Kỳ vọng tổng `w:drawing` chỉ đúng khi
