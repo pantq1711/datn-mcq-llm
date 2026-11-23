@@ -66,6 +66,9 @@ file 12 công thức + 4 ảnh (ảnh cùng dòng với công thức, có công 
 thức + 33 ảnh → 165/165, **Kept-Omml = 0**. Số `w:drawing` giữ nguyên (4 và 33); Word mở được cả hai file. Lý do khớp: bộ
 chuyển chỉ đếm `m:oMath` (`MathTypeDocxConverter.java:93-101`), ảnh không sinh `m:oMath`.
 
+*Chạy lại trong container Linux dựng từ Dockerfile thật (23/11, O2):* data URI dưới `--sandbox` chạy, ảnh dạng file vẫn exit 0 mà thiếu ảnh, MathType
+Kept-Omml = 0 với 12 công thức + 4 ảnh và 165 + 33, số `w:drawing` giữ nguyên; heap pandoc theo cỡ ảnh ở bảng mục 4.2 (20 MB ảnh không vừa 256 MB).
+
 ### 2c. Hiển thị web
 
 `MathText` (`front_end/src/components/common/MathText/MathText.tsx:14-52, 71-102`) tách chuỗi thành đoạn chữ / công thức, dùng ở
@@ -337,8 +340,15 @@ Ba điều bắt buộc ngay sau bảng H9 giữ nguyên; phần dưới là cá
    và số `wp:docPr` có `descr="qimg:<id>"` theo từng id; kỳ vọng = số lần token được chèn theo id (cùng ảnh dùng hai chỗ = 2). Lệch thì ném
    `DocumentExportException(500, "EXPORT_IMAGE_MISSING", …)`, ghi log id đề, số kỳ vọng, số đếm, danh sách id thiếu (không ghi chữ đề, URL hay `sig`); không trả file. Kỳ vọng tổng `w:drawing` chỉ đúng khi
    file mẫu không có drawing nào: test khóa số này ở file mẫu khi không có ảnh câu. `ApiExceptionHandler` đã trả `code` của `DocumentExportException`.
-4. **Giới hạn dung lượng** (đề xuất, chờ số đo): tổng ảnh một lần xuất ≤ 24 MB (cận trên đo được 19 MB, cộng 25%), vượt thì `422 EXPORT_IMAGES_TOO_LARGE`. Heap pandoc lấy từ `PandocLimiter.getPandocHeapMb()`, mặc định 256 MB khi không có limiter
-   (`PandocRunner.java:248`; giá trị cấu hình thật khi chạy chưa kiểm); mục 2b chỉ đo 953 KB ảnh (26 MiB), **chưa biết 19–24 MB có vừa 256 MB**. Nếu không vừa: phương án dự phòng là đưa ảnh giữ chỗ 1×1 vào Markdown rồi thay `word/media/*` sau pandoc.
+4. **Giới hạn dung lượng** (chốt 23/11 sau số đo container, D5 cách A): tổng `byte_size` của ảnh một lần xuất, **tính theo số lần chèn**
+   (pandoc đọc từng lần chèn trong Markdown), ≤ **10 MB** (10 485 760 byte, `app.export.max-image-bytes`); vượt thì `422 EXPORT_IMAGES_TOO_LARGE`,
+   lời nhắn "Tổng hình trong đề quá lớn để xuất Word (X MB, tối đa 10 MB). Hãy bỏ bớt câu có hình." (X làm tròn lên một chữ số thập phân). Kiểm
+   bằng truy vấn không nạp cột `data`, trước khi nạp byte và trước khi chạy pandoc. **Heap pandoc giữ 256 MB** (`app.materials.pandoc-heap-mb`,
+   `application.yaml:143`, đúng giá trị `PandocRunner` dùng). Số đo (bảng dưới): 20 và 24 MB **không chạy** dưới 256 MB (Windows: "Heap exhausted"),
+   nên đề xuất 24 MB ban đầu bị bỏ; trần là cỡ lớn nhất trong 1/5/8/10/12 MB vừa chạy được vừa dùng ≤ 180 MiB heap (còn dư ≥ 30%): 10 MB dùng 169 MiB,
+   12 MB dùng 187 MiB. Đề thật ≈ 13 hình ≈ 0,5 MB nên trần chỉ chặn đề rất nhiều hình lớn; cận trên lý thuyết 19 MB (40 câu × 2 hình × 237 KB) vượt trần.
+   **Hướng phát triển (cách B, chưa làm):** đưa ảnh giữ chỗ 1×1 vào Markdown rồi thay `word/media/*` sau pandoc; khi đó bộ nhớ pandoc không còn phụ
+   thuộc cỡ ảnh và trần có thể nâng lên theo bộ nhớ JVM.
 
 **Chạy lại thử nghiệm 2b trong container Linux (chưa chạy; cần cho phép riêng khi tới lượt):**
 - Dựng image **từ `back_end/Dockerfile` thật** (không dùng image thử `datn-backend:check`), chạy bằng uid 10001 và giới hạn bộ nhớ 1536 MB như `compose.prod.yaml:67`.
@@ -348,6 +358,26 @@ Ba điều bắt buộc ngay sau bảng H9 giữ nguyên; phần dưới là cá
   (6) mở file bằng Word thật: kiểm tay, container không làm được.
 - Khung lệnh (minh họa, chưa kiểm cú pháp, chốt khi viết PR): `docker build -t datn-backend:o2 back_end`, rồi `docker run --rm --user 10001 --memory 1536m -v <thư mục fixture>:/work:ro --entrypoint /bin/sh datn-backend:o2 -c "pandoc --sandbox …"`.
 - Kết quả ghi vào mô tả PR O2 và thay số ở bảng 2b.
+
+**Kết quả chạy 23/11** (image tạm dựng từ `back_end/Dockerfile` của `origin/main` b742b12: pandoc 3.12.1, JRE 21; mỗi cỡ một container mới `--user 10001
+--memory 1536m`; fixture PNG nhiễu ngẫu nhiên tự sinh, 500 KB mỗi ảnh (cận trên H4), mỗi ảnh một đoạn `ExamFigure` alt `qimg:<id>` như builder, mỗi câu một
+công thức). "Heap pandoc" là `total memory in use` của `pandoc +RTS -M256m -s -RTS --sandbox` (phần `-M` giới hạn); "đường ứng dụng" là `PandocRunner` của
+nhánh `feature/figure-export` (sandbox, đếm ảnh, MathType) gọi từ một lớp chạy thử trong container; "docker stats" là mức cao nhất lấy mẫu mỗi ~0,5 s của cả
+container (JVM + pandoc). `memory.peak` của cgroup không đọc được trong container này.
+
+| Tổng ảnh | Số ảnh | Heap pandoc docx / json | Thời gian pandoc docx / json | Đường ứng dụng Equation / MathType | docker stats | `w:drawing` = `descr qimg` | Kept-Omml |
+|---|---|---|---|---|---|---|---|
+| 1 MB | 3 | 29 / 27 MiB | 0,9 / 0,4 s | 3,7 / 5,7 s | 150 MiB | 3 = 3 | 0 |
+| 5 MB | 11 | 95 / 70 MiB | 2,5 / 1,5 s | 5,1 / 9,2 s | 231 MiB | 11 = 11 | 0 |
+| 8 MB | 17 | 139 / 105 MiB | 3,8 / 2,3 s | 7,2 / 16,1 s | 357 MiB | 17 = 17 | 0 |
+| **10 MB** | 21 | **169** / 131 MiB | 6,7 / 4,1 s | 10,6 / 19,2 s | 405 MiB | 21 = 21 | 0 |
+| 12 MB | 25 | **187** / 155 MiB (> 180) | 7,7 / 4,9 s | 11,7 / 21,3 s | 427 MiB | 25 = 25 | 0 |
+| 20 MB, 24 MB (Windows) | 40, 49 | **Heap exhausted** (exit 251, không có file) | – | – | – | – | – |
+
+Các mục còn lại: (1) data URI dưới `--sandbox` chạy ở mọi cỡ; (2) đối chứng ảnh dạng file: `PandocResourceNotFound "fig.png"`, **exit 0**, docx không có ảnh,
+`PandocRunner` của nhánh báo `EXPORT_IMAGE_MISSING` ("kỳ vọng 1 ảnh, đếm được 0 w:drawing") ở cả Equation và MathType; (3) `descr` của `wp:docPr` **đúng**
+`qimg:<id>` (Linux và Windows, pandoc 3.12.1); (4) MathType: 12 công thức + 4 ảnh → 12 đối tượng, Kept-Omml = 0, 4 `w:drawing`; 165 công thức + 33 ảnh →
+165, Kept-Omml = 0, 33 `w:drawing` (fixture Markdown tự sinh, không dùng `KIEM_TRA_mo_rong.docx`); (6) mở bằng Word thật: chưa kiểm.
 
 **Test chính O2:** docx có đủ ảnh theo từng id (ảnh dùng hai chỗ đếm 2); thiếu ảnh trong DB hoặc token không có ảnh → `EXPORT_IMAGE_MISSING`, không trả file; ảnh phương án 2×2, không dấu chấm sau token; token đi qua `cleanText`
 không đổi; `images` không rơi ở `withoutLiteralNewlines`; MathType `Kept-Omml = 0` với file có ảnh; vượt giới hạn dung lượng → 422; xuất `EXAM` không có ảnh `solution`; MockMvc `/api/exams/{id}/export` trả 500 + `code`.
@@ -369,6 +399,7 @@ không đổi; `images` không rơi ở `withoutLiteralNewlines`; MathType `Kept
 | `QcVersionCard` | Không hiện chữ đề hay ảnh (xem 4.0); chữ thay thế của `MathText` đã bảo hiểm | **Không sửa**; thêm 1 test khóa chữ thay thế khi thiếu `images` |
 
 Cũng ghi nhận (không sửa trong đợt này): chưa kiểm `ExamSpecBuilder` có in chữ câu hỏi hay không (tìm thấy dùng `cellId`, số câu); nếu có thì cần cùng xử lý token như O2.
+*Đã kiểm 23/11 (O2):* `ExamSpecBuilder` chỉ dùng `cellId` và vị trí câu, không in chữ câu hỏi; bản đặc tả không nạp ảnh (test `ExamFigureExportApiTest`).
 
 ### 4.4 Sửa câu có hình: vẫn ngoài phạm vi (xác nhận lại H5)
 
@@ -400,12 +431,13 @@ Giờ O2 lớn hơn H9 (6 giờ) vì H9 chỉ tính builder và đếm; thêm b�
 | D2 | Người có chỗ đề dùng câu ngân hàng đã gỡ có được xem ảnh (H3(b), 22/11)? | Có, theo quyết định 16/11 | **Có** |
 | D3 | Thêm cạnh `assignment ──► questionimage` hay đi qua `BankService` (**Q-8, M-35**) | Đi qua `BankService`, không thêm cạnh mới | **Đi qua `BankService`**, không thêm phụ thuộc module mới; Q-8 giữ nguyên |
 | D4 | Đổi bằng sinh mới từ chỗ có hình: bỏ chữ câu cũ khỏi prompt | Bỏ, giữ lý do | **Bỏ chữ câu cũ, giữ lý do** |
-| D5 | Trần dung lượng ảnh khi xuất Word | 24 MB, chốt sau số đo container | **24 MB**; chốt lại sau khi đo trong container |
+| D5 | Trần dung lượng ảnh khi xuất Word | 24 MB, chốt sau số đo container | ~~24 MB~~ → **10 MB** (cách A: hạ trần, giữ heap pandoc 256 MB, không làm ảnh giữ chỗ). Đo trong container: 10 MB dùng 169 MiB heap pandoc, 12 MB dùng 187 MiB (> 180 MiB, dư < 30%), 20–24 MB hết heap (mục 4.2). Cách B (ảnh giữ chỗ, thay `word/media` sau pandoc) là hướng phát triển |
 | D6 | Cache ảnh học sinh: `private, max-age` hay `no-store` | `private` | **`private`** |
 | D7 | Có thêm dòng xác nhận quyền dùng hình ở hộp Giao bài không | Cho chủ dự án quyết (chính sách) | **Không thêm** |
 
-**Chưa xác minh** (ghi rõ để không coi là sự thật): `descr` của `wp:docPr` lấy từ alt của pandoc; heap pandoc 256 MB đủ cho ảnh 19–24 MB; `ExamSpecBuilder` không in chữ câu hỏi;
-`MatrixPromptDraftV0.replaceReasonBlock` xử lý được `oldQuestion = null` cho nhánh D4.
+**Chưa xác minh** (ghi rõ để không coi là sự thật): `MatrixPromptDraftV0.replaceReasonBlock` xử lý được `oldQuestion = null` cho nhánh D4.
+*Đã xác minh 23/11 (O2, mục 4.2):* `descr` của `wp:docPr` lấy từ alt của pandoc (đúng); heap pandoc 256 MB **không** đủ cho ảnh 19–24 MB (trần hạ còn
+10 MB, D5); `ExamSpecBuilder` không in chữ câu hỏi (đúng).
 
 ## Quyết định đã chốt (An, 11/11/2026)
 

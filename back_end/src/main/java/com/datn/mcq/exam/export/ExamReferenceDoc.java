@@ -253,6 +253,9 @@ public final class ExamReferenceDoc {
                 style("ExamOption", "<w:keepLines/><w:spacing w:before=\"0\" w:after=\"0\"/>", ""),
                 style("ExamCenter", "<w:spacing w:before=\"" + after + "\" w:after=\"" + after + "\"/><w:jc w:val=\"center\"/>",
                         ""),
+                // ảnh câu hỏi riêng dòng (O2, 23/11): đoạn riêng căn giữa, đi cùng đoạn sau (phương án, dòng chữ tiếp)
+                style("ExamFigure", "<w:keepNext/><w:spacing w:before=\"" + after + "\" w:after=\"" + after + "\"/>"
+                        + "<w:jc w:val=\"center\"/>", ""),
                 style("ExamHeaderCell", "<w:spacing w:before=\"0\" w:after=\"0\"/><w:jc w:val=\"center\"/>", ""),
                 // bảng Mã đề / Điểm bài thi / Mã phách: dòng cao đúng 360 twips như mẫu
                 style("ExamBoxCell", "<w:spacing w:before=\"0\" w:after=\"0\" w:line=\"360\" w:lineRule=\"exact\"/>"
