@@ -240,19 +240,19 @@ describe("BankImportPage: bản xem trước", () => {
         await user.click(screen.getByRole("button", { name: "Nhập 2 câu đã chọn" }));
         await waitFor(() => expect(mocked.confirmBankImport).toHaveBeenCalledWith(7, ["mcq-001", "tf-001"]));
         expect(await screen.findByText(/Đã nhập 2 câu vào ngân hàng riêng/)).toBeInTheDocument();
-        // không có câu có hình nào được chọn: không có câu về hình
         expect(screen.queryByText(/Câu có hình đã vào ngân hàng/)).toBeNull();
         await user.click(screen.getByRole("button", { name: "Xem ngân hàng câu hỏi" }));
         expect(await screen.findByText("TRANG NGAN HANG")).toBeInTheDocument();
     });
 
-    it("đã nhập câu có hình thì nói rõ chưa dùng để tạo đề được", async () => {
+    it("A2: đã nhập câu có hình thì không còn câu báo chưa dùng để tạo đề được", async () => {
         mocked.confirmBankImport.mockResolvedValue({ batchId: 7, imported: 1, bankItemIds: [3] });
         openPreview();
         const user = userEvent.setup();
         await user.click(await screen.findByRole("checkbox", { name: "Chọn câu mcq-003" }));
         await user.click(screen.getByRole("button", { name: "Nhập 1 câu đã chọn" }));
-        expect(await screen.findByText("Câu có hình đã vào ngân hàng nhưng chưa dùng để tạo đề được.")).toBeInTheDocument();
+        expect(await screen.findByText(/Đã nhập 1 câu vào ngân hàng riêng/)).toBeInTheDocument();
+        expect(screen.queryByText(/chưa dùng để tạo đề được/)).toBeNull();
     });
 
     it("422 IMPORT_ITEM_BLOCKED: tải lại lô, hiện lời máy chủ, giữ lựa chọn còn hợp lệ", async () => {

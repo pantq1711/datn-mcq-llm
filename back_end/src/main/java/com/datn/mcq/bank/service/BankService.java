@@ -326,8 +326,8 @@ public class BankService {
 
     /**
      * Trong {@code sourceQuestionIds} (câu nguồn của câu ngân hàng), những câu có ít nhất một ảnh, mọi role, kể cả câu đã gỡ
-     * khỏi ngân hàng. Cửa cho module {@code assignment} (D3 ngày 23/11: không thêm phụ thuộc vào {@code questionimage}); X1
-     * (D4): Đổi bằng sinh mới biết câu cũ của chỗ có hình để không đưa chữ câu cũ vào prompt.
+     * khỏi ngân hàng. X1 (D4): Đổi bằng sinh mới biết câu cũ của chỗ có hình để không đưa chữ câu cũ vào prompt. (A1 từng
+     * dùng để chặn giao bài có hình; A2 ngày 24/11 gỡ chặn.)
      */
     @Transactional(readOnly = true)
     public java.util.Set<Integer> sourceQuestionsWithImages(java.util.Collection<Integer> sourceQuestionIds) {

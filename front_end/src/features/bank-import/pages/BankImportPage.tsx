@@ -51,7 +51,7 @@ function BankImportFlow({ routeId }: { routeId: number | null | undefined }) {
     );
     const [batch, setBatch] = useState<ImportBatch | null>(seed);
     const [selected, setSelected] = useState<Set<string>>(new Set());
-    const [result, setResult] = useState<{ imported: number; hadFigure: boolean } | null>(null);
+    const [result, setResult] = useState<{ imported: number } | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
 
@@ -74,7 +74,7 @@ function BankImportFlow({ routeId }: { routeId: number | null | undefined }) {
     const applyBatch = useCallback((fresh: ImportBatch) => {
         setBatch(fresh);
         if (fresh.status === "confirmed") {
-            setResult({ imported: fresh.importedCount ?? 0, hadFigure: false });
+            setResult({ imported: fresh.importedCount ?? 0 });
             setPhase("result");
             return;
         }
@@ -150,12 +150,11 @@ function BankImportFlow({ routeId }: { routeId: number | null | undefined }) {
         if (!batch) return;
         const keys = keysToConfirm(items, selected);
         if (keys.length === 0) return;
-        const hadFigure = summarizeSelection(items, selected).hasFigure;
         setConfirming(true);
         setActionError(null);
         try {
             const done = await confirmBankImport(batch.id, keys);
-            setResult({ imported: done.imported, hadFigure });
+            setResult({ imported: done.imported });
             setPhase("result");
         } catch (error) {
             const classified = classifyImportError(error, "Không nhập được các câu đã chọn.");
@@ -272,7 +271,6 @@ function BankImportFlow({ routeId }: { routeId: number | null | undefined }) {
             {phase === "result" && result && (
                 <ImportResult
                     imported={result.imported}
-                    hadFigure={result.hadFigure}
                     onViewBank={() => navigate("/question-bank")}
                     onImportMore={goUpload}
                 />

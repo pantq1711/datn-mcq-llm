@@ -36,8 +36,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * S1 (docs/design/cau-co-hinh.md mục 4.1, bảng 4.5; D1 = A, D6 = private): học sinh xem hình của câu qua URL ký theo lượt
- * làm, {@code sig = HMAC(khóa ảnh, "p|id|exp|attemptId")}. Mọi request ảnh ở đây KHÔNG kèm JWT. A1 còn chặn giao bài có
- * hình nên ảnh được gắn thẳng bằng SQL vào câu nguồn SAU khi đã giao bài (dữ liệu tự tạo, không phải ảnh bộ đề).
+ * làm, {@code sig = HMAC(khóa ảnh, "p|id|exp|attemptId")}. Mọi request ảnh ở đây KHÔNG kèm JWT. Ảnh được gắn thẳng bằng SQL
+ * vào câu nguồn sau khi giao bài (viết lúc A1 còn chặn giao bài có hình; từ A2 gắn trước cũng được, xem
+ * AssignmentFigureFlowTest); dữ liệu tự tạo, không phải ảnh bộ đề.
  */
 @SpringBootTest
 @Import(TestSafetyConfiguration.class)
