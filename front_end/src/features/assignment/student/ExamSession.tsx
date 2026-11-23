@@ -284,7 +284,7 @@ export default function ExamSession({
                                 Câu {q.number}
                             </h3>
                             <div className="student-question-text student-math">
-                                <MathText text={q.questionText} />
+                                <MathText text={q.questionText} images={q.images} />
                             </div>
                             {q.questionType === "mcq" && (
                                 <McqInput question={q} value={draft.mcq[String(q.slotId)]} onChange={(c) => setMcq(q, c)} />

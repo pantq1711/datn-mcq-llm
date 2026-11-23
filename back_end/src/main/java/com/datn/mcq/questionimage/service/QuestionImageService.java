@@ -14,12 +14,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.LongFunction;
 
 @Service
 public class QuestionImageService {
@@ -98,6 +101,27 @@ public class QuestionImageService {
     @Transactional(readOnly = true)
     public Map<Integer, List<QuestionImageDto>> signedImagesBySourceQuestion(Collection<Integer> questionIds,
                                                                               int viewerId) {
+        Instant now = Instant.now();
+        return imagesBySourceQuestion(questionIds, id -> signer.buildSignedUrl(id, viewerId, now));
+    }
+
+    /**
+     * S1 (docs/design/cau-co-hinh.md mục 4.1): như {@link #signedImagesBySourceQuestion} nhưng URL ký cho lượt làm
+     * {@code attemptId} của học sinh ({@code /api/public/question-images/{id}?exp&a&sig}, chữ ký tiền tố {@code p|}).
+     * {@code exp} (epoch giây) do nơi gọi chọn theo trạng thái lượt; null là hạn cuốn theo giờ như H3
+     * ({@link QuestionImageSigner#calculateExp}). Trả mọi role: nơi gọi tự bỏ role {@code solution} khi chưa được xem lời
+     * giải.
+     */
+    @Transactional(readOnly = true)
+    public Map<Integer, List<QuestionImageDto>> attemptSignedImagesBySourceQuestion(Collection<Integer> questionIds,
+                                                                                     int attemptId, Long exp) {
+        long expiry = exp != null ? exp : signer.calculateExp(Instant.now());
+        return imagesBySourceQuestion(questionIds, id -> signer.buildAttemptUrl(id, expiry, attemptId));
+    }
+
+    /** Một truy vấn metadata (không nạp cột data) cho mọi câu; ảnh của một câu theo {@code ordinal}. */
+    private Map<Integer, List<QuestionImageDto>> imagesBySourceQuestion(Collection<Integer> questionIds,
+                                                                        LongFunction<String> url) {
         Set<Integer> ids = new LinkedHashSet<>();
         if (questionIds != null) {
             questionIds.stream().filter(Objects::nonNull).forEach(ids::add);
@@ -105,14 +129,33 @@ public class QuestionImageService {
         if (ids.isEmpty()) {
             return Map.of();
         }
-        Instant now = Instant.now();
         Map<Integer, List<QuestionImageDto>> out = new LinkedHashMap<>();
         for (MetadataProjection m : repository.findMetadataByGeneratedQuestionIdIn(ids)) {
             out.computeIfAbsent(m.getGeneratedQuestionId(), k -> new ArrayList<>())
                     .add(new QuestionImageDto(m.getId(), m.getRole(), m.getOrdinal(), m.getMime(), m.getWidthPx(),
-                            m.getHeightPx(), m.getDisplayWidthMm(), signer.buildSignedUrl(m.getId(), viewerId, now)));
+                            m.getHeightPx(), m.getDisplayWidthMm(), url.apply(m.getId())));
         }
         return out;
+    }
+
+    /** S1: chữ ký URL học sinh đúng và chưa hết hạn. Không truy cập DB, nên gọi trước mọi kiểm tra khác. */
+    public boolean verifyAttemptUrl(long imageId, long exp, int attemptId, String sig) {
+        return signer.verifyForAttempt(imageId, exp, attemptId, sig) && !signer.isExpired(exp, Instant.now());
+    }
+
+    /**
+     * S1: ảnh {@code imageId} nếu nó thuộc một trong các câu nguồn {@code questionIds}; rỗng nếu không có ảnh đó hoặc ảnh
+     * thuộc câu khác (kể cả ảnh xem trước chưa gắn câu). Không kiểm người xem: nơi gọi đã chốt tập câu được xem. Cố ý không
+     * dùng {@code hasAccessPermission} (đòi {@code removed_at IS NULL}, sai với bài đã giao, quyết định 16/11).
+     */
+    @Transactional(readOnly = true)
+    public Optional<QuestionImage> imageOfSourceQuestions(long imageId, Collection<Integer> questionIds) {
+        if (questionIds == null || questionIds.isEmpty()) {
+            return Optional.empty();
+        }
+        Set<Integer> ids = new HashSet<>(questionIds);
+        return repository.findById(imageId)
+                .filter(image -> image.getGeneratedQuestionId() != null && ids.contains(image.getGeneratedQuestionId()));
     }
 
     /**

@@ -2,12 +2,12 @@ import { useMemo } from "react";
 import katex from "katex";
 import { splitMath } from "./mathSegments";
 import QuestionImage, { FigureCompact, FigureFallback } from "./QuestionImage";
-import type { QuestionImageInfo } from "./questionImage.types";
+import type { QuestionImageView } from "./questionImage.types";
 
 interface MathTextProps {
     text?: string | null;
     /** Ảnh của câu (DTO `images`); token ⟦img:id⟧ trong `text` được thay bằng ảnh có đúng id. Không truyền thì token hiện chữ thay thế. */
-    images?: QuestionImageInfo[] | null;
+    images?: QuestionImageView[] | null;
     /** Chỉ một dòng chữ (ô bảng): ảnh thành nhãn "[Hình]", không tải ảnh. */
     compact?: boolean;
 }

@@ -154,6 +154,32 @@ abstract class AssignmentTestBase {
                 answer);
     }
 
+    /** Byte ảnh tự tạo (đầu PNG + vài byte), không phải ảnh bộ đề. */
+    static final byte[] FAKE_PNG = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 7, 7, 7};
+
+    /**
+     * Gắn một ảnh tự tạo ({@link #FAKE_PNG}, sha256 ghi là 64 chữ 'c') vào câu nguồn của câu ngân hàng {@code bankItem};
+     * trả id ảnh. A1 chặn giao bài có hình nên test ảnh của học sinh gắn ảnh SAU khi đã giao bài.
+     */
+    long attachImage(int bankItem, String role, int ordinal) {
+        int sourceQuestion = jdbc.queryForObject("SELECT source_question_id FROM bank_item WHERE id = ?",
+                Integer.class, bankItem);
+        int batch = insert("INSERT INTO import_batch (owner_id, display_name, file_sha256, subject_id, grade_level,"
+                + " topic, status, question_count, preview, created_at, expires_at) VALUES (?, 'Lô ảnh giả',"
+                + " repeat('a', 64), ?, 8, 'Đa thức', 'preview', 1, '{}'::jsonb, CURRENT_TIMESTAMP,"
+                + " CURRENT_TIMESTAMP + INTERVAL '24 hours')", teacher, subject);
+        return jdbc.queryForObject("INSERT INTO question_image (owner_id, import_batch_id, item_key,"
+                + " generated_question_id, role, ordinal, mime, data, byte_size, width_px, height_px, display_width_mm,"
+                + " sha256, source_format) VALUES (?, ?, 'q1', ?, ?, ?, 'image/png', ?, ?, 300, 200, 50,"
+                + " repeat('c', 64), 'png') RETURNING id", Long.class, teacher, batch, sourceQuestion, role,
+                ordinal, FAKE_PNG, FAKE_PNG.length);
+    }
+
+    /** Id lượt làm theo lớp + số thứ tự (test chỉ có một bài giao). */
+    int attemptId(String classLabel, int seatNo) {
+        return count("SELECT id FROM assignment_attempt WHERE class_label = ? AND seat_no = ?", classLabel, seatNo);
+    }
+
     int slot(int cell, int slotNo, String type, int bankItem) {
         return insert("INSERT INTO exam_slot (exam_id, cell_id, slot_no, question_type, state, bank_item_id) VALUES"
                 + " (?, ?, ?, ?, 'kept', ?)", exam, cell, slotNo, type, bankItem);

@@ -4,20 +4,23 @@
  * Gỡ cùng điều kiện ở backend ở PR A2.
  */
 
-/** Một chỗ của đề; chỉ cần `state` (để không trùng kiểu với nhánh giao diện hình) và `images` do backend trả khi có hình. */
+import type { QuestionImageInfo } from "../types/exam.types";
+
+/** Một chỗ của đề; chỉ cần `state` và `images` (backend trả khi có hình, vắng khi không). */
 interface ItemLike {
     state: string;
+    images?: QuestionImageInfo[] | null;
 }
 
 /**
  * Số chỗ của đề có hình (backend trả `images` không rỗng ở chỗ lấy từ ngân hàng mà câu nguồn có ảnh, G0 H3).
- * `images` đọc không qua kiểu: trường này được khai kiểu ở nhánh giao diện hiển thị hình, không phải ở đây.
+ * Vẫn kiểm `Array.isArray` để dữ liệu lỗi dạng không làm sai số đếm.
  */
 export function countFigureItems(parts: ReadonlyArray<{ items: ReadonlyArray<ItemLike> }> | undefined): number {
     let count = 0;
     for (const part of parts ?? []) {
         for (const item of part.items) {
-            const images = (item as { images?: unknown }).images;
+            const images = item.images;
             if (Array.isArray(images) && images.length > 0) {
                 count++;
             }

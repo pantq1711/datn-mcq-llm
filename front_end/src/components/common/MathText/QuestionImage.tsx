@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FIGURE_COMPACT_TEXT, FIGURE_FALLBACK_TEXT, resolveImageUrl, widthPxFromMm } from "./questionImage.utils";
-import type { QuestionImageInfo } from "./questionImage.types";
+import type { QuestionImageView } from "./questionImage.types";
 import "./QuestionImage.css";
 
 export function FigureFallback() {
@@ -12,7 +12,7 @@ export function FigureCompact() {
 }
 
 interface QuestionImageProps {
-    image: QuestionImageInfo;
+    image: QuestionImageView;
     /** Token đứng riêng một dòng: ảnh khối, căn giữa. */
     block?: boolean;
 }

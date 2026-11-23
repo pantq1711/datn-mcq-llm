@@ -1,5 +1,6 @@
 package com.datn.mcq.bank.service;
 
+import com.datn.mcq.bank.dto.BankImageDtos;
 import com.datn.mcq.bank.dto.BankItemDto;
 import com.datn.mcq.bank.dto.BankSearchDtos;
 import com.datn.mcq.bank.dto.BankSearchDtos.BankItemDetailDto;
@@ -330,6 +331,43 @@ public class BankService {
     @Transactional(readOnly = true)
     public java.util.Set<Integer> sourceQuestionsWithImages(java.util.Collection<Integer> sourceQuestionIds) {
         return questionImageService.sourceQuestionsWithImages(sourceQuestionIds);
+    }
+
+    /**
+     * S1 (docs/design/cau-co-hinh.md mục 4.1, D3): ảnh của các câu nguồn theo lô (một truy vấn, không nạp byte), URL ký cho
+     * lượt làm {@code attemptId} của học sinh. {@code exp}: epoch giây; null là hạn cuốn theo giờ như H3. Trả mọi role, kể cả
+     * câu đã gỡ khỏi ngân hàng (bài đã giao vẫn hiện câu đó, quyết định 16/11); nơi gọi tự lọc role {@code solution}.
+     */
+    @Transactional(readOnly = true)
+    public Map<Integer, List<BankImageDtos.SignedImage>> attemptImagesBySourceQuestion(
+            java.util.Collection<Integer> sourceQuestionIds, int attemptId, Long exp) {
+        Map<Integer, List<BankImageDtos.SignedImage>> out = new java.util.LinkedHashMap<>();
+        questionImageService.attemptSignedImagesBySourceQuestion(sourceQuestionIds, attemptId, exp)
+                .forEach((questionId, images) -> out.put(questionId, images.stream()
+                        .map(i -> new BankImageDtos.SignedImage(i.id(), i.role(), i.ordinal(), i.mime(), i.widthPx(),
+                                i.heightPx(), i.displayWidthMm(), i.url()))
+                        .toList()));
+        return out;
+    }
+
+    /** S1: chữ ký URL ảnh của học sinh đúng và chưa hết hạn. Không truy cập DB. */
+    public boolean verifyAttemptImageUrl(long imageId, long exp, int attemptId, String sig) {
+        return questionImageService.verifyAttemptUrl(imageId, exp, attemptId, sig);
+    }
+
+    /**
+     * S1: byte ảnh {@code imageId} nếu ảnh thuộc câu nguồn của một trong các câu ngân hàng {@code bankItemIds}; không lọc
+     * {@code removed_at} (bài đã giao đọc câu theo id, quyết định 16/11). Rỗng khi ảnh không có hoặc thuộc câu khác.
+     */
+    @Transactional(readOnly = true)
+    public Optional<BankImageDtos.ImageFile> imageOfBankItems(long imageId, java.util.Collection<Integer> bankItemIds) {
+        if (bankItemIds == null || bankItemIds.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Integer> sourceQuestionIds = bankItemRepository.findAllById(new java.util.LinkedHashSet<>(bankItemIds))
+                .stream().map(BankItem::getSourceQuestionId).toList();
+        return questionImageService.imageOfSourceQuestions(imageId, sourceQuestionIds)
+                .map(i -> new BankImageDtos.ImageFile(i.getId(), i.getRole(), i.getMime(), i.getData(), i.getSha256()));
     }
 
     @Transactional
