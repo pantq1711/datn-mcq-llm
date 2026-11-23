@@ -36,7 +36,7 @@ public class AssignmentController {
         this.itemStatService = itemStatService;
     }
 
-    /** T1: giao bài. 400 INVALID_REQUEST; 404; 409 ASSIGN_NOT_ALL_KEPT / ASSIGN_SA_KEY_UNSUPPORTED (kèm danh sách câu). */
+    /** T1: giao bài. 400 INVALID_REQUEST; 404; 409 ASSIGN_NOT_ALL_KEPT / ASSIGN_HAS_FIGURE / ASSIGN_SA_KEY_UNSUPPORTED (kèm danh sách câu). */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public AssignmentDto create(CurrentUser user, @PathVariable Integer examId,

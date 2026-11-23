@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import ChangeQuestionModal, { type ChangeQuestionResult } from "../components/ChangeQuestionModal";
 import EditQuestionForm from "../components/EditQuestionForm";
 import { clearEditDraft, findEditDraftSlots, loadEditDraft } from "../utils/editDraft";
+import { countFigureItems, figureAssignBlockReason } from "../utils/figureGuard";
 import { QcTraceModal } from '../components/QcTraceModal';
 import AssignExamModal from "../../assignment/components/AssignExamModal";
 import ExportWordDialog from '../components/ExportWordDialog';
@@ -250,6 +251,12 @@ export default function ExamDetailPage() {
     const notKeptCount = (detail?.parts ?? [])
         .flatMap((p) => p.items)
         .filter((i) => i.state !== "kept" && i.state !== "edited").length;
+    // Học sinh chưa xem được ảnh: đề có câu có hình thì chưa giao bài online được (A1)
+    const figureCount = countFigureItems(detail?.parts);
+    const assignBlockReason =
+        notKeptCount > 0
+            ? `Còn ${notKeptCount} câu chưa Giữ. Giữ hết các câu rồi mới giao bài được.`
+            : figureAssignBlockReason(figureCount);
 
     // Đang lưu hàng loạt thì không tự tải lại giữa chừng (tải lại một lần khi xong)
     const hasPendingWork = !pollingStoppedDueToError && !bulkSaving && pendingSummary.total > 0;
@@ -864,12 +871,12 @@ export default function ExamDetailPage() {
                     </div>
 
                     <Space size={8} className="exam-detail-page-actions">
-                        {/* Giao bài online: cần mọi câu đã Giữ/Sửa (backend cũng kiểm, 409 ASSIGN_NOT_ALL_KEPT) */}
-                        <Tooltip title={notKeptCount > 0 ? `Còn ${notKeptCount} câu chưa Giữ. Giữ hết các câu rồi mới giao bài được.` : undefined}>
+                        {/* Giao bài online: cần mọi câu đã Giữ/Sửa (backend cũng kiểm, 409 ASSIGN_NOT_ALL_KEPT) và đề không có câu có hình (409 ASSIGN_HAS_FIGURE, A1) */}
+                        <Tooltip title={assignBlockReason || undefined}>
                             <span>
                                 <Button
                                     icon={<SendOutlined />}
-                                    disabled={notKeptCount > 0}
+                                    disabled={assignBlockReason !== ""}
                                     onClick={() => setAssignOpen(true)}
                                 >
                                     Giao bài online

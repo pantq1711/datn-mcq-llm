@@ -48,6 +48,10 @@ public interface QuestionImageRepository extends JpaRepository<QuestionImage, Lo
            "FROM QuestionImage q WHERE q.generatedQuestionId IN :questionIds ORDER BY q.generatedQuestionId ASC, q.ordinal ASC")
     List<MetadataProjection> findMetadataByGeneratedQuestionIdIn(@Param("questionIds") Collection<Integer> questionIds);
 
+    /** Id (trong {@code questionIds}) của các câu nguồn có ít nhất một ảnh, mọi role; không nạp cột data. */
+    @Query("SELECT DISTINCT q.generatedQuestionId FROM QuestionImage q WHERE q.generatedQuestionId IN :questionIds")
+    List<Integer> findGeneratedQuestionIdsWithImages(@Param("questionIds") Collection<Integer> questionIds);
+
     @Transactional
     @Modifying
     @Query("DELETE FROM QuestionImage q WHERE q.importBatchId = :batchId AND q.itemKey NOT IN :keptKeys")

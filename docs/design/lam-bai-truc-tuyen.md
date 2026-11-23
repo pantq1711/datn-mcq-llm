@@ -126,10 +126,11 @@ Index `idx_is_bank_item (bank_item_id)`. Không có cột cộng dồn trên `ba
 |---|---|
 | Đề của người gọi | 404 |
 | Đề có ít nhất một chỗ; mọi chỗ `state ∈ {kept, edited}` (đã chốt, câu hỏi 1) | 409 `ASSIGN_NOT_ALL_KEPT`, kèm `slots: [{slotId, part, number}]` |
+| Không chỗ nào của đề có hình: câu nguồn của câu ngân hàng không có dòng `question_image` nào (mọi role; câu đã gỡ vẫn tính) (23/11, mục 6) | 409 `ASSIGN_HAS_FIGURE`, kèm danh sách chỗ có hình |
 | Mọi khóa `sa` ở dạng chặt (số nguyên / thập phân; câu nhập từ Word hoặc trước 27/10 có thể là phân số, căn mà điện thoại không gõ được) | 409 `ASSIGN_SA_KEY_UNSUPPORTED`, kèm danh sách câu |
 | `closesAt` sau hiện tại ít nhất `durationMinutes`, không quá 30 ngày; `durationMinutes` 5..180; đã tick đồng ý | 400 `INVALID_REQUEST` |
 
-Câu có hình: chưa có trên main nên **chưa chặn** (TODO ở mục 6).
+Câu có hình: từ 23/11 bị chặn bằng `ASSIGN_HAS_FIGURE` (mục 6).
 
 Một đề giao được nhiều lần (mỗi lần một `public_code`). Đổi / Sửa câu trên đề sau khi giao **không ảnh hưởng** bài đã giao (F1).
 
@@ -330,11 +331,12 @@ File `docs/thong-ke/11-hau-kiem.sql`: một câu `SELECT`, mỗi dòng `item_sta
 
 ## 6. Câu có hình
 
-- Hiện tại main chưa có câu có hình nên **chưa chặn gì** (đã chốt 14/11).
-- **TODO cho PR câu có hình:** thêm vào `AssignmentService.create` điều kiện "không câu nào trong đề có hình" → 409
-  `ASSIGN_HAS_FIGURE` (nút Giao bài mờ kèm lý do), kèm test. Thiếu việc này thì học sinh nhận câu thiếu hình.
-- Lý do không làm ngay: ảnh hiện thiết kế trả bằng URL có chữ ký cho người đã đăng nhập (H3). Mở cho học sinh cần một đường ảnh
-  công khai gắn với token lượt làm, là một PR riêng sau này.
+- **Đã làm (23/11, PR A1 của `docs/design/cau-co-hinh.md` mục 4.5):** `AssignmentService.create` trả 409 `ASSIGN_HAS_FIGURE`
+  (kèm `errors` là các chỗ có hình) khi đề có chỗ ngân hàng nào có ảnh; không ghi gì vào DB; nút Giao bài online mờ kèm lý do.
+  Thiếu việc này thì học sinh nhận câu thiếu hình, không trả lời được. Việc kiểm đi qua `BankService` (D3), không thêm phụ
+  thuộc module.
+- Lý do chặn tạm: ảnh trả bằng URL có chữ ký cho người đã đăng nhập (H3). Mở cho học sinh cần một đường ảnh gắn với lượt
+  làm (D1 = cách A, PR S1 + S2); khi S1, S2 và X1 xong thì gỡ điều kiện này ở PR A2.
 
 ## 7. Quyền riêng tư
 
