@@ -5,6 +5,7 @@ import DashboardPage from "../features/dashboard/pages/DashboardPage";
 import AuthLayout from "../layouts/AuthLayout";
 import LoginPage from "../features/auth/pages/LoginPage";
 import QuestionBankPage from "../features/question-bank/pages/QuestionBankPage";
+import BankImportPage from "../features/bank-import/pages/BankImportPage";
 import GenerateExamPage from "../features/exam/pages/GenerateExamPage";
 import ExamListPage from "../features/exam/pages/ExamListPage";
 import ExamDetailPage from "../features/exam/pages/ExamDetailPage";
@@ -33,6 +34,8 @@ export default function AppRoutes() {
                 <Route element={<AppLayout />}>
                     <Route path="" element={<DashboardPage />} />
                     <Route path="question-bank" element={<QuestionBankPage />} />
+                    <Route path="question-bank/import" element={<BankImportPage />} />
+                    <Route path="question-bank/import/:id" element={<BankImportPage />} />
                     <Route path="exams" element={<ExamListPage />} />
                     <Route path="exams/generate" element={<GenerateExamPage />} />
                     <Route path="exams/:id" element={<ExamDetailPage />} />

@@ -92,6 +92,7 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | GET | `/api/materials` | Tài liệu của tôi, mới nhất trước, có phân trang, không kèm văn bản (mục 9) |
 | GET, DELETE | `/api/materials/{id}` | Chi tiết kèm 500 ký tự đầu của văn bản / xóa tài liệu của tôi (mục 9) |
 | POST | `/api/bank-imports` | Nhập ngân hàng câu từ Word: tải bộ câu hỏi .docx → bản xem trước kèm cờ (mục 10). Không gọi AI. Câu có hình vẽ được nhập kèm hình (mục 10.3) |
+| GET | `/api/bank-imports?status=preview` | Danh sách các lần nhập của tôi đang chờ xác nhận, không kèm nội dung câu (mục 10.2) |
 | GET, DELETE | `/api/bank-imports/{id}` | Xem lại / hủy một lần nhập của tôi (mục 10) |
 | POST | `/api/bank-imports/{id}/confirm` | Đưa các câu chọn vào ngân hàng RIÊNG TƯ của tôi (mục 10) |
 | GET | `/api/question-images/{id}?exp=&u=&sig=` | Tải một hình của câu nhập bằng URL có chữ ký, không cần JWT (mục 10.3) |
@@ -1638,6 +1639,13 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
 
 ### 10.2. Xem lại, xác nhận, hủy
 
+- `GET /api/bank-imports?status=preview` → 200 mảng các lô của tôi đang chờ xác nhận (`status = preview`, chưa quá `expiresAt`),
+  mới tạo trước. Dùng để mở lại hoặc hủy lô khi quên mã (mỗi người tối đa 3 lô chờ, mục 10.1). Mỗi phần tử có các trường của
+  lô ở mục 10.1 (`id`, `displayName`, `status`, `subjectId`, `gradeLevel`, `topic`, `createdAt`, `expiresAt`, `confirmedAt`,
+  `questionCount`, `importableCount`, `blockedCount`, `importedCount`, `skipped`) nhưng `items` và `skippedItems` luôn rỗng và
+  không có ảnh hay URL ký; mở lô bằng `GET /api/bank-imports/{id}`. Không có lô của người khác, lô đã quá hạn (kể cả chưa bị
+  dọn), lô đã xác nhận hay đã hủy. Không gửi `status` thì coi như `preview`; giá trị khác (kể cả rỗng): 400
+  `IMPORT_STATUS_INVALID`. Chỉ giáo viên.
 - `GET /api/bank-imports/{id}` → lô như trên; lô đã xác nhận không còn `items` (nội dung đã vào ngân hàng). Quá hạn: 410
   `IMPORT_EXPIRED` (nội dung bị xóa).
 - `POST /api/bank-imports/{id}/confirm` thân `{"keys": ["mcq-001", "tf-002"]}` → 200 `{batchId, imported, bankItemIds}`. Một

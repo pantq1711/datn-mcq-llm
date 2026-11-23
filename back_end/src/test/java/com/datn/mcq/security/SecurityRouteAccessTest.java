@@ -106,6 +106,7 @@ class SecurityRouteAccessTest {
         RULES.put("DELETE /api/materials/{id}", Access.TEACHER);
 
         RULES.put("POST /api/bank-imports", Access.TEACHER);
+        RULES.put("GET /api/bank-imports", Access.TEACHER);
         RULES.put("GET /api/bank-imports/{id}", Access.TEACHER);
         RULES.put("POST /api/bank-imports/{id}/confirm", Access.TEACHER);
         RULES.put("DELETE /api/bank-imports/{id}", Access.TEACHER);
