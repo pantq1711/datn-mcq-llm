@@ -11,14 +11,19 @@ import com.datn.mcq.exam.repository.ExamRepository;
 import com.datn.mcq.exam.service.ExamViewService;
 import com.datn.mcq.matrix.entity.ExamMatrix;
 import com.datn.mcq.matrix.service.MatrixService;
+import com.datn.mcq.questionimage.service.QuestionImageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Xuất đề ra Word (ngày 23/10, bản cơ bản): dữ liệu xem đề ở chế độ giáo viên (đã đối soát) → Markdown
@@ -75,17 +80,33 @@ public class ExamExportService {
     private final MatrixService matrixService;
     private final CatalogService catalogService;
     private final ExamScoringProperties scoring;
+    private final QuestionImageService questionImageService;
     private ExportMetrics exportMetrics;
+    /** Trần tổng ảnh một lần xuất (D5, 23/11), byte; đo trong container, xem docs/design/cau-co-hinh.md mục 4.2. */
+    private long maxImageBytes = DEFAULT_MAX_IMAGE_BYTES;
+
+    /**
+     * Mặc định của {@code app.export.max-image-bytes}: 10 MB. Đo 23/11 trong container dựng từ Dockerfile thật (pandoc 3.12.1,
+     * {@code +RTS -M256m}): 10 MB ảnh dùng 169 MiB heap pandoc, 12 MB dùng 187 MiB; trần là cỡ lớn nhất còn dư ≥ 30% heap.
+     */
+    public static final long DEFAULT_MAX_IMAGE_BYTES = 10L * 1024 * 1024;
+    private static final ZoneId VIETNAM = ZoneId.of("Asia/Ho_Chi_Minh");
 
     public ExamExportService(ExamViewService viewService, PandocRunner pandocRunner, ExamRepository examRepository,
                              MatrixService matrixService, CatalogService catalogService,
-                             ExamScoringProperties scoring) {
+                             ExamScoringProperties scoring, QuestionImageService questionImageService) {
         this.viewService = viewService;
         this.pandocRunner = pandocRunner;
         this.examRepository = examRepository;
         this.matrixService = matrixService;
         this.catalogService = catalogService;
         this.scoring = scoring;
+        this.questionImageService = questionImageService;
+    }
+
+    @org.springframework.beans.factory.annotation.Value("${app.export.max-image-bytes:" + DEFAULT_MAX_IMAGE_BYTES + "}")
+    public void setMaxImageBytes(long maxImageBytes) {
+        this.maxImageBytes = maxImageBytes;
     }
 
     /** Giám sát (08/11): nạp bằng setter để chữ ký constructor không đổi; có thể null. */
@@ -119,18 +140,56 @@ public class ExamExportService {
         boolean spec = content == ExportContent.SPEC;
         ExamHeader header = header(view, durationMinutes).withExamCode(spec ? null : examCode);
         ExamDocxOptions options = new ExamDocxOptions(header.examCode(), content);
-        String markdown = spec ? ExamSpecBuilder.build(view, specCells(view), header, scoring)
-                : ExamMarkdownBuilder.build(view, header, scoring, options.content());
-        PandocRunner.Docx docx = exportMetrics == null
-                ? pandocRunner.markdownToDocx(markdown, format, options)
-                : exportMetrics.measure(format == null ? "omml" : format.name().toLowerCase(java.util.Locale.ROOT),
-                        () -> pandocRunner.markdownToDocx(markdown, format, options));
+        PandocRunner.Docx docx;
+        try {
+            // O2: bản đặc tả không in chữ câu hỏi nên không nạp ảnh; file đề nạp byte ảnh TRƯỚC pandoc (không giữ transaction)
+            Map<Long, ExamFigures.Figure> figures = spec ? Map.of() : figures(view, options.content());
+            String markdown = spec ? ExamSpecBuilder.build(view, specCells(view), header, scoring)
+                    : ExamMarkdownBuilder.build(view, header, scoring, LocalDate.now(VIETNAM), options.content(), figures);
+            docx = exportMetrics == null
+                    ? pandocRunner.markdownToDocx(markdown, format, options)
+                    : exportMetrics.measure(format == null ? "omml" : format.name().toLowerCase(java.util.Locale.ROOT),
+                            () -> pandocRunner.markdownToDocx(markdown, format, options));
+        } catch (DocumentExportException e) {
+            if (ExamFigures.MISSING_CODE.equals(e.getCode())) {
+                log.error("Xuất Word đề {} không trả file vì thiếu ảnh câu hỏi: {}", examId, e.getMessage());
+            }
+            throw e;
+        }
         List<String> failedAt = List.of();
         if (!spec && docx.equationsFailed() != null && docx.equationsFailed() > 0) {
             failedAt = logFailed(view, docx.equationsFailed(), docx.failedLatex());
         }
         return new DocxFile(fileName(view), docx.content(), docx.equationsKeptOmml(),
                 docx.equationsScaled(), docx.equationsFailed(), failedAt);
+    }
+
+    /**
+     * O2 (mục 4.2 của cau-co-hinh.md): byte ảnh cho các token sẽ in theo {@code content}. Chỉ nạp ảnh có trong {@code images}
+     * của dữ liệu xem đề (đã lọc theo quyền người xuất, H3(a)); token trỏ tới ảnh khác thì không có ảnh và dựng Markdown dừng
+     * với {@code EXPORT_IMAGE_MISSING}. Tổng dung lượng theo số lần chèn vượt {@link #maxImageBytes} thì 422
+     * {@code EXPORT_IMAGES_TOO_LARGE}, kiểm bằng truy vấn không nạp byte, trước khi nạp byte và chạy pandoc. Đề không có token
+     * thì không truy vấn gì.
+     */
+    private Map<Long, ExamFigures.Figure> figures(ExamViewDto view, ExportContent content) {
+        Map<Long, Integer> counts = ExamFigures.referenced(view, content);
+        if (counts.isEmpty()) {
+            return Map.of();
+        }
+        Set<Long> allowed = new LinkedHashSet<>();
+        view.parts().forEach(p -> p.items().forEach(i -> i.images().forEach(img -> allowed.add(img.id()))));
+        allowed.retainAll(counts.keySet());
+        Map<Long, Integer> sizes = allowed.isEmpty() ? Map.of() : questionImageService.byteSizes(allowed);
+        long total = ExamFigures.totalBytes(counts, sizes);
+        if (total > maxImageBytes) {
+            log.warn("Xuất Word đề {}: tổng ảnh {} byte vượt trần {} byte ({} lần chèn)", view.examId(), total,
+                    maxImageBytes, counts.values().stream().mapToInt(Integer::intValue).sum());
+            throw ExamFigures.tooLarge(total, maxImageBytes);
+        }
+        Map<Long, ExamFigures.Figure> out = new LinkedHashMap<>();
+        questionImageService.exportImages(sizes.keySet()).forEach((id, img) ->
+                out.put(id, new ExamFigures.Figure(id, img.mime(), img.data(), img.displayWidthMm())));
+        return out;
     }
 
     /**
