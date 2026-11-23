@@ -88,6 +88,22 @@ describe("ExamDetailPage: nút Giao bài online", () => {
         expect(screen.queryByText(/chưa hỗ trợ câu có hình/)).toBeNull();
     });
 
+    it("X1: câu ngân hàng có hình hiện ảnh trên trang đề, không hiện chữ thay thế", async () => {
+        mocked.getExamDetail.mockResolvedValue(detail([
+            item({
+                slotId: 1,
+                questionText: "Cho hình vẽ sau.\n⟦img:7⟧",
+                images: [{ id: 7, role: "stem", url: "/api/question-images/7?exp=1&u=1&sig=x" }],
+            }),
+        ]));
+        const { container } = renderPage();
+
+        await screen.findByRole("button", { name: /Giao bài online/ });
+        const img = container.querySelector('img[src*="/api/question-images/7"]');
+        expect(img).not.toBeNull();
+        expect(screen.queryByText(/Hình không tải được/)).toBeNull();
+    });
+
     it("còn câu chưa Giữ thì vẫn làm mờ nút Giao bài", async () => {
         mocked.getExamDetail.mockResolvedValue(detail([item({ slotId: 1, state: "ready" })]));
         renderPage();

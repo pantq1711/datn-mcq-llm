@@ -70,6 +70,8 @@ function toQuestionItem(item: ExamItemDto): ExamQuestionItem {
         infoReasons: item.infoReasons ?? [],
         requests: item.requests,
         inheritedRequests: item.inheritedRequests,
+        // Ảnh của câu ngân hàng có hình (URL ký cho người xem); thiếu thì MathText chỉ hiện chữ thay thế
+        images: item.images,
     };
 }
 
