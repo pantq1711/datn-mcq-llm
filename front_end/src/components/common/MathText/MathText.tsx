@@ -1,78 +1,23 @@
 import { useMemo } from "react";
 import katex from "katex";
-
-interface MathSegment {
-    kind: "text" | "inline" | "display";
-    value: string;
-}
-
-/**
- * Tách văn bản tiếng Việt xen LaTeX theo quy ước docs/api ("Các trường văn bản"):
- * `$...$` trong dòng, `$$...$$` riêng dòng, `\$` ngoài công thức là dấu đô la thường.
- * Dấu mở không có dấu đóng thì giữ nguyên như chữ.
- */
-export function splitMath(text: string): MathSegment[] {
-    const segments: MathSegment[] = [];
-    let buffer = "";
-    let i = 0;
-
-    const pushText = () => {
-        if (buffer) segments.push({ kind: "text", value: buffer });
-        buffer = "";
-    };
-
-    while (i < text.length) {
-        if (text[i] === "\\" && text[i + 1] === "$") {
-            buffer += "$";
-            i += 2;
-            continue;
-        }
-
-        if (text[i] === "$") {
-            const display = text[i + 1] === "$";
-            const open = display ? 2 : 1;
-            const close = findClosing(text, i + open, display);
-            if (close === -1) {
-                // Không có dấu đóng: phần còn lại là chữ thường
-                buffer += text.slice(i);
-                break;
-            }
-            pushText();
-            segments.push({ kind: display ? "display" : "inline", value: text.slice(i + open, close) });
-            i = close + open;
-            continue;
-        }
-
-        buffer += text[i];
-        i++;
-    }
-
-    pushText();
-    return segments;
-}
-
-/** Vị trí dấu đóng `$` (hoặc `$$`) đầu tiên không đứng sau `\`, -1 nếu không có. */
-function findClosing(text: string, from: number, display: boolean): number {
-    for (let j = from; j < text.length; j++) {
-        if (text[j] === "\\") {
-            j++; // bỏ qua ký tự được escape trong công thức, ví dụ `\$` hay `\\`
-            continue;
-        }
-        if (text[j] === "$" && (!display || text[j + 1] === "$")) return j;
-    }
-    return -1;
-}
+import { splitMath } from "./mathSegments";
+import QuestionImage, { FigureCompact, FigureFallback } from "./QuestionImage";
+import type { QuestionImageInfo } from "./questionImage.types";
 
 interface MathTextProps {
     text?: string | null;
+    /** Ảnh của câu (DTO `images`); token ⟦img:id⟧ trong `text` được thay bằng ảnh có đúng id. Không truyền thì token hiện chữ thay thế. */
+    images?: QuestionImageInfo[] | null;
+    /** Chỉ một dòng chữ (ô bảng): ảnh thành nhãn "[Hình]", không tải ảnh. */
+    compact?: boolean;
 }
 
-/** Hiển thị văn bản có công thức LaTeX bằng KaTeX (CSS nạp một lần ở main.tsx). */
-export default function MathText({ text }: MathTextProps) {
+/** Hiển thị văn bản có công thức LaTeX và ảnh của câu (token ⟦img:id⟧) (CSS KaTeX nạp một lần ở main.tsx). */
+export default function MathText({ text, images, compact = false }: MathTextProps) {
     const rendered = useMemo(
         () =>
             splitMath(text ?? "").map((segment) =>
-                segment.kind === "text"
+                segment.kind === "text" || segment.kind === "image"
                     ? segment
                     : {
                         ...segment,
@@ -88,16 +33,23 @@ export default function MathText({ text }: MathTextProps) {
 
     return (
         <>
-            {rendered.map((segment, index) =>
-                segment.kind === "text" ? (
+            {rendered.map((segment, index) => {
+                if (segment.kind === "image") {
+                    const image = images?.find((candidate) => String(candidate.id) === segment.value);
+                    if (!image) return <FigureFallback key={index} />;
+                    if (compact) return <FigureCompact key={index} />;
+                    // key theo url: URL mới sau khi tải lại dữ liệu thì thử tải ảnh lại, không giữ trạng thái lỗi cũ
+                    return <QuestionImage key={`${index}:${image.url}`} image={image} block={segment.block} />;
+                }
+                return segment.kind === "text" ? (
                     // Docs cho phép xuống dòng thật ngoài công thức
                     <span key={index} style={{ whiteSpace: "pre-wrap" }}>
                         {segment.value}
                     </span>
                 ) : (
                     <span key={index} dangerouslySetInnerHTML={{ __html: segment.value }} />
-                )
-            )}
+                );
+            })}
         </>
     );
 }
