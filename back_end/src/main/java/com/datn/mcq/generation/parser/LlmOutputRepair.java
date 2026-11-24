@@ -11,6 +11,7 @@ import com.datn.mcq.questionimage.service.QuestionImageToken;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -32,6 +33,8 @@ import java.util.regex.Pattern;
  *       trong công thức), "\\" trong công thức không có {@code \begin} thành các công thức riêng.</li>
  *   <li>{@link AlignmentAmpersand} (11/11): dấu căn lề "&" trong công thức không có môi trường {@code \begin}
  *       ("$&= 5x(x - 2y)$"), chạy sau cùng.</li>
+ *   <li>{@link #fixHallucinatedCommands} (24/11): bảng ánh xạ nhỏ các lệnh LaTeX bịa đã gặp trong công thức (hiện
+ *       {@code \balance} thành {@code \parallel}).</li>
  * </ol>
  * Toàn bộ chuỗi này cũng chạy cho bản giáo viên sửa qua {@link #normalizeField} (C-07).
  */
@@ -417,6 +420,137 @@ public final class LlmOutputRepair {
      */
     public static String degreeWarning(String field, int fixed) {
         return ESCAPE_WARNING_PREFIX + fixed + " ký hiệu độ (^\\bullet, ^\\triangle thành ^{\\circ}) ở " + field;
+    }
+
+    /**
+     * Bảng ánh xạ nhỏ các lệnh LaTeX bịa đã gặp từ LLM sang lệnh chuẩn (24/11: trên VPS gặp 21 câu Ta-lét viết
+     * {@code \balance} thay cho {@code \parallel}, 7 câu đã vào ngân hàng, xuất Word in nguyên "$MN \balance BC$").
+     * Khóa và giá trị đều là tên lệnh không có dấu "\".
+     */
+    static final Map<String, String> HALLUCINATED_COMMANDS = Map.of(
+            "balance", "parallel");
+
+    /**
+     * @param text         văn bản sau khi sửa
+     * @param fixed        tổng số lần lệnh bịa trong $...$ đã được thay
+     * @param replacements các cặp đã thay theo thứ tự gặp, không lặp (ví dụ {@code "\balance thành \parallel"})
+     */
+    public record CommandRepair(String text, int fixed, List<String> replacements) {
+        public CommandRepair {
+            replacements = List.copyOf(replacements);
+        }
+    }
+
+    /**
+     * Thay các lệnh LaTeX bịa trong {@link #HALLUCINATED_COMMANDS} sang lệnh chuẩn, CHỈ BÊN TRONG cặp $...$ và $$...$$.
+     * Chỉ đổi đúng tên lệnh (ngay sau dấu "\" không bị thoát bởi "\" đứng trước, và ký tự kế tiếp không phải chữ cái),
+     * nên {@code \balanced}, {@code \balanceđ} hay {@code \\balance} giữ nguyên; ngoài công thức và công thức mở bằng "$"
+     * không có "$" đóng không đụng tới. Không có gì để sửa thì trả về đúng đối tượng chuỗi ban đầu.
+     */
+    public static CommandRepair fixHallucinatedCommands(String text) {
+        if (text == null || text.indexOf('$') < 0 || text.indexOf('\\') < 0) {
+            return new CommandRepair(text, 0, List.of());
+        }
+        StringBuilder sb = null;
+        int copied = 0;
+        int fixed = 0;
+        LinkedHashSet<String> replacements = new LinkedHashSet<>();
+        int n = text.length();
+        int i = 0;
+        while (i < n) {
+            char c = text.charAt(i);
+            if (c == '\\') {
+                i += 2;
+                continue;
+            }
+            if (c != '$') {
+                i++;
+                continue;
+            }
+            boolean display = i + 1 < n && text.charAt(i + 1) == '$';
+            int open = display ? 2 : 1;
+            int close = findMathClose(text, i + open);
+            if (close < 0 || (display && (close + 1 >= n || text.charAt(close + 1) != '$'))) {
+                // Số dấu $ lẻ hoặc $$ đóng bằng $: không biết đâu là trong/ngoài công thức nên giữ nguyên toàn bộ.
+                return new CommandRepair(text, 0, List.of());
+            }
+            String inner = text.substring(i + open, close);
+            int[] count = new int[1];
+            String fixedInner = replaceCommandsInMath(inner, count, replacements);
+            if (count[0] > 0) {
+                if (sb == null) {
+                    sb = new StringBuilder(n + 8);
+                }
+                sb.append(text, copied, i + open).append(fixedInner);
+                copied = close;
+                fixed += count[0];
+            }
+            i = close + open;
+        }
+        if (sb == null) {
+            return new CommandRepair(text, 0, List.of());
+        }
+        return new CommandRepair(sb.append(text, copied, n).toString(), fixed, new ArrayList<>(replacements));
+    }
+
+    private static String replaceCommandsInMath(String math, int[] count, Set<String> replacements) {
+        if (math.indexOf('\\') < 0) {
+            return math;
+        }
+        StringBuilder out = null;
+        int copied = 0;
+        int n = math.length();
+        int k = 0;
+        while (k < n) {
+            if (math.charAt(k) != '\\' || k + 1 >= n) {
+                k++;
+                continue;
+            }
+            char next = math.charAt(k + 1);
+            if (!isCommandNameChar(next)) {
+                k += 2;
+                continue;
+            }
+            int end = k + 1;
+            while (end < n && isCommandNameChar(math.charAt(end))) {
+                end++;
+            }
+            String name = math.substring(k + 1, end);
+            String target = HALLUCINATED_COMMANDS.get(name);
+            if (target != null) {
+                if (out == null) {
+                    out = new StringBuilder(n + 8);
+                }
+                out.append(math, copied, k + 1).append(target);
+                copied = end;
+                count[0]++;
+                replacements.add("\\" + name + " thành \\" + target);
+            }
+            k = end;
+        }
+        return out == null ? math : out.append(math, copied, n).toString();
+    }
+
+    private static boolean isCommandNameChar(char c) {
+        if (Character.isLetter(c)) {
+            return true;
+        }
+        int type = Character.getType(c);
+        return type == Character.NON_SPACING_MARK
+                || type == Character.COMBINING_SPACING_MARK
+                || type == Character.ENCLOSING_MARK;
+    }
+
+    /**
+     * Cảnh báo khi đã thay lệnh LaTeX bịa trong công thức. Mang tiền tố {@link #ESCAPE_WARNING_PREFIX} nên lưu ở
+     * warnings, hiện trong vết QC như một lần tự sửa và không bật cờ "cần xem kỹ".
+     */
+    public static String commandWarning(String field, CommandRepair r) {
+        if (r.fixed() == 0) {
+            return null;
+        }
+        return ESCAPE_WARNING_PREFIX + r.fixed() + " lệnh LaTeX sai ("
+                + String.join(", ", r.replacements()) + ") ở " + field;
     }
 
     /** @param text văn bản sau khi sửa; {@code wrapped} là số biểu thức đã được bọc $...$ */
@@ -949,6 +1083,11 @@ public final class LlmOutputRepair {
         if (g.fixed() > 0) {
             warnings.add(degreeWarning(field, g.fixed()));
             s = g.text();
+        }
+        CommandRepair cmd = fixHallucinatedCommands(s);
+        if (cmd.fixed() > 0) {
+            warnings.add(commandWarning(field, cmd));
+            s = cmd.text();
         }
         // 4/11: dòng công thức của lời giải viết ngoài $ ("mỗi bước một dòng") được bọc nguyên dòng, TRƯỚC bước bọc theo
         // đoạn liền mạch (bước đó đi qua cả ký tự xuống dòng và có thể ghép hai dòng, hoặc bọc dở một dòng).
