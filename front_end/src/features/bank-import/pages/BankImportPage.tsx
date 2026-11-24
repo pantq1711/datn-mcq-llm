@@ -313,14 +313,21 @@ function BankImportFlow({ routeId }: { routeId: number | null | undefined }) {
                     {items.length === 0 ? (
                         <Alert type="warning" showIcon title="Không có câu nào trong bản xem trước." />
                     ) : (
-                        items.map((item) => (
-                            <ImportItemCard
-                                key={item.key}
-                                item={item}
-                                selected={selected.has(item.key)}
-                                onToggle={(key) => setSelected((current) => toggleKey(current, key, items))}
+                        <div className="bank-import-list" data-testid="bank-import-list">
+                            {items.map((item) => (
+                                <ImportItemCard
+                                    key={item.key}
+                                    item={item}
+                                    selected={selected.has(item.key)}
+                                    onToggle={(key) => setSelected((current) => toggleKey(current, key, items))}
+                                />
+                            ))}
+                            <div
+                                className="bank-import-list-spacer"
+                                data-testid="bank-import-list-spacer"
+                                aria-hidden="true"
                             />
-                        ))
+                        </div>
                     )}
 
                     <div className="bank-import-confirm-bar">
