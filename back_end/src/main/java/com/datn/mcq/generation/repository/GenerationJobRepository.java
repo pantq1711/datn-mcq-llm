@@ -67,6 +67,10 @@ public interface GenerationJobRepository extends JpaRepository<GenerationJob, In
             """, nativeQuery = true)
     Optional<GenerationJob> lockNextDuePendingJob(@Param("now") LocalDateTime now);
 
+    /** NS-1: khóa một job theo id (ghi lỗi của bước nhận job trong transaction riêng, không đua với worker khác). */
+    @Query(value = "SELECT * FROM generation_job WHERE id = :id FOR UPDATE", nativeQuery = true)
+    Optional<GenerationJob> lockById(@Param("id") Integer id);
+
     /** Như {@link #lockNextDuePendingJob} nhưng chỉ job sinh câu (process-next với runAnswerCheck = false, W1-2). */
     @Query(value = """
             SELECT * FROM generation_job
