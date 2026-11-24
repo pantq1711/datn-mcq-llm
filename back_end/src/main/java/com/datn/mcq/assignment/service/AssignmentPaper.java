@@ -2,6 +2,7 @@ package com.datn.mcq.assignment.service;
 
 import com.datn.mcq.assignment.dto.AssignmentDtos.PartScoreDto;
 import com.datn.mcq.assignment.dto.PublicAttemptDtos.AnswerInput;
+import com.datn.mcq.assignment.dto.PublicAttemptDtos.PublicImageDto;
 import com.datn.mcq.assignment.dto.PublicAttemptDtos.PublicPartDto;
 import com.datn.mcq.assignment.dto.PublicAttemptDtos.PublicQuestionDto;
 import com.datn.mcq.assignment.dto.PublicAttemptDtos.PublicStatementDto;
@@ -89,8 +90,16 @@ final class AssignmentPaper {
 
     // ---------- cho học sinh làm ----------
 
-    /** Các Phần có câu, mỗi câu chỉ có đề, phương án hoặc ý (key, text). Không đáp án, nhãn, đáp số, lời giải. */
-    List<PublicPartDto> publicParts() {
+    /** Câu nguồn ({@code generated_question}) của mọi câu trong đề, để nạp ảnh theo lô. */
+    List<Integer> sourceQuestionIds() {
+        return items.stream().map(i -> i.bank().sourceQuestionId()).distinct().toList();
+    }
+
+    /**
+     * Các Phần có câu, mỗi câu chỉ có đề, phương án hoặc ý (key, text). Không đáp án, nhãn, đáp số, lời giải.
+     * {@code imagesBySource}: hình theo câu nguồn, nơi gọi đã bỏ hình lời giải (S1).
+     */
+    List<PublicPartDto> publicParts(Map<Integer, List<PublicImageDto>> imagesBySource) {
         List<PublicPartDto> out = new ArrayList<>();
         for (String part : PARTS) {
             List<PublicQuestionDto> qs = new ArrayList<>();
@@ -104,7 +113,7 @@ final class AssignmentPaper {
                         ? statements(b).stream().map(s -> new PublicStatementDto(s.key().getDbValue(), s.text())).toList()
                         : null;
                 qs.add(new PublicQuestionDto(item.row().slotId(), item.row().numberInPart(), item.type().getDbValue(),
-                        b.questionText(), options, statements));
+                        b.questionText(), options, statements, imagesBySource.get(b.sourceQuestionId())));
             }
             if (!qs.isEmpty()) {
                 out.add(new PublicPartDto(part, qs));
@@ -197,8 +206,10 @@ final class AssignmentPaper {
     /**
      * Đề kèm lựa chọn của em, đáp án đúng, điểm câu và lời giải. CHỈ gọi khi bài đã đóng, hết ân hạn và giáo viên bật
      * {@code showSolutions}. {@code answersBySlot} rỗng khi lượt chưa nộp (mọi câu hiện là bỏ trống, 0 điểm).
+     * {@code imagesBySource}: mọi hình theo câu nguồn, kể cả hình lời giải (S1).
      */
-    List<ReviewPartDto> review(Map<Integer, AnswerRow> answersBySlot) {
+    List<ReviewPartDto> review(Map<Integer, AnswerRow> answersBySlot,
+                               Map<Integer, List<PublicImageDto>> imagesBySource) {
         List<ReviewPartDto> out = new ArrayList<>();
         for (String part : PARTS) {
             List<ReviewItemDto> list = new ArrayList<>();
@@ -206,7 +217,8 @@ final class AssignmentPaper {
                 if (!part.equals(item.row().part())) {
                     continue;
                 }
-                list.add(reviewItem(item, answersBySlot.get(item.row().slotId())));
+                list.add(reviewItem(item, answersBySlot.get(item.row().slotId()),
+                        imagesBySource.get(item.bank().sourceQuestionId())));
             }
             if (!list.isEmpty()) {
                 out.add(new ReviewPartDto(part, list));
@@ -215,7 +227,7 @@ final class AssignmentPaper {
         return out;
     }
 
-    private ReviewItemDto reviewItem(Item item, AnswerRow a) {
+    private ReviewItemDto reviewItem(Item item, AnswerRow a, List<PublicImageDto> images) {
         BankItemDto b = item.bank();
         int correctCount = a == null ? 0 : a.correctCount();
         BigDecimal score = a == null ? BigDecimal.ZERO : a.score();
@@ -225,7 +237,7 @@ final class AssignmentPaper {
         return switch (item.type()) {
             case MCQ -> new ReviewItemDto(slotId, number, type, b.questionText(), options(b),
                     a == null ? null : a.mcqChoice(), b.correctOption() == null ? null : b.correctOption().getDbValue(),
-                    null, null, null, correctCount, score, b.explanation());
+                    null, null, null, correctCount, score, b.explanation(), images);
             case TF -> {
                 List<StatementDto> st = statements(b);
                 String choices = a == null || a.tfChoices() == null ? "----" : a.tfChoices();
@@ -239,10 +251,10 @@ final class AssignmentPaper {
                             yours != null && label != null && label.getDbValue().equals(yours)));
                 }
                 yield new ReviewItemDto(slotId, number, type, b.questionText(), null, null, null, rs, null, null,
-                        correctCount, score, b.explanation());
+                        correctCount, score, b.explanation(), images);
             }
             case SA -> new ReviewItemDto(slotId, number, type, b.questionText(), null, null, null, null,
-                    a == null ? null : a.saText(), b.saAnswer(), correctCount, score, b.explanation());
+                    a == null ? null : a.saText(), b.saAnswer(), correctCount, score, b.explanation(), images);
         };
     }
 }

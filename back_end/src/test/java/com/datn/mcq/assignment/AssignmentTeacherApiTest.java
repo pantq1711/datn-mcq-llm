@@ -105,6 +105,58 @@ class AssignmentTeacherApiTest extends AssignmentTestBase {
         assertEquals(0, count("SELECT count(*) FROM exam_assignment"));
     }
 
+    /** Gắn một ảnh (dữ liệu tự tạo) vào câu nguồn của câu ngân hàng {@code bankItem}, role {@code role}. */
+    private void attachImage(int bankItem, String role) {
+        int sourceQuestion = jdbc.queryForObject("SELECT source_question_id FROM bank_item WHERE id = ?",
+                Integer.class, bankItem);
+        int batch = insert("INSERT INTO import_batch (owner_id, display_name, file_sha256, subject_id, grade_level,"
+                + " topic, status, question_count, preview, created_at, expires_at) VALUES (?, 'Lô ảnh giả',"
+                + " repeat('a', 64), ?, 8, 'Đa thức', 'preview', 1, '{}'::jsonb, CURRENT_TIMESTAMP,"
+                + " CURRENT_TIMESTAMP + INTERVAL '24 hours')", teacher, subject);
+        jdbc.update("INSERT INTO question_image (owner_id, import_batch_id, item_key, generated_question_id, role,"
+                + " ordinal, mime, data, byte_size, width_px, height_px, display_width_mm, sha256, source_format)"
+                + " VALUES (?, ?, 'q1', ?, ?, 1, 'image/png', ?, 4, 10, 10, 50, repeat('b', 64), 'png')",
+                teacher, batch, sourceQuestion, role, new byte[]{1, 2, 3, 4});
+    }
+
+    @Test
+    void createAcceptsExamWithFigureQuestion() throws Exception {
+        // A2 (cau-co-hinh.md mục 4.5): học sinh đã xem được ảnh (S1+S2) nên gỡ ASSIGN_HAS_FIGURE; đề có câu hình giao được.
+        attachImage(mcqItem2, "stem");
+        int id = json(asTeacher(post(base()).contentType(MediaType.APPLICATION_JSON)
+                .content(createBody(45, inTwoHours(), true, true)))
+                .andExpect(status().isCreated())).get("assignmentId").asInt();
+        assertEquals(1, count("SELECT count(*) FROM exam_assignment"));
+        assertEquals(4, count("SELECT count(*) FROM assignment_item WHERE assignment_id = ?", id));
+        assertEquals(1, count("SELECT count(*) FROM assignment_item WHERE assignment_id = ? AND bank_item_id = ?", id,
+                mcqItem2));
+    }
+
+    @Test
+    void createAcceptsFigureOnRemovedBankItemAndSolutionOnlyFigure() throws Exception {
+        // Câu đã gỡ khỏi ngân hàng vẫn nằm trong đề (quyết định 16/11); ảnh lời giải và ảnh ý Đúng/Sai: vẫn giao được.
+        attachImage(mcqItem1, "solution");
+        jdbc.update("UPDATE bank_item SET removed_at = CURRENT_TIMESTAMP, removed_by = ? WHERE id = ?", teacher,
+                mcqItem1);
+        attachImage(tfItem, "statement_b");
+        asTeacher(post(base()).contentType(MediaType.APPLICATION_JSON)
+                .content(createBody(45, inTwoHours(), true, true)))
+                .andExpect(status().isCreated());
+        assertEquals(1, count("SELECT count(*) FROM exam_assignment"));
+        assertEquals(4, count("SELECT count(*) FROM assignment_item"));
+    }
+
+    @Test
+    void createStillAcceptsExamWhoseFigureBelongsToAnotherQuestion() throws Exception {
+        // Ảnh của một câu không nằm trong đề này không ảnh hưởng: đề không hình giao được như cũ.
+        int otherItem = bankMcq(template("Khác"), "Câu ngoài đề");
+        attachImage(otherItem, "stem");
+        asTeacher(post(base()).contentType(MediaType.APPLICATION_JSON)
+                .content(createBody(45, inTwoHours(), true, true)))
+                .andExpect(status().isCreated());
+        assertEquals(1, count("SELECT count(*) FROM exam_assignment"));
+    }
+
     @Test
     void createValidatesRequest() throws Exception {
         StringBuilder elevenClasses = new StringBuilder("[");

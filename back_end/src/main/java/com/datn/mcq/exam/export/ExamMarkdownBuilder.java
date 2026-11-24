@@ -124,6 +124,18 @@ public final class ExamMarkdownBuilder {
      */
     public static String build(ExamViewDto examView, ExamHeader header, ExamScoringProperties scoring, LocalDate today,
                                ExportContent content) {
+        return build(examView, header, scoring, today, content, Map.of());
+    }
+
+    /**
+     * @param figures (O2, 23/11) byte ảnh theo id cho các token {@code ⟦img:<id>⟧} trong đề ({@link ExamFigures}): token
+     *                riêng một dòng ở câu dẫn, ý đúng/sai, lời giải thành đoạn {@code ExamFigure} căn giữa, rộng tối đa
+     *                {@value ExamFigures#BLOCK_MAX_MM} mm; token ở phương án rộng tối đa {@value ExamFigures#OPTION_MAX_MM} mm
+     *                và bốn phương án xếp 2 cột; token không có ảnh thì 500 {@value ExamFigures#MISSING_CODE}
+     */
+    static String build(ExamViewDto examView, ExamHeader header, ExamScoringProperties scoring, LocalDate today,
+                        ExportContent content, Map<Long, ExamFigures.Figure> figures) {
+        Map<Long, ExamFigures.Figure> figs = figures == null ? Map.of() : figures;
         // Câu đã lưu từ trước có thể còn "\n" chữ trong công thức, và độ viết ^{\circ} thành chỉ số trên cỡ nhỏ: sửa trong file
         // xuất (không sửa DB), cho cả Equation và MathType.
         ExamViewDto exam = withoutLiteralNewlines(examView);
@@ -136,7 +148,7 @@ public final class ExamMarkdownBuilder {
                     + "</w:p>"));
             int k = 1;
             for (ExamItemDto item : part.items()) {
-                question(blocks, k++, item);
+                question(blocks, k++, item, figs);
             }
         }
         if (content == ExportContent.EXAM) {
@@ -162,7 +174,7 @@ public final class ExamMarkdownBuilder {
             blocks.add(raw(paragraph("ExamSubHeading", "PHẦN " + part.part(), false)));
             int k = 1;
             for (ExamItemDto item : part.items()) {
-                solution(blocks, k++, item);
+                solution(blocks, k++, item, figs);
             }
         }
         return String.join("\n\n", blocks) + "\n";
@@ -182,6 +194,7 @@ public final class ExamMarkdownBuilder {
                 exam.createdAt(), exam.buildStatus(), exam.needsReviewCount(), parts, exam.kind(), exam.challenge());
     }
 
+    /** Giữ mọi trường của mục đề (23/11, O2: trước đó dùng chữ ký 26 tham số nên rơi {@code images}). */
     private static ExamItemDto withoutLiteralNewlines(ExamItemDto i) {
         List<ItemStatementDto> statements = i.statements() == null ? null : i.statements().stream()
                 .map(s -> new ItemStatementDto(s.key(), cleanText(s.text()), s.label(), s.difficulty()))
@@ -191,7 +204,8 @@ public final class ExamMarkdownBuilder {
                 cleanText(i.optionA()), cleanText(i.optionB()),
                 cleanText(i.optionC()), cleanText(i.optionD()), i.correctOption(),
                 i.saAnswer(), statements, cleanText(i.explanation()), i.difficulty(),
-                i.needsReview(), i.reviewReasons(), i.qcState(), i.edited(), i.originalQuestionId(), i.failureReason());
+                i.needsReview(), i.reviewReasons(), i.qcState(), i.edited(), i.originalQuestionId(), i.failureReason(),
+                i.infoReasons(), i.requests(), i.inheritedRequests(), i.bankVisibility(), i.images());
     }
 
     /**
@@ -255,28 +269,48 @@ public final class ExamMarkdownBuilder {
         return item.questionText() != null;
     }
 
-    private static void question(List<String> blocks, int k, ExamItemDto item) {
+    private static void question(List<String> blocks, int k, ExamItemDto item, Map<Long, ExamFigures.Figure> figs) {
         if (!hasQuestion(item)) {
             blocks.add(div("ExamQuestion", label(k) + " "
                     + inline(ExamSlot.FAILED.equals(item.state()) ? MISSING_FAILED : MISSING_GENERATING)));
             return;
         }
-        List<String> stem = stemParagraphs(item.questionText());
-        blocks.add(div("ExamQuestion", label(k) + (stem.isEmpty() ? "" : " " + stem.get(0))));
-        if (stem.size() > 1) {
-            blocks.add(div("ExamQuestionCont", String.join("\n\n", stem.subList(1, stem.size()))));
+        ExamFigures.checkNoToken(item.saAnswer());
+        List<Line> stem = stemParagraphs(item.questionText(), figs);
+        // Dòng đầu (nếu là chữ) đi cùng nhãn "Câu k."; các dòng chữ sau gộp vào ExamQuestionCont; ảnh riêng dòng (O2) là đoạn
+        // ExamFigure ngay tại chỗ token, tách khối ExamQuestionCont. Câu không có ảnh ra đúng như trước.
+        int from = !stem.isEmpty() && !stem.get(0).figure() ? 1 : 0;
+        blocks.add(div("ExamQuestion", label(k) + (from == 1 ? " " + stem.get(0).text() : "")));
+        List<String> cont = new ArrayList<>();
+        for (Line line : stem.subList(from, stem.size())) {
+            if (line.figure()) {
+                flush(blocks, "ExamQuestionCont", cont);
+                blocks.add(div(FIGURE_STYLE, line.text()));
+            } else {
+                cont.add(line.text());
+            }
         }
+        flush(blocks, "ExamQuestionCont", cont);
         switch (item.questionType()) {
-            case MCQ -> blocks.add(div("ExamOption", mcqOptions(item)));
+            case MCQ -> blocks.add(div("ExamOption", mcqOptions(item, figs)));
             case TF -> {
                 List<String> lines = new ArrayList<>();
                 for (ItemStatementDto s : statements(item)) {
+                    // ảnh riêng dòng của ý (O2): đoạn ExamFigure ngay sau dòng của ý; chữ còn lại gộp một dòng như trước
+                    List<String> text = new ArrayList<>();
+                    List<String> figures = new ArrayList<>();
+                    for (String l : (s.text() == null ? "" : s.text()).split("\\R")) {
+                        (ExamFigures.figureOnly(l) != null ? figures : text).add(l);
+                    }
+                    String body = figures.isEmpty() ? s.text() : String.join("\n", text);
                     lines.add(ExamTabs.token(ExamPage.OPTION_LABEL_START_TWIPS) + "**" + s.key().getDbValue() + ")** "
-                            + inline(endWithPeriod(oneLine(s.text()))));
+                            + rich(endWithPeriod(oneLine(body)), figs, ExamFigures.BLOCK_MAX_MM));
+                    for (String f : figures) {
+                        flush(blocks, "ExamOption", lines);
+                        blocks.add(div(FIGURE_STYLE, ExamFigures.embed(f.strip(), figs, ExamFigures.BLOCK_MAX_MM)));
+                    }
                 }
-                if (!lines.isEmpty()) {
-                    blocks.add(div("ExamOption", String.join("\n\n", lines)));
-                }
+                flush(blocks, "ExamOption", lines);
             }
             case SA -> {
                 // chỉ có đề
@@ -284,28 +318,62 @@ public final class ExamMarkdownBuilder {
         }
     }
 
+    /** Kiểu đoạn của ảnh riêng dòng (O2): căn giữa, đi cùng đoạn sau ({@link ExamReferenceDoc}). */
+    static final String FIGURE_STYLE = "ExamFigure";
+
+    /** Một đoạn của câu dẫn hay lời giải: Markdown đã thoát, {@code figure} khi là ảnh riêng dòng. */
+    private record Line(String text, boolean figure) {}
+
+    /** Các đoạn {@code paragraphs} (nếu có) thành một khối kiểu {@code style}, rồi xóa danh sách. */
+    private static void flush(List<String> blocks, String style, List<String> paragraphs) {
+        if (!paragraphs.isEmpty()) {
+            blocks.add(div(style, String.join("\n\n", paragraphs)));
+            paragraphs.clear();
+        }
+    }
+
+    /**
+     * Chữ một đoạn ({@link #inline}) với token ảnh trong dòng thay bằng ảnh rộng tối đa {@code maxMm} ({@link ExamFigures#embed});
+     * token trong công thức thì dừng ({@link ExamFigures#checkOutsideMath}).
+     */
+    private static String rich(String source, Map<Long, ExamFigures.Figure> figs, int maxMm) {
+        ExamFigures.checkOutsideMath(source);
+        return ExamFigures.embed(inline(source), figs, maxMm);
+    }
+
+    /** Một dòng nguồn: ảnh riêng dòng thành ảnh khối, còn lại thành chữ (ảnh trong dòng rộng tối đa 120 mm). */
+    private static Line line(String source, Map<Long, ExamFigures.Figure> figs) {
+        return ExamFigures.figureOnly(source) != null
+                ? new Line(ExamFigures.embed(source.strip(), figs, ExamFigures.BLOCK_MAX_MM), true)
+                : new Line(rich(source, figs, ExamFigures.BLOCK_MAX_MM), false);
+    }
+
     /** Mỗi dòng không trống của câu dẫn thành một đoạn; câu dẫn kết thúc bằng "là:" thì bỏ dấu hai chấm. */
-    private static List<String> stemParagraphs(String text) {
+    private static List<Line> stemParagraphs(String text, Map<Long, ExamFigures.Figure> figs) {
         List<String> lines = Arrays.stream(text.split("\\R")).map(String::strip).filter(l -> !l.isEmpty()).toList();
-        List<String> out = new ArrayList<>();
+        List<Line> out = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i);
             if (i == lines.size() - 1) {
                 line = STEM_COLON.matcher(line).replaceFirst("là");
             }
-            out.add(inline(line));
+            out.add(line(line, figs));
         }
         return out;
     }
 
-    /** Bốn phương án xếp 1 dòng 4 cột, 2 dòng 2 cột hoặc mỗi phương án một dòng, tùy bề rộng đo được. */
-    private static String mcqOptions(ExamItemDto item) {
+    /**
+     * Bốn phương án xếp 1 dòng 4 cột, 2 dòng 2 cột hoặc mỗi phương án một dòng, tùy bề rộng đo được. Có phương án chứa ảnh
+     * (O2) thì luôn 2 dòng 2 cột, ảnh rộng tối đa {@value ExamFigures#OPTION_MAX_MM} mm.
+     */
+    private static String mcqOptions(ExamItemDto item, Map<Long, ExamFigures.Figure> figs) {
         List<String> raw = Arrays.asList(item.optionA(), item.optionB(), item.optionC(), item.optionD()).stream()
                 .map(o -> endWithPeriod(oneLine(o))).toList();
-        OptionLayout layout = OptionLayout.choose(raw);
+        OptionLayout layout = raw.stream().anyMatch(ExamFigures::hasToken) ? OptionLayout.TWO_COLUMNS
+                : OptionLayout.choose(raw);
         List<String> cells = new ArrayList<>();
         for (int i = 0; i < raw.size(); i++) {
-            cells.add("**" + (char) ('A' + i) + ".** " + inline(raw.get(i)));
+            cells.add("**" + (char) ('A' + i) + ".** " + rich(raw.get(i), figs, ExamFigures.OPTION_MAX_MM));
         }
         int[] stops = layout.stopsTwips();
         List<String> paragraphs = new ArrayList<>();
@@ -410,12 +478,12 @@ public final class ExamMarkdownBuilder {
 
     // ---------------------------------------------------------------- lời giải
 
-    private static void solution(List<String> blocks, int k, ExamItemDto item) {
+    private static void solution(List<String> blocks, int k, ExamItemDto item, Map<Long, ExamFigures.Figure> figs) {
         if (!hasQuestion(item)) {
             blocks.add(label(k) + " " + NONE);
             return;
         }
-        String explanation = paragraphs(item.explanation());
+        String explanation = paragraphs(item.explanation(), figs);
         switch (item.questionType()) {
             case MCQ -> {
                 blocks.add(item.correctOption() != null ? "**Câu " + k + ". Chọn " + item.correctOption().name() + ".**"
@@ -439,7 +507,7 @@ public final class ExamMarkdownBuilder {
                 for (ItemStatementDto s : list) {
                     blocks.add("**" + s.key().getDbValue() + ") " + truth(s.label()) + ".**");
                     if (split != null && !split.get(s.key()).isBlank()) {
-                        blocks.add(paragraphs(split.get(s.key())));
+                        blocks.add(paragraphs(split.get(s.key()), figs));
                     }
                 }
                 if (split == null && !explanation.isEmpty()) {
@@ -680,25 +748,40 @@ public final class ExamMarkdownBuilder {
 
     /** Mỗi dòng không trống thành một đoạn. */
     static String paragraphs(String text) {
+        return paragraphs(text, Map.of());
+    }
+
+    /** Mỗi dòng không trống thành một đoạn; ảnh riêng dòng (O2, lời giải) thành đoạn {@value #FIGURE_STYLE} căn giữa. */
+    private static String paragraphs(String text, Map<Long, ExamFigures.Figure> figs) {
         if (text == null) {
             return "";
         }
         return Arrays.stream(text.split("\\R")).map(String::strip).filter(l -> !l.isEmpty())
-                .map(ExamMarkdownBuilder::inline).collect(Collectors.joining("\n\n"));
+                .map(l -> line(l, figs)).map(l -> l.figure() ? div(FIGURE_STYLE, l.text()) : l.text())
+                .collect(Collectors.joining("\n\n"));
     }
 
     private static String oneLine(String text) {
         return text == null ? "" : text.replaceAll("\\s*\\R\\s*", " ").strip();
     }
 
-    /** Thêm dấu chấm cuối nếu chưa có dấu kết câu (. ? ! …), kể cả khi kết thúc bằng công thức. Chuỗi rỗng giữ nguyên. */
+    /**
+     * Thêm dấu chấm cuối nếu chưa có dấu kết câu (. ? ! …), kể cả khi kết thúc bằng công thức. Chuỗi rỗng giữ nguyên; kết thúc
+     * bằng token ảnh (O2) cũng giữ nguyên, không có dấu chấm sau ảnh. P4 (24/11): công thức cuối mà bên trong đã kết thúc
+     * bằng dấu kết câu ({@code $m = 1.$}, hay gặp ở câu nhập từ Word) cũng giữ nguyên, để file Word không in "m = 1..".
+     */
     static String endWithPeriod(String text) {
         String s = text == null ? "" : text.strip();
-        if (s.isEmpty() || ".?!…".indexOf(s.charAt(s.length() - 1)) >= 0) {
+        if (s.isEmpty() || ".?!…".indexOf(s.charAt(s.length() - 1)) >= 0 || TRAILING_TOKEN.matcher(s).find()
+                || TRAILING_FORMULA_END.matcher(s).find()) {
             return s;
         }
         return s + ".";
     }
+
+    private static final Pattern TRAILING_TOKEN = Pattern.compile("⟦img:\\d+⟧$");
+    /** Công thức {@code $...$} cuối chuỗi có dấu kết câu ngay trước dấu {@code $} đóng (bỏ qua khoảng trắng). */
+    private static final Pattern TRAILING_FORMULA_END = Pattern.compile("(?<!\\\\)\\$[^$]*[.?!…]\\s*(?<!\\\\)\\$$");
 
     /**
      * Cắt chuỗi nguồn thành chữ thường và công thức: {@code $...$} (nội dung khác rỗng) là công thức, xuống dòng trong công

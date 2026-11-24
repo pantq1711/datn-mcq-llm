@@ -34,6 +34,7 @@ Giá trị enum trong JSON là chuỗi viết thường như cột "Giá trị t
 | 403 | Sai vai trò (`FORBIDDEN`), ví dụ giáo viên gọi API quản trị, admin gọi API của giáo viên |
 | 404 | Không tìm thấy bản ghi, ví dụ `subjectId` hoặc `templateId` không tồn tại. Ma trận, đề của giáo viên khác cũng trả 404 (giống id không tồn tại) |
 | 409 | Xung đột trạng thái, ví dụ nộp đánh giá cho câu `duplicate` hoặc nộp lại câu experiment. Có mã máy đọc được ở một số luồng: `MATRIX_IN_USE`, `BANK_EXHAUSTED`, `SLOT_*`, `VERSION_CONFLICT`, `QC_CHECKING`, `SPEC_UNAVAILABLE` (bản đặc tả của đề không gắn ma trận, mục 7.6). W1-4 (K-5): hai thao tác đồng thời làm vi phạm khóa ngoại hoặc khóa duy nhất trả 409 `FOREIGN_KEY_CONFLICT` / `UNIQUE_CONFLICT` ("hãy tải lại rồi thử lại"), không lộ tên ràng buộc |
+| 422 | Xuất Word: tổng hình của đề vượt trần (`EXPORT_IMAGES_TOO_LARGE`, mục 7.6) |
 | 429 | Gemini đang giới hạn tần suất gọi; chờ khoảng một phút rồi thử lại. Hoặc đăng nhập sai quá nhiều lần (`TOO_MANY_ATTEMPTS`, header `Retry-After`, mục 8.2). Hoặc chạm hạn mức ngày của Gemini (`LLM_DAILY_QUOTA_EXHAUSTED`, header `Retry-After`) |
 | 503 | Gemini tạm thời quá tải hoặc bảo trì |
 | 500 | Lỗi khác chưa được phân loại, body theo định dạng mặc định của Spring. Lỗi toàn vẹn dữ liệu khác (CHECK, NOT NULL: lỗi của chương trình) có `{"code": "DATA_INTEGRITY"}` |
@@ -92,9 +93,11 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | GET | `/api/materials` | Tài liệu của tôi, mới nhất trước, có phân trang, không kèm văn bản (mục 9) |
 | GET, DELETE | `/api/materials/{id}` | Chi tiết kèm 500 ký tự đầu của văn bản / xóa tài liệu của tôi (mục 9) |
 | POST | `/api/bank-imports` | Nhập ngân hàng câu từ Word: tải bộ câu hỏi .docx → bản xem trước kèm cờ (mục 10). Không gọi AI. Câu có hình vẽ được nhập kèm hình (mục 10.3) |
+| GET | `/api/bank-imports?status=preview` | Danh sách các lần nhập của tôi đang chờ xác nhận, không kèm nội dung câu (mục 10.2) |
 | GET, DELETE | `/api/bank-imports/{id}` | Xem lại / hủy một lần nhập của tôi (mục 10) |
 | POST | `/api/bank-imports/{id}/confirm` | Đưa các câu chọn vào ngân hàng RIÊNG TƯ của tôi (mục 10) |
 | GET | `/api/question-images/{id}?exp=&u=&sig=` | Tải một hình của câu nhập bằng URL có chữ ký, không cần JWT (mục 10.3) |
+| GET | `/api/public/question-images/{id}?exp=&a=&sig=` | Học sinh tải hình của câu bằng URL ký theo lượt làm, không cần JWT (mục 11.2) |
 | GET | `/api/exams/{id}/progress` | Tiến độ theo ô |
 | GET | `/api/exams/{id}` | Xem đề: câu theo phần I-III kèm đáp án, lời giải, cờ "cần xem kỹ" (KHÔNG chấm mù) |
 | GET | `/api/exams/{id}/cells/{cellId}` | Các chỗ của một ô (tóm tắt) |
@@ -307,6 +310,10 @@ questionText, optionA..optionD, correctOption, explanation, difficulty, createdA
 - `usageCount`: số đề khác nhau (của mọi giáo viên) đang có câu này; `lastUsedAt`: ngày tạo đề mới nhất trong số đó, `null`
   nếu chưa dùng. Câu bị Đổi ra khỏi một chỗ thì đề đó không còn tính.
 - `content` có thể `null` (câu không sinh từ ô ma trận).
+- `images` (22/11, G0 H3; ở cả danh sách và chi tiết, vắng khi câu không có hình): ảnh của câu nhập từ Word có hình, mảng
+  `{id, role, ordinal, mime, widthPx, heightPx, displayWidthMm, url}` như mục 10.3, `url` ký cho người gọi (hợp lệ khoảng một
+  giờ, hết hạn thì tải lại danh sách). Chữ của câu vẫn chứa token `⟦img:<id>⟧`. Một truy vấn ảnh theo lô cho cả trang, không
+  nạp byte ảnh. Câu riêng của người khác không hiện, nên ảnh của nó cũng không lộ.
 
 **Chi tiết một câu:**
 
@@ -481,8 +488,9 @@ GET /api/exams?page=0&size=10[&kind=lesson|matrix]
 - Chỉ đề do người gọi tạo, CHƯA XÓA (V31), mới nhất trước. `page` từ 0 (mặc định 0), `size` từ 1 đến 50 (mặc định 10);
   sai thì 400.
 - `readySlots`: chỗ đã có câu, chưa Giữ (`ready`); `keptSlots`: đã Giữ (`kept`, `edited`); `needsReviewSlots`: số chỗ có
-  `needsReview = true` trong `GET /api/exams/{id}` của cùng đề (từ 4/11 dùng CHUNG một hàm dựng mục với trang chi tiết, nên gồm
-  cả cờ `similar_in_exam` và luôn bằng `needsReviewCount` của trang chi tiết); `generatingSlots`: `pending`, `generating`;
+  `needsReview = true` trong `GET /api/exams/{id}` của cùng đề (từ 4/11 dùng CHUNG một hàm dựng mục với trang chi tiết, nên
+  luôn bằng `needsReviewCount` của trang chi tiết; 4/11–21/11 gồm cả cờ `similar_in_exam`, từ 22/11 cờ đó là cờ thông tin
+  nên không đếm); `generatingSlots`: `pending`, `generating`;
   `failedSlots`: `failed`.
 - Danh sách chỉ đọc, KHÔNG đối soát job (khác 7.3/7.4): số liệu theo lần đối soát gần nhất. Muốn số mới nhất của một đề
   thì gọi `GET /api/exams/{id}/progress`.
@@ -835,7 +843,13 @@ khác để sinh lại).
   cũng không phải lý do (vẫn lưu trong `warnings` và hiện trong vết QC), ví dụ ở trên chỉ còn các cảnh báo khác. `needsReview` đúng khi danh sách khác rỗng. Câu giáo viên đã sửa (mục 7.5a) có thêm
   `solver_pending` (Solver đang kiểm lại, thay `solver_not_run`), `solver_failed` (kiểm lại thất bại) và
   `duplicate: <id>` (bản sửa trùng câu khác).
-- `similar_in_exam: <Phần>.<số>` (thẩm định 31/10; **đổi dạng 2/11**): câu hệ thống sinh cùng khuôn (chỉ khác số hoặc tên
+- **Từ 22/11 `similar_in_exam` KHÔNG còn ở `reviewReasons` mà ở `infoReasons` (cờ thông tin, xem dưới):** không bật
+  `needsReview`, không đổi `qcState`, không tính vào `needsReviewCount`/`needsReviewSlots`, không chặn "Lưu hàng loạt".
+  Lý do: góp ý giáo viên 21/11, đề hình học mức Biết theo yêu cầu đơn giản dễ có câu cùng dạng, bị báo "cần xem kỹ … nên
+  đổi" là không hợp lý; giáo viên tự chọn giữ cả hai hay Đổi câu khác. Chuỗi hiển thị: "Cùng dạng với Phần {Phần} – Câu
+  {số} trong đề" (thẻ thông tin, vị trí bấm được). Mô tả dưới đây (dạng, phạm vi so, ngưỡng) vẫn đúng, trừ các câu về
+  `needsReview`/`qcState`/số đếm.
+- `similar_in_exam: <Phần>.<số>` (thẩm định 31/10; **đổi dạng 2/11**; **là cờ thông tin từ 22/11**): câu hệ thống sinh cùng khuôn (chỉ khác số hoặc tên
   điểm/hình) với câu đứng TRƯỚC nó trong chính đề này, hoặc câu trắc nghiệm làm lộ đáp án một ý của câu đúng/sai. `<Phần>`
   là `I`, `II` hoặc `III` và `<số>` là số "Câu k" trong Phần đó, đúng cách đánh số của trang đề và file Word (ví dụ
   `similar_in_exam: II.3` là Phần II, Câu 3; trước 2/11 là số thứ tự toàn đề như `similar_in_exam: 14`, dễ nhầm với trang đề).
@@ -858,13 +872,20 @@ khác để sinh lại).
     án; `met` không có cờ. D-05 (15/11): `request_unchecked` ("Chưa kiểm được yêu cầu") khi lượt kiểm yêu cầu (Solver lượt 2)
     lỗi hoặc trả kết quả hỏng; không thử lại. Không bật `needsReview`, không tính vào `needsReviewCount`/`needsReviewSlots`, không đổi `qcState`;
     Giữ câu chỉ có `infoReasons` thì câu vào ngân hàng **dùng chung**. Mỗi giá trị có dạng `<mã>` hoặc `<mã>: <chi tiết>`
-    (sau này thêm "Có hình", lỗi phương án nhiễu); frontend hiện giá trị lạ nguyên văn. Câu ngân hàng, câu đã Giữ: `[]`.
+    (sau này thêm "Có hình", lỗi phương án nhiễu); frontend hiện giá trị lạ nguyên văn. Câu ngân hàng, câu đã Giữ: `[]`,
+    trừ `similar_in_exam: <Phần>.<số>` (từ 22/11, tính lúc xem đề, nối sau các cờ trên; câu ngân hàng chưa Giữ trong đề
+    cũng có thể có, xem mục lý do cần xem kỹ ở trên).
   - `requests` (vắng khi câu không có yêu cầu): `{"codes": [...], "text": "..." | null, "scope": "replace" | "cell" | "exam"}`
     là yêu cầu mà câu đang ở chỗ được sinh theo (`scope` là mức lấy yêu cầu; `replace` là lượt Đổi câu tự đặt).
   - `inheritedRequests` (vắng khi ô và đề không có yêu cầu áp cho chỗ): `{"codes", "text", "scope": "cell" | "exam"}` là yêu
     cầu thừa hưởng của chỗ (của ô nếu ô có mã hoặc văn bản, không thì của đề; mã và văn bản luôn cùng một mức), mã đã lọc theo
     dạng câu của chỗ (`[]` khi mức đó chỉ có văn bản), `text` nguyên văn đã lưu (null khi mức đó chỉ có mã). Hộp Đổi câu dùng
     trường này để chọn sẵn chip và điền sẵn văn bản.
+  - `images` (22/11, G0 H3; vắng khi chỗ không có hình): chỉ ở chỗ lấy từ ngân hàng (`source = "bank"`) mà câu nhập từ Word có
+    hình, mảng `{id, role, ordinal, mime, widthPx, heightPx, displayWidthMm, url}` như mục 10.3; `url` ký cho người xem đề (người
+    gọi). Chữ của câu vẫn chứa token `⟦img:<id>⟧`; giao diện đặt ảnh theo token. Có ở xem đề và kết quả Giữ/Đổi/Sửa của chỗ đó.
+    Một truy vấn ảnh theo lô cho cả đề, bỏ qua khi đề không có chỗ ngân hàng. (Đường tạo đề và Đổi câu hiện chưa chọn câu ngân
+    hàng có hình, nên trường này chưa xuất hiện trong luồng thường.)
 
 ### 7.5. Giữ / Đổi câu khác
 
@@ -992,7 +1013,7 @@ PUT /api/exams/12/slots/101/question
 
 | Mã | `code` | Khi nào |
 |---|---|---|
-| 400 | `INVALID_REQUEST` | Thiếu trường (kể cả `baseQuestionId`), gửi trường của dạng khác, `correctOption` ngoài A-D, nhãn ý ngoài T/F, `tf` không đủ 4 ý a-d |
+| 400 | `INVALID_REQUEST` | Thiếu trường (kể cả `baseQuestionId`), gửi trường của dạng khác, `correctOption` ngoài A-D, nhãn ý ngoài T/F, `tf` không đủ 4 ý a-d; **từ 22/11** mọi trường văn bản (đề, phương án, ý, lời giải, đáp số) chứa `⟦img:` (token hình của hệ thống, chỉ bộ nhập Word được tạo; H2 thiết kế G0), thông báo nêu trường vi phạm, không tạo bản sửa. `[img:1]` với ngoặc vuông thường vẫn hợp lệ |
 | 400 | `FORMAT_INVALID` | Bản sửa không qua kiểm tra định dạng; `errors` liệt kê từng lỗi, ví dụ `["option_a: nội dung trống"]` |
 | 404 | — | Đề không có hoặc của giáo viên khác; chỗ không thuộc đề |
 | 409 | `SLOT_KEPT` | Chỗ đã Giữ (sửa câu ngân hàng chưa hỗ trợ) |
@@ -1014,7 +1035,26 @@ GET /api/exams/12/export/docx?examCode=205&durationMinutes=45  → 200, mã đ�
 GET /api/exams/12/export/docx?content=exam       → 200, chỉ đề (dừng ở dòng HẾT)
 GET /api/exams/12/export/docx?content=spec       → 200, bản đặc tả đề (A4 ngang, mẫu Phụ lục 2 CV 7991)
 GET /api/exams/12/export/docx?examCode=99        → 400
+GET /api/exams/12/export/docx  (đề có câu ngân hàng có hình)  → 200, hình nhúng trong file; tổng hình quá trần → 422 EXPORT_IMAGES_TOO_LARGE
 ```
+
+- **Câu có hình (23/11, O2; thiết kế `docs/design/cau-co-hinh.md` mục 4.2):** chỗ lấy từ ngân hàng mà câu nguồn có hình
+  (`images` của mục 7.4) được xuất kèm hình. Token `⟦img:<id>⟧` trong chữ câu **không bao giờ** ra Word dưới dạng chữ.
+  - Byte ảnh đọc thẳng từ DB (không qua URL ký), chỉ ảnh có trong `images` của dữ liệu xem đề của người xuất; nhúng vào
+    Markdown dạng data URI (dưới `--sandbox` pandoc bỏ ảnh dạng file mà vẫn exit 0). Bản đặc tả (`content=spec`) không in
+    chữ câu hỏi nên không nạp ảnh.
+  - Token riêng một dòng ở câu dẫn, ý Đúng/Sai, lời giải: đoạn riêng căn giữa (kiểu `ExamFigure`, đi cùng đoạn sau) đúng vị
+    trí token, rộng `min(display_width_mm, 120)` mm. Ý Đúng/Sai có hình: hình đứng ngay sau dòng của ý. Token ở phương án: rộng
+    tối đa 40 mm, không thêm dấu chấm sau hình, bốn phương án luôn xếp 2 dòng 2 cột. Hình ở lời giải (`role = solution`) chỉ có
+    trong file đầy đủ, không có ở `content=exam`.
+  - Đếm lại: sau pandoc và trên file cuối (sau MathType, nếu có), số `w:drawing` và số `wp:docPr descr="qimg:<id>"` (alt của
+    ảnh) theo từng id phải bằng số lần chèn (cùng hình dùng hai chỗ đếm 2). Lệch, hoặc token không có hình được phép xuất,
+    token nằm trong công thức hay trong đáp số trả lời ngắn: 500 kèm `code: "EXPORT_IMAGE_MISSING"` (và `error` chung), không
+    trả file; log máy chủ ghi id đề, số kỳ vọng, số đếm, id thiếu (không ghi chữ đề).
+  - Trần (D5, đo trong container 23/11): tổng dung lượng hình đã lưu, tính theo số lần chèn, của một lần xuất tối đa
+    `app.export.max-image-bytes` (mặc định 10 MB = 10 485 760 byte). Vượt thì **422** `EXPORT_IMAGES_TOO_LARGE`, `error`:
+    "Tổng hình trong đề quá lớn để xuất Word (X MB, tối đa Y MB). Hãy bỏ bớt câu có hình." (X làm tròn lên một chữ số thập
+    phân). Kiểm bằng truy vấn không nạp byte, trước khi nạp byte và trước khi chạy pandoc.
 
 - **Bản đặc tả đề (18/11, `content=spec`; thiết kế `docs/design/ban-dac-ta.md`):** bảng theo mẫu Phụ lục 2 Công văn
   7991/BGDĐT-GDTrH ngày 17/12/2024, một section A4 ngang (16838 × 11906 twips, cùng lề như file đề), chân trang "Bản đặc tả
@@ -1174,7 +1214,8 @@ GET /api/exams/12/export/docx?examCode=99        → 400
   (Heading) vẫn dùng font theo theme của pandoc.
 - Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; khi hệ thống đang bận (tiến trình trích xuất tài liệu hoặc xuất Word khác đang giữ Semaphore) và chờ quá thời gian xếp hàng (`queue-wait`, mặc định 30s) trả 503 kèm mã `EXPORT_BUSY` và header `Retry-After`; pandoc báo lỗi trả 500 kèm `error` chung "Lỗi khi xuất file, thầy cô thử lại sau" (11/11, A-07: log của pandoc chỉ ghi ở log máy chủ). `content=spec` với đề không
   gắn ma trận (dữ liệu cũ) trả 409 kèm mã `SPEC_UNAVAILABLE` ("Đề không gắn ma trận nên không xuất được bản đặc tả.").
-  trả 500.
+  trả 500. Đề có hình (23/11): thiếu hình trong file trả 500 `EXPORT_IMAGE_MISSING`; tổng hình vượt trần trả 422
+  `EXPORT_IMAGES_TOO_LARGE` (mục "Câu có hình" ở trên).
 - **Cài pandoc** (backend không tự cài):
   - Windows: tải bộ cài `.msi` ở <https://pandoc.org/installing.html> (hoặc `winget install --id JohnMacFarlane.Pandoc`),
     rồi mở terminal mới và khởi động lại backend để PATH có pandoc. Bộ cài mặc định đặt ở
@@ -1620,6 +1661,13 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
 
 ### 10.2. Xem lại, xác nhận, hủy
 
+- `GET /api/bank-imports?status=preview` → 200 mảng các lô của tôi đang chờ xác nhận (`status = preview`, chưa quá `expiresAt`),
+  mới tạo trước. Dùng để mở lại hoặc hủy lô khi quên mã (mỗi người tối đa 3 lô chờ, mục 10.1). Mỗi phần tử có các trường của
+  lô ở mục 10.1 (`id`, `displayName`, `status`, `subjectId`, `gradeLevel`, `topic`, `createdAt`, `expiresAt`, `confirmedAt`,
+  `questionCount`, `importableCount`, `blockedCount`, `importedCount`, `skipped`) nhưng `items` và `skippedItems` luôn rỗng và
+  không có ảnh hay URL ký; mở lô bằng `GET /api/bank-imports/{id}`. Không có lô của người khác, lô đã quá hạn (kể cả chưa bị
+  dọn), lô đã xác nhận hay đã hủy. Không gửi `status` thì coi như `preview`; giá trị khác (kể cả rỗng): 400
+  `IMPORT_STATUS_INVALID`. Chỉ giáo viên.
 - `GET /api/bank-imports/{id}` → lô như trên; lô đã xác nhận không còn `items` (nội dung đã vào ngân hàng). Quá hạn: 410
   `IMPORT_EXPIRED` (nội dung bị xóa).
 - `POST /api/bank-imports/{id}/confirm` thân `{"keys": ["mcq-001", "tf-002"]}` → 200 `{batchId, imported, bankItemIds}`. Một
@@ -1656,6 +1704,8 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
   ảnh công thức WMF, hình vẽ OLE và ảnh trong "Đáp số".
 - Xác nhận: hình của câu được chọn gắn vào câu trong ngân hàng, hình của câu không chọn bị xóa trong cùng transaction.
   Hủy lô hoặc lô quá hạn thì hình chưa gắn bị xóa.
+- Sau khi vào ngân hàng (22/11): `images[]` có ở `GET /api/bank-items`, `GET /api/bank-items/{id}` (mục "Ngân hàng câu hỏi") và ở
+  mục đề của chỗ lấy từ ngân hàng (mục 7.4), cùng dạng như trên, `url` ký cho người gọi.
 
 ## 11. Bài giao trực tuyến (V32, thiết kế `docs/design/lam-bai-truc-tuyen.md`, quyết định 14/11 và 16/11)
 
@@ -1665,7 +1715,9 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
   ngày), showScore, showSolutions (mặc định false), consentConfirmed: true, classes: [{classLabel, size}]}` → 201 bài giao.
   `classes`: 1–10 lớp, nhãn chuẩn hóa (bỏ khoảng trắng, viết hoa; chữ không dấu, số, `/ . -`; 1–10 ký tự), sĩ số 1–99, không
   trùng. Lỗi: 400 `INVALID_REQUEST`; 409 `ASSIGN_NOT_ALL_KEPT` (còn chỗ chưa Giữ/Sửa, `errors: ["Phần I, Câu 2", …]`),
-  `ASSIGN_SA_KEY_UNSUPPORTED` (đáp số Trả lời ngắn không phải số nguyên/thập phân, `errors` như trên).
+  `ASSIGN_SA_KEY_UNSUPPORTED` (đáp số Trả lời ngắn không phải số nguyên/thập phân, `errors` như trên). Thứ tự kiểm:
+  `ASSIGN_NOT_ALL_KEPT`, rồi `ASSIGN_SA_KEY_UNSUPPORTED`. Đề có câu có hình giao được như mọi đề (24/11, PR A2 gỡ mã
+  `ASSIGN_HAS_FIGURE` của A1 ngày 23/11); học sinh xem hình qua URL ký theo lượt làm (mục 11.2).
 - Bài giao: `{assignmentId, publicCode, title, status (open|closed), durationMinutes, closesAt, closedAt?, showScore,
   showSolutions, createdAt, classes: [{classLabel, size}], questionCount, maxScore, maxAttempts (2 × tổng sĩ số), startedCount,
   submittedCount, duplicateCount, statsComputedAt?, attempts?}`. Link học sinh do frontend ghép: `<origin>/lam-bai/<publicCode>`.
@@ -1682,7 +1734,7 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
 - `DELETE …/{id}` → 204, xóa bài giao cùng mọi lượt làm và câu trả lời, ở mọi trạng thái.
 - `DELETE /api/exams/{examId}` khi đề còn bài giao: 409 `EXAM_HAS_ASSIGNMENTS`, không đổi gì.
 
-### 11.2. Học sinh (không đăng nhập; phản hồi có `Cache-Control: no-store`)
+### 11.2. Học sinh (không đăng nhập; phản hồi có `Cache-Control: no-store`, trừ tải hình)
 
 Token lượt làm gửi ở header `X-Attempt-Token`, không bao giờ trong URL.
 
@@ -1693,19 +1745,35 @@ Token lượt làm gửi ở header `X-Attempt-Token`, không bao giờ trong UR
   (`duplicateSeat: true`). Lỗi: 404; 409 `ASSIGNMENT_CLOSED`, `ASSIGNMENT_FULL`; 429 `TOO_MANY_REQUESTS` (theo IP).
 - Lượt làm (P2, P3): `{attemptToken?, classLabel, seatNo, duplicateSeat, startedAt, deadlineAt, serverNow, remainingSeconds,
   submitted, submittedAt?, resultsReleased, resultsAt, parts?, result?, review?}`. `parts` (chỉ khi còn nộp được):
-  `[{part, items: [{slotId, number, questionType, questionText, options? {A..D}, statements? [{key, text}]}]}]`, không đáp án.
+  `[{part, items: [{slotId, number, questionType, questionText, options? {A..D}, statements? [{key, text}], images?}]}]`,
+  không đáp án.
   `resultsReleased`: bài đã đóng và qua `closed_at + 2 phút`; trước đó không có `result` và `review`. `result` (khi
   `showScore`, lượt đã nộp): `{score, maxScore, score10, parts}`. `review` (khi `showSolutions`): `[{part, items: [{slotId,
   number, questionType, questionText, options?, yourChoice?, correctOption?, statements? [{key, text, label, yourAnswer?,
-  correct}], yourText?, saAnswer?, correctCount, score, explanation?}]}]`.
+  correct}], yourText?, saAnswer?, correctCount, score, explanation?, images?}]}]`.
+- Hình của câu (S1, 23/11, `docs/design/cau-co-hinh.md` mục 4.1): `images?` là `[{id, mime, widthPx, heightPx, displayWidthMm,
+  url}]` (không có `role`), vắng khi câu không có hình. Chữ câu (đề, phương án, ý, lời giải) giữ token `⟦img:<id>⟧` như mục
+  10.3; giao diện thay token bằng ảnh có cùng `id`, dùng nguyên `url`. Trong `parts` không bao giờ có hình lời giải; trong
+  `review` có mọi hình, kể cả lời giải.
+  `url = /api/public/question-images/{id}?exp=<epoch giây>&a=<id lượt>&sig=<hex>`, `sig = HMAC-SHA256(khóa ảnh,
+  "p|<id>|<exp>|<a>")` viết thường (cùng khóa `QUESTION_IMAGE_URL_KEY` với mục 10.3; tiền tố `p|` nên chữ ký của giáo viên và
+  học sinh không dùng lẫn được). `exp`: trong `parts` là `deadlineAt + 2 phút` (URL giữ nguyên cả lượt); trong `review` là hết
+  giờ tròn kế tiếp + 1 giờ (ký lại mỗi lần mở).
+- `GET /api/public/question-images/{id}?exp=&a=&sig=`: không cần JWT, không token. 200 là byte ảnh với `Content-Type`
+  PNG/JPEG, `Cache-Control: private, max-age=<min(giây còn lại tới exp, 3600)>`, `ETag: "<sha256>"`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`; `If-None-Match` khớp thì 304. Điều kiện giống JSON: lượt
+  còn tồn tại; ảnh thuộc một câu của bài giao (kể cả câu đã gỡ khỏi ngân hàng); hình không phải lời giải khi lượt còn nộp được
+  hoặc khi kết quả đã mở và `showSolutions`; hình lời giải chỉ trong trường hợp sau. Mọi lỗi (thiếu hoặc sai kiểu tham số,
+  `sig` sai, hết hạn, lượt đã xóa, ảnh không thuộc bài, không đủ điều kiện) đều là 404 `IMAGE_NOT_FOUND`; 429
+  `TOO_MANY_REQUESTS` khi vượt hạn mức theo lượt (URL ký sai không tính). Chữ ký không được ghi vào nhật ký.
 - `GET /api/public/attempts/current` → lượt làm. 401 `ATTEMPT_TOKEN_INVALID`; 429 (theo lượt).
 - `POST /api/public/attempts/current/submit` thân `{answers: [{slotId, choice}, {slotId, tf: {"a": "T", "b": "F"}}, {slotId,
   text}]}` → 200 `{submittedAt, resultsAt}` (không có điểm). Câu thiếu là bỏ trống. Lỗi: 400 `INVALID_REQUEST` (nhiều phần tử
   hơn số câu, `slotId` lạ hoặc lặp, sai dạng câu, ngoài A–D / a–d / T,F, đáp số quá 20 ký tự; không ghi gì); 401; 409
   `ATTEMPT_ALREADY_SUBMITTED`, `ASSIGNMENT_CLOSED` (giáo viên đóng trước hạn của lượt), `ATTEMPT_EXPIRED` (quá hạn + 2 phút);
   429 (theo lượt).
-- Hạn mức mặc định (biến môi trường `APP_PUBLIC_LIMIT_*`): tạo lượt 200/phút mỗi IP; mở lại 30/phút và nộp 20/phút mỗi lượt,
-  hai bộ đếm riêng. Bộ đếm trong bộ nhớ một tiến trình.
+- Hạn mức mặc định (biến môi trường `APP_PUBLIC_LIMIT_*`): tạo lượt 200/phút mỗi IP; mở lại 30/phút, nộp 20/phút và tải hình
+  300/phút (`APP_PUBLIC_LIMIT_IMAGE_PER_ATTEMPT_PER_MINUTE`) mỗi lượt, ba bộ đếm riêng. Bộ đếm trong bộ nhớ một tiến trình.
 
 ### 11.3. Phân tích câu (V33, PR B 17/11; thiết kế mục 5 và 14)
 

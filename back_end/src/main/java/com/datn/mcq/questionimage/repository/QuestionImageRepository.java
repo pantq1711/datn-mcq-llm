@@ -48,6 +48,31 @@ public interface QuestionImageRepository extends JpaRepository<QuestionImage, Lo
            "FROM QuestionImage q WHERE q.generatedQuestionId IN :questionIds ORDER BY q.generatedQuestionId ASC, q.ordinal ASC")
     List<MetadataProjection> findMetadataByGeneratedQuestionIdIn(@Param("questionIds") Collection<Integer> questionIds);
 
+    /** Dung lượng (byte đã lưu) của từng ảnh, để kiểm trần trước khi nạp byte (O2, xuất Word); không nạp cột data. */
+    interface SizeProjection {
+        Long getId();
+        Integer getByteSize();
+    }
+
+    @Query("SELECT q.id AS id, q.byteSize AS byteSize FROM QuestionImage q WHERE q.id IN :ids")
+    List<SizeProjection> findSizesByIdIn(@Param("ids") Collection<Long> ids);
+
+    /** Byte ảnh để nhúng vào file Word (O2): chỉ các cột cần cho data URI. */
+    interface ExportProjection {
+        Long getId();
+        String getMime();
+        byte[] getData();
+        Short getDisplayWidthMm();
+    }
+
+    @Query("SELECT q.id AS id, q.mime AS mime, q.data AS data, q.displayWidthMm AS displayWidthMm "
+           + "FROM QuestionImage q WHERE q.id IN :ids")
+    List<ExportProjection> findExportDataByIdIn(@Param("ids") Collection<Long> ids);
+
+    /** Id (trong {@code questionIds}) của các câu nguồn có ít nhất một ảnh, mọi role; không nạp cột data. */
+    @Query("SELECT DISTINCT q.generatedQuestionId FROM QuestionImage q WHERE q.generatedQuestionId IN :questionIds")
+    List<Integer> findGeneratedQuestionIdsWithImages(@Param("questionIds") Collection<Integer> questionIds);
+
     @Transactional
     @Modifying
     @Query("DELETE FROM QuestionImage q WHERE q.importBatchId = :batchId AND q.itemKey NOT IN :keptKeys")

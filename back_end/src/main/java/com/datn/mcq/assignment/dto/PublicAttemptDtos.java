@@ -28,10 +28,22 @@ public final class PublicAttemptDtos {
 
     public record PublicStatementDto(String key, String text) {}
 
-    /** Một câu cho học sinh làm: mcq có {@code options}, tf có {@code statements} (chỉ key và text), sa chỉ có đề. */
+    /**
+     * Một hình của câu (S1, docs/design/cau-co-hinh.md mục 4.1): token {@code ⟦img:<id>⟧} trong chữ câu trỏ tới {@code id}.
+     * {@code url} ký theo lượt làm ({@code /api/public/question-images/{id}?exp&a&sig}), giao diện dùng nguyên. Cố ý không có
+     * {@code role}, {@code sha256}, kích thước byte.
+     */
+    public record PublicImageDto(Long id, String mime, Integer widthPx, Integer heightPx, Short displayWidthMm,
+                                 String url) {}
+
+    /**
+     * Một câu cho học sinh làm: mcq có {@code options}, tf có {@code statements} (chỉ key và text), sa chỉ có đề.
+     * {@code images}: hình của câu dẫn, phương án, ý (không bao giờ có hình lời giải); không có khi câu không có hình.
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record PublicQuestionDto(Integer slotId, int number, String questionType, String questionText,
-                                    Map<String, String> options, List<PublicStatementDto> statements) {}
+                                    Map<String, String> options, List<PublicStatementDto> statements,
+                                    List<PublicImageDto> images) {}
 
     public record PublicPartDto(String part, List<PublicQuestionDto> items) {}
 
@@ -45,13 +57,14 @@ public final class PublicAttemptDtos {
     /**
      * Một câu khi xem lại (bài đã đóng, giáo viên bật {@code showSolutions}): đề, lựa chọn của em cạnh đáp án đúng, điểm câu
      * và lời giải. mcq: {@code options}, {@code yourChoice}, {@code correctOption}; tf: {@code statements}; sa:
-     * {@code yourText}, {@code saAnswer}. {@code explanation} null khi câu không có lời giải.
+     * {@code yourText}, {@code saAnswer}. {@code explanation} null khi câu không có lời giải. {@code images}: mọi hình của câu,
+     * kể cả hình lời giải (S1); không có khi câu không có hình.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record ReviewItemDto(Integer slotId, int number, String questionType, String questionText,
                                 Map<String, String> options, String yourChoice, String correctOption,
                                 List<ReviewStatementDto> statements, String yourText, String saAnswer, int correctCount,
-                                BigDecimal score, String explanation) {}
+                                BigDecimal score, String explanation, List<PublicImageDto> images) {}
 
     public record ReviewPartDto(String part, List<ReviewItemDto> items) {}
 

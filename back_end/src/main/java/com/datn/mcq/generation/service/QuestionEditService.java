@@ -30,6 +30,7 @@ import com.datn.mcq.qc.dto.DedupStatus;
 import com.datn.mcq.qc.dto.QcPipelineReport;
 import com.datn.mcq.qc.dto.QuestionQcInput;
 import com.datn.mcq.qc.orchestrator.QcOrchestrator;
+import com.datn.mcq.questionimage.service.QuestionImageToken;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,6 +60,8 @@ import java.util.Set;
  *   <li>Hủy job answer_check còn chờ của bản trước.</li>
  * </ol>
  * Trạng thái câu luôn do QcStatusDecider quyết (M-10, Q-2); Solver không bao giờ đổi đáp án giáo viên.
+ * <p>Chốt token hình (H2/H8): chỉ bộ nhập Word được tạo token {@code ⟦img:<id>⟧}, nên mọi trường chữ chứa {@code ⟦img:}
+ * đều bị từ chối (400 INVALID_REQUEST) và câu mang token không bao giờ được xếp job Solver.</p>
  */
 @Service
 public class QuestionEditService {
@@ -276,7 +279,17 @@ public class QuestionEditService {
         return saved;
     }
 
-    private void enqueueAnswerCheck(GeneratedQuestion version, QuestionType type) {
+    /**
+     * H8 (thiết kế G0, chốt phòng ngừa): câu có token hình {@code ⟦img:…⟧} ở phần Solver nhìn thấy (đề dẫn, phương án, ý
+     * Đúng/Sai) không được xếp job Solver, vì mô hình chỉ thấy chuỗi token chứ không thấy ảnh nên kết luận sẽ như câu sạch.
+     * Sau chốt H2 ({@link Content#fromInput}) không còn đường nào đưa token tới đây; chốt này giữ cho tới khi mở "sửa câu có hình".
+     */
+    void enqueueAnswerCheck(GeneratedQuestion version, QuestionType type) {
+        List<GeneratedQuestionStatement> statements = type == QuestionType.TF
+                ? statementRepository.findByQuestionIdOrderByPositionAsc(version.getId()) : List.of();
+        if (carriesImageToken(version, statements)) {
+            return;
+        }
         LocalDateTime now = LocalDateTime.now();
         GenerationJob job = new GenerationJob();
         job.setJobType(GenerationJob.TYPE_ANSWER_CHECK);
@@ -286,8 +299,7 @@ public class QuestionEditService {
         job.setQuestionId(version.getId());
         if (type == QuestionType.TF) {
             // CHECK chk_gj_target_statements: job tf ghi mức 4 ý (của câu, không đổi khi sửa).
-            List<Difficulty> levels = statementRepository.findByQuestionIdOrderByPositionAsc(version.getId()).stream()
-                    .map(GeneratedQuestionStatement::getLlmDifficulty).toList();
+            List<Difficulty> levels = statements.stream().map(GeneratedQuestionStatement::getLlmDifficulty).toList();
             if (levels.size() != 4 || levels.contains(null)) {
                 throw new IllegalStateException("Câu đúng/sai id=" + version.getId() + " thiếu mức độ của ý");
             }
@@ -299,6 +311,15 @@ public class QuestionEditService {
         job.setCreatedAt(now);
         job.setUpdatedAt(now);
         jobRepository.save(job);
+    }
+
+    private static boolean carriesImageToken(GeneratedQuestion q, List<GeneratedQuestionStatement> statements) {
+        return QuestionImageToken.containsDisallowedPrefix(q.getQuestionText())
+                || QuestionImageToken.containsDisallowedPrefix(q.getOptionA())
+                || QuestionImageToken.containsDisallowedPrefix(q.getOptionB())
+                || QuestionImageToken.containsDisallowedPrefix(q.getOptionC())
+                || QuestionImageToken.containsDisallowedPrefix(q.getOptionD())
+                || statements.stream().anyMatch(s -> QuestionImageToken.containsDisallowedPrefix(s.getStatementText()));
     }
 
     /** Nội dung một câu theo dạng, đã trim và (với đầu vào giáo viên) đã tự đóng "$". */
@@ -469,8 +490,30 @@ public class QuestionEditService {
          * câu dẫn và ý Đúng/Sai. Đáp số của câu trả lời ngắn là số viết trần: để bước kiểm định dạng báo lỗi dạng đáp án.
          */
         private static String text(String field, String value, QuestionType type, List<String> repairs) {
+            // H2 (thiết kế G0): token hình do bộ nhập tạo, không ai tự gõ id ảnh vào câu của mình (kể cả ảnh người khác).
+            if (QuestionImageToken.containsDisallowedPrefix(value)) {
+                throw invalid("Nội dung " + fieldLabel(field) + " chứa ký hiệu hình ảnh " + QuestionImageToken.PREFIX
+                        + " do hệ thống tạo ra, không thể nhập hay sửa tay. Hãy xóa đoạn đó; giáo viên chưa thể thêm hoặc đổi"
+                        + " hình trong câu.");
+            }
             return LlmOutputRepair.normalizeField(field, value.strip(), EXPLANATION.equals(field),
                     type == QuestionType.TF, repairs);
+        }
+
+        /** Tên trường (khóa của {@link #text}) bằng lời cho giáo viên: "đề bài", "phương án A", "ý a", "lời giải", "đáp số". */
+        private static String fieldLabel(String field) {
+            if (field.startsWith("option_")) {
+                return "phương án " + field.substring("option_".length()).toUpperCase();
+            }
+            if (field.startsWith("statement_")) {
+                return "ý " + field.substring("statement_".length());
+            }
+            return switch (field) {
+                case "question_text" -> "đề bài";
+                case EXPLANATION -> "lời giải";
+                case "answer" -> "đáp số";
+                default -> field;
+            };
         }
 
         private static String required(String value, String name) {

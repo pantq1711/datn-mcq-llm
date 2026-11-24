@@ -1,5 +1,13 @@
 // Kiểu dữ liệu bài giao trực tuyến, theo docs/api mục 11. Thời gian backend trả là giờ máy chủ, không kèm múi giờ.
 
+import type { QuestionImageView } from "../../../components/common/MathText/questionImage.types";
+
+/**
+ * Một hình của câu cho học sinh (S1, docs/api mục 11.2): không có `role`; `url` ký theo lượt làm
+ * ("/api/public/question-images/{id}?exp&a&sig"), dùng nguyên.
+ */
+export type PublicImage = QuestionImageView;
+
 export type AssignmentStatus = "open" | "closed";
 export type AttemptState = "in_progress" | "submitted" | "expired";
 export type PartCode = "I" | "II" | "III";
@@ -133,6 +141,8 @@ export interface PublicQuestion {
     questionText: string;
     options?: Record<string, string>;
     statements?: PublicStatement[];
+    /** Hình của đề, phương án, ý (không bao giờ có hình lời giải); vắng khi câu không có hình. */
+    images?: PublicImage[];
 }
 
 export interface PublicPart {
@@ -171,6 +181,8 @@ export interface ReviewItem {
     correctCount: number;
     score: number;
     explanation?: string;
+    /** Mọi hình của câu, kể cả hình lời giải; vắng khi câu không có hình. */
+    images?: PublicImage[];
 }
 
 export interface ReviewPart {

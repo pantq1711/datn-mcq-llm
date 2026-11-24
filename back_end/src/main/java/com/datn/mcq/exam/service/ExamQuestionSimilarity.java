@@ -9,7 +9,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
@@ -18,7 +20,10 @@ import java.util.regex.Pattern;
  *
  * <p>Khác dedup của ngân hàng và của câu sinh (quy tắc "câu chỉ khác số liệu không tính là trùng" giữ nguyên ở
  * {@code DedupChecker}): ở đây số liệu và tên điểm bị che đi nên câu cùng khuôn mới giống nhau. Kết quả chỉ để gắn cờ
- * "cần xem kỹ" khi xem đề, không loại câu, không đổi trạng thái, không lưu DB.
+ * THÔNG TIN ({@code infoReasons}) khi xem đề, không loại câu, không đổi trạng thái, không lưu DB. Trước 22/11 đây là lý do
+ * "cần xem kỹ"; giáo viên góp ý 21/11: đề hình học mức Biết theo yêu cầu đơn giản dễ có câu cùng khuôn, bị báo "nên đổi"
+ * và không được lưu hàng loạt là không hợp lý, nên hạ thành lưu ý (không bật needsReview, không tính vào số câu cần xem
+ * kỹ, không chặn lưu hàng loạt).
  *
  * <p>Chuẩn hóa ({@link #pattern}): bỏ ký hiệu {@code $} của công thức (khoảng trắng trong công thức đã bỏ bởi
  * {@link McqTextNormalizer#normalize}), thay mọi số bằng {@code #}, thay cụm 2-5 chữ in hoa (tên điểm, tên hình) bằng
@@ -35,7 +40,7 @@ public final class ExamQuestionSimilarity {
      * recall vì lớp này chỉ gắn cờ; xem dev-log L-55.
      */
     public static final double DEFAULT_THRESHOLD = 0.82;
-    /** Tiền tố lý do "cần xem kỹ", theo sau là Phần và số trong Phần của câu đứng trước, xem {@link #reason}. */
+    /** Tiền tố cờ thông tin (trước 22/11: lý do "cần xem kỹ"), theo sau là Phần và số trong Phần của câu đứng trước, xem {@link #reason}. */
     public static final String REASON_PREFIX = "similar_in_exam: ";
 
     /** Cụm 2-5 chữ in hoa đứng riêng (không dính chữ cái khác): tên điểm, tên hình như WXYZ, PQRS, AB. */
@@ -43,10 +48,13 @@ public final class ExamQuestionSimilarity {
     private static final Pattern NUMBER = Pattern.compile("\\d+(?:\\{,\\}\\d+|[.,]\\d+)?");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
+    /** Mọi câu cùng khóa hình rỗng: hành vi trước X1 (chỉ so chữ). */
+    private static final Function<ExamItemDto, String> NO_IMAGE_KEY = item -> "";
+
     private ExamQuestionSimilarity() {}
 
     /**
-     * Lý do "cần xem kỹ" trỏ tới câu {@code numberInPart} của Phần {@code part}, ví dụ {@code similar_in_exam: II.3}. Trang
+     * Cờ thông tin trỏ tới câu {@code numberInPart} của Phần {@code part}, ví dụ {@code similar_in_exam: II.3}. Trang
      * đề đánh số "Câu k" theo từng Phần nên lý do dùng đúng cách đánh số đó (không dùng số thứ tự toàn đề).
      */
     public static String reason(String part, int numberInPart) {
@@ -54,13 +62,22 @@ public final class ExamQuestionSimilarity {
     }
 
     /**
-     * Gắn lý do {@link #REASON_PREFIX} cho các câu cùng khuôn với câu đứng TRƯỚC nó trong đề (xem {@link #flaggable}). Mỗi
+     * Gắn cờ thông tin {@link #REASON_PREFIX} cho các câu cùng khuôn với câu đứng TRƯỚC nó trong đề (xem {@link #flaggable}). Mỗi
      * cặp chỉ câu có số thứ tự lớn hơn bị gắn; câu đã Giữ/Sửa trong đề này được so nhưng không bị gắn. Thay phần tử trong
      * các danh sách của {@code byPart} (theo thứ tự Phần hiển thị; mỗi chỗ một vị trí, kể cả chỗ chưa có câu).
      */
     public static void flag(Map<String, List<ExamItemDto>> byPart, double threshold) {
+        flag(byPart, threshold, NO_IMAGE_KEY);
+    }
+
+    /**
+     * Như {@link #flag(Map, double)}; X1 (H7): hai câu khác khóa hình ({@code imageKey}, rỗng khi không có hình) không bao giờ
+     * cùng khuôn, như quy tắc của {@code DedupChecker}.
+     */
+    public static void flag(Map<String, List<ExamItemDto>> byPart, double threshold,
+                            Function<ExamItemDto, String> imageKey) {
         List<ExamItemDto> flat = byPart.values().stream().flatMap(List::stream).toList();
-        Map<Integer, List<Integer>> similar = findSimilar(flat, threshold);
+        Map<Integer, List<Integer>> similar = findSimilar(flat, threshold, imageKey);
         if (similar.isEmpty()) {
             return;
         }
@@ -79,7 +96,7 @@ public final class ExamQuestionSimilarity {
                 ExamItemDto item = items.get(i);
                 List<Integer> earlier = similar.get(position);
                 if (earlier != null && flaggable(item)) {
-                    items.set(i, item.withExtraReasons(earlier.stream()
+                    items.set(i, item.withExtraInfo(earlier.stream()
                             .map(p -> reason(partOf.get(p - 1), numberOf.get(p - 1))).toList()));
                 }
             }
@@ -120,10 +137,17 @@ public final class ExamQuestionSimilarity {
      *         có trong kết quả
      */
     public static Map<Integer, List<Integer>> findSimilar(List<ExamItemDto> items, double threshold) {
+        return findSimilar(items, threshold, NO_IMAGE_KEY);
+    }
+
+    /** Như {@link #findSimilar(List, double)}, cặp khác khóa hình không tính (X1, H7). */
+    public static Map<Integer, List<Integer>> findSimilar(List<ExamItemDto> items, double threshold,
+                                                          Function<ExamItemDto, String> imageKey) {
         Map<Integer, List<Integer>> out = new TreeMap<>();
         for (int i = 0; i < items.size(); i++) {
             for (int j = i + 1; j < items.size(); j++) {
-                if (similar(items.get(i), items.get(j), threshold)) {
+                if (Objects.equals(imageKey.apply(items.get(i)), imageKey.apply(items.get(j)))
+                        && similar(items.get(i), items.get(j), threshold)) {
                     out.computeIfAbsent(j + 1, k -> new ArrayList<>()).add(i + 1);
                 }
             }

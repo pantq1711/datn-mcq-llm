@@ -60,20 +60,21 @@ com.datn.mcq
 ## Hướng phụ thuộc (không được tạo vòng)
 
 ```
-exam        ──► matrix, generation, qc, review, bank, catalog, user, material, mathtype   (V7: tạo đề theo ma trận; W2-3: material; 30/10: mathtype)
+exam        ──► matrix, generation, qc, review, bank, catalog, user, material, mathtype, questionimage   (V7: tạo đề theo ma trận; W2-3: material; 30/10: mathtype; 22/11: questionimage, chỉ QuestionImageService.signedImagesBySourceQuestion để xem đề trả images, H3)
 matrix      ──► catalog
 material    ──► (chỉ common; passage/PassageSelector là hàm thuần)   (W2-3 bước 4: exam ──► material qua MaterialService; material khai báo MaterialUsageLookup, exam cài đặt)
 bankimport  ──► bank, catalog, generation, review, material.extract (chỉ DocxInputGuard), mtef, qc (DedupChecker/DedupCandidate thuần, không gọi mạng), questionimage   (V26, quyết định 3/11; 11/11: questionimage; không bao giờ ──► llm)
 review      ──► generation, bank, catalog, experiment, user   (25/10: chỉ còn AssistedKeepService)
-generation  ──► qc, llm
+generation  ──► qc, llm, questionimage   (22/11: chỉ QuestionImageToken, hàm thuần: parser xóa token ⟦img:⟧ khỏi đầu ra LLM, sửa câu chặn token; H2 thiết kế G0)
 experiment  ──► generation, catalog
 goldset     ──► qc, user
 qc          ──► llm   (GroundingChecker và AnswerSolverChecker gọi LlmClient)
 auth        ──► user                                   (W1-1, duyệt ngày 24/10)
 questionimage ──► user                                 (V34, PR #61: module lá, chỉ kiểm trạng thái user; native SQL chỉ đọc)
-bank, catalog, user, llm ──► (chỉ common/config)
+bank        ──► questionimage                          (22/11, H3: chỉ QuestionImageService.signedImagesBySourceQuestion và QuestionImageDto để danh sách và chi tiết ngân hàng trả images)
+catalog, user, llm ──► (chỉ common/config)
 mathtype    ──► (không module nào; chỉ JDK, Apache POI, JLaTeXMath)
-assignment  ──► exam (chỉ ExamAssignmentSource, ExamDeletionGuard), bank (BankService.getItems), config   (V32, 16/11; exam không biết assignment)
+assignment  ──► exam (chỉ ExamAssignmentSource, ExamDeletionGuard), bank (BankService.getItems; hình câu qua BankService, D3 23/11, không có cạnh tới questionimage), config   (V32, 16/11; exam không biết assignment)
 ```
 
 Bài giao trực tuyến (V32, quyết định 16/11): `exam` khai báo `ExamAssignmentSource` (đề của người gọi kèm các chỗ theo thứ tự
@@ -95,7 +96,7 @@ Quy tắc:
 7. `llm` chỉ gọi dịch vụ ngoài, không biết đến entity của dự án.
 8. Quy tắc DB không tự chặn được (xem `docs/contract/enums.md`, mục "Quy tắc đi kèm") đặt trong service của module `review`, `exam`, `goldset`.
 9. Chế độ giáo viên là chế độ duy nhất (25/10, form chấm mù đã gỡ): API xem đề của module `exam` (`/api/exams/**`) có đáp án, lời giải và cờ từ kết quả QC (quyết định 22/10 trong `docs/ai-development-rules.md`). Module `review` không còn controller và DTO.
-10. `generation` không biết `exam`/`matrix`: run sinh câu theo ô mang thông số ô ở `experiment_run.hyperparams` (`MatrixCellSpec`), worker dựng prompt từ đó; `exam` đối soát kết quả qua `GenerationService.latestJobForSlot`. Ngoại lệ đọc chéo bảng: `ExamSlotRepository.findBankCandidates` là truy vấn native **chỉ đọc** trên `bank_item`, `bank_item_statement`, `generated_question`, `question_template`, `exam_matrix_cell`, `exam_question` để chọn câu ngân hàng khớp ô (W1-3: thêm `exam_slot` và `exam` để xếp hạng mềm theo số đề đã dùng và lần dùng gần nhất; PR I1–I3: đọc thêm `question_image` để loại câu có hình khỏi đề trước khi O1/O2 xong). Ngoại lệ thứ hai (D1): `GenerationQuotaRepository.countActiveGenerateJobs` (module `exam`) là truy vấn native **chỉ đọc** trên `generation_job` (nối `exam_slot`, `exam`) để đếm job sinh câu đang chờ/chạy của một giáo viên; `GenerationQuotaService` (module `exam`) khóa dòng `generation_quota` và kiểm trần trong transaction tạo job.
+10. `generation` không biết `exam`/`matrix`: run sinh câu theo ô mang thông số ô ở `experiment_run.hyperparams` (`MatrixCellSpec`), worker dựng prompt từ đó; `exam` đối soát kết quả qua `GenerationService.latestJobForSlot`. Ngoại lệ đọc chéo bảng: `ExamSlotRepository.findBankCandidates` là truy vấn native **chỉ đọc** trên `bank_item`, `bank_item_statement`, `generated_question`, `question_template`, `exam_matrix_cell`, `exam_question` để chọn câu ngân hàng khớp ô (W1-3: thêm `exam_slot` và `exam` để xếp hạng mềm theo số đề đã dùng và lần dùng gần nhất; PR I1–I3 từng đọc thêm `question_image` để loại câu có hình khỏi đề trước khi O1/O2 xong; X1 ngày 24/11 bỏ điều kiện đó nên truy vấn không còn đọc `question_image`). Ngoại lệ thứ hai (D1): `GenerationQuotaRepository.countActiveGenerateJobs` (module `exam`) là truy vấn native **chỉ đọc** trên `generation_job` (nối `exam_slot`, `exam`) để đếm job sinh câu đang chờ/chạy của một giáo viên; `GenerationQuotaService` (module `exam`) khóa dòng `generation_quota` và kiểm trần trong transaction tạo job.
 11. Xác thực và phân quyền (W1-1): quyền thô theo URL và vai trò (TEACHER, ADMIN) đặt ở `config.SecurityConfig`; đường chưa khai báo bị chặn. Quyền sở hữu (giáo viên chỉ thấy ma trận, đề của mình) kiểm tra ở **service**: controller nhận `CurrentUser` rồi truyền `actorId` xuống; service tìm bằng `findByIdAndCreatedBy` và trả 404 giống bản ghi không tồn tại. Kiểm tra chủ sở hữu phải đứng **trước** `reconcile` (đối soát có ghi DB). Service không đọc `SecurityContext`, nên worker, scheduler và job phục hồi (không đi qua HTTP) không cần đăng nhập.
 12. Ngân hàng câu (`bank_item`) dùng chung cho mọi giáo viên (quyết định H1 ngày 24/10): tạo đề lấy câu ngân hàng không lọc theo người.
 13. Giáo viên sửa câu (W1-2, V13): `exam` (`ExamActionService.editQuestion`) kiểm chủ sở hữu, khóa chỗ, kiểm trạng thái rồi gọi `generation` (`QuestionEditService`) tạo bản sửa là một dòng `generated_question` mới (`edited_from_question_id`), không sửa dòng cũ. QC không cần LLM chạy trong transaction đó; Solver chạy qua hàng đợi `generation_job` có sẵn (`job_type = 'answer_check'`, không gắn chỗ), poller gọi Solver ngoài transaction rồi ghi kết quả, trạng thái câu và job `done` trong một transaction ngắn (`QcOrchestrator.callSolver` / `recordSolver`). Không thêm chiều phụ thuộc module. Mọi thống kê về đầu ra LLM phải lọc `edited_from_question_id IS NULL`.

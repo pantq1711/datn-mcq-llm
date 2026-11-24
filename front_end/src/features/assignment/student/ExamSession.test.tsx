@@ -1,7 +1,8 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { FIGURE_FALLBACK_TEXT } from "../../../components/common/MathText/questionImage.utils";
 import { axiosError, makeAttemptView } from "../test/fixtures";
 import type { SubmitAnswerPayload, SubmitResult } from "../types/assignment.types";
 import { emptyDraft, loadDraft } from "../utils/attemptStorage";
@@ -71,6 +72,64 @@ describe("ExamSession: làm bài", () => {
         await user.clear(input);
         await user.type(input, "0.125");
         expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("câu có hình (S2): hình ở đề, phương án và ý Đúng/Sai; hình tải lỗi thì hiện chữ thay thế", () => {
+        const url = (id: number) => `/api/public/question-images/${id}?exp=9&a=5&sig=abc`;
+        const base = makeAttemptView();
+        const [mcqPart, tfPart, saPart] = base.parts!;
+        const view = makeAttemptView({
+            parts: [
+                {
+                    ...mcqPart,
+                    items: [
+                        {
+                            ...mcqPart.items[0],
+                            questionText: "Cho tam giác như hình:\n⟦img:21⟧\nTính BC.",
+                            options: { A: "$5$", B: "$7$", C: "⟦img:22⟧", D: "$25$" },
+                            images: [
+                                { id: 21, url: url(21), displayWidthMm: 120, widthPx: 1600, heightPx: 900 },
+                                { id: 22, url: url(22), displayWidthMm: 35 },
+                            ],
+                        },
+                    ],
+                },
+                {
+                    ...tfPart,
+                    items: [
+                        {
+                            ...tfPart.items[0],
+                            statements: [{ key: "a", text: "⟦img:23⟧" }, { key: "b", text: "Ý không hình." }],
+                            images: [{ id: 23, url: url(23), displayWidthMm: 40 }],
+                        },
+                    ],
+                },
+                saPart,
+            ],
+        });
+        render(
+            <ExamSession
+                code="ABC123"
+                title="Kiểm tra 15 phút"
+                token="tok"
+                view={view}
+                initialDraft={emptyDraft()}
+                send={vi.fn()}
+                sleep={immediate}
+                onSubmitted={vi.fn()}
+            />
+        );
+
+        // Thẻ <img> thật (biểu tượng antd cũng có role="img").
+        const images = Array.from(document.querySelectorAll("img"));
+        expect(images.map((img) => img.getAttribute("src"))).toEqual([url(21), url(22), url(23)]);
+        // Ảnh rộng (120 mm ≈ 454 px) vẫn bị chặn ở bề rộng khung để không tràn ngang màn điện thoại.
+        expect(images[0]).toHaveStyle({ maxWidth: "100%" });
+        expect(document.body.textContent).not.toContain("⟦img:");
+
+        fireEvent.error(images[1]);
+        expect(screen.getByText(FIGURE_FALLBACK_TEXT)).toBeInTheDocument();
+        expect(document.querySelectorAll("img")).toHaveLength(2);
     });
 });
 

@@ -333,11 +333,15 @@ class ReplaceFromBankTest extends ExamFlowTestBase {
     }
 
     @Test
-    void doiBangNganHangKhongLayCauCoHinh() throws Exception {
+    void doiBangNganHangLayDuocCauCoHinh() throws Exception {
+        // X1 (24/11): bỏ điều kiện loại tạm của PR I1–I3; Đổi qua lại có hình ↔ không hình ở ExamFigureBankTest.
         int[] e = generatedExam(1);
         int withImage = bankMcq(TOPIC, "easy", "Cho hình vẽ sau.\n⟦img:1⟧");
         attachImageToBankItem(withImage);
 
+        JsonNode item = replaceBank(e[0], e[1]);
+        assertEquals(withImage, item.get("bankItemId").asInt());
+        assertEquals(1, item.get("images").size());
         assertExhausted(e[0], e[1]);
     }
 }

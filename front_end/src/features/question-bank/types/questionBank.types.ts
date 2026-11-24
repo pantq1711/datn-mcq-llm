@@ -1,4 +1,6 @@
-import type { BankVisibility, ExamItemStatement } from "../../exam/types/exam.types";
+import type { BankVisibility, ExamItemStatement, QuestionImageInfo } from "../../exam/types/exam.types";
+
+export type { QuestionImageInfo };
 
 export type QuestionDifficulty = "easy" | "medium" | "hard";
 export type QuestionType = "mcq" | "tf" | "sa";
@@ -25,6 +27,8 @@ export interface QuestionTableItem {
     lastUsedAt?: string | null
     /** NV-30: câu dùng chung hay câu riêng của người xem. */
     visibility?: BankVisibility;
+    /** Ảnh của câu (G0 H3, URL ký cho người xem). Vắng khi câu không có hình. */
+    images?: QuestionImageInfo[];
 }
 
 export interface QuestionFilterValues {
@@ -107,4 +111,6 @@ export interface BankItemDetail {
     visibility?: BankVisibility;
     /** NV-21: người xem gỡ được câu khỏi ngân hàng (người lưu câu, người tải câu nhập, hoặc admin). */
     canRemove?: boolean;
+    /** Ảnh của câu (G0 H3, URL ký cho người xem). Vắng khi câu không có hình. */
+    images?: QuestionImageInfo[];
 }

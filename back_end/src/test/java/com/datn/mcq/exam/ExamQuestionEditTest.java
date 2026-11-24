@@ -554,6 +554,67 @@ class ExamQuestionEditTest {
         assertEquals(mcqBase, questionOf(mcq));
     }
 
+    /** H2 (B7): bản sửa có token hình ⟦img:…⟧ bị từ chối 400 INVALID_REQUEST, nêu đúng trường, không ghi gì. */
+    private void assertImageTokenRejected(int examId, int slot, ObjectNode body, String fieldLabel) throws Exception {
+        List<Integer> before = footprint();
+        JsonNode r = json(putQuestion(examId, slot, body).andExpect(status().isBadRequest()));
+        assertEquals("INVALID_REQUEST", r.get("code").asText(), r.toString());
+        String message = r.get("error").asText();
+        assertTrue(message.contains("⟦img:"), message);
+        assertTrue(message.contains(fieldLabel), "thông báo phải nêu trường \"" + fieldLabel + "\": " + message);
+        assertEquals(before, footprint(), "bản sửa bị từ chối thì không ghi gì (" + fieldLabel + ")");
+    }
+
+    @Test
+    void banSuaCoTokenHinhTra400ChoTungTruongMcq() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int base = questionOf(slot);
+
+        assertImageTokenRejected(examId, slot, mcqBody(base).put("questionText", "Cho hình ⟦img:1⟧ Tính $x$."), "đề bài");
+        assertImageTokenRejected(examId, slot, mcqBody(base).put("optionA", "⟦img:99999⟧"), "phương án A");
+        assertImageTokenRejected(examId, slot, mcqBody(base).put("optionB", "$2$ ⟦img:7⟧"), "phương án B");
+        assertImageTokenRejected(examId, slot, mcqBody(base).put("optionC", "⟦img:7"), "phương án C");
+        assertImageTokenRejected(examId, slot, mcqBody(base).put("optionD", "⟦img:abc⟧"), "phương án D");
+        assertImageTokenRejected(examId, slot, mcqBody(base).put("explanation", "Xem ⟦img:7⟧."), "lời giải");
+        assertEquals(base, questionOf(slot));
+    }
+
+    @Test
+    void banSuaCoTokenHinhTra400ChoTfVaSa() throws Exception {
+        int examId = readyExam();
+        int tfSlot = slotId(examId, "tf", 1);
+        int tfBase = questionOf(tfSlot);
+        int saSlot = slotId(examId, "sa", 1);
+        int saBase = questionOf(saSlot);
+
+        assertImageTokenRejected(examId, tfSlot, tfBody(tfBase).put("questionText", "Cho ⟦img:2⟧ hình thang."), "đề bài");
+        String[] keys = {"a", "b", "c", "d"};
+        for (int i = 0; i < 4; i++) {
+            ObjectNode body = tfBody(tfBase);
+            ((ObjectNode) body.get("statements").get(i)).put("text", "Ý ⟦img:3⟧");
+            assertImageTokenRejected(examId, tfSlot, body, "ý " + keys[i]);
+        }
+        assertImageTokenRejected(examId, tfSlot, tfBody(tfBase).put("explanation", "⟦img:4⟧"), "lời giải");
+
+        assertImageTokenRejected(examId, saSlot, saBody(saBase).put("questionText", "Tính ⟦img:5⟧."), "đề bài");
+        assertImageTokenRejected(examId, saSlot, saBody(saBase).put("saAnswer", "⟦img:6⟧"), "đáp số");
+        assertImageTokenRejected(examId, saSlot, saBody(saBase).put("explanation", "⟦img:6⟧"), "lời giải");
+        assertEquals(tfBase, questionOf(tfSlot));
+        assertEquals(saBase, questionOf(saSlot));
+    }
+
+    @Test
+    void ngoacVuongThuongKhongPhaiTokenHinhVaVanLuuDuoc() throws Exception {
+        int examId = readyExam();
+        int slot = slotId(examId, "mcq", 1);
+        int base = questionOf(slot);
+
+        JsonNode item = json(putQuestion(examId, slot, mcqBody(base).put("explanation", "Ký hiệu [img:1] chỉ là chữ."))
+                .andExpect(status().isOk()));
+        assertTrue(item.get("explanation").asText().contains("[img:1]"), item.toString());
+    }
+
     @Test
     void tuDongDongDoLaCoGhiNhanCanhBao() throws Exception {
         int examId = readyExam();

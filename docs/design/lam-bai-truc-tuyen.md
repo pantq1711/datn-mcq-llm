@@ -129,7 +129,7 @@ Index `idx_is_bank_item (bank_item_id)`. Không có cột cộng dồn trên `ba
 | Mọi khóa `sa` ở dạng chặt (số nguyên / thập phân; câu nhập từ Word hoặc trước 27/10 có thể là phân số, căn mà điện thoại không gõ được) | 409 `ASSIGN_SA_KEY_UNSUPPORTED`, kèm danh sách câu |
 | `closesAt` sau hiện tại ít nhất `durationMinutes`, không quá 30 ngày; `durationMinutes` 5..180; đã tick đồng ý | 400 `INVALID_REQUEST` |
 
-Câu có hình: chưa có trên main nên **chưa chặn** (TODO ở mục 6).
+Câu có hình: giao được như mọi câu từ 24/11 (PR A2 gỡ `ASSIGN_HAS_FIGURE` của A1 ngày 23/11, mục 6).
 
 Một đề giao được nhiều lần (mỗi lần một `public_code`). Đổi / Sửa câu trên đề sau khi giao **không ảnh hưởng** bài đã giao (F1).
 
@@ -330,11 +330,12 @@ File `docs/thong-ke/11-hau-kiem.sql`: một câu `SELECT`, mỗi dòng `item_sta
 
 ## 6. Câu có hình
 
-- Hiện tại main chưa có câu có hình nên **chưa chặn gì** (đã chốt 14/11).
-- **TODO cho PR câu có hình:** thêm vào `AssignmentService.create` điều kiện "không câu nào trong đề có hình" → 409
-  `ASSIGN_HAS_FIGURE` (nút Giao bài mờ kèm lý do), kèm test. Thiếu việc này thì học sinh nhận câu thiếu hình.
-- Lý do không làm ngay: ảnh hiện thiết kế trả bằng URL có chữ ký cho người đã đăng nhập (H3). Mở cho học sinh cần một đường ảnh
-  công khai gắn với token lượt làm, là một PR riêng sau này.
+- **Đã gỡ (24/11, PR A2 của `docs/design/cau-co-hinh.md` mục 4.5):** đề có câu có hình giao được như mọi đề; nút Giao bài
+  online chỉ còn mờ khi còn câu chưa Giữ/Sửa. Học sinh xem hình qua URL ký theo lượt làm (D1 = cách A, PR S1 + S2): khi làm
+  bài có hình đề, phương án và ý Đúng/Sai, không có hình lời giải; hình lời giải chỉ có ở phần xem lại sau khi đóng bài, hết
+  ân hạn và `showSolutions` bật.
+- *Lịch sử (23/11, PR A1):* `AssignmentService.create` từng trả 409 `ASSIGN_HAS_FIGURE` (kèm `errors` là các chỗ có hình) vì
+  ảnh khi đó chỉ trả bằng URL có chữ ký cho người đã đăng nhập (H3).
 
 ## 7. Quyền riêng tư
 
@@ -420,7 +421,7 @@ trang đề ở frontend nên PR merge sau phải rebase.
 
 ## 11. Không làm (nhắc lại phạm vi)
 
-Tài khoản học sinh, quản lý lớp, chống gian lận, trộn đề / trộn phương án theo học sinh, lưu nháp ở server, tự luận, câu có hình,
+Tài khoản học sinh, quản lý lớp, chống gian lận, trộn đề / trộn phương án theo học sinh, lưu nháp ở server, tự luận,
 xuất bảng điểm ra file, gộp thống kê nhiều bài giao, cột cộng dồn trên `bank_item`, lọc ngân hàng theo cờ hậu kiểm, biểu đồ.
 
 ## 12. Câu hỏi cho An – ĐÃ CHỐT 14/11/2026

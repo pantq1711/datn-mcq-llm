@@ -49,11 +49,14 @@ public class PublicAttemptService {
     private final AssignmentRepository repository;
     private final AssignmentLoader loader;
     private final PublicRateLimiter limiter;
+    private final PublicAttemptImageService images;
 
-    public PublicAttemptService(AssignmentRepository repository, AssignmentLoader loader, PublicRateLimiter limiter) {
+    public PublicAttemptService(AssignmentRepository repository, AssignmentLoader loader, PublicRateLimiter limiter,
+                                PublicAttemptImageService images) {
         this.repository = repository;
         this.loader = loader;
         this.limiter = limiter;
+        this.images = images;
     }
 
     private static LocalDateTime now() {
@@ -157,7 +160,11 @@ public class PublicAttemptService {
         boolean canSubmit = AttemptRules.canSubmit(a, attempt, now);
         boolean released = AttemptRules.resultsReleased(a, now);
         boolean duplicate = repository.countSameSeat(a.id(), attempt.classLabel(), attempt.seatNo()) > 1;
-        List<PublicPartDto> parts = canSubmit ? paper.publicParts() : null;
+        // S1: hình trong parts không bao giờ có hình lời giải; URL sống tới hạn của lượt + ân hạn.
+        List<PublicPartDto> parts = canSubmit
+                ? paper.publicParts(images.images(paper, attempt.id(), false,
+                        PublicAttemptImageService.attemptExp(attempt)))
+                : null;
         ResultDto result = null;
         List<ReviewPartDto> review = null;
         if (released && (a.showScore() || a.showSolutions())) {
@@ -170,7 +177,7 @@ public class PublicAttemptService {
                         AssignmentPaper.score10(attempt.score(), attempt.maxScore()), paper.partScores(answers));
             }
             if (a.showSolutions()) {
-                review = paper.review(answers);
+                review = paper.review(answers, images.images(paper, attempt.id(), true, null));
             }
         }
         return new AttemptViewDto(token, attempt.classLabel(), attempt.seatNo(), duplicate, attempt.startedAt(),

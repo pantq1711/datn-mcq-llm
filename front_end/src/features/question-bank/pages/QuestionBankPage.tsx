@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button, Card, message, Tooltip, Typography } from "antd";
+import { useNavigate } from "react-router-dom";
+import { Button, Card, message, Typography } from "antd";
 import { FileWordOutlined, ReadOutlined } from "@ant-design/icons";
 import QuestionDetail from "../components/QuestionDetail";
 import QuestionFilters from "../components/QuestionFilters";
@@ -23,7 +24,10 @@ const initialFilters: QuestionFilterValues = {
     content: null
 };
 
+const IMPORT_PATH = "/question-bank/import";
+
 export default function QuestionBankPage() {
+    const navigate = useNavigate();
     const [filters, setFilters] =
         useState<QuestionFilterValues>(initialFilters);
 
@@ -165,11 +169,17 @@ export default function QuestionBankPage() {
                         Gồm câu dùng chung và câu riêng của thầy/cô (cột "Phạm vi"). Câu riêng chỉ thầy/cô thấy.
                     </Paragraph>
                 </div>
-                <Tooltip title="Sắp có: nhập câu từ file Word của thầy/cô.">
-                    <Button icon={<FileWordOutlined />} disabled>
-                        Nhập từ Word
-                    </Button>
-                </Tooltip>
+                {/* href để mở được bằng chuột phải/tab mới; bấm thường thì chuyển trang trong ứng dụng */}
+                <Button
+                    icon={<FileWordOutlined />}
+                    href={IMPORT_PATH}
+                    onClick={(event) => {
+                        event.preventDefault();
+                        navigate(IMPORT_PATH);
+                    }}
+                >
+                    Nhập từ Word
+                </Button>
             </div>
 
             <div className="question-bank-page-filters">

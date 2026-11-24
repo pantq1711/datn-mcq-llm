@@ -64,8 +64,9 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
      *
      * <p>NV-01 (V31): đề đã xóa ({@code exam.deleted_at}) không tính vào số đề đã dùng và lần dùng gần nhất của xếp hạng mềm.
      *
-     * <p>PR I1–I3 (chặn tạm trước O1/O2): loại câu có hình ({@code question_image}, V34) để câu có hình chưa vào đề khi đầu
-     * ra xem đề/xuất Word chưa hỗ trợ hình.
+     * <p>X1 (24/11, docs/design/cau-co-hinh.md mục 4.3): câu có hình ({@code question_image}, V34) là ứng viên như mọi câu
+     * (trước đó PR I1–I3 loại tạm khi xem đề/xuất Word chưa hỗ trợ hình). Xếp hạng không đổi: câu mới nhập chưa dùng nên lên
+     * đầu như mọi câu chưa dùng.
      */
     @Query(value = """
             WITH RECURSIVE out_of_reach(id) AS (
@@ -101,7 +102,6 @@ public interface ExamSlotRepository extends JpaRepository<ExamSlot, Integer> {
               AND ((:type <> 'tf' AND b.difficulty = :difficulty)
                    OR (:type = 'tf' AND (SELECT string_agg(s.difficulty, ',' ORDER BY s.position)
                                          FROM bank_item_statement s WHERE s.bank_item_id = b.id) = :levels))
-              AND NOT EXISTS (SELECT 1 FROM question_image qi WHERE qi.generated_question_id = g.id)
               AND b.id NOT IN (SELECT es.bank_item_id FROM exam_slot es
                                WHERE es.exam_id = :examId AND es.bank_item_id IS NOT NULL)
               AND b.id NOT IN (SELECT a.bank_item_id FROM exam_slot_action a JOIN exam_slot es ON es.id = a.slot_id

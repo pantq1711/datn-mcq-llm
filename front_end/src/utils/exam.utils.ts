@@ -394,7 +394,9 @@ export function hasContentFlag(needsReview: boolean | undefined, reasons: string
 
 /**
  * Câu được "Lưu hàng loạt" (CT-7): đã có câu, chưa lưu, không đang tự kiểm tra lại bản sửa, và không có lý do cần xem kỹ
- * nào (kể cả `similar_in_exam`: giáo viên nên đổi một trong hai câu trước). Cờ thông tin (`infoReasons`) không tính là cờ.
+ * nào. Cờ thông tin (`infoReasons`) không tính là cờ; từ 22/11 `similar_in_exam` là cờ thông tin nên câu chỉ cùng dạng với
+ * câu khác trong đề vẫn được lưu hàng loạt (góp ý giáo viên 21/11). Dữ liệu cũ còn `similar_in_exam` trong `reviewReasons`
+ * thì vẫn không lưu hàng loạt.
  */
 export function isBulkKeepCandidate(question: Pick<ExamQuestionItem, "state" | "qcState" | "needsReview" | "reviewReasons">): boolean {
     return (question.state ?? "ready") === "ready"
@@ -510,6 +512,8 @@ export function summarizeQc(question: ExamQuestionItem): QcSummaryLine[] | null 
 
     const formatIssue = reasons.some((r) => r.startsWith("warning:"));
     const duplicate = reasons.some((r) => r.startsWith("duplicate:") || r.startsWith("similar_in_exam:"));
+    // 22/11: câu cùng dạng trong đề là cờ thông tin (infoReasons), chỉ ghi chú, không tô màu lỗi
+    const sameTypeInExam = (question.infoReasons ?? []).some((r) => r.startsWith("similar_in_exam:"));
 
     let solver: { value: string; ok: boolean };
     if (question.qcState === "checking" || has("solver_pending")) {
@@ -530,7 +534,11 @@ export function summarizeQc(question: ExamQuestionItem): QcSummaryLine[] | null 
 
     return [
         { label: "Trình bày", value: formatIssue ? "cần xem lại" : "đạt", ok: !formatIssue },
-        { label: "Trùng câu khác", value: duplicate ? "có câu gần giống" : "không", ok: !duplicate },
+        {
+            label: "Trùng câu khác",
+            value: duplicate ? "có câu gần giống" : sameTypeInExam ? "không (có câu cùng dạng trong đề)" : "không",
+            ok: !duplicate,
+        },
         { label: "Tự giải lại", ...solver },
     ];
 }

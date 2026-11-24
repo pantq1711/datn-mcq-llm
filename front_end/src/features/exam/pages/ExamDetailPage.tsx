@@ -70,6 +70,8 @@ function toQuestionItem(item: ExamItemDto): ExamQuestionItem {
         infoReasons: item.infoReasons ?? [],
         requests: item.requests,
         inheritedRequests: item.inheritedRequests,
+        // Ảnh của câu ngân hàng có hình (URL ký cho người xem); thiếu thì MathText chỉ hiện chữ thay thế
+        images: item.images,
     };
 }
 
@@ -250,6 +252,11 @@ export default function ExamDetailPage() {
     const notKeptCount = (detail?.parts ?? [])
         .flatMap((p) => p.items)
         .filter((i) => i.state !== "kept" && i.state !== "edited").length;
+    // Đề có câu có hình giao được như mọi đề (A2): học sinh xem hình qua URL ký theo lượt làm
+    const assignBlockReason =
+        notKeptCount > 0
+            ? `Còn ${notKeptCount} câu chưa Giữ. Giữ hết các câu rồi mới giao bài được.`
+            : "";
 
     // Đang lưu hàng loạt thì không tự tải lại giữa chừng (tải lại một lần khi xong)
     const hasPendingWork = !pollingStoppedDueToError && !bulkSaving && pendingSummary.total > 0;
@@ -865,11 +872,11 @@ export default function ExamDetailPage() {
 
                     <Space size={8} className="exam-detail-page-actions">
                         {/* Giao bài online: cần mọi câu đã Giữ/Sửa (backend cũng kiểm, 409 ASSIGN_NOT_ALL_KEPT) */}
-                        <Tooltip title={notKeptCount > 0 ? `Còn ${notKeptCount} câu chưa Giữ. Giữ hết các câu rồi mới giao bài được.` : undefined}>
+                        <Tooltip title={assignBlockReason || undefined}>
                             <span>
                                 <Button
                                     icon={<SendOutlined />}
-                                    disabled={notKeptCount > 0}
+                                    disabled={assignBlockReason !== ""}
                                     onClick={() => setAssignOpen(true)}
                                 >
                                     Giao bài online

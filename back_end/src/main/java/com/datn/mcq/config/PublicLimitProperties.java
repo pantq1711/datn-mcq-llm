@@ -12,15 +12,19 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param startPerIpPerMinute        bắt đầu lượt làm (POST /api/public/assignments/{code}/attempts), mỗi IP
  * @param resumePerAttemptPerMinute  mở lại lượt làm (GET /api/public/attempts/current), mỗi lượt
  * @param submitPerAttemptPerMinute  nộp bài (POST /api/public/attempts/current/submit), mỗi lượt
+ * @param imagePerAttemptPerMinute   tải ảnh câu hỏi (GET /api/public/question-images/{id}), mỗi lượt; mặc định 300 đủ cho
+ *                                   đề 80 ảnh tải lại vài lần (S1, docs/design/cau-co-hinh.md mục 4.1)
  */
 @ConfigurationProperties(prefix = "app.public-limit")
 public record PublicLimitProperties(
         @DefaultValue("200") int startPerIpPerMinute,
         @DefaultValue("30") int resumePerAttemptPerMinute,
-        @DefaultValue("20") int submitPerAttemptPerMinute
+        @DefaultValue("20") int submitPerAttemptPerMinute,
+        @DefaultValue("300") int imagePerAttemptPerMinute
 ) {
     public PublicLimitProperties {
-        if (startPerIpPerMinute < 1 || resumePerAttemptPerMinute < 1 || submitPerAttemptPerMinute < 1) {
+        if (startPerIpPerMinute < 1 || resumePerAttemptPerMinute < 1 || submitPerAttemptPerMinute < 1
+                || imagePerAttemptPerMinute < 1) {
             throw new IllegalArgumentException("app.public-limit.*-per-minute phải từ 1 trở lên");
         }
     }

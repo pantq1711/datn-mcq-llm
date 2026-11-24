@@ -6,6 +6,7 @@ import com.datn.mcq.enums.Option;
 import com.datn.mcq.enums.QuestionType;
 import com.datn.mcq.enums.StatementKey;
 import com.datn.mcq.enums.TruthValue;
+import com.datn.mcq.questionimage.dto.QuestionImageDto;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.math.BigDecimal;
@@ -33,9 +34,8 @@ public final class ExamViewDtos {
      *                      solver_unparseable, statement_undecidable, dedup_not_run, explanation_draft_suspect (lời giải có
      *                      "tính lại", "làm lại" hoặc "sửa lại", thẩm định 31/10), "warning: ..." (cảnh báo format);
      *                      W1-2 thêm solver_pending (Solver đang kiểm lại bản sửa), solver_failed (job kiểm lại thất
-     *                      bại), "duplicate: &lt;id&gt;" (bản sửa trùng câu khác); "similar_in_exam: &lt;Phần&gt;.&lt;số&gt;" (câu hệ
-     *                      thống sinh cùng khuôn với câu đứng trước nó, Phần I/II/III và số "Câu k" trong Phần như trang đề;
-     *                      mỗi cặp chỉ câu sau bị gắn; tính lúc xem đề, thẩm định 31/10, đổi dạng 2/11)
+     *                      bại), "duplicate: &lt;id&gt;" (bản sửa trùng câu khác). Từ 22/11 "similar_in_exam: …" không còn ở
+     *                      đây mà ở {@code infoReasons}
      * @param qcState       (W1-2) chỉ với câu hệ thống sinh chưa Giữ: "checking" (Solver đang kiểm lại), "passed" (không
      *                      còn lý do cần xem kỹ), "needs_review" (có lý do); bỏ khỏi JSON với chỗ khác. D-01 (15/11): job
      *                      Solver đang hoãn vì AI hết lượt trong ngày là "needs_review" (lý do solver_pending), không phải
@@ -44,8 +44,11 @@ public final class ExamViewDtos {
      * @param originalQuestionId (W1-2) bản gốc LLM của bản sửa; bỏ khỏi JSON khi câu chưa sửa
      * @param infoReasons   (12/11, PR B) cờ THÔNG TIN, luôn có ({@code []} khi không có): {@code request_partial: <lý do>},
      *                      {@code request_not_met: <lý do>}, {@code request_unchecked} (D-05, 15/11: lượt kiểm yêu cầu
-     *                      lỗi hoặc trả kết quả hỏng); về sau thêm cờ khác cùng dạng {@code <mã>} hoặc
-     *                      {@code <mã>: <chi tiết>}. Tách hẳn khỏi {@code reviewReasons}: không bật {@code needsReview},
+     *                      lỗi hoặc trả kết quả hỏng); "similar_in_exam: &lt;Phần&gt;.&lt;số&gt;" (22/11, trước đó là lý do cần
+     *                      xem kỹ: câu cùng khuôn với câu đứng trước nó trong đề, Phần I/II/III và số "Câu k" trong Phần như
+     *                      trang đề; mỗi cặp chỉ câu sau bị gắn; tính lúc xem đề, thẩm định 31/10, đổi dạng 2/11; giáo viên
+     *                      góp ý 21/11 là đề sinh theo yêu cầu đơn giản dễ có câu cùng khuôn, không nên coi là phải sửa);
+     *                      về sau thêm cờ khác cùng dạng {@code <mã>} hoặc {@code <mã>: <chi tiết>}. Tách hẳn khỏi {@code reviewReasons}: không bật {@code needsReview},
      *                      không tính vào số câu cần xem kỹ, không đổi {@code qcState} hay ngân hàng riêng/chung khi Giữ
      * @param requests      (PR B) yêu cầu mà câu đang ở chỗ được sinh theo; vắng khi câu không có yêu cầu (câu ngân hàng,
      *                      câu đã Giữ hiện bản ngân hàng, chỗ chưa có câu)
@@ -53,6 +56,9 @@ public final class ExamViewDtos {
      *                      Đổi câu điền sẵn; vắng khi ô và đề không có yêu cầu áp cho chỗ này
      * @param bankVisibility (16/11, NV-28) CHỈ có trong kết quả Giữ câu: câu vừa lưu vào ngân hàng chung ("shared") hay
      *                      riêng của người Giữ ("private"); vắng ở mọi API khác
+     * @param images        (22/11, G0 H3) ảnh của câu nhập từ Word có hình, CHỈ ở chỗ lấy từ ngân hàng ({@code source = "bank"});
+     *                      mỗi ảnh có URL ký ngắn hạn cho đúng người xem đề, giao diện đặt ảnh theo token
+     *                      {@code ⟦img:<id>⟧} trong chữ. Vắng khỏi JSON khi chỗ không có hình
      */
     public record ExamItemDto(
             Integer slotId,
@@ -84,7 +90,8 @@ public final class ExamViewDtos {
             List<String> infoReasons,
             @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto requests,
             @JsonInclude(JsonInclude.Include.NON_NULL) RequestsDto inheritedRequests,
-            @JsonInclude(JsonInclude.Include.NON_NULL) String bankVisibility
+            @JsonInclude(JsonInclude.Include.NON_NULL) String bankVisibility,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<QuestionImageDto> images
     ) {
         public static final String QC_CHECKING = "checking";
         public static final String QC_PASSED = "passed";
@@ -92,6 +99,32 @@ public final class ExamViewDtos {
 
         public ExamItemDto {
             infoReasons = infoReasons == null ? List.of() : List.copyOf(infoReasons);
+            images = images == null ? List.of() : List.copyOf(images);
+        }
+
+        /** Chữ ký trước G0 H3 (không có ảnh). */
+        public ExamItemDto(Integer slotId, Integer cellId, Integer slotNo, String part, String topic,
+                           QuestionType questionType, String state, String source, Integer bankItemId,
+                           Integer questionId, String questionText, String optionA, String optionB, String optionC,
+                           String optionD, Option correctOption, String saAnswer, List<ItemStatementDto> statements,
+                           String explanation, Difficulty difficulty, boolean needsReview, List<String> reviewReasons,
+                           String qcState, boolean edited, Integer originalQuestionId, String failureReason,
+                           List<String> infoReasons, RequestsDto requests, RequestsDto inheritedRequests,
+                           String bankVisibility) {
+            this(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId, questionText,
+                    optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation, difficulty,
+                    needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, infoReasons,
+                    requests, inheritedRequests, bankVisibility, null);
+        }
+
+        /**
+         * Bản sao kèm ảnh của câu (G0 H3): chỉ chỗ lấy từ ngân hàng mà câu nguồn có hình; chỗ khác để rỗng (vắng khỏi JSON).
+         */
+        public ExamItemDto withImages(List<QuestionImageDto> images) {
+            return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
+                    questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
+                    difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, infoReasons,
+                    requests, inheritedRequests, bankVisibility, images);
         }
 
         /** Chữ ký trước PR B (không có cờ thông tin và yêu cầu). */
@@ -107,16 +140,16 @@ public final class ExamViewDtos {
         }
 
         /**
-         * Bản sao có thêm lý do "cần xem kỹ" {@code extra} (tính lúc xem đề, không lưu): {@code needsReview} thành true,
-         * {@code qcState} thành "needs_review" trừ khi Solver đang kiểm lại ("checking" giữ nguyên).
+         * Bản sao có thêm cờ THÔNG TIN {@code extra} (tính lúc xem đề, không lưu), nối sau {@code infoReasons} hiện có.
+         * Không đổi {@code needsReview}, {@code reviewReasons} hay {@code qcState} (22/11: dùng cho similar_in_exam).
          */
-        public ExamItemDto withExtraReasons(List<String> extra) {
-            List<String> all = new java.util.ArrayList<>(reviewReasons);
+        public ExamItemDto withExtraInfo(List<String> extra) {
+            List<String> all = new java.util.ArrayList<>(infoReasons);
             all.addAll(extra);
             return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
                     questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
-                    difficulty, true, all, QC_CHECKING.equals(qcState) ? qcState : QC_NEEDS_REVIEW, edited,
-                    originalQuestionId, failureReason, infoReasons, requests, inheritedRequests, bankVisibility);
+                    difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, all, requests,
+                    inheritedRequests, bankVisibility, images);
         }
 
         /** Bản sao kèm cờ thông tin và yêu cầu (PR B). */
@@ -124,7 +157,7 @@ public final class ExamViewDtos {
             return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
                     questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
                     difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, info, own,
-                    inherited, bankVisibility);
+                    inherited, bankVisibility, images);
         }
 
         /** Bản sao kèm nơi câu vừa được Giữ vào ("shared" hoặc "private"), chỉ dùng cho kết quả Giữ (NV-28). */
@@ -132,7 +165,7 @@ public final class ExamViewDtos {
             return new ExamItemDto(slotId, cellId, slotNo, part, topic, questionType, state, source, bankItemId, questionId,
                     questionText, optionA, optionB, optionC, optionD, correctOption, saAnswer, statements, explanation,
                     difficulty, needsReview, reviewReasons, qcState, edited, originalQuestionId, failureReason, infoReasons,
-                    requests, inheritedRequests, visibility);
+                    requests, inheritedRequests, visibility, images);
         }
 
         /** Chữ ký trước W2-4b (chỗ đã có câu, không có failureReason). */

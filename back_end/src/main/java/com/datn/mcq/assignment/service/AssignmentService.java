@@ -96,7 +96,7 @@ public class AssignmentService {
     /**
      * Giao đề {@code examId}. Kiểm yêu cầu (400) trước mọi truy cập DB; rồi khóa chia sẻ hàng đề (404 khi không phải đề của
      * người gọi), kiểm mọi chỗ đã chốt (409 {@value #ASSIGN_NOT_ALL_KEPT}) và khóa Trả lời ngắn gõ được trên điện thoại
-     * (409 {@value #ASSIGN_SA_KEY_UNSUPPORTED}); không ghi gì khi có lỗi.
+     * (409 {@value #ASSIGN_SA_KEY_UNSUPPORTED}); không ghi gì khi có lỗi. Đề có câu có hình giao được như mọi đề (A2, 24/11).
      */
     @Transactional
     public AssignmentDto create(Integer examId, Integer actorId, CreateAssignmentRequest request) {
@@ -137,6 +137,7 @@ public class AssignmentService {
                     "Còn " + notKept.size() + " câu chưa Giữ. Giữ hoặc Sửa mọi câu rồi mới giao bài.", notKept);
         }
         Map<Integer, BankItemDto> bank = bankService.getItems(slots.stream().map(AssignableSlot::bankItemId).toList());
+        // A2 (24/11, cau-co-hinh.md mục 4.5): đề có câu có hình giao được; học sinh xem hình qua URL ký theo lượt (S1, S2).
         List<String> badSa = slots.stream().filter(s -> s.questionType() == QuestionType.SA)
                 .filter(s -> ShortAnswerValue.normalizedStrictAnswer(bank.get(s.bankItemId()).saAnswer()) == null)
                 .map(AssignmentService::label).toList();

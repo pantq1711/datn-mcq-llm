@@ -4,8 +4,9 @@
  * cho học sinh sau khi bài đóng (quyết định 16/11).
  *
  * <p>Bảng sở hữu: exam_assignment, assignment_class, assignment_item, assignment_attempt, attempt_answer.
- * <br>Được phép phụ thuộc: exam (chỉ {@code ExamAssignmentSource}, {@code ExamDeletionGuard}), bank (đọc câu), config
- * (bảng điểm). {@code exam} không biết {@code assignment}.
+ * <br>Được phép phụ thuộc: exam (chỉ {@code ExamAssignmentSource}, {@code ExamDeletionGuard}), bank (đọc câu; hình của
+ * câu cũng qua {@code BankService}, D3 ngày 23/11: không phụ thuộc thẳng module questionimage), config (bảng điểm, hạn
+ * mức). {@code exam} không biết {@code assignment}.
  *
  * <p>Cấu trúc: controller, dto, repository (JdbcTemplate, không entity JPA), service. API công khai nằm dưới
  * {@code /api/public/**}; API giáo viên dưới {@code /api/exams/{examId}/assignments}.

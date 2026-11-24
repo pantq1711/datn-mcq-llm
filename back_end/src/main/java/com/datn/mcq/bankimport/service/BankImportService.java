@@ -560,6 +560,27 @@ public class BankImportService {
 
     // ---------- xem lại, hủy ----------
 
+    /**
+     * B1: các lô của người gọi đang chờ xác nhận và chưa hết hạn, mới tạo trước. Chỉ phần tóm tắt: {@code items} và
+     * {@code skippedItems} rỗng, không dựng URL ảnh. Để giáo viên mất mã lô vẫn mở lại hoặc hủy được (trần 3 lô chờ).
+     */
+    @Transactional(readOnly = true)
+    public List<BatchDto> listPending(Integer ownerId) {
+        return batches.findByOwnerIdAndStatusAndExpiresAtAfterOrderByCreatedAtDescIdDesc(
+                        ownerId, ImportBatch.STATUS_PREVIEW, LocalDateTime.now(clock)).stream()
+                .map(this::toSummaryDto)
+                .toList();
+    }
+
+    private BatchDto toSummaryDto(ImportBatch b) {
+        Map<String, Integer> skipped = JSON.readValue(b.getSkippedCounts(), new TypeReference<LinkedHashMap<String, Integer>>() {});
+        List<ImportItem> items = b.getPreview() == null ? List.of() : readPreview(b).items();
+        int blocked = (int) items.stream().filter(ImportItem::blocking).count();
+        return new BatchDto(b.getId(), b.getDisplayName(), b.getStatus(), b.getSubjectId(), b.getGradeLevel(),
+                b.getTopic(), b.getCreatedAt(), b.getExpiresAt(), b.getConfirmedAt(), b.getQuestionCount(),
+                items.size() - blocked, blocked, b.getImportedCount(), skipped, List.of(), List.of());
+    }
+
     @Transactional(readOnly = true)
     public BatchDto get(Integer id, Integer ownerId) {
         ImportBatch b = owned(id, ownerId);
