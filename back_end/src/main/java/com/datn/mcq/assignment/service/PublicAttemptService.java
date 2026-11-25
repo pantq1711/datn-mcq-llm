@@ -15,6 +15,7 @@ import com.datn.mcq.assignment.repository.AssignmentRepository.AnswerRow;
 import com.datn.mcq.assignment.repository.AssignmentRepository.AssignmentRow;
 import com.datn.mcq.assignment.repository.AssignmentRepository.AttemptRow;
 import com.datn.mcq.assignment.repository.AssignmentRepository.ClassRow;
+import com.datn.mcq.assignment.repository.AssignmentRepository.IdentityRow;
 import com.datn.mcq.common.exception.ApiErrorException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,8 @@ public class PublicAttemptService {
     public static final String ATTEMPT_TOKEN_INVALID = "ATTEMPT_TOKEN_INVALID";
     public static final String ATTEMPT_ALREADY_SUBMITTED = "ATTEMPT_ALREADY_SUBMITTED";
     public static final String ATTEMPT_EXPIRED = "ATTEMPT_EXPIRED";
+    /** Quyết định 25/11: đã có lượt cùng lớp + số / tên và học sinh chưa xác nhận; không tạo lượt. */
+    public static final String ATTEMPT_IDENTITY_TAKEN = "ATTEMPT_IDENTITY_TAKEN";
     static final int SA_TEXT_MAX = 20;
     private static final Set<String> MCQ_CHOICES = Set.of("A", "B", "C", "D");
     private static final Set<String> TF_VALUES = Set.of("T", "F");
@@ -79,7 +82,7 @@ public class PublicAttemptService {
     public InfoDto info(String code) {
         AssignmentRow a = loader.refresh(byCode(code), now());
         return new InfoDto(a.title(), repository.items(a.id()).size(), a.durationMinutes(), a.closesAt(), a.status(),
-                a.showScore(), a.showSolutions(), repository.classes(a.id()).stream()
+                a.showScore(), a.showSolutions(), a.identityMode(), repository.classes(a.id()).stream()
                 .map(c -> new ClassOptionDto(c.classLabel(), c.rosterSize())).toList());
     }
 
@@ -93,15 +96,22 @@ public class PublicAttemptService {
     // ---------- P2: bắt đầu ----------
 
     /**
-     * Bắt đầu một lượt. Thứ tự: hạn mức theo IP (trước mọi truy cập DB); dạng yêu cầu (400); mã (404); khóa hàng bài giao;
-     * bài đã đóng (409); lớp phải thuộc bài giao và số thứ tự trong 1..sĩ số (400); trần 2 × tổng sĩ số (409
-     * {@value #ASSIGNMENT_FULL}). Trùng lớp + số thứ tự: vẫn tạo lượt mới, cả hai lượt bị đánh dấu "trùng" lúc đọc.
+     * Bắt đầu một lượt. Thứ tự: hạn mức theo IP (trước mọi truy cập DB; mọi lần gọi đều tính, kể cả lần bị báo trùng);
+     * dạng yêu cầu (400); mã (404); khóa hàng bài giao; bài đã đóng (409); lớp phải thuộc bài giao (400); danh tính theo
+     * chế độ của bài giao (400): số thứ tự trong 1..sĩ số, hoặc họ tên hợp lệ ({@link StudentNames#normalize}); trần 2 ×
+     * tổng sĩ số (409 {@value #ASSIGNMENT_FULL}).
+     *
+     * <p>Quyết định 25/11: đã có lượt cùng lớp + số (hoặc lớp + tên, {@link AttemptRules#identityKey}) mà
+     * {@code confirmDuplicate} không phải true thì 409 {@value #ATTEMPT_IDENTITY_TAKEN}, KHÔNG tạo lượt, đồng hồ chưa chạy.
+     * Học sinh xác nhận thì tạo lượt mới, cả hai lượt bị đánh dấu "trùng" lúc đọc (như 16/11). Khóa hàng bài giao làm hai
+     * lần bắt đầu đồng thời của cùng một tên chạy lần lượt, nên lần sau luôn thấy lần trước. Thông báo lỗi không lặp lại
+     * họ tên.
      */
     @Transactional
     public AttemptViewDto start(String code, StartRequest request, String clientIp) {
         limiter.checkStart(clientIp);
-        if (request == null || request.seatNo() == null) {
-            throw AssignmentService.invalid("Thiếu lớp hoặc số thứ tự.");
+        if (request == null) {
+            throw AssignmentService.invalid("Thiếu lớp hoặc danh tính của em.");
         }
         String classLabel = AttemptTokens.normalizeClassLabel(request.classLabel());
         if (classLabel == null) {
@@ -117,23 +127,63 @@ public class PublicAttemptService {
         List<ClassRow> classes = repository.classes(a.id());
         ClassRow cls = classes.stream().filter(c -> c.classLabel().equals(classLabel)).findFirst()
                 .orElseThrow(() -> AssignmentService.invalid("Lớp " + classLabel + " không có trong bài này."));
-        int seat = request.seatNo();
-        if (seat < 1 || seat > cls.rosterSize()) {
-            throw AssignmentService.invalid("Số thứ tự của lớp " + classLabel + " phải từ 1 đến " + cls.rosterSize()
-                    + ".");
+        Integer seat = null;
+        String name = null;
+        if (a.nameMode()) {
+            // Số thứ tự (nếu có) bị bỏ qua; không lặp lại tên trong thông báo lỗi.
+            name = StudentNames.normalize(request.studentName());
+            if (name == null) {
+                throw AssignmentService.invalid("Em nhập họ và tên của em (từ " + StudentNames.MIN_LENGTH + " đến "
+                        + StudentNames.MAX_LENGTH + " ký tự).");
+            }
+        } else {
+            // Họ tên (nếu có) bị bỏ qua và không lưu: bài giao chế độ số thứ tự không thu họ tên.
+            seat = request.seatNo();
+            if (seat == null) {
+                throw AssignmentService.invalid("Thiếu lớp hoặc số thứ tự.");
+            }
+            if (seat < 1 || seat > cls.rosterSize()) {
+                throw AssignmentService.invalid("Số thứ tự của lớp " + classLabel + " phải từ 1 đến "
+                        + cls.rosterSize() + ".");
+            }
         }
         int roster = classes.stream().mapToInt(ClassRow::rosterSize).sum();
         if (repository.countAttempts(a.id()) >= AssignmentService.ATTEMPT_CAP_FACTOR * roster) {
             throw ApiErrorException.conflict(ASSIGNMENT_FULL, "Bài đã đủ số lượt làm. Báo thầy cô.");
+        }
+        if (!Boolean.TRUE.equals(request.confirmDuplicate()) && taken(a.id(), classLabel, seat, name)) {
+            throw ApiErrorException.conflict(ATTEMPT_IDENTITY_TAKEN, a.nameMode()
+                    ? "Đã có bạn vào làm với tên này. Nếu em gõ nhầm, em nhập lại; nếu đúng là em, em vẫn làm được."
+                    : "Đã có bạn vào làm với số này. Nếu em nhập nhầm, em nhập lại; nếu đúng là em, em vẫn làm được.");
         }
         String token = AttemptTokens.newToken();
         LocalDateTime deadline = now.plusMinutes(a.durationMinutes());
         if (deadline.isAfter(a.closesAt())) {
             deadline = a.closesAt();
         }
-        int id = repository.insertAttempt(a.id(), classLabel, seat, AttemptTokens.sha256Hex(token), now, deadline);
+        int id = repository.insertAttempt(a.id(), classLabel, seat, name, AttemptTokens.sha256Hex(token), now,
+                deadline);
         AttemptRow attempt = repository.attemptById(id).orElseThrow();
         return view(a, attempt, loader.paper(a), now, token);
+    }
+
+    /**
+     * Số lượt cùng lớp có cùng danh tính với ({@code seat}, {@code name}) trong bài giao, theo
+     * {@link AttemptRules#identityKey}. Lượt đang xét (nếu đã có) cũng được đếm.
+     */
+    private int sameIdentity(Integer assignmentId, String classLabel, Integer seat, String name) {
+        String key = AttemptRules.identityKey(seat, name);
+        int n = 0;
+        for (IdentityRow r : repository.identitiesInClass(assignmentId, classLabel)) {
+            if (key.equals(AttemptRules.identityKey(r.seatNo(), r.studentName()))) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    private boolean taken(Integer assignmentId, String classLabel, Integer seat, String name) {
+        return sameIdentity(assignmentId, classLabel, seat, name) > 0;
     }
 
     // ---------- P3: mở lại ----------
@@ -159,7 +209,7 @@ public class PublicAttemptService {
         boolean submitted = attempt.submittedAt() != null;
         boolean canSubmit = AttemptRules.canSubmit(a, attempt, now);
         boolean released = AttemptRules.resultsReleased(a, now);
-        boolean duplicate = repository.countSameSeat(a.id(), attempt.classLabel(), attempt.seatNo()) > 1;
+        boolean duplicate = sameIdentity(a.id(), attempt.classLabel(), attempt.seatNo(), attempt.studentName()) > 1;
         // S1: hình trong parts không bao giờ có hình lời giải; URL sống tới hạn của lượt + ân hạn.
         List<PublicPartDto> parts = canSubmit
                 ? paper.publicParts(images.images(paper, attempt.id(), false,
@@ -180,7 +230,9 @@ public class PublicAttemptService {
                 review = paper.review(answers, images.images(paper, attempt.id(), true, null));
             }
         }
-        return new AttemptViewDto(token, attempt.classLabel(), attempt.seatNo(), duplicate, attempt.startedAt(),
+        // Họ tên chỉ là của chính lượt này (token); không bao giờ đọc tên của lượt khác ra đây.
+        return new AttemptViewDto(token, a.identityMode(), attempt.classLabel(), attempt.seatNo(),
+                attempt.studentName(), duplicate, attempt.startedAt(),
                 attempt.deadlineAt(), now, AttemptRules.remainingSeconds(attempt, now), submitted,
                 attempt.submittedAt(), released, AttemptRules.resultsAt(a), parts, result, review);
     }

@@ -107,6 +107,11 @@ public class AssignmentService {
         if (!Boolean.TRUE.equals(request.consentConfirmed())) {
             throw invalid("Cần xác nhận việc cho học sinh làm bài đã được nhà trường cho phép.");
         }
+        // Quyết định 25/11: không gửi chế độ thì học sinh nhập họ tên.
+        String identityMode = request.identityMode() == null ? AssignmentRepository.MODE_NAME : request.identityMode();
+        if (!AssignmentRepository.MODE_NAME.equals(identityMode) && !AssignmentRepository.MODE_SEAT.equals(identityMode)) {
+            throw invalid("Chế độ học sinh nhập chỉ là \"name\" (họ và tên) hoặc \"seat\" (số thứ tự).");
+        }
         Integer duration = request.durationMinutes();
         if (duration == null || duration < MIN_DURATION || duration > MAX_DURATION) {
             throw invalid("Thời gian làm bài phải từ " + MIN_DURATION + " đến " + MAX_DURATION + " phút.");
@@ -151,7 +156,7 @@ public class AssignmentService {
         Scoring scoring = Scoring.of(scoringProperties);
         int id = repository.insertAssignment(examId, actorId, code, exam.title(), duration, closesAt,
                 Boolean.TRUE.equals(request.showScore()), Boolean.TRUE.equals(request.showSolutions()),
-                scoring.toJson(), now);
+                scoring.toJson(), identityMode, now);
         repository.insertClasses(id, classes);
         List<ItemRow> items = new ArrayList<>(slots.size());
         for (int i = 0; i < slots.size(); i++) {
@@ -254,20 +259,22 @@ public class AssignmentService {
                 answers.computeIfAbsent(ans.attemptId(), k -> new HashMap<>()).put(ans.slotId(), ans);
             }
             rows = new ArrayList<>(attempts.size());
-            for (AttemptRow t : attempts) {
+            // Chế độ họ tên (25/11): trong lớp sắp theo tên như sổ điểm; chế độ số thứ tự giữ thứ tự của SQL.
+            for (AttemptRow t : a.nameMode() ? AttemptRules.byClassThenName(attempts) : attempts) {
                 boolean duplicate = duplicateIds.contains(t.id());
                 String state = AttemptRules.state(a, t, now);
                 if (t.submittedAt() == null) {
-                    rows.add(new AttemptDto(t.id(), t.classLabel(), t.seatNo(), state, duplicate, t.startedAt(), null,
-                            null, null, null));
+                    rows.add(new AttemptDto(t.id(), t.classLabel(), t.seatNo(), t.studentName(), state, duplicate,
+                            t.startedAt(), null, null, null, null));
                 } else {
-                    rows.add(new AttemptDto(t.id(), t.classLabel(), t.seatNo(), state, duplicate, t.startedAt(),
-                            t.submittedAt(), t.score(), AssignmentPaper.score10(t.score(), t.maxScore()),
+                    rows.add(new AttemptDto(t.id(), t.classLabel(), t.seatNo(), t.studentName(), state, duplicate,
+                            t.startedAt(), t.submittedAt(), t.score(), AssignmentPaper.score10(t.score(), t.maxScore()),
                             paper.partScores(answers.getOrDefault(t.id(), Map.of()))));
                 }
             }
         }
-        return new AssignmentDto(a.id(), a.publicCode(), a.title(), a.status(), a.durationMinutes(), a.closesAt(),
+        return new AssignmentDto(a.id(), a.publicCode(), a.title(), a.status(), a.identityMode(), a.durationMinutes(),
+                a.closesAt(),
                 a.closedAt(), a.showScore(), a.showSolutions(), a.createdAt(),
                 classes.stream().map(c -> new ClassDto(c.classLabel(), c.rosterSize())).toList(),
                 paper.questionCount(), paper.maxScore(), ATTEMPT_CAP_FACTOR * roster, attempts.size(), submitted,

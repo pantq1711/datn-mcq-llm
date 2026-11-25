@@ -1,7 +1,8 @@
 # Bước 0 – Học sinh làm đề trực tuyến qua link (A) và phân tích câu sau khi làm bài (B)
 
 Trạng thái: **An đã duyệt 14/11/2026** kèm các quyết định ở mục 12; **chốt thêm 16/11/2026** sau rà soát an ninh 07 (mục 13,
-thắng các mục trên khi mâu thuẫn). Đang code theo thứ tự PR ở mục 10.
+thắng các mục trên khi mâu thuẫn). Đang code theo thứ tự PR ở mục 10. **25/11/2026:** học sinh nhập họ tên thay số thứ tự
+(mục 15, V36), thay quyết định "không thu họ tên" ở mục 7, 12 và 13.
 Nền: `origin/main` 199f5f6 (PR #82), migration của PR A là **V32** (main đã có V30, V31). Tuân thủ `docs/ai-development-rules.md` v3.
 
 Vị trí trong đề tài: A là vế "nền tảng học tập trực tuyến" (có người học thật); B là lớp QC thứ ba
@@ -339,6 +340,9 @@ File `docs/thong-ke/11-hau-kiem.sql`: một câu `SELECT`, mỗi dòng `item_sta
 
 ## 7. Quyền riêng tư
 
+> **25/11/2026:** bài giao chế độ họ tên (mặc định từ V36) thu thêm họ tên học sinh; quy tắc mới ở **mục 15**, thắng mục này
+> khi mâu thuẫn. Phần dưới vẫn đúng cho bài giao chế độ số thứ tự.
+
 - **Thu thập:** lớp, số thứ tự, câu trả lời, giờ bắt đầu và nộp. **Không thu:** họ tên, email, số điện thoại, IP,
   user-agent, định danh thiết bị. IP chỉ nằm trong bộ đếm tần suất lúc tạo lượt, ở bộ nhớ, tối đa một phút. (16/11, sửa câu
   cũ "log truy cập của nginx vẫn có IP": máy chủ dùng Caddy và hiện không bật nhật ký truy cập, nên IP không được ghi; nếu sau
@@ -492,3 +496,45 @@ An duyệt sau bước inspect của PR B.
    `HauKiemSqlTest` bắt khớp service. **Không làm file 12 / bảng chéo bằng SQL:** bảng chéo tiền kiểm × hậu kiểm cho chương 4 làm
    bằng Python từ `tools/measurement/do_luong/co_qc.py` (ghép qua `bank_item_id`), để không có bản sao thứ ba của logic cờ.
 6. **Chia PR:** nhánh `feature/online-item-stat` chỉ backend; tab "Phân tích câu" là PR frontend riêng ngay sau, trước 22/11.
+
+## 15. Quyết định ngày 25/11/2026 – học sinh nhập họ tên, báo trùng trước khi bắt đầu (V36) – thắng các mục trên khi mâu thuẫn
+
+Chủ dự án quyết ngày 25/11/2026, **thay quyết định 16/11 "không thu họ tên"** (mục 7, câu 2 ở mục 12, mục 13 ý 2 phần danh
+tính). Lý do, từ góp ý khi dùng thật: (1) học sinh và giáo viên không nhớ số thứ tự, nên lượt nhập nhầm số nhiều và bảng điểm
+khó đối chiếu; (2) cảnh báo trùng hiện **sau** khi đã bắt đầu (đồng hồ đã chạy), học sinh không biết thoát ra để nhập lại.
+
+1. **Chế độ theo từng bài giao:** `exam_assignment.identity_mode` = `name` (họ và tên) | `seat` (số thứ tự). Bài giao mới mặc
+   định `name`; bài giao đã có trước V36 giữ `seat` nên hành vi nhận diện không đổi. Hộp Giao bài có lựa chọn "Học sinh nhập: Họ
+   và tên (mặc định) / Số thứ tự". Không đổi được chế độ sau khi giao.
+2. **V36:** thêm `identity_mode` (NOT NULL, CHECK hai giá trị; dòng cũ `seat`, mặc định dòng mới `name`);
+   `assignment_attempt.student_name VARCHAR(60) NULL`; `seat_no` bỏ NOT NULL; CHECK `chk_aa_identity` mỗi lượt có **đúng một**
+   trong hai (`seat_no` hoặc `student_name`), CHECK độ dài 2–60; index `idx_aa_identity_name (assignment_id, class_label,
+   student_name) WHERE student_name IS NOT NULL`. Lượt khớp chế độ của bài giao: service kiểm. Không sửa V1–V35; test nâng cấp
+   `V36StudentNameMigrationTest` (V35 → V36 trên dữ liệu cũ).
+3. **Họ tên:** chuẩn hóa NFC, bỏ khoảng trắng đầu cuối, gộp khoảng trắng (kể cả khoảng trắng không ngắt), 2–60 ký tự, không ký
+   tự điều khiển (Cc) và ký tự định dạng vô hình (Cf, ví dụ zero-width space: không thấy được nên làm hai tên trông như nhau mà
+   không bị nhận là trùng). Lưu như học sinh gõ sau chuẩn hóa (giữ hoa thường). **So trùng** trong cùng bài giao + cùng lớp:
+   chữ thường, khoảng trắng đã gộp, **giữ dấu** ("Nguyễn Văn An" trùng "nguyễn  VĂN an", không trùng "Nguyen Van An"). Hai em
+   trùng tên thật là có thật nên trùng chỉ là cảnh báo; cả hai lượt giữ như cơ chế trùng STT. Một hàm Java
+   (`AttemptRules.identityKey`) dùng chung cho báo trùng trước khi bắt đầu, cờ `duplicate` của bảng điểm và thống kê câu, nên
+   không so bằng `lower()` của DB. Nhãn theo chế độ: "Trùng tên" / "Trùng STT".
+4. **Báo trùng trước khi bắt đầu (cả hai chế độ):** P2 nhận thêm `studentName` và `confirmDuplicate` (mặc định false). Đã có lượt
+   cùng lớp + tên (hoặc lớp + số) mà `confirmDuplicate` không phải true → 409 `ATTEMPT_IDENTITY_TAKEN`, **không** tạo lượt, đồng
+   hồ chưa chạy. Màn xác nhận hiện "Đã có bạn vào làm với tên/số này." kèm "Nhập lại" và "Đúng là em, vẫn làm" (gửi lại với
+   `confirmDuplicate = true`). Hạn mức theo IP của P2 giữ nguyên và tính cả lần bị báo trùng. Áp cho cả bài giao cũ chế độ
+   `seat` (đây là phần hành vi đổi có chủ đích của bài giao cũ: trước kia lượt trùng được tạo ngay). Thứ tự kiểm của P2: hạn
+   mức → dạng yêu cầu → mã → khóa bài giao → đã đóng → lớp → danh tính theo chế độ → trần lượt → trùng.
+5. **Quyền riêng tư:** họ tên chỉ nằm ở `assignment_attempt.student_name` (máy học sinh chỉ lưu token, lớp và số thứ tự nếu có;
+   không lưu họ tên). Chỉ trả cho chủ bài giao (T3 bảng điểm) và cho chính học sinh đó (P2/P3 của lượt mình). Không có ở P1, P4,
+   T2, B1/B2, `item_stat`, `docs/thong-ke`. Thông báo lỗi không lặp lại họ tên; nhật ký 4xx chỉ ghi mã lỗi (không ghi thân
+   request), có test bắt log không chứa họ tên. Xóa bài giao (T6) hoặc xóa lượt (T5, xóa nhiều lượt) xóa họ tên theo
+   (ON DELETE CASCADE của V32). Câu xác nhận trong hộp Giao bài theo chế độ:
+   - `name`: "Tôi xác nhận việc cho học sinh làm bài trên hệ thống này đã được nhà trường cho phép, phụ huynh đã được thông báo
+     việc học sinh nhập họ tên để giáo viên xem điểm, và tôi chỉ dùng họ tên cho việc này."
+   - `seat`: giữ câu cũ (mục 7). Đổi chế độ trong hộp thì bỏ tích ô xác nhận để giáo viên tích lại câu mới.
+6. **Giao diện học sinh (chế độ `name`):** ô "Họ và tên của em" thay ô số thứ tự; dòng nhắc "Hệ thống lưu lớp, họ tên và bài làm
+   của em để thầy cô xem điểm."; màn xác nhận "Em là <tên>, lớp <lớp> — đúng không?"; đường "Không phải em, thoát" giữ nguyên.
+7. **Giao diện giáo viên:** bảng điểm có cột "Họ và tên" (chế độ `name`) thay cột STT, sắp theo lớp (thứ tự khai lúc giao) rồi
+   **theo tên** (chữ cuối, như sổ điểm), rồi họ và tên đệm, so theo quy tắc chữ tiếng Việt; cảnh báo trùng và "Chọn các lượt
+   trùng" chạy cho cả hai chế độ; phân tích câu loại lượt trùng như cũ (`11-hau-kiem.sql` nhận trùng theo `lower(student_name)`).
+8. **Không làm trong đợt này:** danh sách lớp dán sẵn, xuất bảng điểm Excel, đổi chế độ của bài giao đã giao.

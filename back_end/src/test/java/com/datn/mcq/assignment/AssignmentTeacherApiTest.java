@@ -346,7 +346,7 @@ class AssignmentTeacherApiTest extends AssignmentTestBase {
         String code = a.get("publicCode").asText();
         String first = startToken(code, "8A1", 12);
         submit(first, sampleAnswers()).andExpect(status().isOk());
-        String second = startToken(code, "8A1", 12);
+        String second = startConfirmedToken(code, "8A1", 12);   // 25/11: học sinh xác nhận "Đúng là em, vẫn làm"
         startToken(code, "8A1", 13);
 
         JsonNode rows = json(asTeacher(get(base() + "/" + id)).andExpect(status().isOk())

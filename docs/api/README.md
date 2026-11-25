@@ -1707,26 +1707,35 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
 - Sau khi vào ngân hàng (22/11): `images[]` có ở `GET /api/bank-items`, `GET /api/bank-items/{id}` (mục "Ngân hàng câu hỏi") và ở
   mục đề của chỗ lấy từ ngân hàng (mục 7.4), cùng dạng như trên, `url` ký cho người gọi.
 
-## 11. Bài giao trực tuyến (V32, thiết kế `docs/design/lam-bai-truc-tuyen.md`, quyết định 14/11 và 16/11)
+## 11. Bài giao trực tuyến (V32, V36; thiết kế `docs/design/lam-bai-truc-tuyen.md`, quyết định 14/11, 16/11 và 25/11)
+
+25/11/2026 (V36, đổi hợp đồng API được chủ dự án duyệt): thêm chế độ nhận diện `identityMode` của bài giao (học sinh nhập
+họ tên hoặc số thứ tự), `studentName` và báo trùng trước khi bắt đầu (`confirmDuplicate`, 409 `ATTEMPT_IDENTITY_TAKEN`). Bài
+giao cũ là `seat`; client cũ không gửi `confirmDuplicate` sẽ nhận 409 khi trùng thay cho lượt mới.
 
 ### 11.1. Giáo viên (`TEACHER`, chỉ chủ đề; đề của người khác hoặc đã xóa: 404)
 
 - `POST /api/exams/{examId}/assignments` thân `{durationMinutes (5–180), closesAt (ISO, sau lúc giao ≥ durationMinutes, ≤ 30
-  ngày), showScore, showSolutions (mặc định false), consentConfirmed: true, classes: [{classLabel, size}]}` → 201 bài giao.
-  `classes`: 1–10 lớp, nhãn chuẩn hóa (bỏ khoảng trắng, viết hoa; chữ không dấu, số, `/ . -`; 1–10 ký tự), sĩ số 1–99, không
-  trùng. Lỗi: 400 `INVALID_REQUEST`; 409 `ASSIGN_NOT_ALL_KEPT` (còn chỗ chưa Giữ/Sửa, `errors: ["Phần I, Câu 2", …]`),
+  ngày), showScore, showSolutions (mặc định false), consentConfirmed: true, classes: [{classLabel, size}], identityMode?}` →
+  201 bài giao. `classes`: 1–10 lớp, nhãn chuẩn hóa (bỏ khoảng trắng, viết hoa; chữ không dấu, số, `/ . -`; 1–10 ký tự), sĩ số
+  1–99, không trùng. `identityMode` (25/11, V36): `name` (học sinh nhập họ và tên; **mặc định khi không gửi**) hoặc `seat` (số
+  thứ tự); giá trị khác là 400; không đổi được sau khi giao. Lỗi: 400 `INVALID_REQUEST`; 409 `ASSIGN_NOT_ALL_KEPT` (còn chỗ chưa Giữ/Sửa, `errors: ["Phần I, Câu 2", …]`),
   `ASSIGN_SA_KEY_UNSUPPORTED` (đáp số Trả lời ngắn không phải số nguyên/thập phân, `errors` như trên). Thứ tự kiểm:
   `ASSIGN_NOT_ALL_KEPT`, rồi `ASSIGN_SA_KEY_UNSUPPORTED`. Đề có câu có hình giao được như mọi đề (24/11, PR A2 gỡ mã
   `ASSIGN_HAS_FIGURE` của A1 ngày 23/11); học sinh xem hình qua URL ký theo lượt làm (mục 11.2).
-- Bài giao: `{assignmentId, publicCode, title, status (open|closed), durationMinutes, closesAt, closedAt?, showScore,
+- Bài giao: `{assignmentId, publicCode, title, status (open|closed), identityMode (name|seat; bài giao trước V36 là seat),
+  durationMinutes, closesAt, closedAt?, showScore,
   showSolutions, createdAt, classes: [{classLabel, size}], questionCount, maxScore, maxAttempts (2 × tổng sĩ số), startedCount,
   submittedCount, duplicateCount, statsComputedAt?, attempts?}`. Link học sinh do frontend ghép: `<origin>/lam-bai/<publicCode>`.
   `statsComputedAt` (V33): lúc tính thống kê câu gần nhất (mục 11.3); không có khi chưa tính hoặc đã bị vô hiệu do xóa lượt.
 - `GET /api/exams/{examId}/assignments` → danh sách bài giao (không có `attempts`), mới nhất trước.
-- `GET /api/exams/{examId}/assignments/{id}` → bài giao kèm `attempts: [{attemptId, classLabel, seatNo, state (in_progress |
-  submitted | expired), duplicate, startedAt, submittedAt?, score?, score10?, parts?: [{part, correct, total, score}]}]`, theo
-  lớp (thứ tự khai) rồi số thứ tự. Phần II đếm theo ý. `duplicate = true`: có lượt khác cùng lớp + số thứ tự (cả hai lượt đều
-  được giữ và đánh dấu, tính lúc đọc).
+- `GET /api/exams/{examId}/assignments/{id}` → bài giao kèm `attempts: [{attemptId, classLabel, seatNo?, studentName?, state
+  (in_progress | submitted | expired), duplicate, startedAt, submittedAt?, score?, score10?, parts?: [{part, correct, total,
+  score}]}]`. Đúng một trong `seatNo` (chế độ `seat`) / `studentName` (chế độ `name`, họ tên học sinh gõ, đã chuẩn hóa khoảng
+  trắng) có mặt. Thứ tự: lớp (thứ tự khai) rồi số thứ tự; chế độ `name`: lớp rồi theo tên (chữ cuối), rồi họ và tên đệm (quy
+  tắc chữ tiếng Việt). Phần II đếm theo ý. `duplicate = true`: có lượt khác cùng lớp + số thứ tự, hoặc cùng lớp + họ tên (chữ
+  thường, khoảng trắng đã gộp, giữ dấu) (cả hai lượt đều được giữ và đánh dấu, tính lúc đọc). Đây là chỗ duy nhất của API
+  giáo viên có `studentName`.
 - `POST …/{id}/close` → 200 bài giao; đã đóng thì trả nguyên trạng. Lượt chưa nộp không nộp được nữa.
 - `DELETE …/{id}/attempts/{attemptId}` → 204; 404. Ở mọi trạng thái, kể cả sau khi đóng (dữ liệu giữ tới khi giáo viên xóa).
 - `POST …/{id}/attempts/bulk-delete` thân `{attemptIds: [..]}` (1–500) → 200 `{deleted}`; id không thuộc bài giao bị bỏ qua.
@@ -1739,12 +1748,21 @@ POST /api/bank-imports      (multipart: file; tùy chọn gradeLevel 6-9, topic,
 Token lượt làm gửi ở header `X-Attempt-Token`, không bao giờ trong URL.
 
 - `GET /api/public/assignments/{code}` → `{title, questionCount, durationMinutes, closesAt, status, showScore, showSolutions,
-  classes: [{classLabel, size}]}`; không câu hỏi. 404 khi mã sai. Không giới hạn tần suất.
-- `POST /api/public/assignments/{code}/attempts` thân `{classLabel, seatNo}` → 201 lượt làm kèm `attemptToken` (chỉ trả một
-  lần). Lớp phải thuộc bài giao, số thứ tự trong 1..sĩ số (400 `INVALID_REQUEST`). Trùng lớp + số thứ tự vẫn được tạo
-  (`duplicateSeat: true`). Lỗi: 404; 409 `ASSIGNMENT_CLOSED`, `ASSIGNMENT_FULL`; 429 `TOO_MANY_REQUESTS` (theo IP).
-- Lượt làm (P2, P3): `{attemptToken?, classLabel, seatNo, duplicateSeat, startedAt, deadlineAt, serverNow, remainingSeconds,
-  submitted, submittedAt?, resultsReleased, resultsAt, parts?, result?, review?}`. `parts` (chỉ khi còn nộp được):
+  identityMode, classes: [{classLabel, size}]}`; không câu hỏi, không họ tên của ai. 404 khi mã sai. Không giới hạn tần suất.
+- `POST /api/public/assignments/{code}/attempts` thân `{classLabel, seatNo?, studentName?, confirmDuplicate?}` → 201 lượt làm
+  kèm `attemptToken` (chỉ trả một lần). Lớp phải thuộc bài giao. Chế độ `seat`: `seatNo` trong 1..sĩ số (`studentName` bị bỏ
+  qua, không lưu). Chế độ `name` (25/11): `studentName` sau chuẩn hóa (NFC, bỏ khoảng trắng đầu cuối, gộp khoảng trắng) dài
+  2–60 ký tự, không có ký tự điều khiển hay ký tự định dạng vô hình (`seatNo` bị bỏ qua). Sai: 400 `INVALID_REQUEST` (thông báo
+  không lặp lại họ tên). **Trùng (25/11, cả hai chế độ):** đã có lượt cùng lớp + số, hoặc cùng lớp + họ tên (chữ thường, giữ
+  dấu), mà `confirmDuplicate` không phải `true` (mặc định `false`) → 409 `ATTEMPT_IDENTITY_TAKEN`, **không tạo lượt**, đồng hồ
+  chưa chạy; gửi lại với `confirmDuplicate: true` thì tạo lượt mới, cả hai lượt có `duplicateSeat: true`. Thứ tự kiểm: hạn mức
+  theo IP, dạng yêu cầu, mã (404), bài đã đóng (409), lớp, danh tính (400), trần lượt (409 `ASSIGNMENT_FULL`), trùng (409
+  `ATTEMPT_IDENTITY_TAKEN`). Lỗi: 404; 409 `ASSIGNMENT_CLOSED`, `ASSIGNMENT_FULL`, `ATTEMPT_IDENTITY_TAKEN`; 429
+  `TOO_MANY_REQUESTS` (theo IP, tính cả lần bị báo trùng).
+- Lượt làm (P2, P3): `{attemptToken?, identityMode, classLabel, seatNo?, studentName?, duplicateSeat, startedAt, deadlineAt,
+  serverNow, remainingSeconds, submitted, submittedAt?, resultsReleased, resultsAt, parts?, result?, review?}`. Đúng một trong
+  `seatNo` / `studentName` có mặt; `studentName` là tên của chính lượt này. `duplicateSeat`: có lượt khác cùng lớp + số hoặc
+  cùng lớp + tên (tên trường giữ như trước để không đổi hợp đồng). `parts` (chỉ khi còn nộp được):
   `[{part, items: [{slotId, number, questionType, questionText, options? {A..D}, statements? [{key, text}], images?}]}]`,
   không đáp án.
   `resultsReleased`: bài đã đóng và qua `closed_at + 2 phút`; trước đó không có `result` và `review`. `result` (khi
@@ -1783,7 +1801,8 @@ Vai trò, quyền và lỗi 404 như 11.1.
   tính và lưu. `POST …/{id}/item-stats/recompute` (B2) → tính lại rồi trả như B1.
 - Chỉ có khi bài đã đóng **và** đã qua 2 phút ân hạn nộp tính từ lúc đóng. Lỗi: 409 `ASSIGNMENT_OPEN` (bài còn mở); 409
   `STATS_NOT_READY` (còn ân hạn; `errors[0]` là lúc có thống kê, ISO).
-- Chỉ tính lượt **đã nộp** và **không trùng** lớp + số thứ tự (cùng quy tắc `duplicate` của bảng điểm, xét cả lượt bỏ dở).
+- Chỉ tính lượt **đã nộp** và **không trùng** lớp + số thứ tự, hoặc lớp + họ tên ở chế độ `name` (cùng quy tắc `duplicate`
+  của bảng điểm, xét cả lượt bỏ dở). Không có họ tên trong phản hồi.
   Xóa một hoặc nhiều lượt (T5, bulk-delete) thì thống kê bị vô hiệu; lần đọc sau tính lại.
 - Phản hồi: `{assignmentId, n, groupSize, computedAt, sampleSufficient, minSampleSize (20), sampleNote, excluded: {duplicate,
   notSubmitted}, items: [{slotId, part, number, questionType, bankItemId, answerKey, p, d, choiceCounts, flags, slotChanged}]}`.

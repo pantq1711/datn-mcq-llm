@@ -48,7 +48,10 @@ public class PublicAttemptController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.info(code));
     }
 
-    /** P2: bắt đầu. 201 kèm token (chỉ trả một lần); 400, 404, 409 ASSIGNMENT_CLOSED / ASSIGNMENT_FULL, 429. */
+    /**
+     * P2: bắt đầu. 201 kèm token (chỉ trả một lần); 400, 404, 409 ASSIGNMENT_CLOSED / ASSIGNMENT_FULL /
+     * ATTEMPT_IDENTITY_TAKEN (25/11: trùng lớp + tên hoặc số mà chưa xác nhận), 429.
+     */
     @PostMapping("/assignments/{code}/attempts")
     public ResponseEntity<AttemptViewDto> start(@PathVariable String code,
                                                 @RequestBody(required = false) StartRequest request,
