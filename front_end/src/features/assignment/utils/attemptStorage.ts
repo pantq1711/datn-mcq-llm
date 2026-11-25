@@ -3,10 +3,14 @@ import type { DraftAnswers } from "../types/assignment.types";
 // Token lượt làm và câu trả lời tạm nằm ở localStorage của máy học sinh. localStorage có thể ném lỗi hoặc rỗng
 // (cửa sổ riêng tư, chặn dữ liệu trang), nên mọi đọc/ghi đều bọc try/catch và trang vẫn chạy khi không lưu được.
 
+/**
+ * Phiên trên máy: token và lớp; `seatNo` chỉ ở chế độ số thứ tự. Cố ý KHÔNG lưu họ tên (quyết định 25/11: họ tên chỉ nằm
+ * ở máy chủ); màn mở lại lấy tên từ P3.
+ */
 export interface StoredSession {
     token: string;
     classLabel: string;
-    seatNo: number;
+    seatNo?: number;
 }
 
 const sessionKey = (code: string) => `online-attempt:${code}`;
@@ -25,7 +29,7 @@ export function loadSession(code: string): StoredSession | null {
         return {
             token: value.token,
             classLabel: typeof value.classLabel === "string" ? value.classLabel : "",
-            seatNo: typeof value.seatNo === "number" ? value.seatNo : 0,
+            ...(typeof value.seatNo === "number" ? { seatNo: value.seatNo } : {}),
         };
     } catch {
         return null;

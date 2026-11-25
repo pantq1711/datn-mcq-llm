@@ -2,6 +2,7 @@ import { Alert, Button } from "antd";
 
 import MathText from "../../../components/common/MathText/MathText";
 import type { AttemptView, ReviewItem, ReviewPart } from "../types/assignment.types";
+import { identityLine } from "../utils/identity";
 import { formatPoints, formatServerTime } from "../utils/timeFormat";
 // Tên Phần dùng chung với trang đề của giáo viên và file Word (G25)
 import { PART_TITLES } from "../../../utils/exam.utils";
@@ -24,7 +25,7 @@ interface AttemptOutcomeProps {
  * chủ báo `resultsReleased` mới hiện điểm theo phần (nếu có `result`) và đáp án + lời giải (nếu có `review`).
  */
 export default function AttemptOutcome({ view, showScore, showSolutions, refreshing, onRefresh, onDone }: AttemptOutcomeProps) {
-    const identity = `Lớp ${view.classLabel}, số ${view.seatNo}`;
+    const identity = identityLine(view);
 
     let body;
     if (!view.submitted) {

@@ -3,8 +3,9 @@ import { useParams } from "react-router-dom";
 import { Alert, Button, ConfigProvider, Spin, message } from "antd";
 
 import { getCurrentAttempt, getPublicAssignment, startAttempt } from "../services/publicAttemptApi";
-import type { AttemptView, PublicAssignmentInfo } from "../types/assignment.types";
+import { ATTEMPT_IDENTITY_TAKEN, type AttemptView, type PublicAssignmentInfo } from "../types/assignment.types";
 import { clearDraft, clearSession, loadDraft, loadSession, saveSession } from "../utils/attemptStorage";
+import { NAME_MAX, NAME_MIN, isNameMode, normalizeStudentName } from "../utils/identity";
 import type { SubmitOutcome } from "../utils/submitRetry";
 import { formatServerTime } from "../utils/timeFormat";
 import AttemptOutcome from "./AttemptOutcome";
@@ -18,7 +19,8 @@ type Phase =
     | { name: "not_found" }
     | { name: "load_error"; text: string }
     | { name: "welcome" }
-    | { name: "confirm_new"; classLabel: string; seatNo: number }
+    // Chế độ số thứ tự có seatNo, chế độ họ tên có studentName. taken: máy chủ báo trùng trước khi tạo lượt (25/11).
+    | { name: "confirm_new"; classLabel: string; seatNo?: number; studentName?: string; taken?: boolean }
     | { name: "resume_confirm"; view: AttemptView; token: string }
     | { name: "exam"; view: AttemptView; token: string }
     | { name: "outcome"; view: AttemptView; token: string; anchorServer: string; anchorLocalMs: number }
@@ -51,10 +53,12 @@ export default function StudentAssignmentPage() {
     const [reloadKey, setReloadKey] = useState(0);
     const [busy, setBusy] = useState(false);
 
-    // Chọn lớp và nhập số thứ tự (màn chào)
+    // Chọn lớp và nhập số thứ tự hoặc họ tên (màn chào), theo chế độ của bài giao
     const [classLabel, setClassLabel] = useState<string>("");
     const [seatText, setSeatText] = useState("");
+    const [nameText, setNameText] = useState("");
     const [formError, setFormError] = useState<string | undefined>();
+    const nameMode = isNameMode(info?.identityMode);
 
     // Mở trang: tải thông tin bài; nếu máy này có token thì tải luôn lượt làm để hỏi lại "Em là lớp X, số Y"
     useEffect(() => {
@@ -90,7 +94,11 @@ export default function StudentAssignmentPage() {
                 if (statusOf(viewResult.error) === 401) {
                     // Lượt cũ không còn (thầy cô đã xóa): bỏ token trên máy, cho em vào lại từ đầu
                     clearSession(code);
-                    setNotice("Bài làm cũ trên máy này không còn dùng được. Em chọn lớp và nhập số thứ tự để vào lại.");
+                    setNotice(
+                        `Bài làm cũ trên máy này không còn dùng được. Em chọn lớp và nhập ${
+                            isNameMode(infoResult.value.identityMode) ? "họ tên" : "số thứ tự"
+                        } để vào lại.`
+                    );
                 } else {
                     // Mạng yếu hoặc máy chủ bận: giữ token trên máy, cho em thử lại
                     setPhase({ name: "load_error", text: errorText(viewResult.error, "Chưa mở lại được bài làm của em.") });
@@ -107,11 +115,22 @@ export default function StudentAssignmentPage() {
     const selectedClass = info?.classes.find((c) => c.classLabel === classLabel);
 
     const submitWelcome = () => {
-        const seatNo = Number(seatText);
         if (!selectedClass) {
             setFormError("Em chọn lớp của em.");
             return;
         }
+        if (nameMode) {
+            const studentName = normalizeStudentName(nameText);
+            if (!studentName) {
+                setFormError(`Em nhập họ và tên của em (từ ${NAME_MIN} đến ${NAME_MAX} ký tự).`);
+                return;
+            }
+            setFormError(undefined);
+            setNotice(undefined);
+            setPhase({ name: "confirm_new", classLabel: selectedClass.classLabel, studentName });
+            return;
+        }
+        const seatNo = Number(seatText);
         if (!seatText || !Number.isInteger(seatNo) || seatNo < 1 || seatNo > selectedClass.size) {
             setFormError(`Số thứ tự của lớp ${selectedClass.classLabel} phải từ 1 đến ${selectedClass.size}.`);
             return;
@@ -121,17 +140,38 @@ export default function StudentAssignmentPage() {
         setPhase({ name: "confirm_new", classLabel: selectedClass.classLabel, seatNo });
     };
 
-    const beginAttempt = async (label: string, seatNo: number) => {
+    /**
+     * Gửi P2. Trùng lớp + tên / số mà chưa xác nhận (409 ATTEMPT_IDENTITY_TAKEN, quyết định 25/11): ở lại màn xác nhận,
+     * hỏi "Nhập lại" hay "Đúng là em, vẫn làm"; chưa có lượt nào, đồng hồ chưa chạy.
+     */
+    const beginAttempt = async (
+        identity: { classLabel: string; seatNo?: number; studentName?: string },
+        confirmDuplicate: boolean
+    ) => {
         setBusy(true);
         try {
-            const view = await startAttempt(code, label, seatNo);
+            const view = await startAttempt(code, {
+                classLabel: identity.classLabel,
+                ...(identity.studentName !== undefined ? { studentName: identity.studentName } : { seatNo: identity.seatNo }),
+                confirmDuplicate,
+            });
             if (!view.attemptToken) throw new Error("Máy chủ không trả mã lượt làm.");
-            const saved = saveSession(code, { token: view.attemptToken, classLabel: view.classLabel, seatNo: view.seatNo });
+            // Không lưu họ tên trên máy (chỉ token, lớp và số thứ tự nếu có)
+            const saved = saveSession(code, {
+                token: view.attemptToken,
+                classLabel: view.classLabel,
+                ...(typeof view.seatNo === "number" ? { seatNo: view.seatNo } : {}),
+            });
             setStorageBlocked(!saved);
             setPhase({ name: "exam", view, token: view.attemptToken });
         } catch (error) {
             const status = statusOf(error);
-            if (status === 409 && (error as ErrorLike).response?.data?.code === "ASSIGNMENT_CLOSED") {
+            const errorCode = (error as ErrorLike).response?.data?.code;
+            if (status === 409 && errorCode === ATTEMPT_IDENTITY_TAKEN) {
+                setPhase({ name: "confirm_new", ...identity, taken: true });
+                return;
+            }
+            if (status === 409 && errorCode === "ASSIGNMENT_CLOSED") {
                 setInfo((prev) => (prev ? { ...prev, status: "closed" } : prev));
             }
             setFormError(errorText(error, "Chưa bắt đầu được. Em thử lại hoặc báo thầy cô."));
@@ -146,6 +186,7 @@ export default function StudentAssignmentPage() {
         clearSession(code);
         setClassLabel("");
         setSeatText("");
+        setNameText("");
         setPhase({ name: "left" });
     }, [code]);
 
@@ -264,27 +305,35 @@ export default function StudentAssignmentPage() {
             content = (
                 <section className="student-card">
                     <h1 className="student-heading">Đã xóa bài làm khỏi máy này</h1>
-                    <p className="student-muted">Em có thể đóng trang. Muốn vào lại, em mở lại link và chọn lớp, số thứ tự.</p>
+                    <p className="student-muted">
+                        Em có thể đóng trang. Muốn vào lại, em mở lại link và chọn lớp, {nameMode ? "nhập họ tên" : "số thứ tự"}.
+                    </p>
                     <Button size="large" block onClick={goWelcome}>
-                        Vào bằng lớp và số khác
+                        {nameMode ? "Vào bằng lớp và tên khác" : "Vào bằng lớp và số khác"}
                     </Button>
                 </section>
             );
             break;
-        case "confirm_new":
+        case "confirm_new": {
+            const identity = { classLabel: phase.classLabel, seatNo: phase.seatNo, studentName: phase.studentName };
             content = (
                 <IdentityConfirm
                     classLabel={phase.classLabel}
                     seatNo={phase.seatNo}
+                    studentName={phase.studentName}
+                    taken={phase.taken}
                     note={`Bấm Bắt đầu là đồng hồ ${info?.durationMinutes ?? ""} phút chạy ngay.`}
                     confirmText="Đúng, bắt đầu làm bài"
                     rejectText="Không phải, nhập lại"
                     busy={busy}
-                    onConfirm={() => void beginAttempt(phase.classLabel, phase.seatNo)}
+                    onConfirm={() => void beginAttempt(identity, false)}
                     onReject={goWelcome}
+                    onConfirmDuplicate={() => void beginAttempt(identity, true)}
+                    onRetype={goWelcome}
                 />
             );
             break;
+        }
         case "resume_confirm": {
             const { view, token } = phase;
             const canContinue = !view.submitted && !!view.parts;
@@ -292,11 +341,14 @@ export default function StudentAssignmentPage() {
                 <IdentityConfirm
                     classLabel={view.classLabel}
                     seatNo={view.seatNo}
+                    studentName={view.studentName}
                     duplicateSeat={view.duplicateSeat}
                     note={
                         canContinue
                             ? "Máy này đang có bài làm dở. Nếu đúng là em, em làm tiếp với thời gian còn lại."
-                            : "Máy này đang lưu bài của lớp và số này."
+                            : view.studentName !== undefined
+                                ? "Máy này đang lưu bài của lớp và tên này."
+                                : "Máy này đang lưu bài của lớp và số này."
                     }
                     confirmText={canContinue ? "Đúng, làm tiếp" : "Đúng, xem tiếp"}
                     rejectText="Không phải em, thoát"
@@ -346,6 +398,8 @@ export default function StudentAssignmentPage() {
                     notice={notice}
                     classLabel={classLabel}
                     seatText={seatText}
+                    nameMode={nameMode}
+                    nameText={nameText}
                     error={formError}
                     onClass={(label) => {
                         setClassLabel(label);
@@ -353,6 +407,10 @@ export default function StudentAssignmentPage() {
                     }}
                     onSeat={(text) => {
                         setSeatText(text.replace(/\D/g, "").slice(0, 2));
+                        setFormError(undefined);
+                    }}
+                    onName={(text) => {
+                        setNameText(text);
                         setFormError(undefined);
                     }}
                     onNext={submitWelcome}
@@ -374,13 +432,17 @@ interface WelcomeProps {
     notice?: string;
     classLabel: string;
     seatText: string;
+    /** Bài giao chế độ họ tên (quyết định 25/11): ô họ tên thay ô số thứ tự. */
+    nameMode: boolean;
+    nameText: string;
     error?: string;
     onClass: (label: string) => void;
     onSeat: (text: string) => void;
+    onName: (text: string) => void;
     onNext: () => void;
 }
 
-function Welcome({ info, notice, classLabel, seatText, error, onClass, onSeat, onNext }: WelcomeProps) {
+function Welcome({ info, notice, classLabel, seatText, nameMode, nameText, error, onClass, onSeat, onName, onNext }: WelcomeProps) {
     const selected = info.classes.find((c) => c.classLabel === classLabel);
     const closed = info.status === "closed";
     return (
@@ -399,7 +461,9 @@ function Welcome({ info, notice, classLabel, seatText, error, onClass, onSeat, o
             ) : (
                 <>
                     <p className="student-privacy">
-                        Không nhập họ tên. Hệ thống chỉ lưu lớp, số thứ tự và bài làm của em để thầy cô xem điểm.
+                        {nameMode
+                            ? "Hệ thống lưu lớp, họ tên và bài làm của em để thầy cô xem điểm."
+                            : "Không nhập họ tên. Hệ thống chỉ lưu lớp, số thứ tự và bài làm của em để thầy cô xem điểm."}
                     </p>
 
                     <div className="student-field">
@@ -420,25 +484,49 @@ function Welcome({ info, notice, classLabel, seatText, error, onClass, onSeat, o
                         </div>
                     </div>
 
-                    <div className="student-field">
-                        <label htmlFor="student-seat" className="student-field-label">
-                            Số thứ tự của em{selected ? ` (từ 1 đến ${selected.size})` : ""}
-                        </label>
-                        <input
-                            id="student-seat"
-                            className="student-seat-input"
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            autoComplete="off"
-                            maxLength={2}
-                            value={seatText}
-                            onChange={(e) => onSeat(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter") onNext();
-                            }}
-                        />
-                    </div>
+                    {nameMode ? (
+                        <div className="student-field">
+                            <label htmlFor="student-name" className="student-field-label">
+                                Họ và tên của em
+                            </label>
+                            {/* autoComplete tắt: máy dùng chung không gợi ý tên của bạn trước */}
+                            <input
+                                id="student-name"
+                                className="student-name-input"
+                                type="text"
+                                autoComplete="off"
+                                autoCapitalize="words"
+                                spellCheck={false}
+                                maxLength={NAME_MAX + 20}
+                                placeholder="Ví dụ: Nguyễn Văn An"
+                                value={nameText}
+                                onChange={(e) => onName(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") onNext();
+                                }}
+                            />
+                        </div>
+                    ) : (
+                        <div className="student-field">
+                            <label htmlFor="student-seat" className="student-field-label">
+                                Số thứ tự của em{selected ? ` (từ 1 đến ${selected.size})` : ""}
+                            </label>
+                            <input
+                                id="student-seat"
+                                className="student-seat-input"
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                autoComplete="off"
+                                maxLength={2}
+                                value={seatText}
+                                onChange={(e) => onSeat(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") onNext();
+                                }}
+                            />
+                        </div>
+                    )}
 
                     {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
 

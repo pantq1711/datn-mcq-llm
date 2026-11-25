@@ -8,15 +8,20 @@ export const INFO: PublicAssignmentInfo = {
     status: "open",
     showScore: true,
     showSolutions: false,
+    identityMode: "seat",
     classes: [
         { classLabel: "8A1", size: 35 },
         { classLabel: "8A2", size: 36 },
     ],
 };
 
-/** Lượt đang làm: một câu mỗi dạng. */
+/** Bài giao chế độ họ tên (quyết định 25/11, mặc định của bài giao mới). */
+export const INFO_NAME: PublicAssignmentInfo = { ...INFO, identityMode: "name" };
+
+/** Lượt đang làm (chế độ số thứ tự): một câu mỗi dạng. */
 export function makeAttemptView(overrides: Partial<AttemptView> = {}): AttemptView {
     return {
+        identityMode: "seat",
         classLabel: "8A1",
         seatNo: 12,
         duplicateSeat: false,
@@ -62,6 +67,13 @@ export function makeAttemptView(overrides: Partial<AttemptView> = {}): AttemptVi
         ],
         ...overrides,
     };
+}
+
+/** Lượt đang làm ở chế độ họ tên: có `studentName`, không có `seatNo`. */
+export function makeNameAttemptView(overrides: Partial<AttemptView> = {}): AttemptView {
+    const { seatNo: _omit, ...base } = makeAttemptView({ identityMode: "name", studentName: "Nguyễn Văn An" });
+    void _omit;
+    return { ...base, ...overrides };
 }
 
 /** Bộ thống kê đủ mẫu (n = 36): một câu mỗi dạng, đúng thứ tự trang đề; câu mcq có cờ, câu tf đã được đổi sau khi giao. */

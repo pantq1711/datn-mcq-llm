@@ -50,7 +50,10 @@ public class AssignmentController {
         return service.list(examId, user.id());
     }
 
-    /** T3: một bài giao kèm bảng điểm (theo lớp rồi số thứ tự; lượt trùng có {@code duplicate = true}). */
+    /**
+     * T3: một bài giao kèm bảng điểm (theo lớp rồi số thứ tự, hoặc rồi tên ở chế độ họ tên; lượt trùng có
+     * {@code duplicate = true}). Chỗ duy nhất của API giáo viên trả họ tên học sinh.
+     */
     @GetMapping("/{assignmentId}")
     public AssignmentDto get(CurrentUser user, @PathVariable Integer examId, @PathVariable Integer assignmentId) {
         return service.get(examId, assignmentId, user.id());

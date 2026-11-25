@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Alert, Button, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Space, Switch, Typography } from "antd";
+import { Alert, Button, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Radio, Space, Switch, Typography } from "antd";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import dayjs, { type Dayjs } from "dayjs";
 
 import { createAssignment } from "../services/assignmentApi";
-import type { Assignment } from "../types/assignment.types";
+import type { Assignment, IdentityMode } from "../types/assignment.types";
 import { MAX_CLASSES, MAX_CLASS_SIZE, toClassPayload, validateClassRows, type RawClassRow } from "../utils/classInput";
 import { getApiErrorMessage } from "../../../utils/apiError";
 import AssignmentLinkCard from "./AssignmentLinkCard";
@@ -14,11 +14,18 @@ const { Text } = Typography;
 
 const MAX_DAYS_AHEAD = 30;
 
+/** Câu xác nhận của giáo viên theo chế độ (quyết định 25/11); câu của chế độ số thứ tự giữ như trước. */
+const CONSENT_TEXT: Record<IdentityMode, string> = {
+    name: "Tôi xác nhận việc cho học sinh làm bài trên hệ thống này đã được nhà trường cho phép, phụ huynh đã được thông báo việc học sinh nhập họ tên để giáo viên xem điểm, và tôi chỉ dùng họ tên cho việc này.",
+    seat: "Tôi xác nhận việc cho học sinh làm bài trên hệ thống này đã được nhà trường cho phép, phụ huynh đã được thông báo theo quy định của trường, và tôi sẽ không yêu cầu học sinh nhập họ tên.",
+};
+
 interface FormValues {
     durationMinutes: number;
     closesAt: Dayjs;
     showScore: boolean;
     showSolutions: boolean;
+    identityMode: IdentityMode;
     classes: RawClassRow[];
     consent: boolean;
 }
@@ -44,6 +51,7 @@ export default function AssignExamModal({ open, examId, onClose, onCreated }: As
     const [errorText, setErrorText] = useState<string | undefined>();
     const [errorList, setErrorList] = useState<string[]>([]);
     const [created, setCreated] = useState<Assignment | null>(null);
+    const identityMode: IdentityMode = Form.useWatch("identityMode", form) ?? "name";
 
     const handleClose = () => {
         setErrorText(undefined);
@@ -79,6 +87,7 @@ export default function AssignExamModal({ open, examId, onClose, onCreated }: As
                 showSolutions: values.showSolutions,
                 consentConfirmed: true,
                 classes: toClassPayload(values.classes),
+                identityMode: values.identityMode,
             });
             setCreated(assignment);
             onCreated?.(assignment);
@@ -113,8 +122,11 @@ export default function AssignExamModal({ open, examId, onClose, onCreated }: As
                     </Button>,
                 ]}
             >
-                <p>Thầy/cô gửi link hoặc chiếu mã QR cho học sinh. Học sinh chọn lớp và nhập số thứ tự của mình.</p>
-                <AssignmentLinkCard publicCode={created.publicCode} fileName={created.title} />
+                <p>
+                    Thầy/cô gửi link hoặc chiếu mã QR cho học sinh. Học sinh chọn lớp và nhập{" "}
+                    {created.identityMode === "name" ? "họ và tên" : "số thứ tự"} của mình.
+                </p>
+                <AssignmentLinkCard publicCode={created.publicCode} fileName={created.title} identityMode={created.identityMode} />
             </Modal>
         );
     }
@@ -136,15 +148,28 @@ export default function AssignExamModal({ open, examId, onClose, onCreated }: As
                 layout="vertical"
                 requiredMark={false}
                 onFinish={(values) => void handleFinish(values)}
+                // Đổi chế độ thì câu xác nhận đổi theo: bỏ tích để thầy/cô đọc và tích lại câu mới
+                onValuesChange={(changed: Partial<FormValues>) => {
+                    if ("identityMode" in changed) form.setFieldValue("consent", false);
+                }}
                 initialValues={{
                     durationMinutes: 45,
                     closesAt: dayjs().add(1, "day").minute(0).second(0),
                     showScore: true,
                     showSolutions: false,
+                    identityMode: "name",
                     classes: [{ classLabel: "", size: undefined }],
                     consent: false,
                 }}
             >
+                <Form.Item label="Học sinh nhập" name="identityMode" style={{ marginBottom: 16 }}>
+                    <Radio.Group
+                        options={[
+                            { value: "name", label: "Họ và tên (mặc định)" },
+                            { value: "seat", label: "Số thứ tự" },
+                        ]}
+                    />
+                </Form.Item>
                 <Text strong>Các lớp làm bài (tối đa {MAX_CLASSES} lớp)</Text>
                 <Form.List name="classes">
                     {(fields, { add, remove }) => (
@@ -182,7 +207,9 @@ export default function AssignExamModal({ open, examId, onClose, onCreated }: As
                                 Thêm lớp
                             </Button>
                             <div className="assignment-hint">
-                                Học sinh chọn lớp trong danh sách này và nhập số thứ tự từ 1 đến sĩ số của lớp.
+                                {identityMode === "name"
+                                    ? "Học sinh chọn lớp trong danh sách này và nhập họ tên. Sĩ số dùng để giới hạn số lượt làm."
+                                    : "Học sinh chọn lớp trong danh sách này và nhập số thứ tự từ 1 đến sĩ số của lớp."}
                             </div>
                         </div>
                     )}
@@ -222,10 +249,7 @@ export default function AssignExamModal({ open, examId, onClose, onCreated }: As
                         },
                     ]}
                 >
-                    <Checkbox>
-                        Tôi xác nhận việc cho học sinh làm bài trên hệ thống này đã được nhà trường cho phép, phụ huynh đã được thông báo
-                        theo quy định của trường, và tôi sẽ không yêu cầu học sinh nhập họ tên.
-                    </Checkbox>
+                    <Checkbox>{CONSENT_TEXT[identityMode]}</Checkbox>
                 </Form.Item>
 
                 {errorText && (

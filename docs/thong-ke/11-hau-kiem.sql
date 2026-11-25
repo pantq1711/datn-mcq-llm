@@ -8,6 +8,9 @@
 -- Bài giao được tính: đã đóng VÀ đã qua 2 phút ân hạn nộp tính từ lúc đóng (trong ân hạn còn lượt nộp được). Lượt được
 -- tính: đã nộp và KHÔNG trùng lớp + số thứ tự với lượt nào khác của bài giao, kể cả lượt bỏ dở (cùng quy tắc "trùng" của
 -- bảng điểm). Câu không có lượt hợp lệ nào thì không có dòng.
+-- (V36, quyết định 25/11) Bài giao chế độ họ tên có seat_no NULL: trùng là cùng lớp + họ tên chữ thường (giữ dấu), như
+-- service. Service hạ chữ bằng Java (Locale.ROOT); file này dùng lower() của PostgreSQL, nên hai bên chỉ khớp khi DB dùng
+-- collation UTF-8 có bảng chữ thường Unicode (mặc định của image postgres; HauKiemSqlTest kiểm trên DB test).
 --
 -- Công thức (thiết kế mục 5.2-5.4):
 --   * Xếp lượt theo điểm giảm dần, hòa thì theo tổng số câu/ý đúng (correct_count) giảm dần, rồi id tăng dần.
@@ -53,7 +56,8 @@ bai AS (
 luot AS (
     -- mọi lượt, kể cả chưa nộp, để xác định "trùng"
     SELECT a.id, a.assignment_id, a.score, a.submitted_at,
-           count(*) OVER (PARTITION BY a.assignment_id, a.class_label, a.seat_no) AS so_luot_cung_cho
+           count(*) OVER (PARTITION BY a.assignment_id, a.class_label, a.seat_no, lower(a.student_name))
+               AS so_luot_cung_cho
     FROM assignment_attempt a
     JOIN bai b ON b.id = a.assignment_id
 ),

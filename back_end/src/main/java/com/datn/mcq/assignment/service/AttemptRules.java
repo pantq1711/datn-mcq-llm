@@ -3,11 +3,15 @@ package com.datn.mcq.assignment.service;
 import com.datn.mcq.assignment.repository.AssignmentRepository.AssignmentRow;
 import com.datn.mcq.assignment.repository.AssignmentRepository.AttemptRow;
 
+import java.text.Collator;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -30,6 +34,9 @@ final class AttemptRules {
     static final String IN_PROGRESS = "in_progress";
     static final String SUBMITTED = "submitted";
     static final String EXPIRED = "expired";
+
+    /** Quy tắc so chữ khi sắp bảng điểm theo họ tên (25/11). */
+    private static final Locale VIETNAMESE = Locale.forLanguageTag("vi-VN");
 
     private AttemptRules() {}
 
@@ -68,25 +75,51 @@ final class AttemptRules {
     }
 
     /**
-     * Id các lượt "trùng" (quyết định 16/11): có lượt KHÁC cùng lớp + số thứ tự trong cùng bài giao, xét MỌI lượt kể cả
-     * chưa nộp; tính lúc đọc, không lưu. Một quy tắc cho cả bảng điểm (cờ {@code duplicate}) và thống kê câu (lượt trùng
-     * không được tính), để hai nơi luôn khớp nhau.
+     * Id các lượt "trùng" (quyết định 16/11): có lượt KHÁC cùng lớp + số thứ tự (hoặc, chế độ họ tên từ 25/11, cùng lớp +
+     * họ tên theo {@link StudentNames#key}) trong cùng bài giao, xét MỌI lượt kể cả chưa nộp; tính lúc đọc, không lưu. Một
+     * quy tắc cho cả bảng điểm (cờ {@code duplicate}), thống kê câu (lượt trùng không được tính) và báo trùng trước khi
+     * bắt đầu ({@link #identityKey}), để các nơi luôn khớp nhau.
      */
     static Set<Integer> duplicateIds(List<AttemptRow> attempts) {
-        Map<String, Integer> seatCounts = new HashMap<>();
+        Map<String, Integer> counts = new HashMap<>();
         for (AttemptRow t : attempts) {
-            seatCounts.merge(seatKey(t), 1, Integer::sum);
+            counts.merge(t.classLabel() + identityKey(t.seatNo(), t.studentName()), 1, Integer::sum);
         }
         Set<Integer> out = new HashSet<>();
         for (AttemptRow t : attempts) {
-            if (seatCounts.get(seatKey(t)) > 1) {
+            if (counts.get(t.classLabel() + identityKey(t.seatNo(), t.studentName())) > 1) {
                 out.add(t.id());
             }
         }
         return out;
     }
 
-    private static String seatKey(AttemptRow t) {
-        return t.classLabel() + "#" + t.seatNo();
+    /**
+     * Khóa danh tính của một lượt TRONG một lớp: {@code #<số>} hoặc {@code @<họ tên chữ thường>}. Hai tiền tố khác nhau
+     * nên số và tên không bao giờ trùng nhau (mỗi bài giao chỉ một chế độ).
+     */
+    static String identityKey(Integer seatNo, String studentName) {
+        return studentName != null ? "@" + StudentNames.key(studentName) : "#" + seatNo;
+    }
+
+    /**
+     * Thứ tự bảng điểm ở chế độ họ tên (25/11): giữ thứ tự lớp đã có (thứ tự khai lúc giao), trong lớp theo tên (chữ cuối)
+     * rồi theo cả họ và tên, như sổ điểm; so theo quy tắc chữ tiếng Việt. Cùng tên thì theo lúc bắt đầu, rồi id.
+     */
+    static List<AttemptRow> byClassThenName(List<AttemptRow> attempts) {
+        Map<String, Integer> classOrder = new HashMap<>();
+        for (AttemptRow t : attempts) {
+            classOrder.putIfAbsent(t.classLabel(), classOrder.size());
+        }
+        Collator collator = Collator.getInstance(VIETNAMESE);
+        Comparator<String> text = Comparator.nullsFirst((String x, String y) -> collator.compare(x, y));
+        Comparator<AttemptRow> order = Comparator.<AttemptRow>comparingInt(t -> classOrder.get(t.classLabel()))
+                .thenComparing(t -> t.studentName() == null ? null : StudentNames.givenName(t.studentName()), text)
+                .thenComparing(AttemptRow::studentName, text)
+                .thenComparing(AttemptRow::startedAt)
+                .thenComparing(AttemptRow::id);
+        List<AttemptRow> out = new ArrayList<>(attempts);
+        out.sort(order);
+        return out;
     }
 }

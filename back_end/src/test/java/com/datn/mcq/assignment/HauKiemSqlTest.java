@@ -57,7 +57,7 @@ class HauKiemSqlTest extends AssignmentTestBase {
             submit(startToken(code, "8A1", s), answers(s)).andExpect(status().isOk());
         }
         submit(startToken(code, "8A2", 1), answers(1)).andExpect(status().isOk());   // cặp trùng
-        submit(startToken(code, "8A2", 1), answers(22)).andExpect(status().isOk());
+        submit(startConfirmedToken(code, "8A2", 1), answers(22)).andExpect(status().isOk());
         startToken(code, "8A2", 2);                                                     // chưa nộp
         closeAndPassGrace(id);
 
@@ -94,6 +94,40 @@ class HauKiemSqlTest extends AssignmentTestBase {
         // c_H = 3, c_L = 6 ⇒ D = -0,5; A, C không ai chọn; D: cao 3 > thấp 0 và 3 ≥ max(2; 1,2).
         assertEquals("[\"low_discrimination\", \"unused_option: A\", \"unused_option: C\", \"key_suspect: D\"]",
                 String.valueOf(sqlBySlot.get(mcqSlot2).get("flags")));
+    }
+
+    /**
+     * Quyết định 25/11: bài giao chế độ họ tên có {@code seat_no} NULL; SQL phải nhận "trùng" theo lớp + họ tên (chữ
+     * thường, giữ dấu) như service, không gộp mọi lượt NULL của một lớp thành một nhóm trùng.
+     */
+    @Test
+    void cheDoHoTenSqlNhanTrungTheoTenKhopService() throws Exception {
+        JsonNode a = assignMode(NAME, true, false);
+        int id = a.get("assignmentId").asInt();
+        String code = a.get("publicCode").asText();
+        submit(json(startName(code, "8A1", "Nguyễn Văn An").andExpect(status().isCreated())).get("attemptToken")
+                .asText(), answers(1)).andExpect(status().isOk());
+        submit(json(startName(code, "8A1", "Nguyen Van An").andExpect(status().isCreated())).get("attemptToken")
+                .asText(), answers(5)).andExpect(status().isOk());   // khác dấu: không trùng
+        submit(json(startName(code, "8A1", "Trần Bình").andExpect(status().isCreated())).get("attemptToken")
+                .asText(), answers(2)).andExpect(status().isOk());
+        submit(json(startNameConfirmed(code, "8A1", "  trần   BÌNH ").andExpect(status().isCreated()))
+                .get("attemptToken").asText(), answers(20)).andExpect(status().isOk());   // trùng với "Trần Bình"
+        submit(json(startName(code, "8A2", "Trần Bình").andExpect(status().isCreated())).get("attemptToken")
+                .asText(), answers(3)).andExpect(status().isOk());   // khác lớp: không trùng
+        closeAndPassGrace(id);
+
+        JsonNode service = json(asTeacher(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .get(base() + "/" + id + "/item-stats")).andExpect(status().isOk()));
+        assertEquals(3, service.get("n").asInt(), service.toString());
+        assertEquals(2, service.get("excluded").get("duplicate").asInt());
+
+        List<Map<String, Object>> mine = jdbc.queryForList(PsqlFile.load(FILE)).stream()
+                .filter(r -> ((Number) r.get("assignment_id")).intValue() == id).toList();
+        assertEquals(4, mine.size(), mine.toString());
+        for (Map<String, Object> r : mine) {
+            assertEquals(3, ((Number) r.get("n")).intValue(), "SQL phải loại đúng cặp trùng tên: " + r);
+        }
     }
 
     @Test

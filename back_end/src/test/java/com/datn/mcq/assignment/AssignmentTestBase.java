@@ -206,11 +206,25 @@ abstract class AssignmentTestBase {
         return createBody(durationMinutes, closesAt, showScore, false, consent, DEFAULT_CLASSES);
     }
 
+    /**
+     * Thân giao bài ở chế độ số thứ tự ('seat'): các test viết trước quyết định 25/11 kiểm hành vi của chế độ này. Bài giao
+     * mới không ghi chế độ thì là 'name' ({@link #createBody(int, Instant, boolean, boolean, boolean, String, String)}).
+     */
     static String createBody(int durationMinutes, Instant closesAt, boolean showScore, boolean showSolutions,
                              boolean consent, String classesJson) {
+        return createBody(durationMinutes, closesAt, showScore, showSolutions, consent, classesJson, SEAT);
+    }
+
+    static final String SEAT = "seat";
+    static final String NAME = "name";
+
+    /** {@code identityMode} null: không gửi trường này (mặc định của server). */
+    static String createBody(int durationMinutes, Instant closesAt, boolean showScore, boolean showSolutions,
+                             boolean consent, String classesJson, String identityMode) {
         return "{\"durationMinutes\": " + durationMinutes + ", \"closesAt\": \"" + closesAt + "\", \"showScore\": "
                 + showScore + ", \"showSolutions\": " + showSolutions + ", \"consentConfirmed\": " + consent
-                + (classesJson == null ? "" : ", \"classes\": " + classesJson) + "}";
+                + (classesJson == null ? "" : ", \"classes\": " + classesJson)
+                + (identityMode == null ? "" : ", \"identityMode\": \"" + identityMode + "\"") + "}";
     }
 
     String base() {
@@ -238,15 +252,50 @@ abstract class AssignmentTestBase {
                 + " closes_at = closes_at - interval '3 minutes' WHERE id = ?", assignmentId);
     }
 
+    /** Giao bài ở chế độ {@code identityMode} (null: không gửi, server dùng mặc định), 45 phút, lớp mặc định. */
+    JsonNode assignMode(String identityMode, boolean showScore, boolean showSolutions) throws Exception {
+        return json(asTeacher(post(base()).contentType(MediaType.APPLICATION_JSON)
+                .content(createBody(45, Instant.now().plus(2, ChronoUnit.HOURS), showScore, showSolutions, true,
+                        DEFAULT_CLASSES, identityMode)))
+                .andExpect(status().isCreated()));
+    }
+
     ResultActions start(String code, String classLabel, int seatNo) throws Exception {
+        return startBody(code, java.util.Map.of("classLabel", classLabel, "seatNo", seatNo));
+    }
+
+    /**
+     * Bắt đầu với {@code confirmDuplicate = true} (quyết định 25/11): học sinh đã thấy báo trùng và bấm "Đúng là em, vẫn
+     * làm". Không trùng thì như {@link #start}.
+     */
+    ResultActions startConfirmed(String code, String classLabel, int seatNo) throws Exception {
+        return startBody(code, java.util.Map.of("classLabel", classLabel, "seatNo", seatNo, "confirmDuplicate", true));
+    }
+
+    ResultActions startName(String code, String classLabel, String studentName) throws Exception {
+        return startBody(code, java.util.Map.of("classLabel", classLabel, "studentName", studentName));
+    }
+
+    ResultActions startNameConfirmed(String code, String classLabel, String studentName) throws Exception {
+        return startBody(code, java.util.Map.of("classLabel", classLabel, "studentName", studentName,
+                "confirmDuplicate", true));
+    }
+
+    ResultActions startBody(String code, java.util.Map<String, Object> body) throws Exception {
         return mockMvc.perform(post("/api/public/assignments/" + code + "/attempts")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(java.util.Map.of("classLabel", classLabel, "seatNo", seatNo))));
+                .content(objectMapper.writeValueAsString(body)));
     }
 
     /** Bắt đầu một lượt, trả token. */
     String startToken(String code, String classLabel, int seatNo) throws Exception {
         return json(start(code, classLabel, seatNo).andExpect(status().isCreated())).get("attemptToken").asText();
+    }
+
+    /** Như {@link #startToken} nhưng đã xác nhận trùng (dùng khi test cố ý tạo lượt trùng lớp + số thứ tự). */
+    String startConfirmedToken(String code, String classLabel, int seatNo) throws Exception {
+        return json(startConfirmed(code, classLabel, seatNo).andExpect(status().isCreated())).get("attemptToken")
+                .asText();
     }
 
     ResultActions current(String token) throws Exception {

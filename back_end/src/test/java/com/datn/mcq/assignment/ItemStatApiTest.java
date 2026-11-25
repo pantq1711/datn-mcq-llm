@@ -39,9 +39,12 @@ class ItemStatApiTest extends AssignmentTestBase {
         return json(asTeacher(get(stats(assignmentId))).andExpect(status().isOk()));
     }
 
-    /** Một lượt nộp chỉ trả lời câu trắc nghiệm 1 bằng {@code choice} (các câu khác bỏ trống). */
+    /**
+     * Một lượt nộp chỉ trả lời câu trắc nghiệm 1 bằng {@code choice} (các câu khác bỏ trống). Bắt đầu với xác nhận trùng
+     * (quyết định 25/11) vì các test ở đây cố ý tạo lượt trùng lớp + số thứ tự.
+     */
     private String submitMcq1(String code, String classLabel, int seat, String choice) throws Exception {
-        String token = startToken(code, classLabel, seat);
+        String token = startConfirmedToken(code, classLabel, seat);
         submit(token, "[{\"slotId\": " + mcqSlot1 + ", \"choice\": \"" + choice + "\"}]").andExpect(status().isOk());
         return token;
     }
@@ -121,7 +124,7 @@ class ItemStatApiTest extends AssignmentTestBase {
         submitMcq1(code, "8A1", 2, "C");            // trùng (cả hai đã nộp)
         submitMcq1(code, "8A1", 2, "C");
         submitMcq1(code, "8A1", 3, "C");            // trùng với một lượt bỏ dở
-        startToken(code, "8A1", 3);
+        startConfirmedToken(code, "8A1", 3);
         startToken(code, "8A1", 4);                 // chưa nộp
         closeAndPassGrace(id);
 

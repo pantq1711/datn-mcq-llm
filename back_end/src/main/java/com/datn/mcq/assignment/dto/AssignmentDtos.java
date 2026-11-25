@@ -20,10 +20,13 @@ public final class AssignmentDtos {
 
     /**
      * T1. {@code showSolutions} (16/11, mặc định false): sau khi bài đóng, học sinh mở lại link xem đáp án và lời giải từng
-     * câu cạnh lựa chọn của mình. {@code classes}: 1..10 lớp, nhãn không trùng.
+     * câu cạnh lựa chọn của mình. {@code classes}: 1..10 lớp, nhãn không trùng. {@code identityMode} (25/11): học sinh nhập
+     * {@code name} (họ và tên, mặc định khi không gửi) hoặc {@code seat} (số thứ tự); giá trị khác là 400. Không đổi được
+     * sau khi giao.
      */
     public record CreateAssignmentRequest(Integer durationMinutes, Instant closesAt, Boolean showScore,
-                                          Boolean showSolutions, Boolean consentConfirmed, List<ClassInput> classes) {}
+                                          Boolean showSolutions, Boolean consentConfirmed, List<ClassInput> classes,
+                                          String identityMode) {}
 
     public record ClassDto(String classLabel, int size) {}
 
@@ -32,22 +35,25 @@ public final class AssignmentDtos {
 
     /**
      * Một dòng bảng điểm. {@code state}: {@code in_progress}, {@code submitted}, {@code expired}. {@code duplicate}
-     * (16/11): có lượt khác cùng lớp + số thứ tự trong bài giao này; tính lúc đọc, cả hai lượt đều bị đánh dấu và không
-     * được tính vào thống kê hậu kiểm (PR B, cùng quy tắc). Điểm chỉ có khi đã nộp.
+     * (16/11): có lượt khác cùng lớp + số thứ tự (chế độ {@code seat}) hoặc cùng lớp + họ tên (chế độ {@code name}, 25/11:
+     * chữ thường, giữ dấu) trong bài giao này; tính lúc đọc, cả hai lượt đều bị đánh dấu và không được tính vào thống kê
+     * hậu kiểm (PR B, cùng quy tắc). Đúng một trong {@code seatNo} / {@code studentName} có giá trị, theo chế độ. Điểm chỉ
+     * có khi đã nộp. {@code studentName} chỉ có ở T3 (chủ bài giao).
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record AttemptDto(Integer attemptId, String classLabel, int seatNo, String state, boolean duplicate,
-                             LocalDateTime startedAt, LocalDateTime submittedAt, BigDecimal score, BigDecimal score10,
-                             List<PartScoreDto> parts) {}
+    public record AttemptDto(Integer attemptId, String classLabel, Integer seatNo, String studentName, String state,
+                             boolean duplicate, LocalDateTime startedAt, LocalDateTime submittedAt, BigDecimal score,
+                             BigDecimal score10, List<PartScoreDto> parts) {}
 
     /**
      * Bài giao. {@code attempts} chỉ có ở T3 (xem một bài giao); T2 (danh sách) không có. {@code maxAttempts} = 2 × tổng sĩ
      * số (quyết định 16/11). {@code statsComputedAt} (PR B): lúc tính thống kê câu gần nhất; không có khi chưa tính hoặc
-     * thống kê đã bị vô hiệu do xóa lượt.
+     * thống kê đã bị vô hiệu do xóa lượt. {@code identityMode} (25/11): {@code name} hoặc {@code seat}.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record AssignmentDto(Integer assignmentId, String publicCode, String title, String status,
-                                int durationMinutes, LocalDateTime closesAt, LocalDateTime closedAt, boolean showScore,
+                                String identityMode, int durationMinutes, LocalDateTime closesAt,
+                                LocalDateTime closedAt, boolean showScore,
                                 boolean showSolutions, LocalDateTime createdAt, List<ClassDto> classes,
                                 int questionCount, BigDecimal maxScore, int maxAttempts, int startedCount,
                                 int submittedCount, int duplicateCount, LocalDateTime statsComputedAt,

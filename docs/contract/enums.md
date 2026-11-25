@@ -35,6 +35,7 @@ Java: đặt tên hằng kiểu `ZERO_SHOT`, `FEW_SHOT_STRUCTURED`... và có b�
 | `ImportBatchStatus` (V26) | `import_batch.status` (chưa có enum Java, hằng ở `ImportBatch.STATUS_*`) |
 | `ExamChallenge` (V27, 12/11) | `exam.challenge` |
 | `AssignmentStatus` (V32, 16/11) | `exam_assignment.status` (chưa có enum Java, hằng ở `AssignmentRepository.OPEN/CLOSED`) |
+| `IdentityMode` (V36, 25/11) | `exam_assignment.identity_mode` (chưa có enum Java, hằng ở `AssignmentRepository.MODE_NAME/MODE_SEAT`) |
 | `TeacherRequest` (V28, PR B 12/11) | phần tử của mảng `request_codes TEXT[]` ở `exam_generation_context`, `exam_slot_action`, `generation_job`, `generated_question` |
 | `RequestVerdict` (V28, PR B 12/11; V29 thêm `unchecked`) | `quality_check_result.request_verdict` (chỉ dòng `answer_check`) |
 
@@ -299,7 +300,24 @@ là `unchecked`.
 
 Trạng thái của một lượt làm KHÔNG lưu DB, tính lúc đọc (`AttemptRules.state`): `in_progress` (chưa nộp, còn nộp được),
 `submitted`, `expired` (chưa nộp, hết hạn + ân hạn 2 phút, hoặc giáo viên đóng bài trước hạn của lượt). Cờ "trùng" của lượt
-(cùng lớp + số thứ tự với lượt khác của bài giao) cũng tính lúc đọc.
+(cùng lớp + số thứ tự, hoặc từ 25/11 cùng lớp + họ tên, với lượt khác của bài giao) cũng tính lúc đọc.
+
+### `IdentityMode` (V36, học sinh nhập gì khi làm bài trực tuyến, quyết định 25/11)
+
+| Giá trị trong DB / API | Ý nghĩa |
+|---|---|
+| `name` | Học sinh nhập họ và tên (`assignment_attempt.student_name`, `seat_no` NULL). **Mặc định** của bài giao mới (DEFAULT của cột và khi T1 không gửi `identityMode`) |
+| `seat` | Học sinh nhập số thứ tự 1..sĩ số (`seat_no`, `student_name` NULL). Mọi bài giao có trước V36 |
+
+DB chặn: CHECK hai giá trị; mỗi lượt có đúng một trong `seat_no` / `student_name` (`chk_aa_identity`); `student_name` 2–60 ký
+tự. Service chặn (DB không tự đảm bảo): lượt phải khớp chế độ của bài giao; họ tên đã chuẩn hóa (NFC, gộp khoảng trắng, không
+ký tự điều khiển Cc hay định dạng vô hình Cf). Khóa "trùng" chế độ `name`: lớp + họ tên chữ thường, giữ dấu
+(`AttemptRules.identityKey`, một hàm Java cho báo trùng P2, bảng điểm và thống kê câu). Họ tên chỉ trả ở T3 (chủ bài giao) và
+P2/P3 của chính lượt đó.
+
+Mã lỗi 409 khi học sinh bắt đầu (`POST /api/public/assignments/{code}/attempts`, P2): `ASSIGNMENT_CLOSED`, `ASSIGNMENT_FULL`,
+`ATTEMPT_IDENTITY_TAKEN` (25/11: đã có lượt cùng lớp + số hoặc cùng lớp + tên và thân yêu cầu không có `confirmDuplicate:
+true`; không tạo lượt, đồng hồ chưa chạy; áp cho cả hai chế độ). Mã cũ `IDENTITY_TAKEN` của thiết kế 14/11 không dùng.
 
 Mã lỗi 409 khi giao bài (`POST /api/exams/{examId}/assignments`, kèm `errors` là danh sách chỗ, ví dụ `"Phần I, Câu 2"`), kiểm theo
 thứ tự này và không ghi gì vào DB khi có lỗi: `ASSIGN_NOT_ALL_KEPT` (đề trống hoặc còn chỗ chưa Giữ/Sửa),

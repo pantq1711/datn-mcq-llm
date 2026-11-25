@@ -24,9 +24,14 @@ public class AssignmentRepository {
     public record AssignmentRow(Integer id, Integer examId, Integer createdBy, String publicCode, String title,
                                 int durationMinutes, LocalDateTime closesAt, boolean showScore, boolean showSolutions,
                                 String status, LocalDateTime closedAt, String scoringJson, LocalDateTime createdAt,
-                                LocalDateTime statsComputedAt) {
+                                LocalDateTime statsComputedAt, String identityMode) {
         public boolean open() {
             return OPEN.equals(status);
+        }
+
+        /** Chế độ họ tên (V36, quyết định 25/11); ngược lại là số thứ tự. */
+        public boolean nameMode() {
+            return MODE_NAME.equals(identityMode);
         }
     }
 
@@ -35,31 +40,36 @@ public class AssignmentRepository {
     public record ItemRow(Integer slotId, Integer bankItemId, String questionType, String part, int numberInPart,
                           int position) {}
 
-    public record AttemptRow(Integer id, Integer assignmentId, String classLabel, int seatNo, LocalDateTime startedAt,
-                             LocalDateTime deadlineAt, LocalDateTime submittedAt, BigDecimal score,
-                             BigDecimal maxScore) {}
+    /** Một lượt làm. Đúng một trong {@code seatNo} / {@code studentName} có giá trị (V36, theo chế độ của bài giao). */
+    public record AttemptRow(Integer id, Integer assignmentId, String classLabel, Integer seatNo, String studentName,
+                             LocalDateTime startedAt, LocalDateTime deadlineAt, LocalDateTime submittedAt,
+                             BigDecimal score, BigDecimal maxScore) {}
 
     public record AnswerRow(Integer attemptId, Integer slotId, String mcqChoice, String tfChoices, String saText,
                             int correctCount, BigDecimal score) {}
 
     public static final String OPEN = "open";
     public static final String CLOSED = "closed";
+    /** {@code exam_assignment.identity_mode} (V36). */
+    public static final String MODE_NAME = "name";
+    public static final String MODE_SEAT = "seat";
 
     private static final String ASSIGNMENT_COLUMNS = "id, exam_id, created_by, public_code, title, duration_minutes,"
             + " closes_at, show_score, show_solutions, status, closed_at, scoring::text AS scoring, created_at,"
-            + " stats_computed_at";
-    private static final String ATTEMPT_COLUMNS = "id, assignment_id, class_label, seat_no, started_at, deadline_at,"
-            + " submitted_at, score, max_score";
+            + " stats_computed_at, identity_mode";
+    private static final String ATTEMPT_COLUMNS = "id, assignment_id, class_label, seat_no, student_name, started_at,"
+            + " deadline_at, submitted_at, score, max_score";
 
     private static final RowMapper<AssignmentRow> ASSIGNMENT = (rs, i) -> new AssignmentRow(rs.getInt("id"),
             rs.getInt("exam_id"), rs.getInt("created_by"), rs.getString("public_code"), rs.getString("title"),
             rs.getInt("duration_minutes"), time(rs.getTimestamp("closes_at")), rs.getBoolean("show_score"),
             rs.getBoolean("show_solutions"), rs.getString("status"), time(rs.getTimestamp("closed_at")),
-            rs.getString("scoring"), time(rs.getTimestamp("created_at")), time(rs.getTimestamp("stats_computed_at")));
+            rs.getString("scoring"), time(rs.getTimestamp("created_at")), time(rs.getTimestamp("stats_computed_at")),
+            rs.getString("identity_mode"));
 
     private static final RowMapper<AttemptRow> ATTEMPT = (rs, i) -> new AttemptRow(rs.getInt("id"),
-            rs.getInt("assignment_id"), rs.getString("class_label"), rs.getInt("seat_no"),
-            time(rs.getTimestamp("started_at")), time(rs.getTimestamp("deadline_at")),
+            rs.getInt("assignment_id"), rs.getString("class_label"), rs.getObject("seat_no", Integer.class),
+            rs.getString("student_name"), time(rs.getTimestamp("started_at")), time(rs.getTimestamp("deadline_at")),
             time(rs.getTimestamp("submitted_at")), rs.getBigDecimal("score"), rs.getBigDecimal("max_score"));
 
     private static final RowMapper<AnswerRow> ANSWER = (rs, i) -> new AnswerRow(rs.getInt("attempt_id"),
@@ -87,12 +97,13 @@ public class AssignmentRepository {
 
     public int insertAssignment(Integer examId, Integer createdBy, String publicCode, String title, int durationMinutes,
                                 LocalDateTime closesAt, boolean showScore, boolean showSolutions, String scoringJson,
-                                LocalDateTime now) {
+                                String identityMode, LocalDateTime now) {
         return jdbc.queryForObject("INSERT INTO exam_assignment (exam_id, created_by, public_code, title,"
-                        + " duration_minutes, closes_at, show_score, show_solutions, scoring, consent_confirmed_at,"
-                        + " created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?) RETURNING id", Integer.class,
+                        + " duration_minutes, closes_at, show_score, show_solutions, scoring, identity_mode,"
+                        + " consent_confirmed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?)"
+                        + " RETURNING id", Integer.class,
                 examId, createdBy, publicCode, title, durationMinutes, closesAt, showScore, showSolutions, scoringJson,
-                now, now);
+                identityMode, now, now);
     }
 
     public void insertClasses(int assignmentId, List<ClassRow> classes) {
@@ -177,17 +188,26 @@ public class AssignmentRepository {
                 assignmentId);
     }
 
-    /** Số lượt khác (chưa tính lượt mới) đã dùng lớp + số thứ tự này trong bài giao. */
-    public int countSameSeat(Integer assignmentId, String classLabel, int seatNo) {
-        return jdbc.queryForObject("SELECT count(*) FROM assignment_attempt WHERE assignment_id = ? AND class_label = ?"
-                + " AND seat_no = ?", Integer.class, assignmentId, classLabel, seatNo);
+    /** Số thứ tự hoặc họ tên của một lượt (V36): đúng một trong hai có giá trị. */
+    public record IdentityRow(Integer seatNo, String studentName) {}
+
+    /**
+     * Danh tính (số thứ tự hoặc họ tên) của mọi lượt cùng lớp trong bài giao, để service so trùng bằng một quy tắc
+     * ({@code AttemptRules.identityKey}); không so ở SQL để không phụ thuộc lower() theo collation của DB.
+     */
+    public List<IdentityRow> identitiesInClass(Integer assignmentId, String classLabel) {
+        return jdbc.query("SELECT seat_no, student_name FROM assignment_attempt WHERE assignment_id = ?"
+                        + " AND class_label = ?",
+                (rs, i) -> new IdentityRow(rs.getObject("seat_no", Integer.class), rs.getString("student_name")),
+                assignmentId, classLabel);
     }
 
-    public int insertAttempt(Integer assignmentId, String classLabel, int seatNo, String tokenHash,
-                             LocalDateTime startedAt, LocalDateTime deadlineAt) {
-        return jdbc.queryForObject("INSERT INTO assignment_attempt (assignment_id, class_label, seat_no, token_hash,"
-                        + " started_at, deadline_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING id", Integer.class,
-                assignmentId, classLabel, seatNo, tokenHash, startedAt, deadlineAt);
+    /** Chèn một lượt; đúng một trong {@code seatNo} / {@code studentName} khác null (CHECK chk_aa_identity, V36). */
+    public int insertAttempt(Integer assignmentId, String classLabel, Integer seatNo, String studentName,
+                             String tokenHash, LocalDateTime startedAt, LocalDateTime deadlineAt) {
+        return jdbc.queryForObject("INSERT INTO assignment_attempt (assignment_id, class_label, seat_no, student_name,"
+                        + " token_hash, started_at, deadline_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                Integer.class, assignmentId, classLabel, seatNo, studentName, tokenHash, startedAt, deadlineAt);
     }
 
     public Optional<AttemptRow> attemptByTokenHash(String tokenHash) {
@@ -200,10 +220,13 @@ public class AssignmentRepository {
                 .stream().findFirst();
     }
 
-    /** Các lượt của bài giao, theo lớp (thứ tự khai lúc giao), số thứ tự, rồi lúc bắt đầu. */
+    /**
+     * Các lượt của bài giao, theo lớp (thứ tự khai lúc giao), số thứ tự, rồi lúc bắt đầu. Chế độ họ tên: service sắp lại
+     * trong lớp theo tên ({@code AttemptRules.byClassThenName}).
+     */
     public List<AttemptRow> attempts(Integer assignmentId) {
-        return jdbc.query("SELECT a.id, a.assignment_id, a.class_label, a.seat_no, a.started_at, a.deadline_at,"
-                + " a.submitted_at, a.score, a.max_score FROM assignment_attempt a JOIN assignment_class c"
+        return jdbc.query("SELECT a.id, a.assignment_id, a.class_label, a.seat_no, a.student_name, a.started_at,"
+                + " a.deadline_at, a.submitted_at, a.score, a.max_score FROM assignment_attempt a JOIN assignment_class c"
                 + " ON c.assignment_id = a.assignment_id AND c.class_label = a.class_label WHERE a.assignment_id = ?"
                 + " ORDER BY c.position, a.seat_no, a.started_at, a.id", ATTEMPT, assignmentId);
     }

@@ -3,15 +3,19 @@ import { Button, Input, QRCode, Space, message } from "antd";
 import { CopyOutlined, DownloadOutlined } from "@ant-design/icons";
 
 import { buildStudentLink } from "../services/assignmentApi";
+import type { IdentityMode } from "../types/assignment.types";
+import { isNameMode } from "../utils/identity";
 
 interface AssignmentLinkCardProps {
     publicCode: string;
     /** Tên file khi tải ảnh QR, không kèm đuôi. */
     fileName?: string;
+    /** Chế độ của bài giao (quyết định 25/11): chọn câu nhắc học sinh nhập gì; thiếu là số thứ tự. */
+    identityMode?: IdentityMode;
 }
 
 /** Link học sinh làm bài và mã QR để chiếu lên bảng. Mã QR dùng component có sẵn của antd. */
-export default function AssignmentLinkCard({ publicCode, fileName }: AssignmentLinkCardProps) {
+export default function AssignmentLinkCard({ publicCode, fileName, identityMode }: AssignmentLinkCardProps) {
     const link = buildStudentLink(publicCode);
     const qrRef = useRef<HTMLDivElement>(null);
 
@@ -57,7 +61,8 @@ export default function AssignmentLinkCard({ publicCode, fileName }: AssignmentL
                 </Button>
             </div>
             <p className="assignment-hint">
-                Học sinh quét mã QR hoặc mở link bằng điện thoại. Không cần đăng nhập, không nhập họ tên.
+                Học sinh quét mã QR hoặc mở link bằng điện thoại. Không cần đăng nhập,{" "}
+                {isNameMode(identityMode) ? "chỉ chọn lớp và nhập họ tên." : "không nhập họ tên."}
             </p>
         </div>
     );

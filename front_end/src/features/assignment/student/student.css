@@ -105,6 +105,7 @@
 }
 
 .student-seat-input,
+.student-name-input,
 .student-sa-input {
     width: 100%;
     box-sizing: border-box;
@@ -121,6 +122,7 @@
 }
 
 .student-seat-input:focus,
+.student-name-input:focus,
 .student-sa-input:focus {
     outline: none;
     border-color: #1677ff;

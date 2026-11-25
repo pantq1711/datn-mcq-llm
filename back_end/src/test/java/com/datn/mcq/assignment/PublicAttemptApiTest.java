@@ -153,13 +153,17 @@ class PublicAttemptApiTest extends AssignmentTestBase {
 
     /**
      * Quyết định 16/11 (2): lớp phải là một lớp của bài giao, số thứ tự trong 1..sĩ số. Trùng lớp + số thứ tự vẫn vào được
-     * (lượt mới, không ghi đè lượt cũ) và cả hai lượt bị đánh dấu.
+     * (lượt mới, không ghi đè lượt cũ) và cả hai lượt bị đánh dấu. Quyết định 25/11: lần đầu báo trùng (409
+     * ATTEMPT_IDENTITY_TAKEN, không tạo lượt); học sinh xác nhận ({@code confirmDuplicate}) thì mới tạo.
      */
     @Test
     void startAcceptsDuplicateSeatAndRejectsClassOrSeatOutsideTheRoster() throws Exception {
         String code = assign(true).get("publicCode").asText();
         String first = startToken(code, "8A1", 12);
-        JsonNode again = json(start(code, "8a1", 12).andExpect(status().isCreated()));
+        start(code, "8a1", 12).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ATTEMPT_IDENTITY_TAKEN"));
+        assertEquals(1, count("SELECT count(*) FROM assignment_attempt WHERE class_label = '8A1' AND seat_no = 12"));
+        JsonNode again = json(startConfirmed(code, "8a1", 12).andExpect(status().isCreated()));
         assertTrue(again.get("duplicateSeat").asBoolean());
         assertTrue(json(current(first).andExpect(status().isOk())).get("duplicateSeat").asBoolean());
         assertEquals(2, count("SELECT count(*) FROM assignment_attempt WHERE class_label = '8A1' AND seat_no = 12"));

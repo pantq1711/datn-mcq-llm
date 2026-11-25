@@ -19,12 +19,21 @@ public final class PublicAttemptDtos {
 
     public record ClassOptionDto(String classLabel, int size) {}
 
-    /** P1: trang chào; không có câu hỏi. {@code classes}: các lớp để học sinh chọn. */
+    /**
+     * P1: trang chào; không có câu hỏi. {@code classes}: các lớp để học sinh chọn. {@code identityMode} (25/11): {@code name}
+     * thì học sinh nhập họ tên, {@code seat} thì nhập số thứ tự. Không có họ tên của ai.
+     */
     public record InfoDto(String title, int questionCount, int durationMinutes, LocalDateTime closesAt, String status,
-                          boolean showScore, boolean showSolutions, List<ClassOptionDto> classes) {}
+                          boolean showScore, boolean showSolutions, String identityMode,
+                          List<ClassOptionDto> classes) {}
 
-    /** P2. {@code classLabel} phải là một lớp của bài giao; {@code seatNo} trong 1..sĩ số của lớp đó. */
-    public record StartRequest(String classLabel, Integer seatNo) {}
+    /**
+     * P2. {@code classLabel} phải là một lớp của bài giao. Chế độ {@code seat}: {@code seatNo} trong 1..sĩ số của lớp đó
+     * ({@code studentName} bị bỏ qua, không lưu). Chế độ {@code name} (25/11): {@code studentName} 2–60 ký tự sau khi chuẩn
+     * hóa ({@code seatNo} bị bỏ qua). {@code confirmDuplicate} (25/11, mặc định false): đã có lượt cùng lớp + số / tên thì
+     * chỉ tạo lượt khi true; false trả 409 {@code ATTEMPT_IDENTITY_TAKEN} và không tạo gì.
+     */
+    public record StartRequest(String classLabel, Integer seatNo, String studentName, Boolean confirmDuplicate) {}
 
     public record PublicStatementDto(String key, String text) {}
 
@@ -70,12 +79,16 @@ public final class PublicAttemptDtos {
 
     /**
      * P2 (có {@code attemptToken}, chỉ trả một lần) và P3. {@code parts}: câu hỏi, chỉ khi còn nộp được.
-     * {@code duplicateSeat}: đã có lượt khác cùng lớp + số thứ tự (giáo viên thấy cả hai lượt bị đánh dấu "trùng").
+     * {@code duplicateSeat}: đã có lượt khác cùng lớp + số thứ tự, hoặc (chế độ {@code name}, 25/11) cùng lớp + họ tên
+     * (giáo viên thấy cả hai lượt bị đánh dấu "trùng"). {@code identityMode}: chế độ của bài giao; đúng một trong
+     * {@code seatNo} / {@code studentName} có giá trị. {@code studentName} là tên của CHÍNH lượt này (token), không bao
+     * giờ là tên của lượt khác.
      * {@code resultsReleased}: bài đã đóng và hết ân hạn nộp; trước đó không có {@code result} hay {@code review}.
      * {@code resultsAt}: lúc dự kiến có kết quả (hạn đóng + ân hạn; giáo viên đóng sớm thì sớm hơn).
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record AttemptViewDto(String attemptToken, String classLabel, int seatNo, boolean duplicateSeat,
+    public record AttemptViewDto(String attemptToken, String identityMode, String classLabel, Integer seatNo,
+                                 String studentName, boolean duplicateSeat,
                                  LocalDateTime startedAt, LocalDateTime deadlineAt, LocalDateTime serverNow,
                                  long remainingSeconds, boolean submitted, LocalDateTime submittedAt,
                                  boolean resultsReleased, LocalDateTime resultsAt, List<PublicPartDto> parts,

@@ -66,6 +66,28 @@ class PublicRateLimitTest extends AssignmentTestBase {
     }
 
     /**
+     * Quyết định 25/11: báo trùng trước khi bắt đầu (409 ATTEMPT_IDENTITY_TAKEN) vẫn đi qua hạn mức theo IP, nên không dùng
+     * được để dò tên hay số đã có người dùng; lần gửi lại có xác nhận cũng bị tính.
+     */
+    @Test
+    void identityTakenCallsCountTowardTheStartLimit() throws Exception {
+        String code = assignMode(NAME, true, false).get("publicCode").asText();
+        String ip = "10.20.9.1";
+        String body = "{\"classLabel\": \"8A1\", \"studentName\": \"Lê Hoa\"}";
+        mockMvc.perform(from(post("/api/public/assignments/" + code + "/attempts")
+                .contentType(MediaType.APPLICATION_JSON).content(body), ip)).andExpect(status().isCreated());
+        for (int i = 0; i < 2; i++) {
+            mockMvc.perform(from(post("/api/public/assignments/" + code + "/attempts")
+                    .contentType(MediaType.APPLICATION_JSON).content(body), ip))
+                    .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("ATTEMPT_IDENTITY_TAKEN"));
+        }
+        mockMvc.perform(from(post("/api/public/assignments/" + code + "/attempts").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"classLabel\": \"8A1\", \"studentName\": \"Lê Hoa\", \"confirmDuplicate\": true}"), ip))
+                .andExpect(status().isTooManyRequests()).andExpect(jsonPath("$.code").value("TOO_MANY_REQUESTS"));
+        assertEquals(1, count("SELECT count(*) FROM assignment_attempt"));
+    }
+
+    /**
      * Frontend chạy khác origin (Vite dev, hoặc tên miền tách riêng) chỉ đọc được Retry-After của phản hồi 429 khi header
      * này nằm trong Access-Control-Expose-Headers; thiếu thì trang học sinh không biết phải chờ bao lâu trước khi thử lại.
      */
