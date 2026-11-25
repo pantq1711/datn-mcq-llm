@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../services/publicAttemptApi";
-import { axiosError, INFO, makeAttemptView } from "../test/fixtures";
+import { axiosError, INFO, INFO_NAME, makeAttemptView, makeNameAttemptView } from "../test/fixtures";
 import { STUDENT_ROUTE, studentPath } from "../studentPath";
 import { loadSession, saveSession } from "../utils/attemptStorage";
 import StudentAssignmentPage from "./StudentAssignmentPage";
@@ -54,8 +54,30 @@ describe("StudentAssignmentPage: vào bài mới", () => {
         await user.click(screen.getByRole("button", { name: "Đúng, bắt đầu làm bài" }));
 
         expect(await screen.findByText("Đã làm 0/3")).toBeInTheDocument();
-        expect(mocked.startAttempt).toHaveBeenCalledWith("ABC123", "8A2", 7);
+        expect(mocked.startAttempt).toHaveBeenCalledWith("ABC123", { classLabel: "8A2", seatNo: 7, confirmDuplicate: false });
         expect(loadSession("ABC123")).toEqual({ token: "tok-1", classLabel: "8A2", seatNo: 7 });
+    });
+
+    it("trùng số (409 ATTEMPT_IDENTITY_TAKEN): báo ở màn xác nhận trước khi bắt đầu, có Nhập lại và Đúng là em, vẫn làm", async () => {
+        const user = userEvent.setup();
+        mocked.startAttempt
+            .mockRejectedValueOnce(axiosError(409, { code: "ATTEMPT_IDENTITY_TAKEN", error: "Đã có bạn vào làm với số này." }))
+            .mockResolvedValueOnce(makeAttemptView({ attemptToken: "tok-2", duplicateSeat: true }));
+        renderPage();
+
+        await user.click(await screen.findByRole("radio", { name: "8A1" }));
+        await user.type(screen.getByLabelText(/Số thứ tự của em/), "12");
+        await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
+        await user.click(await screen.findByRole("button", { name: "Đúng, bắt đầu làm bài" }));
+
+        expect(await screen.findByText("Đã có bạn vào làm với số này.")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Em là lớp 8A1, số 12 — đúng không?" })).toBeInTheDocument();
+        expect(screen.queryByText("Đã làm 0/3")).not.toBeInTheDocument();
+        expect(loadSession("ABC123")).toBeNull();
+
+        await user.click(screen.getByRole("button", { name: "Đúng là em, vẫn làm" }));
+        expect(await screen.findByText("Đã làm 0/3")).toBeInTheDocument();
+        expect(mocked.startAttempt).toHaveBeenLastCalledWith("ABC123", { classLabel: "8A1", seatNo: 12, confirmDuplicate: true });
     });
 
     it("số thứ tự ngoài sĩ số của lớp thì báo ngay, chưa gọi máy chủ", async () => {
@@ -214,5 +236,106 @@ describe("StudentAssignmentPage: mở lại bài (AN-06)", () => {
 
         await user.click(screen.getByRole("button", { name: "Thử lại" }));
         expect(await screen.findByRole("heading", { name: "Em là lớp 8A1, số 12 — đúng không?" })).toBeInTheDocument();
+    });
+});
+
+describe("StudentAssignmentPage: chế độ họ tên (quyết định 25/11)", () => {
+    beforeEach(() => {
+        mocked.getPublicAssignment.mockResolvedValue(INFO_NAME);
+    });
+
+    it("trang chào có ô 'Họ và tên của em' thay ô số thứ tự và dòng nhắc hệ thống lưu họ tên", async () => {
+        renderPage();
+
+        expect(await screen.findByLabelText("Họ và tên của em")).toBeInTheDocument();
+        expect(screen.queryByLabelText(/Số thứ tự của em/)).not.toBeInTheDocument();
+        expect(screen.getByText("Hệ thống lưu lớp, họ tên và bài làm của em để thầy cô xem điểm.")).toBeInTheDocument();
+        expect(screen.queryByText(/Không nhập họ tên/)).not.toBeInTheDocument();
+    });
+
+    it("nhập họ tên → 'Em là <tên>, lớp <lớp> — đúng không?' → đúng thì tạo lượt; máy không lưu họ tên", async () => {
+        const user = userEvent.setup();
+        mocked.startAttempt.mockResolvedValue(makeNameAttemptView({ attemptToken: "tok-n" }));
+        renderPage();
+
+        await user.click(await screen.findByRole("radio", { name: "8A1" }));
+        await user.type(screen.getByLabelText("Họ và tên của em"), "  Nguyễn   Văn An ");
+        await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
+
+        expect(await screen.findByRole("heading", { name: "Em là Nguyễn Văn An, lớp 8A1 — đúng không?" })).toBeInTheDocument();
+        expect(mocked.startAttempt).not.toHaveBeenCalled();
+
+        await user.click(screen.getByRole("button", { name: "Đúng, bắt đầu làm bài" }));
+
+        expect(await screen.findByText("Đã làm 0/3")).toBeInTheDocument();
+        expect(mocked.startAttempt).toHaveBeenCalledWith("ABC123", {
+            classLabel: "8A1",
+            studentName: "Nguyễn Văn An",
+            confirmDuplicate: false,
+        });
+        expect(loadSession("ABC123")?.token).toBe("tok-n");
+        const stored = Array.from({ length: localStorage.length }, (_, i) => localStorage.getItem(localStorage.key(i) ?? ""));
+        expect(stored.join("|")).not.toContain("Nguyễn");
+    });
+
+    it("họ tên quá ngắn thì báo ngay, chưa gọi máy chủ", async () => {
+        const user = userEvent.setup();
+        renderPage();
+
+        await user.click(await screen.findByRole("radio", { name: "8A1" }));
+        await user.type(screen.getByLabelText("Họ và tên của em"), " A ");
+        await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
+
+        expect(screen.getByText("Em nhập họ và tên của em (từ 2 đến 60 ký tự).")).toBeInTheDocument();
+        expect(mocked.startAttempt).not.toHaveBeenCalled();
+    });
+
+    it("trùng tên: 'Đã có bạn vào làm với tên này.'; Nhập lại về trang chào, không tạo lượt", async () => {
+        const user = userEvent.setup();
+        mocked.startAttempt.mockRejectedValue(axiosError(409, { code: "ATTEMPT_IDENTITY_TAKEN", error: "Đã có bạn vào làm với tên này." }));
+        renderPage();
+
+        await user.click(await screen.findByRole("radio", { name: "8A1" }));
+        await user.type(screen.getByLabelText("Họ và tên của em"), "Nguyễn Văn An");
+        await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
+        await user.click(await screen.findByRole("button", { name: "Đúng, bắt đầu làm bài" }));
+
+        expect(await screen.findByText("Đã có bạn vào làm với tên này.")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Đúng là em, vẫn làm" })).toBeInTheDocument();
+
+        await user.click(screen.getByRole("button", { name: "Nhập lại" }));
+        expect(await screen.findByLabelText("Họ và tên của em")).toBeInTheDocument();
+        expect(mocked.startAttempt).toHaveBeenCalledTimes(1);
+        expect(loadSession("ABC123")).toBeNull();
+    });
+
+    it("trùng tên rồi bấm 'Đúng là em, vẫn làm': gửi lại với confirmDuplicate = true và vào làm bài", async () => {
+        const user = userEvent.setup();
+        mocked.startAttempt
+            .mockRejectedValueOnce(axiosError(409, { code: "ATTEMPT_IDENTITY_TAKEN" }))
+            .mockResolvedValueOnce(makeNameAttemptView({ attemptToken: "tok-d", duplicateSeat: true }));
+        renderPage();
+
+        await user.click(await screen.findByRole("radio", { name: "8A1" }));
+        await user.type(screen.getByLabelText("Họ và tên của em"), "Nguyễn Văn An");
+        await user.click(screen.getByRole("button", { name: "Tiếp tục" }));
+        await user.click(await screen.findByRole("button", { name: "Đúng, bắt đầu làm bài" }));
+        await user.click(await screen.findByRole("button", { name: "Đúng là em, vẫn làm" }));
+
+        expect(await screen.findByText("Đã làm 0/3")).toBeInTheDocument();
+        expect(mocked.startAttempt).toHaveBeenLastCalledWith("ABC123", {
+            classLabel: "8A1",
+            studentName: "Nguyễn Văn An",
+            confirmDuplicate: true,
+        });
+    });
+
+    it("mở lại link hỏi 'Em là <tên>, lớp <lớp> — đúng không?', vẫn có 'Không phải em, thoát'", async () => {
+        saveSession("ABC123", { token: "tok-old", classLabel: "8A1" });
+        mocked.getCurrentAttempt.mockResolvedValue(makeNameAttemptView());
+        renderPage();
+
+        expect(await screen.findByRole("heading", { name: "Em là Nguyễn Văn An, lớp 8A1 — đúng không?" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Không phải em, thoát" })).toBeInTheDocument();
     });
 });

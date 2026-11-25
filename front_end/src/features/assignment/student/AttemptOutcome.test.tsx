@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { FIGURE_FALLBACK_TEXT } from "../../../components/common/MathText/questionImage.utils";
-import { makeAttemptView } from "../test/fixtures";
+import { makeAttemptView, makeNameAttemptView } from "../test/fixtures";
 import type { AttemptView } from "../types/assignment.types";
 import AttemptOutcome from "./AttemptOutcome";
 
@@ -61,6 +61,18 @@ function setup(view: AttemptView, flags = { showScore: true, showSolutions: fals
 
 const submittedOpen = () =>
     makeAttemptView({ submitted: true, submittedAt: "2026-11-20T09:30:00", parts: undefined, resultsReleased: false });
+
+describe("AttemptOutcome: dòng danh tính", () => {
+    it("chế độ số thứ tự: 'Lớp 8A1, số 12'", () => {
+        setup(submittedOpen());
+        expect(screen.getByText("Lớp 8A1, số 12")).toBeInTheDocument();
+    });
+
+    it("chế độ họ tên (25/11)", () => {
+        setup(makeNameAttemptView({ submitted: true, submittedAt: "2026-11-20T09:30:00", parts: undefined }));
+        expect(screen.getByText("Nguyễn Văn An, lớp 8A1")).toBeInTheDocument();
+    });
+});
 
 describe("AttemptOutcome: ẩn / hiện kết quả theo trạng thái", () => {
     it("bài còn mở: chỉ báo đã nộp và giờ có kết quả, không có điểm, đáp án, lời giải", () => {

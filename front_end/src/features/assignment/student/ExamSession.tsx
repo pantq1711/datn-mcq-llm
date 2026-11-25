@@ -224,7 +224,11 @@ export default function ExamSession({
                     <Alert
                         type="warning"
                         showIcon
-                        message={`Đã có bạn khác vào với lớp ${view.classLabel}, số ${view.seatNo}. Nếu em nhập nhầm số, em báo thầy cô.`}
+                        message={
+                            view.studentName !== undefined
+                                ? `Đã có bạn khác vào với lớp ${view.classLabel}, tên ${view.studentName}. Nếu em gõ nhầm tên, em báo thầy cô.`
+                                : `Đã có bạn khác vào với lớp ${view.classLabel}, số ${view.seatNo}. Nếu em nhập nhầm số, em báo thầy cô.`
+                        }
                     />
                 )}
                 {storageBlocked && (

@@ -5,7 +5,7 @@ import { ClockCircleOutlined, QuestionCircleOutlined, ReloadOutlined } from "@an
 
 import { getItemStats, recomputeItemStats } from "../services/assignmentApi";
 import { ASSIGNMENT_OPEN, STATS_NOT_READY } from "../types/assignment.types";
-import type { AssignmentStatus, ItemStat, ItemStats } from "../types/assignment.types";
+import type { AssignmentStatus, IdentityMode, ItemStat, ItemStats } from "../types/assignment.types";
 import {
     flagView,
     formatPercent,
@@ -18,6 +18,7 @@ import {
     tfRows,
 } from "../utils/itemStats";
 import type { FlagTone } from "../utils/itemStats";
+import { isNameMode } from "../utils/identity";
 import { formatServerTime } from "../utils/timeFormat";
 import { getApiErrorMessage, showApiError } from "../../../utils/apiError";
 
@@ -50,10 +51,13 @@ interface Props {
     examId: string;
     assignmentId: string;
     status: AssignmentStatus;
+    /** Chỉ để chọn chữ "trùng tên" / "trùng STT" (quyết định 25/11); thiếu là số thứ tự. */
+    identityMode?: IdentityMode;
 }
 
 /** Tab "Phân tích câu" của trang chi tiết bài giao (docs/api mục 11.3, thiết kế mục 5.5 và 14). */
-export default function ItemStatsTab({ examId, assignmentId, status }: Props) {
+export default function ItemStatsTab({ examId, assignmentId, status, identityMode }: Props) {
+    const byName = isNameMode(identityMode);
     const [view, setView] = useState<View>({ kind: "loading" });
     const [reloadTick, setReloadTick] = useState(0);
     const [recomputing, setRecomputing] = useState(false);
@@ -144,7 +148,7 @@ export default function ItemStatsTab({ examId, assignmentId, status }: Props) {
         );
     }
 
-    return <StatsView stats={view.stats} recomputing={recomputing} onRecompute={recompute} />;
+    return <StatsView stats={view.stats} recomputing={recomputing} onRecompute={recompute} byName={byName} />;
 }
 
 function WaitingNote({ title, detail }: { title: string; detail: string }) {
@@ -157,7 +161,18 @@ function WaitingNote({ title, detail }: { title: string; detail: string }) {
     );
 }
 
-function StatsView({ stats, recomputing, onRecompute }: { stats: ItemStats; recomputing: boolean; onRecompute: () => void }) {
+function StatsView({
+    stats,
+    recomputing,
+    onRecompute,
+    byName,
+}: {
+    stats: ItemStats;
+    recomputing: boolean;
+    onRecompute: () => void;
+    /** Bài giao chế độ họ tên: lượt bị loại là "trùng tên". */
+    byName: boolean;
+}) {
     const columns: ColumnsType<ItemStat> = useMemo(
         () => [
             {
@@ -239,9 +254,8 @@ function StatsView({ stats, recomputing, onRecompute }: { stats: ItemStats; reco
                         {stats.groupSize > 0 && <Text type="secondary"> · mỗi nhóm điểm cao/thấp {stats.groupSize} lượt</Text>}
                     </div>
                     <Text type="secondary" className="item-stat-excluded">
-                        {`Đã loại ${stats.excluded.duplicate} lượt trùng STT và ${stats.excluded.notSubmitted} lượt chưa nộp. `}
-                        Lượt trùng lớp và số thứ tự bị loại vì không biết lượt nào là của học sinh đó; lượt chưa nộp thì chưa có bài làm
-                        hoàn chỉnh.
+                        {`Đã loại ${stats.excluded.duplicate} lượt trùng ${byName ? "tên" : "STT"} và ${stats.excluded.notSubmitted} lượt chưa nộp. `}
+                        {`Lượt trùng lớp và ${byName ? "họ tên" : "số thứ tự"} bị loại vì không biết lượt nào là của học sinh đó; lượt chưa nộp thì chưa có bài làm hoàn chỉnh.`}
                     </Text>
                     {stats.computedAt && (
                         <div>

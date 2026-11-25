@@ -18,6 +18,7 @@ function makeAssignment(overrides: Partial<Assignment> = {}): Assignment {
         publicCode: "ABC123",
         title: "Kiểm tra 15 phút - Hàm số",
         status: "closed",
+        identityMode: "seat",
         durationMinutes: 45,
         closesAt: "2026-11-20T17:00:00",
         closedAt: "2026-11-20T17:00:00",
@@ -116,6 +117,48 @@ describe("AssignmentDetailPage: xóa lượt làm (backend cho xóa ở mọi tr
         await user.click(confirmButtons[confirmButtons.length - 1]);
 
         await waitFor(() => expect(mocked.bulkDeleteAttempts).toHaveBeenCalledWith("5", "7", [1, 2]));
+    });
+});
+
+describe("AssignmentDetailPage: chế độ họ tên (quyết định 25/11)", () => {
+    function named(attemptId: number, studentName: string, duplicate = false): AttemptRow {
+        const { seatNo: _omit, ...row } = makeAttempt(attemptId, 0, duplicate);
+        void _omit;
+        return { ...row, studentName };
+    }
+
+    it("bảng điểm có cột 'Họ và tên' thay cột STT, nhãn 'Trùng tên', cảnh báo và 'Chọn các lượt trùng'", async () => {
+        const user = userEvent.setup();
+        mocked.getAssignment.mockResolvedValue(
+            makeAssignment({
+                identityMode: "name",
+                duplicateCount: 2,
+                attempts: [named(1, "Nguyễn Văn An", true), named(2, "nguyễn văn an", true), named(3, "Trần Bình")],
+            })
+        );
+        renderPage();
+
+        expect(await screen.findByRole("columnheader", { name: "Họ và tên" })).toBeInTheDocument();
+        expect(screen.queryByRole("columnheader", { name: "STT" })).not.toBeInTheDocument();
+        expect(screen.getByText("Nguyễn Văn An")).toBeInTheDocument();
+        expect(screen.getByText("Trần Bình")).toBeInTheDocument();
+        expect(screen.getAllByText("Trùng tên")).toHaveLength(2);
+        expect(screen.getByText("Có 2 lượt trùng tên")).toBeInTheDocument();
+        expect(screen.queryByText(/Bảng điểm không có tên học sinh/)).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole("button", { name: "Chọn các lượt trùng" }));
+        expect(screen.getByText("Đã chọn 2 lượt")).toBeInTheDocument();
+    });
+
+    it("chế độ số thứ tự giữ cột STT và nhãn 'Trùng STT'", async () => {
+        mocked.getAssignment.mockResolvedValue(
+            makeAssignment({ identityMode: "seat", duplicateCount: 2, attempts: [makeAttempt(1, 5, true), makeAttempt(2, 5, true)] })
+        );
+        renderPage();
+
+        expect(await screen.findByRole("columnheader", { name: "STT" })).toBeInTheDocument();
+        expect(screen.queryByRole("columnheader", { name: "Họ và tên" })).not.toBeInTheDocument();
+        expect(screen.getAllByText("Trùng STT")).toHaveLength(2);
     });
 });
 
