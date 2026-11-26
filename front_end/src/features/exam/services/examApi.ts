@@ -136,13 +136,21 @@ export interface ExportDocxOptions {
     examCode?: string;
     /**
      * "exam": file dừng ở dòng HẾT, không kèm đáp án và lời giải; "spec": bản đặc tả đề (mẫu Phụ lục 2 CV 7991, A4 ngang,
+     * không dùng mã đề); "youngmix" (26/11): bản cho phần mềm trộn đề YoungMix (chỉ nội dung đề, đáp án đúng gạch chân,
      * không dùng mã đề); không có thì "all".
      */
     content?: ExportContent;
+    /** true: có trang tờ phách (chỉ cho "all" và "exam"); không có thì không phách. */
+    phach?: boolean;
+    /** Cỡ chữ 14; không có thì 12. */
+    fontSize?: ExportFontSize;
 }
 
 /** Nội dung file Word (tham số content của docs/api mục 7.6). */
-export type ExportContent = 'all' | 'exam' | 'spec';
+export type ExportContent = 'all' | 'exam' | 'spec' | 'youngmix';
+
+/** Cỡ chữ của file Word (tham số fontSize, 26/11). */
+export type ExportFontSize = 12 | 14;
 
 export const getExamExportDocx = async (
     examId: string,
@@ -153,7 +161,11 @@ export const getExamExportDocx = async (
     if (equation === 'mathtype') params.equation = equation;
     if (options.durationMinutes !== undefined) params.durationMinutes = options.durationMinutes;
     if (options.examCode) params.examCode = options.examCode;
-    if (options.content === 'exam' || options.content === 'spec') params.content = options.content;
+    if (options.content === 'exam' || options.content === 'spec' || options.content === 'youngmix') {
+        params.content = options.content;
+    }
+    if (options.phach) params.phach = 'true';
+    if (options.fontSize === 14) params.fontSize = options.fontSize;
     const resp = await axiosInstance.get(
         `/api/exams/${examId}/export/docx`,
         {

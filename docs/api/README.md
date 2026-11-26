@@ -105,7 +105,7 @@ Quyền của các dòng dưới: `catalog/subjects` và `bank-items` cho GV và
 | POST | `/api/exams/{id}/slots/{slotId}/keep` | Giữ câu (vào ngân hàng) |
 | POST | `/api/exams/{id}/slots/{slotId}/replace` | Đổi câu khác: `source = generate` (mặc định) sinh lại đúng ô, có thể kèm yêu cầu của giáo viên; `source = bank` lấy câu ngân hàng khớp ô, hết thì 409 `BANK_EXHAUSTED` (mục 7.5) |
 | PUT | `/api/exams/{id}/slots/{slotId}/question` | Sửa câu của chỗ chưa Giữ (mục 7.5a); QC chạy lại, Solver qua hàng đợi |
-| GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; `?equation=omml` (mặc định) hoặc `mathtype`; `?content=exam` chỉ đề, `?content=spec` bản đặc tả đề (18/11) (mục 7.6); cần pandoc trên máy chủ |
+| GET | `/api/exams/{id}/export/docx` | Xuất đề ra Word (.docx): đề, ĐÁP ÁN, LỜI GIẢI; `?equation=omml` (mặc định) hoặc `mathtype`; `?content=exam` chỉ đề, `?content=spec` bản đặc tả đề (18/11), `?content=youngmix` bản cho phần mềm trộn đề YoungMix (26/11); `?phach=true` tờ phách, `?fontSize=14` cỡ chữ 14 (26/11) (mục 7.6); cần pandoc trên máy chủ |
 
 Chạy lại QC cho câu `generated` (quy tắc QC-RERUN, quyết định 6 ngày 22/10) đã có ở tầng service (`QcRerunService`, cả ba
 dạng) cho công cụ thí nghiệm, không có endpoint HTTP.
@@ -1034,7 +1034,10 @@ GET /api/exams/12/export/docx?equation=abc       → 400
 GET /api/exams/12/export/docx?examCode=205&durationMinutes=45  → 200, mã đề 205, thời gian 45 phút
 GET /api/exams/12/export/docx?content=exam       → 200, chỉ đề (dừng ở dòng HẾT)
 GET /api/exams/12/export/docx?content=spec       → 200, bản đặc tả đề (A4 ngang, mẫu Phụ lục 2 CV 7991)
+GET /api/exams/12/export/docx?content=youngmix   → 200, bản cho YoungMix (chỉ nội dung đề, đáp án đúng gạch chân)
+GET /api/exams/12/export/docx?content=exam&phach=true&fontSize=14  → 200, chỉ đề, có trang tờ phách, cỡ chữ 14
 GET /api/exams/12/export/docx?examCode=99        → 400
+GET /api/exams/12/export/docx?fontSize=13        → 400 (chỉ nhận 12 hoặc 14); ?phach=yes → 400 (chỉ nhận true/false)
 GET /api/exams/12/export/docx  (đề có câu ngân hàng có hình)  → 200, hình nhúng trong file; tổng hình quá trần → 422 EXPORT_IMAGES_TOO_LARGE
 ```
 
@@ -1080,12 +1083,57 @@ GET /api/exams/12/export/docx  (đề có câu ngân hàng có hình)  → 200, 
   - Đề không gắn ma trận (dữ liệu cũ; đề chế độ giáo viên luôn có ma trận theo V7): 409 `SPEC_UNAVAILABLE`. Đề của người
     khác: 404 như các tham số khác.
 
+- **Bản cho phần mềm trộn đề YoungMix (26/11, `content=youngmix`; chủ dự án duyệt 26/11/2026):** giáo viên đem file
+  vào YoungMix (youngmix.vn, chấm bằng app QM) để trộn mã đề và tạo đáp án, mã QR chấm. Quy tắc lấy từ
+  huongdan.youngmix.vn (đọc 26/11): bỏ phần đầu và phần cuối đề; câu bắt đầu "Câu k." và xuống dòng trước phương án/ý và
+  trước câu sau; phương án/ý không nằm trong bảng, không dùng numbering tự động của Word; hình In Line with Text; phần I
+  phương án "A." … "D.", đáp án đúng gạch chân nhãn; phần II ý "a)" … "d)", ý Đúng gạch chân nhãn; phần III một dòng riêng
+  "A. <đáp án>" dưới câu hỏi; thẻ nhóm `<gN#P>` một dòng ngay trên nhóm câu (N = 0 không trộn, 1 chỉ hoán vị câu, 2 chỉ hoán
+  vị đáp án, 3 cả hai; P = số phần). File xuất:
+  - Không có đầu đề, ô mã đề, chân trang (section duy nhất, sectPr không có `footerReference`), dòng HẾT, ghi chú điểm,
+    trang đáp án và lời giải. Cũng không có tiêu đề phần ("PHẦN I. …") và dòng hướng dẫn của phần, ở cả ba phần (thử trên
+    youngmix.vn 26/11: hai dòng này bị gộp vào thân câu cuối của phần trước, câu 12 phần I và câu 2 phần II, nên khi trộn
+    sẽ đi theo câu). Ngay trên "Câu 1." của mỗi phần là một dòng thẻ (kiểu `ExamGroupTag`): phần I `<g3#1>` (dòng đầu file),
+    phần II `<g3#2>`, phần III `<g1#3>`.
+  - Bố cục câu, phương án, ý (tab tới mốc 283, nhãn đậm, phương án xếp cột bằng tab), MathType/Equation, hình inline giữ như
+    file đề. Phần I: nhãn "A."/"B."/"C."/"D." của phương án đúng gạch chân đơn (chỉ nhãn, không gạch nội dung; vẫn đậm).
+    Phần II: nhãn "a)"… của các ý Đúng gạch chân; ý Sai (hoặc chưa có nhãn) để nguyên. Câu phần I chưa có đáp án thì không
+    gạch nhãn nào.
+  - Phần III: đoạn "A. <đáp án>" ngay sau câu hỏi, cùng mốc tab như phương án, chữ thường (không công thức). Đáp án đạt quy
+    tắc STRICT (`enums.md`, quyết định 27/10) in dạng đã chuẩn hóa (`2.5`, `$2,5$` thành `2,5`); không đạt (dữ liệu cũ:
+    phân số, quá 4 ký tự…) thì VẪN in, bỏ `$`, đổi `{,}` và dấu chấm thập phân thành dấu phẩy (ví dụ `\frac{1}{2}` in nguyên
+    chữ); không có đáp án thì "A. —". Hộp xuất Word cảnh báo các câu này trước khi tải (mục Frontend dưới), không chặn.
+  - `examCode`, `durationMinutes`, `phach` được nhận (vẫn kiểm như thường) nhưng không dùng; `fontSize` có dùng. Tên file
+    (`Content-Disposition`) cùng quy tắc với file đề (mã hệ thống `MT….docx`); giao diện đặt tên "<tên đề> – YoungMix –
+    <dd-mm-yyyy>".
+  - Chưa thử trên YoungMix thật (26/11): file mẫu gửi giáo viên thử trước khi coi là xong.
+
+- **Tờ phách (26/11, `phach`; chủ dự án duyệt 26/11/2026):** `true` hoặc `false` (không phân biệt hoa thường; không truyền
+  hoặc trống là `false`; giá trị khác 400 "Tham số phach chỉ nhận true hoặc false"). Chỉ áp cho `content=all` và
+  `content=exam`; `spec` và `youngmix` bỏ qua.
+  - `false` (**mặc định mới từ 26/11**, đổi bản xuất mặc định): bảng ô dưới đầu đề là 2 ô bằng nhau "Mã đề | Điểm" (bỏ "Mã
+    phách"), ngay dưới bảng ô là dòng "Họ và tên: …………………… Lớp: ………" (kiểu `ExamNameLine`, căn trái).
+  - `true`: đầu đề như trước 26/11 ("Mã đề | Điểm bài thi | Mã phách", không có dòng họ tên) và thêm MỘT trang tờ phách đầu
+    file: bảng 2 cột không viền như đầu đề (trái: "UBND PHƯỜNG ……………", "TRƯỜNG THCS ……………", "Họ và tên: ……", "Lớp: ……";
+    phải: các dòng ngày, tên kì, năm học, môn, thời gian như đầu đề), một ô có viền "Mã phách" (bảng 1 cột rộng 1/3 bề rộng
+    chữ, căn giữa, hàng dưới để trống), rồi ngắt section (sectPr không chân trang, sang trang mới) mới đến tờ đề. Section đề
+    đánh số trang lại từ 1, chân trang "Mã đề <mã>" như cũ; file đầy đủ có 3 section (tờ phách, đề, đáp án), chỉ đề có 2.
+- **Cỡ chữ (26/11, `fontSize`):** `12` (mặc định, như trước) hoặc `14`; không truyền hoặc trống là 12; giá trị khác 400 "Tham
+  số fontSize chỉ nhận 12 hoặc 14". Cỡ 14: mọi kiểu chữ của file (thân, đầu đề, tiêu đề phần, câu, phương án, bảng đáp án,
+  tiêu đề trang đáp án) Times New Roman 14 (`w:sz` 28); dòng cao cố định nhân theo tỉ lệ 14/12 (ô mã đề `ExamBoxCell` 420,
+  hàng 2 của bảng ô 1680, `ExamGap` 280 twips); `OptionLayout` đo chữ và công thức ở cỡ 14 (mốc tab, đệm 20pt không đổi) nên
+  phương án vừa 4 cột ở cỡ 12 có thể xuống 2 cột. Công thức theo cỡ 14: Equation (OMML) theo cỡ chữ của đoạn; MathType dựng
+  ảnh xem trước ở 14pt và ghi EQN_PREFS của MTEF cỡ Full 14 (chỉ số dưới 8, cấp 2 6, ký hiệu 21, ký hiệu nhỏ 14 pt, cùng tỉ
+  lệ MathType 7.12 ghi ở cỡ 12: 7, 5, 18, 12), nên bấm đúp sửa trong MathType vẫn cỡ 14. Áp cho `all`, `exam`, `youngmix`;
+  bản đặc tả giữ cỡ hiện có.
+
 - **Tham số tùy chọn mới (16/11, NV-43/NV-44):** không truyền thì file như trước.
   - `examCode`: mã đề, số nguyên 100–999 (chữ số ASCII; ngoài khoảng hoặc không phải số là 400, thông báo nêu khoảng
     100–999); không truyền hoặc trống là `101`. In ở ô mã đề của đầu đề, tiêu đề "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ <mã>" và
     chân trang hai section ("Mã đề <mã>", "Đáp án mã đề <mã>"). Tên file (`Content-Disposition`) vẫn theo mã hệ thống `MT…`.
-  - `content`: `all` (mặc định: đề, rồi section đáp án và lời giải), `exam` hoặc (18/11) `spec` (bản đặc tả, mục trên)
-    (không phân biệt hoa thường; giá trị khác 400). `exam`: file dừng ở dòng "------ HẾT ------", không có trang đáp án, ghi chú thang điểm và lời giải; một section
+  - `content`: `all` (mặc định: đề, rồi section đáp án và lời giải), `exam`, (18/11) `spec` (bản đặc tả, mục trên) hoặc
+    (26/11) `youngmix` (bản cho YoungMix, mục trên) (không phân biệt hoa thường; giá trị khác 400, thông báo "Tham số content
+    chỉ nhận all, exam, spec hoặc youngmix"). `exam`: file dừng ở dòng "------ HẾT ------", không có trang đáp án, ghi chú thang điểm và lời giải; một section
     duy nhất (cùng khổ, lề như section đề), chân trang "Mã đề <mã>", số trang từ 1, không đánh số lại.
 - **Khuôn đề kiểm tra THCS (4/11, theo mẫu của một trường):** tham số tùy chọn `durationMinutes` (số nguyên 5–180, chỉ chữ số
   ASCII từ 16/11; ngoài khoảng hoặc không phải số là 400) điền "(Thời gian làm bài N phút không kể thời gian giao đề)"; không truyền thì "……". File khổ A4
@@ -1123,9 +1171,10 @@ GET /api/exams/12/export/docx  (đề có câu ngân hàng có hình)  → 200, 
   "ĐỀ KIỂM TRA GIỮA KÌ I"),
   "NĂM HỌC <y> - <y+1>" (đậm; y = năm hiện tại nếu tháng ≥ 8, ngược lại năm
   trước), "Môn: <môn>, Lớp: <khối>." (đậm; thiếu thì "……") và "(Thời gian làm bài <N> phút không kể thời gian giao đề)" (nghiêng).
-  Dưới đó là bảng có viền 3 cột bằng nhau, toàn chiều rộng: hàng tiêu đề đậm căn giữa "Mã đề | Điểm bài thi | Mã phách", hàng 2
-  cao 1440 twips (như mẫu) với mã đề đậm căn giữa ở ô 1, hai ô còn lại để trống. Không còn dòng "Họ và tên/Lớp" và "(Đề có N
-  trang)". Mã đề in ra là số 3 chữ số, mặc định 101 cho đề gốc, đổi bằng `examCode` (chưa có chức năng trộn mã đề); **mã hệ
+  Dưới đó là bảng có viền các cột bằng nhau, toàn chiều rộng: từ 26/11 mặc định (`phach=false`) 2 cột, hàng tiêu đề đậm căn
+  giữa "Mã đề | Điểm", rồi dòng "Họ và tên: …………………… Lớp: ………"; có tờ phách (`phach=true`) 3 cột "Mã đề | Điểm bài thi | Mã
+  phách" như trước 26/11, không có dòng họ tên (mục "Tờ phách" ở trên). Hàng 2 cao 1440 twips (như mẫu; cỡ 14 là 1680) với mã
+  đề đậm căn giữa ở ô 1, các ô còn lại để trống. Không còn dòng "(Đề có N trang)". Mã đề in ra là số 3 chữ số, mặc định 101 cho đề gốc, đổi bằng `examCode` (chưa có chức năng trộn mã đề); **mã hệ
   thống `MT…` không in ra nội dung file**, chỉ còn ở tên
   file tải về (`Content-Disposition`). Đầu đề viết bằng khối openxml thô do `ExamMarkdownBuilder` chèn (như ngắt trang) vì
   Markdown của pandoc không bỏ được viền bảng; chữ trong đó được thoát XML.
@@ -1134,7 +1183,8 @@ GET /api/exams/12/export/docx  (đề có câu ngân hàng có hình)  → 200, 
   phần; `mcq` các phương án "A. ..." xếp cột bằng tab; `tf` các ý "a) ..."; `sa` chỉ có đề. Sau một ngắt section là "ĐÁP ÁN"
   (bảng từng phần như mô tả ở trên: `mcq` chữ cái, `tf` bảng "Câu | Ý | Đáp án" từng ý, `sa` đáp số) rồi "LỜI GIẢI" từng
   câu; `content=exam` thì không có hai phần này.
-- Đáp án đúng trong phần đề CHƯA đánh dấu (tùy chọn gạch chân cho phần mềm trộn đề làm sau).
+- Đáp án đúng trong phần đề không đánh dấu ở `all`/`exam`; bản `content=youngmix` (26/11) gạch chân nhãn đáp án đúng cho
+  phần mềm trộn đề YoungMix (mục trên).
 - Chỉ xuất nội dung các chỗ đã có câu (`ready`, `kept`, `edited`); chỗ `failed` ghi "[Chưa có câu – cần sinh lại]",
   chỗ đang sinh ghi "[Chưa có câu – đang sinh]"; ở ĐÁP ÁN và LỜI GIẢI các chỗ này ghi "—". Xuất đề cũng đối soát như
   xem đề (7.4).
@@ -1195,7 +1245,14 @@ GET /api/exams/12/export/docx  (đề có câu ngân hàng có hình)  → 200, 
     `?equation=mathtype`) / "Công thức Word (Equation)", nhóm chọn "Nội dung file" (18/11, thay ô "Chỉ đề"): "Đề kèm đáp
     án và lời giải (mặc định)" / "Chỉ đề (không kèm đáp án)" (gửi `content=exam`) / "Bản đặc tả đề" (gửi `content=spec`;
     ẩn ô Mã đề, không gửi `examCode`; tên file mặc định "<tên đề> – Bản đặc tả – <dd-mm-yyyy>", tên mặc định đổi theo lựa
-    chọn, tên tự gõ thì giữ), khung cảnh báo đề chưa hoàn chỉnh (mục trên); nút "Tải về" / "Quay lại". Trong lúc tạo, nút chính ghi "Đang tạo file Word… (khoảng 10
+    chọn, tên tự gõ thì giữ) / (26/11) "Cho phần mềm trộn đề (YoungMix)" (gửi `content=youngmix`; mô tả "Chỉ nội dung đề,
+    đáp án đúng được gạch chân để YoungMix trộn và tạo đáp án, mã QR chấm. Không có đầu đề, đáp án, lời giải."; ẩn ô Mã đề,
+    thời gian làm bài và ô tờ phách, không gửi `examCode`, `durationMinutes`; tên file mặc định "<tên đề> – YoungMix –
+    <dd-mm-yyyy>"; câu phần III đã có câu mà đáp án không phải số hoặc quá 4 ký tự, cùng quy tắc STRICT, thì hiện khung cảnh
+    báo liệt kê "Câu k phần III", không chặn), (26/11) "Cỡ chữ: 12 / 14" (ẩn với bản đặc tả; gửi `fontSize=14` khi chọn 14),
+    ô tích "Có tờ phách (thường dùng cho đề cuối kì)" (chỉ hiện với "Đề kèm đáp án…" và "Chỉ đề", mặc định không tích; gửi
+    `phach=true` khi tích); hộp không nhớ lựa chọn, mỗi lần mở điền lại mặc định; khung cảnh báo đề chưa hoàn chỉnh (mục
+    trên); nút "Tải về" / "Quay lại". Trong lúc tạo, nút chính ghi "Đang tạo file Word… (khoảng 10
     giây)"; xong báo "Đã tải file Word về máy." và đóng hộp. Đề còn câu đang soạn: cạnh nút có dòng chữ thường trực (không
     khóa nút). Sau khi tải: `X-Equation-Kept-Omml > 0` hiện "N công thức không
     chuyển được sang MathType, vẫn ở dạng công thức Word"; `X-Equation-Scaled > 0` hiện "N công thức dài đã được thu nhỏ
@@ -1211,7 +1268,8 @@ GET /api/exams/12/export/docx  (đề có câu ngân hàng có hình)  → 200, 
   khai báo `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word"
   w:val="15"/></w:compat>` (trước `<w:rsids>`) để Word không mở file ở Compatibility Mode (lệnh Convert Equations của
   MathType mới chạy), và đặt font mặc định cùng kiểu Normal là Times New Roman 13 trong `word/styles.xml`. Tiêu đề
-  (Heading) vẫn dùng font theo theme của pandoc.
+  (Heading) vẫn dùng font theo theme của pandoc. Đây là nội dung file mẫu gốc: mỗi lần xuất, `ExamReferenceDoc` đặt mọi kiểu
+  (kể cả tiêu đề) về Times New Roman 12, hoặc 14 khi `fontSize=14` (26/11), như mô tả "Khuôn đề kiểm tra THCS" ở trên.
 - Lỗi: đề không tồn tại 404; máy chủ không có pandoc hoặc pandoc chạy quá 30 giây trả 503 kèm `error`; khi hệ thống đang bận (tiến trình trích xuất tài liệu hoặc xuất Word khác đang giữ Semaphore) và chờ quá thời gian xếp hàng (`queue-wait`, mặc định 30s) trả 503 kèm mã `EXPORT_BUSY` và header `Retry-After`; pandoc báo lỗi trả 500 kèm `error` chung "Lỗi khi xuất file, thầy cô thử lại sau" (11/11, A-07: log của pandoc chỉ ghi ở log máy chủ). `content=spec` với đề không
   gắn ma trận (dữ liệu cũ) trả 409 kèm mã `SPEC_UNAVAILABLE` ("Đề không gắn ma trận nên không xuất được bản đặc tả.").
   trả 500. Đề có hình (23/11): thiếu hình trong file trả 500 `EXPORT_IMAGE_MISSING`; tổng hình vượt trần trả 422

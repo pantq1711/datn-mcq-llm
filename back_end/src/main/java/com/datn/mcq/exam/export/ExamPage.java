@@ -30,7 +30,10 @@ public final class ExamPage {
     public static final int LANDSCAPE_HEIGHT_TWIPS = PAGE_WIDTH_TWIPS;
     public static final int LANDSCAPE_TEXT_WIDTH_TWIPS = LANDSCAPE_WIDTH_TWIPS - MARGIN_LEFT_TWIPS - MARGIN_RIGHT_TWIPS;
 
-    /** Cỡ chữ (pt) và phông của toàn bộ file, kể cả tiêu đề. */
+    /**
+     * Cỡ chữ mặc định (pt) và phông của toàn bộ file, kể cả tiêu đề. Từ 26/11 chọn được cỡ 14
+     * ({@link ExamDocxOptions#fontSizePt()}): kiểu chữ, đo phương án và công thức MathType đi theo cỡ đã chọn.
+     */
     public static final int FONT_SIZE_PT = 12;
     public static final String FONT = "Times New Roman";
 
@@ -56,12 +59,16 @@ public final class ExamPage {
         return sectionProperties(footerRelId, restartPageNumbers, false);
     }
 
-    /** {@code landscape} (bản đặc tả, 18/11): A4 ngang, cùng lề. */
+    /**
+     * {@code landscape} (bản đặc tả, 18/11): A4 ngang, cùng lề. {@code footerRelId} null (26/11: tờ phách, bản YoungMix):
+     * section không có chân trang.
+     */
     static String sectionProperties(String footerRelId, boolean restartPageNumbers, boolean landscape) {
         String size = landscape
                 ? "<w:pgSz w:w=\"" + LANDSCAPE_WIDTH_TWIPS + "\" w:h=\"" + LANDSCAPE_HEIGHT_TWIPS + "\" w:orient=\"landscape\"/>"
                 : "<w:pgSz w:w=\"" + PAGE_WIDTH_TWIPS + "\" w:h=\"" + PAGE_HEIGHT_TWIPS + "\"/>";
-        return "<w:sectPr><w:footerReference w:type=\"default\" r:id=\"" + footerRelId + "\"/>"
+        return "<w:sectPr>"
+                + (footerRelId == null ? "" : "<w:footerReference w:type=\"default\" r:id=\"" + footerRelId + "\"/>")
                 + "<w:footnotePr><w:numRestart w:val=\"eachSect\"/></w:footnotePr>"
                 + size
                 + "<w:pgMar w:top=\"" + MARGIN_TOP_TWIPS + "\" w:right=\"" + MARGIN_RIGHT_TWIPS

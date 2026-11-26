@@ -384,10 +384,11 @@ class ExamMarkdownBuilderTest {
                 "UBND PHƯỜNG ……………", "TRƯỜNG THCS ……………", "Thứ..... ngày........ tháng..... năm 2026",
                 "ĐỀ KIỂM TRA GIỮA KÌ I", "NĂM HỌC 2026 - 2027", "Môn: Toán, Lớp: 8.",
                 "(Thời gian làm bài 45 phút không kể thời gian giao đề)",
-                "Mã đề", "Điểm bài thi", "Mã phách", ">101<")) {
+                ">Mã đề<", ">Điểm<", ">101<", "Họ và tên: …………………… Lớp: ………")) {
             assertTrue(block.contains(part), "đầu đề thiếu: " + part + "\n" + block);
         }
-        assertFalse(block.contains("Họ và tên"), "bỏ dòng Họ và tên/Lớp");
+        // 26/11: mặc định không có tờ phách: bảng ô "Mã đề | Điểm" rồi dòng họ tên (tờ phách: ExamPhachFontSizeExportTest)
+        assertFalse(block.contains("Mã phách") || block.contains("Điểm bài thi"), "mặc định bỏ ô Mã phách");
         assertFalse(block.contains("Đề có") || block.contains("SECTIONPAGES"), "bỏ \"(Đề có N trang)\"");
         assertFalse(block.contains("PHÒNG GD"), block);
     }

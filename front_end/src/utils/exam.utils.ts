@@ -151,6 +151,23 @@ const ANSWER_FORMAT_START = /^đáp (?:số|án) phải là/i;
 const ANSWER_FORMAT_MESSAGE =
     "Đáp số phải là số nguyên hoặc thập phân tối đa 4 ký tự. Thầy/cô chọn lại số liệu của đề để đáp số vừa khung.";
 
+/**
+ * Đáp án câu trả lời ngắn mà YoungMix nhận được (26/11): số nguyên hoặc thập phân, tối đa 4 ký tự tính cả dấu "-" và ",",
+ * như quy tắc STRICT của backend (docs/contract/enums.md, quyết định 27/10): bỏ cặp $...$ bao cả chuỗi, "−" thành "-",
+ * "{,}" và dấu "." thành ","; không có chữ số 0 thừa ở đầu, không có "-0".
+ */
+export function isYoungMixShortAnswer(value: string | null | undefined): boolean {
+    let s = (value ?? "").trim();
+    if (s.length >= 4 && s.startsWith("$$") && s.endsWith("$$")) s = s.slice(2, -2);
+    else if (s.length >= 2 && s.startsWith("$") && s.endsWith("$")) s = s.slice(1, -1);
+    s = s.trim().replace(/−/g, "-").replace(/\{,\}/g, ",").replace(/\./g, ",");
+    if (!/^-?[0-9]+(,[0-9]+)?$/.test(s) || s.length > 4) return false;
+    const unsigned = s.startsWith("-") ? s.slice(1) : s;
+    const integerPart = unsigned.split(",")[0];
+    if (integerPart.length > 1 && integerPart.startsWith("0")) return false;
+    return !(s.startsWith("-") && !/[1-9]/.test(unsigned));
+}
+
 // Tên trường backend nhắc tới trong cảnh báo định dạng → chỗ trong câu, nói theo giáo viên
 const warningFieldLabels: Record<string, string> = {
     question_text: "câu dẫn",

@@ -30,24 +30,54 @@ final class MtefWriter {
 
     /**
      * Phần định nghĩa (ENCODING_DEF "WinAllBasicCodePages", FONT_DEF Times New Roman / Symbol / Courier New / MT Extra,
-     * EQN_PREFS: cỡ chữ 12pt, khoảng cách, bảng style) chép nguyên từ đối tượng do MathType 7.12 sinh trên máy dev.
+     * EQN_PREFS: cỡ chữ 12pt, khoảng cách, bảng style) chép nguyên từ đối tượng do MathType 7.12 sinh trên máy dev. Cỡ 14
+     * (26/11) chỉ đổi 5 cỡ đầu của EQN_PREFS ({@link #SIZES_14}).
      */
-    private static final byte[] PREAMBLE = HexFormat.of().parseHex(
+    private static final String PREAMBLE_HEX =
             "1357696e416c6c4261736963436f6465506167657300110554696d6573204e657720526f6d616e00110353796d626f6c00"
             + "1105436f7572696572204e65770011044d5420457874726100120008212f27f25f218f212f475f4150f21f1e4150f4150f"
             + "4100f445f425f48f425f4100f4100f435f4100f21f20a5f20a25f48f21f4100f4100f40f48f417f48f4100f21a5f445f45"
-            + "f45f45f45f410f0c0100010001020202020002000101010003000100040000");
+            + "f45f45f45f410f0c0100010001020202020002000101010003000100040000";
+    private static final byte[] PREAMBLE = HexFormat.of().parseHex(PREAMBLE_HEX);
+
+    /**
+     * EQN_PREFS (tag 0x12, options 0, 8 cỡ) và 5 cỡ đầu dạng nibble (đơn vị 2 = pt, chữ số, F kết thúc): Full 12, chỉ số dưới
+     * 7, chỉ số dưới cấp 2 5, ký hiệu 18, ký hiệu nhỏ 12, như MathType 7.12 ghi ở cỡ 12.
+     */
+    private static final String SIZES_12 = "120008" + "212f27f25f218f212f";
+    /**
+     * Cùng tỉ lệ ở cỡ 14 (26/11, đề cỡ 14): Full 14, chỉ số dưới 8, cấp 2 6, ký hiệu 21, ký hiệu nhỏ 14. Cùng số nibble với
+     * {@link #SIZES_12} nên phần sau của EQN_PREFS không lệch byte.
+     */
+    private static final String SIZES_14 = "120008" + "214f28f26f221f214f";
+    private static final byte[] PREAMBLE_14 = HexFormat.of().parseHex(PREAMBLE_HEX.replace(SIZES_12, SIZES_14));
 
     private final ByteArrayOutputStream out = new ByteArrayOutputStream();
     private int curSize = -1;
 
-    /** Header MTEF: v5, Windows, MathType 6.9, key "DSMT6", eqn_options = 1 (inline). */
+    /** Header MTEF: v5, Windows, MathType 6.9, key "DSMT6", eqn_options = 1 (inline). Cỡ Full 12pt. */
     MtefWriter(boolean inline) {
+        this(inline, 12f);
+    }
+
+    /**
+     * @param fullPt cỡ Full của EQN_PREFS (26/11): 12 (byte như MathType 7.12 ghi) hoặc 14
+     * @throws IllegalArgumentException cỡ khác
+     */
+    MtefWriter(boolean inline, float fullPt) {
+        byte[] preamble;
+        if (fullPt == 12f) {
+            preamble = PREAMBLE;
+        } else if (fullPt == 14f) {
+            preamble = PREAMBLE_14;
+        } else {
+            throw new IllegalArgumentException("Cỡ MathType chỉ nhận 12 hoặc 14 pt: " + fullPt);
+        }
         out.writeBytes(new byte[]{5, 1, 0, 6, 9});
         out.writeBytes("DSMT6".getBytes());
         out.write(0);
         out.write(inline ? 1 : 0);
-        out.writeBytes(PREAMBLE);
+        out.writeBytes(preamble);
     }
 
     void size(int s) {

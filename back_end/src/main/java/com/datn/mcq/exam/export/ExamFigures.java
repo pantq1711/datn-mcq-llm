@@ -121,7 +121,8 @@ final class ExamFigures {
 
     /**
      * Số lần mỗi id ảnh được in trong file theo {@code content}: câu dẫn, phương án, ý đúng/sai; lời giải chỉ khi file có lời
-     * giải ({@link ExportContent#ALL}). Bản đặc tả không in chữ câu hỏi nên rỗng. Chỗ chưa có câu bỏ qua.
+     * giải ({@link ExportContent#ALL}; không có ở chỉ đề và bản YoungMix). Bản đặc tả không in chữ câu hỏi nên rỗng. Chỗ chưa
+     * có câu bỏ qua.
      */
     static Map<Long, Integer> referenced(ExamViewDto view, ExportContent content) {
         Map<Long, Integer> out = new TreeMap<>();
@@ -138,7 +139,8 @@ final class ExamFigures {
                 if (item.statements() != null) {
                     item.statements().stream().map(ItemStatementDto::text).map(ExamFigures::nz).forEach(fields::add);
                 }
-                if (content != ExportContent.EXAM) {
+                // chỉ đề và bản YoungMix (26/11) không có lời giải
+                if (content != ExportContent.EXAM && content != ExportContent.YOUNGMIX) {
                     fields.add(nz(item.explanation()));
                 }
                 for (String f : fields) {

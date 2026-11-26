@@ -136,16 +136,29 @@ public class ExamExportService {
      */
     public DocxFile docx(Integer examId, Integer actorId, EquationFormat format, Integer durationMinutes, String examCode,
                          ExportContent content) {
+        return docx(examId, actorId, format, durationMinutes, examCode, content, false,
+                ExamDocxOptions.DEFAULT_FONT_SIZE_PT);
+    }
+
+    /**
+     * @param phach      (26/11) trang tờ phách đầu file và đầu đề 3 ô; chỉ áp cho {@link ExportContent#ALL} và
+     *                   {@link ExportContent#EXAM} ({@link ExamDocxOptions})
+     * @param fontSizePt (26/11) cỡ chữ 12 hoặc 14 (nơi gọi kiểm bằng {@link ExamDocxOptions#parseFontSize}); bản đặc tả giữ 12.
+     *                   Bản YoungMix ({@link ExportContent#YOUNGMIX}) bỏ qua mã đề như bản đặc tả; tên file như file đề
+     */
+    public DocxFile docx(Integer examId, Integer actorId, EquationFormat format, Integer durationMinutes, String examCode,
+                         ExportContent content, boolean phach, int fontSizePt) {
         ExamViewDto view = viewService.view(examId, actorId);
         boolean spec = content == ExportContent.SPEC;
-        ExamHeader header = header(view, durationMinutes).withExamCode(spec ? null : examCode);
-        ExamDocxOptions options = new ExamDocxOptions(header.examCode(), content);
+        boolean noCode = spec || content == ExportContent.YOUNGMIX;
+        ExamHeader header = header(view, durationMinutes).withExamCode(noCode ? null : examCode);
+        ExamDocxOptions options = new ExamDocxOptions(header.examCode(), content, phach, fontSizePt);
         PandocRunner.Docx docx;
         try {
             // O2: bản đặc tả không in chữ câu hỏi nên không nạp ảnh; file đề nạp byte ảnh TRƯỚC pandoc (không giữ transaction)
             Map<Long, ExamFigures.Figure> figures = spec ? Map.of() : figures(view, options.content());
             String markdown = spec ? ExamSpecBuilder.build(view, specCells(view), header, scoring)
-                    : ExamMarkdownBuilder.build(view, header, scoring, LocalDate.now(VIETNAM), options.content(), figures);
+                    : ExamMarkdownBuilder.build(view, header, scoring, LocalDate.now(VIETNAM), options, figures);
             docx = exportMetrics == null
                     ? pandocRunner.markdownToDocx(markdown, format, options)
                     : exportMetrics.measure(format == null ? "omml" : format.name().toLowerCase(java.util.Locale.ROOT),

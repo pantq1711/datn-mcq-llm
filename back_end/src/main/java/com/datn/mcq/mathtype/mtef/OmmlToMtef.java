@@ -31,18 +31,24 @@ public final class OmmlToMtef {
 
     private final MtefWriter w;
 
-    private OmmlToMtef(boolean inline) {
-        this.w = new MtefWriter(inline);
+    private OmmlToMtef(boolean inline, float fontPt) {
+        this.w = new MtefWriter(inline, fontPt);
+    }
+
+    /** Như {@link #convert(Element, boolean, float)} ở cỡ 12pt. */
+    public static byte[] convert(Element oMath, boolean inline) {
+        return convert(oMath, inline, 12f);
     }
 
     /**
      * @param oMath  phần tử m:oMath
      * @param inline true: công thức nằm trong dòng chữ; false: công thức riêng dòng (m:oMathPara)
+     * @param fontPt cỡ Full ghi trong EQN_PREFS (26/11): 12 hoặc 14
      * @return luồng MTEF v5
      * @throws Unsupported cấu trúc hoặc ký hiệu chưa hỗ trợ
      */
-    public static byte[] convert(Element oMath, boolean inline) {
-        OmmlToMtef c = new OmmlToMtef(inline);
+    public static byte[] convert(Element oMath, boolean inline, float fontPt) {
+        OmmlToMtef c = new OmmlToMtef(inline, fontPt);
         c.w.size(FULL);
         c.w.line();
         c.children(oMath, FULL);
