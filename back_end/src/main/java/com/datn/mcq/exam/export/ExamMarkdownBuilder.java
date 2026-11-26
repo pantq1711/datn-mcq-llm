@@ -44,8 +44,8 @@ import java.util.stream.Collectors;
  *   <li>sang trang mới: "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101" (mã đề theo {@link ExamHeader#code()}) với bảng đáp án
  *       từng phần và điểm (lấy từ {@link ExamScoringProperties}), rồi "LỜI GIẢI CHI TIẾT"; chỉ đề
  *       ({@link ExportContent#EXAM}) thì dừng ở dòng HẾT;</li>
- *   <li>bản cho YoungMix ({@link ExportContent#YOUNGMIX}, 26/11): không đầu đề, HẾT, đáp án, lời giải; dòng thẻ nhóm dưới
- *       dòng hướng dẫn của mỗi phần, nhãn đúng gạch chân, phần III có dòng "A. đáp án".</li>
+ *   <li>bản cho YoungMix ({@link ExportContent#YOUNGMIX}, 26/11): không đầu đề, tiêu đề phần, dòng hướng dẫn, HẾT, đáp án,
+ *       lời giải; dòng thẻ nhóm ngay trên câu đầu của mỗi phần, nhãn đúng gạch chân, phần III có dòng "A. đáp án".</li>
  * </ul>
  * Paragraph có kiểu riêng viết bằng khối {@code ::: {custom-style="..."}}; đầu đề, bảng và các dòng không có công thức viết
  * bằng khối openxml thô (Markdown của pandoc không bỏ được viền bảng, không có tab, không có ngắt trang trước đoạn). Chữ
@@ -146,7 +146,8 @@ public final class ExamMarkdownBuilder {
     /**
      * @param options (26/11) nội dung file ({@link ExamDocxOptions#content()}), tờ phách ({@link #phachPage}, đầu đề 3 ô),
      *                cỡ chữ (đo cột phương án, dòng cao của ô mã đề). {@link ExportContent#YOUNGMIX}: không đầu đề, dòng
-     *                thẻ nhóm {@link #groupTag} dưới dòng hướng dẫn của mỗi phần, nhãn đúng gạch chân, phần III có dòng
+     *                thẻ nhóm {@link #groupTag} ngay trên câu đầu của mỗi phần (không tiêu đề phần, dòng hướng dẫn), nhãn
+     *                đúng gạch chân, phần III có dòng
      *                "A. đáp án" ({@link #youngMixAnswer}), dừng ở câu cuối (không HẾT, đáp án, lời giải). Mã đề lấy từ
      *                {@code header}.
      */
@@ -168,12 +169,18 @@ public final class ExamMarkdownBuilder {
         }
         List<PartDto> parts = exam.parts().stream().filter(p -> !p.items().isEmpty()).toList();
         for (PartDto part : parts) {
-            blocks.add(raw(paragraph("ExamPartHeading", partHeading(part, scoring), false)));
-            blocks.add(raw("<w:p><w:pPr><w:pStyle w:val=\"ExamInstruction\"/></w:pPr>" + run(instruction(part), false, true)
-                    + "</w:p>"));
-            String tag = youngMix ? groupTag(part.part()) : null;
-            if (tag != null) {
-                blocks.add(raw(paragraph("ExamGroupTag", tag, false)));
+            if (youngMix) {
+                // Thử trên youngmix.vn (26/11): tiêu đề phần và dòng hướng dẫn bị gộp vào thân câu cuối của phần trước rồi
+                // đi theo câu khi trộn, nên bản YoungMix bỏ cả hai (cả phần I cho đồng nhất); chỉ còn dòng thẻ nhóm ngay trên
+                // câu đầu của phần.
+                String tag = groupTag(part.part());
+                if (tag != null) {
+                    blocks.add(raw(paragraph("ExamGroupTag", tag, false)));
+                }
+            } else {
+                blocks.add(raw(paragraph("ExamPartHeading", partHeading(part, scoring), false)));
+                blocks.add(raw("<w:p><w:pPr><w:pStyle w:val=\"ExamInstruction\"/></w:pPr>"
+                        + run(instruction(part), false, true) + "</w:p>"));
             }
             int k = 1;
             for (ExamItemDto item : part.items()) {

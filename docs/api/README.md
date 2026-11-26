@@ -1091,8 +1091,10 @@ GET /api/exams/12/export/docx  (đề có câu ngân hàng có hình)  → 200, 
   "A. <đáp án>" dưới câu hỏi; thẻ nhóm `<gN#P>` một dòng ngay trên nhóm câu (N = 0 không trộn, 1 chỉ hoán vị câu, 2 chỉ hoán
   vị đáp án, 3 cả hai; P = số phần). File xuất:
   - Không có đầu đề, ô mã đề, chân trang (section duy nhất, sectPr không có `footerReference`), dòng HẾT, ghi chú điểm,
-    trang đáp án và lời giải. Giữ tiêu đề phần ("PHẦN I. …") và dòng hướng dẫn; ngay dưới dòng hướng dẫn, trên "Câu 1." của
-    phần, một dòng thẻ (kiểu `ExamGroupTag`): phần I `<g3#1>`, phần II `<g3#2>`, phần III `<g1#3>`.
+    trang đáp án và lời giải. Cũng không có tiêu đề phần ("PHẦN I. …") và dòng hướng dẫn của phần, ở cả ba phần (thử trên
+    youngmix.vn 26/11: hai dòng này bị gộp vào thân câu cuối của phần trước, câu 12 phần I và câu 2 phần II, nên khi trộn
+    sẽ đi theo câu). Ngay trên "Câu 1." của mỗi phần là một dòng thẻ (kiểu `ExamGroupTag`): phần I `<g3#1>` (dòng đầu file),
+    phần II `<g3#2>`, phần III `<g1#3>`.
   - Bố cục câu, phương án, ý (tab tới mốc 283, nhãn đậm, phương án xếp cột bằng tab), MathType/Equation, hình inline giữ như
     file đề. Phần I: nhãn "A."/"B."/"C."/"D." của phương án đúng gạch chân đơn (chỉ nhãn, không gạch nội dung; vẫn đậm).
     Phần II: nhãn "a)"… của các ý Đúng gạch chân; ý Sai (hoặc chưa có nhãn) để nguyên. Câu phần I chưa có đáp án thì không

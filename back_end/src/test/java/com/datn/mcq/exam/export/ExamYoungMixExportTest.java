@@ -121,10 +121,13 @@ class ExamYoungMixExportTest {
                 "Mỗi câu trả lời đúng", "Số mũ của", "Xét từng ý", "Tính trực tiếp", "<w:sectPr", "<w:tbl")) {
             assertFalse(md.contains(absent), "bản YoungMix không có: " + absent);
         }
-        assertTrue(md.contains("PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN") && md.contains("Học sinh chọn một đáp án đúng"),
-                "giữ tiêu đề phần và dòng hướng dẫn");
-        assertTrue(md.startsWith("```{=openxml}\n<w:p><w:pPr><w:pStyle w:val=\"ExamPartHeading\"/>"),
-                "file mở đầu bằng tiêu đề phần I: " + md.substring(0, 120));
+        // Thử trên youngmix.vn 26/11: tiêu đề phần và dòng hướng dẫn bị gộp vào câu cuối của phần trước, nên bản YoungMix
+        // bỏ cả hai (cả phần I cho đồng nhất).
+        for (String absent : List.of("PHẦN", "Học sinh", "ExamPartHeading", "ExamInstruction", "(3,0 điểm)")) {
+            assertFalse(md.contains(absent), "bản YoungMix không có tiêu đề phần, dòng hướng dẫn: " + absent);
+        }
+        assertTrue(md.startsWith("```{=openxml}\n<w:p><w:pPr><w:pStyle w:val=\"ExamGroupTag\"/>"),
+                "file mở đầu bằng dòng thẻ phần I: " + md.substring(0, 120));
     }
 
     @Test
@@ -217,7 +220,8 @@ class ExamYoungMixExportTest {
         assertFalse(xml.contains("<w:tbl"), "không có bảng (đầu đề, bảng đáp án, bảng quanh phương án)");
         assertFalse(xml.contains("footerReference"), "không có chân trang");
         assertEquals(1, count(xml, "<w:sectPr"), "một section");
-        for (String absent : List.of("UBND", "Mã đề", "HẾT", "ĐÁP ÁN", "LỜI GIẢI", "Số mũ của", "Họ và tên")) {
+        for (String absent : List.of("UBND", "Mã đề", "HẾT", "ĐÁP ÁN", "LỜI GIẢI", "Số mũ của", "Họ và tên", "PHẦN",
+                "Học sinh")) {
             assertFalse(xml.contains(absent), "không có: " + absent);
         }
         assertFalse(xml.contains("<w:numPr"), "không dùng numbering tự động của Word");
@@ -230,23 +234,30 @@ class ExamYoungMixExportTest {
         }
     }
 
-    /** Đúng 3 dòng thẻ, mỗi dòng ngay dưới dòng hướng dẫn của phần và ngay trên "Câu 1." của phần. */
+    /**
+     * Đúng 3 dòng thẻ, mỗi dòng ngay trên "Câu 1." của phần; không còn đoạn tiêu đề phần ("PHẦN …") và dòng hướng dẫn
+     * (thử trên youngmix.vn 26/11: chúng bị gộp vào câu cuối của phần trước). Đoạn ngay trước thẻ phần II, III là đoạn cuối
+     * của câu cuối phần trước (ý d) hay dòng phương án), không phải chữ nào khác.
+     */
     @ParameterizedTest
     @EnumSource(EquationFormat.class)
     void baDongTheNhomDungViTri(EquationFormat format) throws Exception {
         List<Para> ps = paragraphs(PandocTestSupport.documentXml(docx(format, 12)));
         List<String> tags = ps.stream().map(p -> p.text().strip()).filter(t -> t.matches("<g\\d#\\d>")).toList();
         assertEquals(List.of("<g3#1>", "<g3#2>", "<g1#3>"), tags);
-        String[][] parts = {{"PHẦN I.", "<g3#1>"}, {"PHẦN II.", "<g3#2>"}, {"PHẦN III.", "<g1#3>"}};
-        for (String[] part : parts) {
-            int heading = indexStarting(ps, part[0], 0);
-            assertTrue(heading >= 0, part[0]);
-            assertTrue(ps.get(heading + 1).text().startsWith("Học sinh"), "dòng hướng dẫn ngay sau tiêu đề " + part[0]);
-            assertEquals(part[1], ps.get(heading + 2).text(), "dòng thẻ ngay dưới dòng hướng dẫn " + part[0]);
-            assertTrue(ps.get(heading + 3).text().startsWith("Câu 1."), "câu 1 ngay sau dòng thẻ " + part[0]);
-            assertTrue(runs(ps.get(heading + 2).xml()).stream().noneMatch(Map.Entry::getValue), "thẻ không gạch chân");
+        assertTrue(ps.stream().noneMatch(p -> p.text().strip().startsWith("PHẦN") || p.text().contains("Học sinh")),
+                "không có tiêu đề phần và dòng hướng dẫn");
+        for (String tag : tags) {
+            int at = indexStarting(ps, tag, 0);
+            assertTrue(ps.get(at + 1).text().startsWith("Câu 1."), "câu 1 ngay sau dòng thẻ " + tag);
+            assertTrue(runs(ps.get(at).xml()).stream().noneMatch(Map.Entry::getValue), "thẻ không gạch chân");
         }
-        assertTrue(ps.get(0).text().startsWith("PHẦN I."), "đoạn đầu tiên của file là tiêu đề phần I");
+        assertEquals("<g3#1>", ps.get(0).text(), "đoạn đầu tiên của file là dòng thẻ phần I");
+        String beforePart2 = ps.get(indexStarting(ps, "<g3#2>", 0) - 1).text();
+        assertTrue(beforePart2.contains("D.") && beforePart2.contains("\t"),
+                "trước thẻ phần II là dòng phương án (có D.) của câu 2 phần I: " + beforePart2);
+        assertTrue(ps.get(indexStarting(ps, "<g1#3>", 0) - 1).text().strip().startsWith("d)"),
+                "trước thẻ phần III là ý d) của câu đúng/sai");
     }
 
     @ParameterizedTest
@@ -255,8 +266,9 @@ class ExamYoungMixExportTest {
         List<Para> ps = paragraphs(PandocTestSupport.documentXml(docx(format, 12)));
         // câu 1 (đáp án B), câu 2 (đáp án D), câu đúng/sai (a, c, d Đúng; b Sai)
         List<Map.Entry<String, Boolean>> labelRuns = new ArrayList<>();
-        int part1 = indexStarting(ps, "PHẦN I.", 0);
-        int part3 = indexStarting(ps, "PHẦN III.", 0);
+        int part1 = indexStarting(ps, "<g3#1>", 0);
+        int part3 = indexStarting(ps, "<g1#3>", 0);
+        assertTrue(part1 >= 0 && part3 > part1, "thẻ phần I và phần III");
         for (int i = part1; i < part3; i++) {
             for (Map.Entry<String, Boolean> run : runs(ps.get(i).xml())) {
                 if (run.getValue()) {
@@ -282,7 +294,8 @@ class ExamYoungMixExportTest {
     @EnumSource(EquationFormat.class)
     void phanBaCoDongDapAnDuoiCauHoi(EquationFormat format) throws Exception {
         List<Para> ps = paragraphs(PandocTestSupport.documentXml(docx(format, 12)));
-        int part3 = indexStarting(ps, "PHẦN III.", 0);
+        int part3 = indexStarting(ps, "<g1#3>", 0);
+        assertTrue(part3 >= 0, "thẻ phần III");
         List<String> expected = List.of("A. 10", "A. 2,5", "A. \\frac{1}{2}");
         for (int k = 1; k <= 3; k++) {
             int q = indexStarting(ps, "Câu " + k + ".", part3);

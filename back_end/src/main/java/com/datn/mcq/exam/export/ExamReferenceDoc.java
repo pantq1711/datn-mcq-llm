@@ -279,7 +279,7 @@ public final class ExamReferenceDoc {
                         + "\" w:lineRule=\"exact\"/>", ""),
                 // 26/11: dòng "Họ và tên: … Lớp: …" dưới bảng ô (không phách) và các dòng họ tên, lớp của tờ phách
                 style("ExamNameLine", "<w:spacing w:before=\"" + after + "\" w:after=\"" + after + "\"/>", ""),
-                // 26/11 (YoungMix): dòng thẻ nhóm "<g3#1>" ngay dưới dòng hướng dẫn của phần, đi cùng câu đầu
+                // 26/11 (YoungMix): dòng thẻ nhóm "<g3#1>" ngay trên câu đầu của phần, đi cùng câu đầu
                 style("ExamGroupTag", "<w:keepNext/><w:spacing w:before=\"0\" w:after=\"" + after + "\"/>", ""),
                 style("ExamTableCell", "<w:spacing w:before=\"20\" w:after=\"20\" w:line=\"240\" w:lineRule=\"auto\"/>"
                         + "<w:jc w:val=\"center\"/>", ""),

@@ -1549,9 +1549,11 @@ class ExamBuildTest {
                 assertEquals(200, ok.getStatus(), ok.getContentAsString(StandardCharsets.UTF_8));
                 assertTrue(ok.getHeader("Content-Disposition").contains("filename=\"" + code + ".docx\""), query);
                 String xml = PandocTestSupport.documentXml(ok.getContentAsByteArray());
-                assertTrue(xml.contains("&lt;g3#1&gt;") && xml.contains("PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN"), query);
+                assertTrue(xml.contains("&lt;g3#1&gt;") && xml.contains("&lt;g3#2&gt;") && xml.contains("&lt;g1#3&gt;"),
+                        query);
+                // thử trên youngmix.vn 26/11: không có tiêu đề phần và dòng hướng dẫn (bị gộp vào câu cuối phần trước)
                 for (String absent : List.of("UBND", "Mã đề", "Mã phách", "HẾT", "ĐÁP ÁN", "LỜI GIẢI", "<w:tbl",
-                        "footerReference")) {
+                        "footerReference", "PHẦN", "Học sinh")) {
                     assertFalse(xml.contains(absent), "YoungMix không có " + absent + ": " + query);
                 }
                 assertTrue(xml.contains("<w:u w:val=\"single\""), "nhãn đáp án đúng gạch chân: " + query);

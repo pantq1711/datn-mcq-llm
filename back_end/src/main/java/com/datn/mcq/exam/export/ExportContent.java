@@ -18,9 +18,10 @@ public enum ExportContent {
     SPEC,
 
     /**
-     * Bản cho phần mềm trộn đề YoungMix (26/11): chỉ nội dung đề (tiêu đề phần, dòng hướng dẫn, câu), dòng thẻ nhóm
-     * {@code <gN#P>} dưới tiêu đề mỗi phần, nhãn phương án đúng và nhãn ý Đúng gạch chân, phần III có dòng "A. đáp án" dưới
-     * câu hỏi; không có đầu đề, chân trang, dòng HẾT, đáp án, lời giải ({@link ExamMarkdownBuilder}).
+     * Bản cho phần mềm trộn đề YoungMix (26/11): chỉ các câu, dòng thẻ nhóm {@code <gN#P>} ngay trên câu đầu của mỗi phần,
+     * nhãn phương án đúng và nhãn ý Đúng gạch chân, phần III có dòng "A. đáp án" dưới câu hỏi; không có đầu đề, tiêu đề
+     * phần, dòng hướng dẫn (thử trên youngmix.vn: bị gộp vào câu cuối phần trước), chân trang, dòng HẾT, đáp án, lời giải
+     * ({@link ExamMarkdownBuilder}).
      */
     YOUNGMIX;
 
