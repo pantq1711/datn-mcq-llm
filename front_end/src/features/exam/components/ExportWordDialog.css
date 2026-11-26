@@ -36,6 +36,15 @@
     margin-bottom: 4px;
 }
 
+/* 26/11: cảnh báo đáp án phần III của bản YoungMix, cỡ chữ và tờ phách nằm dưới câu giải thích của "Nội dung file" */
+.export-word-dialog-youngmix-warning {
+    margin-top: 12px;
+}
+
+.export-word-dialog-extra {
+    margin-top: 16px;
+}
+
 /* Nút "Đang tạo file Word… (khoảng 10 giây)" dài: cho xuống dòng trên màn hẹp thay vì tràn hộp */
 .export-word-dialog .ant-modal-footer .ant-btn {
     max-width: 100%;
