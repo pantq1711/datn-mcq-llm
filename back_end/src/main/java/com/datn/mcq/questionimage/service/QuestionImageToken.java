@@ -76,6 +76,17 @@ public final class QuestionImageToken {
     }
 
     /**
+     * Xóa token khỏi văn bản không tin cậy (đầu ra LLM, H2): mọi {@code ⟦img:<id>⟧} đủ dạng, rồi tiền tố {@code ⟦img:}
+     * còn sót (token dở dang hay sai dạng). Không trim và không đụng ngoặc thường hay {@code ⟦ ⟧} khác.
+     */
+    public static String removeTokens(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        return TOKEN_PATTERN.matcher(text).replaceAll("").replace(PREFIX, "");
+    }
+
+    /**
      * Thoát ký tự ⟦ và ⟧ có sẵn trong văn bản Word thành [ và ] (H2: tránh người dùng gõ giả token).
      */
     public static String sanitizeWordText(String text) {

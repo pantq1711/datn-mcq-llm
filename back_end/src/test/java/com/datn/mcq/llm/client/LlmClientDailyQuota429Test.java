@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -64,16 +65,34 @@ class LlmClientDailyQuota429Test {
         return new GeminiRateLimiter(0L, 480, 60_000L, Clock.systemDefaultZone(), d -> { }, s -> 0);
     }
 
+    /**
+     * NS-2: lượt gọi bị 429 PerDay ném ngay {@link QuotaExhaustedException} (kèm mốc đặt lại), như lượt gọi chạm trần
+     * {@code daily-quota}, để worker hoãn job mà không tính một lượt lỗi.
+     */
     @Test
-    void tra429HetHanMucNgayThiDanhDauHetHanMucNgay() {
+    void tra429HetHanMucNgayThiDanhDauHetHanMucNgayVaNemQuotaExhausted() {
         GeminiRateLimiter limiter = limiter();
         assertTrue(limiter.hasDailyQuota());
         LlmClient client = new LlmClient("khoa-gia", "m", fakeBase(), limiter);
 
-        assertThrows(UpstreamServiceException.class, () -> client.callJsonMode("xin chào", "gemini-gia", 0.0));
+        QuotaExhaustedException ex = assertThrows(QuotaExhaustedException.class,
+                () -> client.callJsonMode("xin chào", "gemini-gia", 0.0));
 
+        assertEquals(480, ex.getDailyQuota());
+        assertEquals(limiter.nextResetAt(), ex.getResetAt());
         assertFalse(limiter.hasDailyQuota(), "429 PerDay: coi như hết hạn mức ngày tới 0h giờ Thái Bình Dương");
         assertThrows(QuotaExhaustedException.class, limiter::acquire, "lượt gọi sau ném QuotaExhaustedException ngay");
+    }
+
+    /** Hạn mức ngày tắt ({@code daily-quota} = 0): bộ điều tiết không đánh dấu gì, 429 PerDay giữ lỗi 429 như cũ. */
+    @Test
+    void tra429HetHanMucNgayKhiTatHanMucNgayThiGiuLoi429NhuCu() {
+        GeminiRateLimiter disabled = new GeminiRateLimiter(0L, 0, 60_000L, Clock.systemDefaultZone(), d -> { }, s -> 0);
+        LlmClient client = new LlmClient("khoa-gia", "m", fakeBase(), disabled);
+
+        assertThrows(UpstreamServiceException.class, () -> client.callJsonMode("xin chào", "gemini-gia", 0.0));
+
+        assertTrue(disabled.hasDailyQuota());
     }
 
     @Test

@@ -99,6 +99,8 @@ class SecurityRouteAccessTest {
         RULES.put("POST /api/public/assignments/{code}/attempts", Access.PUBLIC);
         RULES.put("GET /api/public/attempts/current", Access.PUBLIC);
         RULES.put("POST /api/public/attempts/current/submit", Access.PUBLIC);
+        // S1: học sinh tải hình bằng URL ký theo lượt làm, không JWT (cau-co-hinh.md mục 4.1).
+        RULES.put("GET /api/public/question-images/{id}", Access.PUBLIC);
 
         RULES.put("POST /api/materials", Access.TEACHER);
         RULES.put("GET /api/materials", Access.TEACHER);
@@ -106,6 +108,7 @@ class SecurityRouteAccessTest {
         RULES.put("DELETE /api/materials/{id}", Access.TEACHER);
 
         RULES.put("POST /api/bank-imports", Access.TEACHER);
+        RULES.put("GET /api/bank-imports", Access.TEACHER);
         RULES.put("GET /api/bank-imports/{id}", Access.TEACHER);
         RULES.put("POST /api/bank-imports/{id}/confirm", Access.TEACHER);
         RULES.put("DELETE /api/bank-imports/{id}", Access.TEACHER);

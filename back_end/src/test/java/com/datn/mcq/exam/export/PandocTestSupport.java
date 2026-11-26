@@ -71,6 +71,11 @@ public final class PandocTestSupport {
 
     /** Kiểu Normal dùng Times New Roman cỡ 12 (sz = 24 nửa điểm), như mẫu đề của trường. */
     public static boolean normalIsTimesNewRoman12(String stylesXml) {
+        return normalIsTimesNewRoman(stylesXml, 24);
+    }
+
+    /** Kiểu Normal dùng Times New Roman cỡ {@code halfPoints}/2 (26/11: cỡ 14 là sz = 28). */
+    public static boolean normalIsTimesNewRoman(String stylesXml, int halfPoints) {
         // Thứ tự thuộc tính của w:style không cố định (file mẫu được vá bằng DOM), nên không dựa vào thứ tự đó.
         java.util.regex.Matcher m = java.util.regex.Pattern.compile(
                 "(?s)<w:style\\s([^>]*w:styleId=\"Normal\"[^>]*)>(.*?)</w:style>").matcher(stylesXml);
@@ -79,6 +84,6 @@ public final class PandocTestSupport {
         }
         String normal = m.group(2);
         return normal.contains("w:ascii=\"Times New Roman\"") && normal.contains("w:hAnsi=\"Times New Roman\"")
-                && normal.contains("<w:sz w:val=\"24\"");
+                && normal.contains("<w:sz w:val=\"" + halfPoints + "\"");
     }
 }

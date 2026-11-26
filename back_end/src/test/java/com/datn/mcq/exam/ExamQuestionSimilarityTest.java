@@ -17,6 +17,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -178,13 +179,30 @@ class ExamQuestionSimilarityTest {
 
         ExamQuestionSimilarity.flag(byPart, T);
 
-        assertEquals(List.of(), byPart.get("I").get(0).reviewReasons());
-        assertEquals(List.of(), byPart.get("I").get(1).reviewReasons(), "câu đứng trước của cặp không bị gắn");
+        assertEquals(List.of(), byPart.get("I").get(0).infoReasons());
+        assertEquals(List.of(), byPart.get("I").get(1).infoReasons(), "câu đứng trước của cặp không bị gắn");
         assertFalse(byPart.get("I").get(1).needsReview());
         ExamItemDto flagged = byPart.get("II").get(0);
-        assertEquals(List.of("similar_in_exam: I.2"), flagged.reviewReasons(), "Phần I, câu 2 (không phải câu 2 toàn đề hay 3)");
-        assertTrue(flagged.needsReview());
-        assertEquals("needs_review", flagged.qcState());
+        assertEquals(List.of("similar_in_exam: I.2"), flagged.infoReasons(), "Phần I, câu 2 (không phải câu 2 toàn đề hay 3)");
+        // 22/11: cờ thông tin, không phải lý do cần xem kỹ
+        assertEquals(List.of(), flagged.reviewReasons());
+        assertFalse(flagged.needsReview());
+        assertNull(flagged.qcState(), "không đổi qcState");
+    }
+
+    /** 22/11: cờ cùng khuôn nối sau cờ thông tin sẵn có (vd. request_partial), không thay thế. */
+    @Test
+    void coCungKhuonNoiSauCoThongTinSanCo() {
+        ExamItemDto first = mcq("Bậc của đơn thức $5x^3$ là:", "$5$", "$3$", "$2$", "$6$");
+        ExamItemDto second = mcq("Bậc của đơn thức $7x^4$ là:", "$7$", "$4$", "$2$", "$8$")
+                .withRequests(List.of("request_partial: thiếu hình"), null, null);
+        Map<String, List<ExamItemDto>> byPart = new LinkedHashMap<>();
+        byPart.put("I", new ArrayList<>(List.of(first, second)));
+
+        ExamQuestionSimilarity.flag(byPart, T);
+
+        assertEquals(List.of("request_partial: thiếu hình", "similar_in_exam: I.1"), byPart.get("I").get(1).infoReasons());
+        assertFalse(byPart.get("I").get(1).needsReview());
     }
 
     /** 2/11: trang đề đánh số theo Phần ("Câu 3" của Phần II), nên lý do mang Phần và số trong Phần. */

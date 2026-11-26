@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.public-limit.start-per-ip-per-minute=3",
         "app.public-limit.resume-per-attempt-per-minute=4",
         "app.public-limit.submit-per-attempt-per-minute=3",
+        "app.public-limit.image-per-attempt-per-minute=3",
         "app.security.cors.allowed-origins=http://localhost:5173"
 })
 @Import(TestSafetyConfiguration.class)
@@ -62,6 +63,28 @@ class PublicRateLimitTest extends AssignmentTestBase {
 
         // IP khác (lớp khác, trường khác) không bị ảnh hưởng.
         mockMvc.perform(from(startRequest(code, 4), "10.20.0.2")).andExpect(status().isCreated());
+    }
+
+    /**
+     * Quyết định 25/11: báo trùng trước khi bắt đầu (409 ATTEMPT_IDENTITY_TAKEN) vẫn đi qua hạn mức theo IP, nên không dùng
+     * được để dò tên hay số đã có người dùng; lần gửi lại có xác nhận cũng bị tính.
+     */
+    @Test
+    void identityTakenCallsCountTowardTheStartLimit() throws Exception {
+        String code = assignMode(NAME, true, false).get("publicCode").asText();
+        String ip = "10.20.9.1";
+        String body = "{\"classLabel\": \"8A1\", \"studentName\": \"Lê Hoa\"}";
+        mockMvc.perform(from(post("/api/public/assignments/" + code + "/attempts")
+                .contentType(MediaType.APPLICATION_JSON).content(body), ip)).andExpect(status().isCreated());
+        for (int i = 0; i < 2; i++) {
+            mockMvc.perform(from(post("/api/public/assignments/" + code + "/attempts")
+                    .contentType(MediaType.APPLICATION_JSON).content(body), ip))
+                    .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("ATTEMPT_IDENTITY_TAKEN"));
+        }
+        mockMvc.perform(from(post("/api/public/assignments/" + code + "/attempts").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"classLabel\": \"8A1\", \"studentName\": \"Lê Hoa\", \"confirmDuplicate\": true}"), ip))
+                .andExpect(status().isTooManyRequests()).andExpect(jsonPath("$.code").value("TOO_MANY_REQUESTS"));
+        assertEquals(1, count("SELECT count(*) FROM assignment_attempt"));
     }
 
     /**
@@ -127,6 +150,37 @@ class PublicRateLimitTest extends AssignmentTestBase {
     private org.springframework.test.web.servlet.ResultActions submitFrom(String token, String ip) throws Exception {
         return mockMvc.perform(from(post("/api/public/attempts/current/submit").header(TOKEN_HEADER, token)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"answers\": " + sampleAnswers() + "}"), ip));
+    }
+
+    /**
+     * S1 (cau-co-hinh.md mục 4.1): tải ảnh có bộ đếm thứ tư theo lượt làm; vượt thì 429 kèm Retry-After. URL ký sai bị 404
+     * trước khi đếm nên không làm lượt bị chặn; lượt khác cùng IP vẫn tải được.
+     */
+    @Test
+    void imageLoadsAreLimitedPerAttempt() throws Exception {
+        String code = assign(true).get("publicCode").asText();
+        long stem = attachImage(mcqItem1, "stem", 1);
+        String url = json(mockMvc.perform(from(startRequest(code, 1), "10.20.5.1")).andExpect(status().isCreated()))
+                .get("parts").get(0).get("items").get(0).get("images").get(0).get("url").asText();
+        String classmateUrl = json(mockMvc.perform(from(startRequest(code, 2), "10.20.5.1"))
+                .andExpect(status().isCreated()))
+                .get("parts").get(0).get("items").get(0).get("images").get(0).get("url").asText();
+        assertTrue(url.startsWith("/api/public/question-images/" + stem + "?"), url);
+
+        String badSig = url.substring(0, url.length() - 1) + (url.endsWith("0") ? "1" : "0");
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(from(get(badSig), "10.20.5.1")).andExpect(status().isNotFound());
+        }
+        for (int i = 0; i < 3; i++) {
+            mockMvc.perform(from(get(url), "10.20.5.1")).andExpect(status().isOk());
+        }
+        MvcResult blocked = mockMvc.perform(from(get(url), "10.20.5.1"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("TOO_MANY_REQUESTS"))
+                .andReturn();
+        assertTrue(Long.parseLong(blocked.getResponse().getHeader("Retry-After")) >= 1);
+
+        mockMvc.perform(from(get(classmateUrl), "10.20.5.1")).andExpect(status().isOk());
     }
 
     /** Token sai trả 401 và không tính vào bộ đếm nào (token 32 byte, không dò được). */

@@ -2,6 +2,7 @@ import axios from "axios";
 import type {
     AttemptView,
     PublicAssignmentInfo,
+    StartAttemptPayload,
     SubmitAnswerPayload,
     SubmitResult,
 } from "../types/assignment.types";
@@ -25,10 +26,11 @@ export async function getPublicAssignment(code: string): Promise<PublicAssignmen
     return data;
 }
 
-export async function startAttempt(code: string, classLabel: string, seatNo: number): Promise<AttemptView> {
+/** P2. 409 ATTEMPT_IDENTITY_TAKEN (25/11): đã có lượt cùng lớp + tên / số và `confirmDuplicate` là false. */
+export async function startAttempt(code: string, payload: StartAttemptPayload): Promise<AttemptView> {
     const { data } = await publicClient.post<AttemptView>(
         `/api/public/assignments/${encodeURIComponent(code)}/attempts`,
-        { classLabel, seatNo }
+        payload
     );
     return data;
 }

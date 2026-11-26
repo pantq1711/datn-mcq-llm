@@ -1333,12 +1333,14 @@ class ExamBuildTest {
                 assertTrue(xml.contains(part), "docx thiếu: " + part);
             }
             // 2/11: đầu đề (bảng 2 cột không viền) và mã đề hiển thị 101; mã hệ thống MT... chỉ ở tên file, không in ra file.
+            // 26/11: mặc định không có tờ phách: ô "Mã đề | Điểm" và dòng họ tên (bỏ "Điểm bài thi", "Mã phách").
             for (String part : List.of("UBND PHƯỜNG ……………", "TRƯỜNG THCS ……………", "ĐỀ KIỂM TRA ĐỀ THỬ MA TRẬN",
-                    "Môn: Toán, Lớp: 8.", "(Thời gian làm bài …… phút không kể thời gian giao đề)", "Mã đề",
-                    "Điểm bài thi", "Mã phách", "<w:tbl>",
+                    "Môn: Toán, Lớp: 8.", "(Thời gian làm bài …… phút không kể thời gian giao đề)", ">Mã đề<",
+                    ">Điểm<", "Họ và tên: …………………… Lớp: ………", "<w:tbl>",
                     "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101", "LỜI GIẢI CHI TIẾT", "------ HẾT ------")) {
                 assertTrue(xml.contains(part), "đầu đề docx thiếu: " + part);
             }
+            assertFalse(xml.contains("Mã phách") || xml.contains("Điểm bài thi"), "mặc định không có phách");
             assertTrue(xml.contains("<w:top w:val=\"nil\"/>"), "bảng đầu đề không viền");
             assertFalse(xml.contains("MT2"), "mã hệ thống không in ra file");
             assertFalse(xml.contains(code), "mã hệ thống không in ra file");
@@ -1480,6 +1482,134 @@ class ExamBuildTest {
         assertEquals(400, bad.getStatus());
         String body = bad.getContentAsString(StandardCharsets.UTF_8);
         assertTrue(body.contains("all") && body.contains("exam"), "thông báo nêu giá trị hợp lệ: " + body);
+    }
+
+    /**
+     * Bản đặc tả (18/11, mẫu Phụ lục 2 CV 7991, D1–D7): content=spec trả file Word một section ngang trang, tên file cùng quy
+     * tắc với file đề; đầu đề không có ô mã đề, điểm, mã phách (examCode bị bỏ qua); chỗ hỏng vẫn được đếm; câu Đúng – Sai đếm
+     * theo ý. Đề của người khác 404.
+     */
+    @Test
+    void xuatBanDacTaDeTheoMaTran() throws Exception {
+        generator.brokenMcq = 6;
+        int examId = readyExam();
+        progress(examId);
+        assertTrue(count("SELECT count(*) FROM exam_slot WHERE exam_id = ? AND question_type = 'mcq' AND state = 'failed'",
+                examId) > 0, "đề có chỗ hỏng ở phần I");
+        String code = jdbc.queryForObject("SELECT exam_code FROM exam WHERE id = ?", String.class, examId);
+        String base = "/api/exams/" + examId + "/export/docx";
+        for (String query : List.of("?content=spec", "?content=SPEC&equation=mathtype&examCode=205&durationMinutes=45")) {
+            var response = perform(get(base + query)).andReturn().getResponse();
+            if (!PandocTestSupport.find().isPresent()) {
+                assertEquals(503, response.getStatus(), query);
+                continue;
+            }
+            assertEquals(200, response.getStatus(), response.getContentAsString(StandardCharsets.UTF_8));
+            assertTrue(response.getHeader("Content-Disposition").contains("filename=\"" + code + ".docx\""),
+                    "tên file cùng quy tắc với file đề: " + query);
+            String xml = PandocTestSupport.documentXml(response.getContentAsByteArray());
+            for (String part : List.of("BẢN ĐẶC TẢ ĐỀ KIỂM TRA ĐỊNH KÌ", "ĐỀ KIỂM TRA ĐỀ THỬ MA TRẬN", "Môn: Toán, Lớp: 8.",
+                    "Đa thức", "Đơn thức, đa thức", "- Biết: Nhận biết được đơn thức, đa thức.", "Hằng đẳng thức",
+                    "- Hiểu: Khai triển.", "Tứ giác, hình thang cân", "- Hiểu: Tính được góc trong tứ giác.",
+                    "2 (C1, C2)", "2 (C1a, C1b)", "1 (C1c)", "1 (C1d)", "1 (C1)", "Tổng số câu", "Tổng số điểm",
+                    "Tỉ lệ %")) {
+                assertTrue(xml.contains(part), "bản đặc tả thiếu: " + part + " (" + query + ")");
+            }
+            for (String absent : List.of("Mã phách", "Điểm bài thi", ">205<", "ĐÁP ÁN", "Chưa có câu", "PHẦN I.")) {
+                assertFalse(xml.contains(absent), "bản đặc tả không có: " + absent + " (" + query + ")");
+            }
+            assertEquals(1, xml.split("<w:sectPr", -1).length - 1, "một section: " + query);
+            assertTrue(xml.contains("w:orient=\"landscape\""), "ngang trang: " + query);
+            String footers = footersXml(response.getContentAsByteArray());
+            assertTrue(footers.contains("Bản đặc tả") && !footers.contains("Mã đề"), footers);
+        }
+        int other = insert("INSERT INTO users (name, email, role) VALUES ('GV2', 'gv2.spec@test', 'teacher')");
+        mockMvc.perform(get(base + "?content=spec").with(AuthTestSupport.teacher(other)))
+                .andExpect(status().isNotFound());
+        var bad = perform(get(base + "?content=dacta")).andReturn().getResponse();
+        assertEquals(400, bad.getStatus());
+        assertTrue(bad.getContentAsString(StandardCharsets.UTF_8).contains("spec"), "thông báo nêu giá trị spec");
+    }
+
+    /**
+     * 26/11: content=youngmix (bản cho phần mềm trộn đề YoungMix: không đầu đề, chân trang, HẾT, đáp án, lời giải; dòng thẻ
+     * nhóm dưới tiêu đề mỗi phần), phach=true|false (tờ phách cho "Chỉ đề" và "Đề kèm đáp án"), fontSize=12|14. Giá trị sai
+     * của phach và fontSize thì 400 như các tham số khác.
+     */
+    @Test
+    void xuatDeRaWordYoungMixPhachCoChu() throws Exception {
+        int examId = readyExam();
+        progress(examId);
+        String code = jdbc.queryForObject("SELECT exam_code FROM exam WHERE id = ?", String.class, examId);
+        String base = "/api/exams/" + examId + "/export/docx";
+        if (PandocTestSupport.find().isPresent()) {
+            for (String query : List.of("?content=youngmix", "?content=YoungMix&equation=mathtype&examCode=205&phach=true"
+                    + "&fontSize=14")) {
+                var ok = perform(get(base + query)).andReturn().getResponse();
+                assertEquals(200, ok.getStatus(), ok.getContentAsString(StandardCharsets.UTF_8));
+                assertTrue(ok.getHeader("Content-Disposition").contains("filename=\"" + code + ".docx\""), query);
+                String xml = PandocTestSupport.documentXml(ok.getContentAsByteArray());
+                assertTrue(xml.contains("&lt;g3#1&gt;") && xml.contains("&lt;g3#2&gt;") && xml.contains("&lt;g1#3&gt;"),
+                        query);
+                // thử trên youngmix.vn 26/11: không có tiêu đề phần và dòng hướng dẫn (bị gộp vào câu cuối phần trước)
+                for (String absent : List.of("UBND", "Mã đề", "Mã phách", "HẾT", "ĐÁP ÁN", "LỜI GIẢI", "<w:tbl",
+                        "footerReference", "PHẦN", "Học sinh")) {
+                    assertFalse(xml.contains(absent), "YoungMix không có " + absent + ": " + query);
+                }
+                assertTrue(xml.contains("<w:u w:val=\"single\""), "nhãn đáp án đúng gạch chân: " + query);
+            }
+            var phach = perform(get(base + "?content=exam&phach=TRUE&fontSize=14")).andReturn().getResponse();
+            assertEquals(200, phach.getStatus(), phach.getContentAsString(StandardCharsets.UTF_8));
+            String xml = PandocTestSupport.documentXml(phach.getContentAsByteArray());
+            assertTrue(xml.contains("Mã phách") && xml.contains("Điểm bài thi"), "có tờ phách");
+            assertEquals(2, xml.split("<w:sectPr", -1).length - 1, "tờ phách và đề");
+            String styles = PandocTestSupport.entry(phach.getContentAsByteArray(), "word/styles.xml");
+            assertTrue(PandocTestSupport.normalIsTimesNewRoman(styles, 28), "cỡ 14");
+            for (String query : List.of("?phach=false&fontSize=12", "?phach=&fontSize=")) {
+                var plain = perform(get(base + query)).andReturn().getResponse();
+                assertEquals(200, plain.getStatus(), query);
+                String x = PandocTestSupport.documentXml(plain.getContentAsByteArray());
+                assertFalse(x.contains("Mã phách"), query);
+                assertTrue(PandocTestSupport.normalIsTimesNewRoman12(
+                        PandocTestSupport.entry(plain.getContentAsByteArray(), "word/styles.xml")), query);
+            }
+        }
+        for (String[] bad : List.of(new String[]{"?fontSize=13", "fontSize"}, new String[]{"?fontSize=abc", "fontSize"},
+                new String[]{"?phach=yes", "phach"}, new String[]{"?phach=1", "phach"},
+                new String[]{"?content=young-mix", "youngmix"})) {
+            var response = perform(get(base + bad[0])).andReturn().getResponse();
+            assertEquals(400, response.getStatus(), bad[0]);
+            assertTrue(response.getContentAsString(StandardCharsets.UTF_8).contains(bad[1]), bad[0]);
+        }
+    }
+
+    /**
+     * Bản đặc tả của đề sinh theo bài (ma trận ẩn kind = lesson): chủ đề là tên bài, yêu cầu cần đạt mặc định in nguyên văn;
+     * chưa chạy job nên mọi chỗ đang soạn, vẫn được đếm.
+     */
+    @Test
+    void xuatBanDacTaDeTheoBaiChuaCoCau() throws Exception {
+        String lesson = "Bài 3. Hằng đẳng thức đáng nhớ";
+        JsonNode built = json(postJson("/api/exams/build-by-lesson", "{\"subjectId\": " + subject
+                + ", \"gradeLevel\": 8, \"lesson\": \"" + lesson + "\", \"useBank\": false, \"cells\": ["
+                + "{\"questionType\": \"mcq\", \"difficulty\": \"easy\", \"questionCount\": 3},"
+                + "{\"questionType\": \"tf\", \"questionCount\": 1}]}").andExpect(status().isOk()));
+        int examId = built.get("examId").asInt();
+        assertEquals("lesson", built.get("kind").asText());
+        assertEquals(4, count("SELECT count(*) FROM exam_slot WHERE exam_id = ? AND state NOT IN ('ready', 'kept', 'edited')",
+                examId), "chưa chạy job: mọi chỗ chưa có câu");
+        var response = perform(get("/api/exams/" + examId + "/export/docx?content=spec")).andReturn().getResponse();
+        if (!PandocTestSupport.find().isPresent()) {
+            assertEquals(503, response.getStatus());
+            return;
+        }
+        assertEquals(200, response.getStatus(), response.getContentAsString(StandardCharsets.UTF_8));
+        String xml = PandocTestSupport.documentXml(response.getContentAsByteArray());
+        for (String part : List.of(lesson, "- Biết: Nhận biết được kiến thức cơ bản của bài: " + lesson + ".",
+                "- Hiểu: Hiểu và vận dụng trực tiếp kiến thức của bài: " + lesson + ".", "- Vận dụng: ",
+                "3 (C1–C3)", "2 (C1a, C1b)", "1 (C1c)", "1 (C1d)")) {
+            assertTrue(xml.contains(part), "bản đặc tả đề theo bài thiếu: " + part);
+        }
     }
 
     /** ?equation=mathtype: công thức thành đối tượng MathType OLE; header báo số công thức giữ Equation của Word. */

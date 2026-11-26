@@ -262,6 +262,28 @@ class ExamMarkdownBuilderTest {
         assertTrue(md.contains("**d)** Đồ thị đi qua $O$.") && !md.contains("$O$.."), "đã có . thì không thêm: " + md);
     }
 
+    /**
+     * P4 (chạy thử 24/11, file Word in "m = 1.."): câu nhập từ Word có dấu chấm nằm TRONG công thức cuối ({@code $m = 1.$}).
+     * Dấu kết câu ở cuối công thức coi như đã có, không thêm dấu chấm sau công thức; công thức không kết câu vẫn được thêm.
+     */
+    @Test
+    void congThucCuoiDaKetThucBangDauChamThiKhongThemDauCham() {
+        assertEquals("$m = 1.$", ExamMarkdownBuilder.endWithPeriod("$m = 1.$"));
+        assertEquals("Giá trị là $m = -1.$", ExamMarkdownBuilder.endWithPeriod("Giá trị là $m = -1.$"));
+        assertEquals("$x = 2?$", ExamMarkdownBuilder.endWithPeriod("$x = 2?$"));
+        assertEquals("$m = 1. $", ExamMarkdownBuilder.endWithPeriod("$m = 1. $"));
+        assertEquals("$m = 1$.", ExamMarkdownBuilder.endWithPeriod("$m = 1$"), "công thức không kết câu: thêm dấu chấm");
+        assertEquals("$15cm^2$.", ExamMarkdownBuilder.endWithPeriod("$15cm^2$"));
+        assertEquals("$1.5$ và $2$.", ExamMarkdownBuilder.endWithPeriod("$1.5$ và $2$"), "dấu chấm giữa công thức trước không tính");
+        assertEquals("Chi phí \\$5.", ExamMarkdownBuilder.endWithPeriod("Chi phí \\$5"), "\\$ là chữ, không phải công thức");
+
+        String md = markdownOnly(ExamMarkdownBuilder.build(viewOf(new PartDto("I", 1, 1, List.of(
+                mcq(1, "ready", "Tìm $m$.", "$m = 1.$", "$m = -1.$", "$m = -2$", "$m = 2.$", Option.B, null)))),
+                HEADER, SCORING));
+        assertTrue(md.contains("**A.** $m = 1.$") && !md.contains("$m = 1.$."), md);
+        assertTrue(md.contains("**C.** $m = -2$."), md);
+    }
+
     @Test
     void cauDanKetThucBangLaHaiChamBoDauHaiCham() {
         for (String stem : new String[]{"Bậc của đơn thức $x^2$ là:", "Bậc của đơn thức $x^2$ là :", "Bậc của đơn thức $x^2$ là : "}) {
@@ -362,10 +384,11 @@ class ExamMarkdownBuilderTest {
                 "UBND PHƯỜNG ……………", "TRƯỜNG THCS ……………", "Thứ..... ngày........ tháng..... năm 2026",
                 "ĐỀ KIỂM TRA GIỮA KÌ I", "NĂM HỌC 2026 - 2027", "Môn: Toán, Lớp: 8.",
                 "(Thời gian làm bài 45 phút không kể thời gian giao đề)",
-                "Mã đề", "Điểm bài thi", "Mã phách", ">101<")) {
+                ">Mã đề<", ">Điểm<", ">101<", "Họ và tên: …………………… Lớp: ………")) {
             assertTrue(block.contains(part), "đầu đề thiếu: " + part + "\n" + block);
         }
-        assertFalse(block.contains("Họ và tên"), "bỏ dòng Họ và tên/Lớp");
+        // 26/11: mặc định không có tờ phách: bảng ô "Mã đề | Điểm" rồi dòng họ tên (tờ phách: ExamPhachFontSizeExportTest)
+        assertFalse(block.contains("Mã phách") || block.contains("Điểm bài thi"), "mặc định bỏ ô Mã phách");
         assertFalse(block.contains("Đề có") || block.contains("SECTIONPAGES"), "bỏ \"(Đề có N trang)\"");
         assertFalse(block.contains("PHÒNG GD"), block);
     }

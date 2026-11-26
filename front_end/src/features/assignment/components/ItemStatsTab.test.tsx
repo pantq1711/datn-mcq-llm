@@ -94,6 +94,13 @@ describe("ItemStatsTab: đủ mẫu", () => {
         expect(document.querySelector(".ant-alert")).toBeNull();
     });
 
+    it("bài giao chế độ họ tên (25/11): ghi 'lượt trùng tên'", async () => {
+        render(<ItemStatsTab examId="5" assignmentId="7" status="closed" identityMode="name" />);
+
+        expect(await screen.findByText(/2 lượt trùng tên/)).toBeInTheDocument();
+        expect(screen.queryByText(/trùng STT/)).not.toBeInTheDocument();
+    });
+
     it("có chú thích bằng lời cho p và D", async () => {
         renderTab();
 

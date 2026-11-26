@@ -96,7 +96,7 @@ public class AssignmentService {
     /**
      * Giao đề {@code examId}. Kiểm yêu cầu (400) trước mọi truy cập DB; rồi khóa chia sẻ hàng đề (404 khi không phải đề của
      * người gọi), kiểm mọi chỗ đã chốt (409 {@value #ASSIGN_NOT_ALL_KEPT}) và khóa Trả lời ngắn gõ được trên điện thoại
-     * (409 {@value #ASSIGN_SA_KEY_UNSUPPORTED}); không ghi gì khi có lỗi.
+     * (409 {@value #ASSIGN_SA_KEY_UNSUPPORTED}); không ghi gì khi có lỗi. Đề có câu có hình giao được như mọi đề (A2, 24/11).
      */
     @Transactional
     public AssignmentDto create(Integer examId, Integer actorId, CreateAssignmentRequest request) {
@@ -106,6 +106,11 @@ public class AssignmentService {
         }
         if (!Boolean.TRUE.equals(request.consentConfirmed())) {
             throw invalid("Cần xác nhận việc cho học sinh làm bài đã được nhà trường cho phép.");
+        }
+        // Quyết định 25/11: không gửi chế độ thì học sinh nhập họ tên.
+        String identityMode = request.identityMode() == null ? AssignmentRepository.MODE_NAME : request.identityMode();
+        if (!AssignmentRepository.MODE_NAME.equals(identityMode) && !AssignmentRepository.MODE_SEAT.equals(identityMode)) {
+            throw invalid("Chế độ học sinh nhập chỉ là \"name\" (họ và tên) hoặc \"seat\" (số thứ tự).");
         }
         Integer duration = request.durationMinutes();
         if (duration == null || duration < MIN_DURATION || duration > MAX_DURATION) {
@@ -137,6 +142,7 @@ public class AssignmentService {
                     "Còn " + notKept.size() + " câu chưa Giữ. Giữ hoặc Sửa mọi câu rồi mới giao bài.", notKept);
         }
         Map<Integer, BankItemDto> bank = bankService.getItems(slots.stream().map(AssignableSlot::bankItemId).toList());
+        // A2 (24/11, cau-co-hinh.md mục 4.5): đề có câu có hình giao được; học sinh xem hình qua URL ký theo lượt (S1, S2).
         List<String> badSa = slots.stream().filter(s -> s.questionType() == QuestionType.SA)
                 .filter(s -> ShortAnswerValue.normalizedStrictAnswer(bank.get(s.bankItemId()).saAnswer()) == null)
                 .map(AssignmentService::label).toList();
@@ -150,7 +156,7 @@ public class AssignmentService {
         Scoring scoring = Scoring.of(scoringProperties);
         int id = repository.insertAssignment(examId, actorId, code, exam.title(), duration, closesAt,
                 Boolean.TRUE.equals(request.showScore()), Boolean.TRUE.equals(request.showSolutions()),
-                scoring.toJson(), now);
+                scoring.toJson(), identityMode, now);
         repository.insertClasses(id, classes);
         List<ItemRow> items = new ArrayList<>(slots.size());
         for (int i = 0; i < slots.size(); i++) {
@@ -253,20 +259,22 @@ public class AssignmentService {
                 answers.computeIfAbsent(ans.attemptId(), k -> new HashMap<>()).put(ans.slotId(), ans);
             }
             rows = new ArrayList<>(attempts.size());
-            for (AttemptRow t : attempts) {
+            // Chế độ họ tên (25/11): trong lớp sắp theo tên như sổ điểm; chế độ số thứ tự giữ thứ tự của SQL.
+            for (AttemptRow t : a.nameMode() ? AttemptRules.byClassThenName(attempts) : attempts) {
                 boolean duplicate = duplicateIds.contains(t.id());
                 String state = AttemptRules.state(a, t, now);
                 if (t.submittedAt() == null) {
-                    rows.add(new AttemptDto(t.id(), t.classLabel(), t.seatNo(), state, duplicate, t.startedAt(), null,
-                            null, null, null));
+                    rows.add(new AttemptDto(t.id(), t.classLabel(), t.seatNo(), t.studentName(), state, duplicate,
+                            t.startedAt(), null, null, null, null));
                 } else {
-                    rows.add(new AttemptDto(t.id(), t.classLabel(), t.seatNo(), state, duplicate, t.startedAt(),
-                            t.submittedAt(), t.score(), AssignmentPaper.score10(t.score(), t.maxScore()),
+                    rows.add(new AttemptDto(t.id(), t.classLabel(), t.seatNo(), t.studentName(), state, duplicate,
+                            t.startedAt(), t.submittedAt(), t.score(), AssignmentPaper.score10(t.score(), t.maxScore()),
                             paper.partScores(answers.getOrDefault(t.id(), Map.of()))));
                 }
             }
         }
-        return new AssignmentDto(a.id(), a.publicCode(), a.title(), a.status(), a.durationMinutes(), a.closesAt(),
+        return new AssignmentDto(a.id(), a.publicCode(), a.title(), a.status(), a.identityMode(), a.durationMinutes(),
+                a.closesAt(),
                 a.closedAt(), a.showScore(), a.showSolutions(), a.createdAt(),
                 classes.stream().map(c -> new ClassDto(c.classLabel(), c.rosterSize())).toList(),
                 paper.questionCount(), paper.maxScore(), ATTEMPT_CAP_FACTOR * roster, attempts.size(), submitted,

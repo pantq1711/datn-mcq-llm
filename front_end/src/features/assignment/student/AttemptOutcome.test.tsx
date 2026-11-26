@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { makeAttemptView } from "../test/fixtures";
+import { FIGURE_FALLBACK_TEXT } from "../../../components/common/MathText/questionImage.utils";
+import { makeAttemptView, makeNameAttemptView } from "../test/fixtures";
 import type { AttemptView } from "../types/assignment.types";
 import AttemptOutcome from "./AttemptOutcome";
 
@@ -61,6 +62,18 @@ function setup(view: AttemptView, flags = { showScore: true, showSolutions: fals
 const submittedOpen = () =>
     makeAttemptView({ submitted: true, submittedAt: "2026-11-20T09:30:00", parts: undefined, resultsReleased: false });
 
+describe("AttemptOutcome: dòng danh tính", () => {
+    it("chế độ số thứ tự: 'Lớp 8A1, số 12'", () => {
+        setup(submittedOpen());
+        expect(screen.getByText("Lớp 8A1, số 12")).toBeInTheDocument();
+    });
+
+    it("chế độ họ tên (25/11)", () => {
+        setup(makeNameAttemptView({ submitted: true, submittedAt: "2026-11-20T09:30:00", parts: undefined }));
+        expect(screen.getByText("Nguyễn Văn An, lớp 8A1")).toBeInTheDocument();
+    });
+});
+
 describe("AttemptOutcome: ẩn / hiện kết quả theo trạng thái", () => {
     it("bài còn mở: chỉ báo đã nộp và giờ có kết quả, không có điểm, đáp án, lời giải", () => {
         setup(submittedOpen());
@@ -119,6 +132,41 @@ describe("AttemptOutcome: ẩn / hiện kết quả theo trạng thái", () => {
         expect(screen.getByText(/Điểm không được công khai/)).toBeInTheDocument();
         expect(screen.getByText("Đáp án đúng")).toBeInTheDocument();
         expect(screen.queryByText(/điểm thô/i)).not.toBeInTheDocument();
+    });
+
+    it("xem lại có hình (S2): hình ở đề, phương án và lời giải; hình tải lỗi thì hiện chữ thay thế", () => {
+        const url = (id: number) => `/api/public/question-images/${id}?exp=9&a=5&sig=abc`;
+        const review = [
+            {
+                ...REVIEW[0],
+                items: [
+                    {
+                        ...REVIEW[0].items[0],
+                        questionText: "Cho hình:\n⟦img:11⟧\nTính góc.",
+                        options: { A: "⟦img:12⟧", B: "2", C: "3", D: "4" },
+                        explanation: "Kẻ thêm đường cao:\n⟦img:13⟧",
+                        images: [
+                            { id: 11, url: url(11), displayWidthMm: 100 },
+                            { id: 12, url: url(12), displayWidthMm: 30 },
+                            { id: 13, url: url(13), displayWidthMm: 60 },
+                        ],
+                    },
+                ],
+            },
+        ];
+        setup(
+            { ...submittedOpen(), resultsReleased: true, review },
+            { showScore: false, showSolutions: true }
+        );
+
+        // Thẻ <img> thật (biểu tượng antd cũng có role="img").
+        const images = Array.from(document.querySelectorAll("img"));
+        expect(images.map((img) => img.getAttribute("src"))).toEqual([url(11), url(12), url(13)]);
+        expect(document.body.textContent).not.toContain("⟦img:");
+
+        fireEvent.error(images[2]);
+        expect(screen.getByText(FIGURE_FALLBACK_TEXT)).toBeInTheDocument();
+        expect(document.querySelectorAll("img")).toHaveLength(2);
     });
 
     it("tắt cả điểm lẫn đáp án: không hứa có kết quả", () => {

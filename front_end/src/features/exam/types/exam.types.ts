@@ -1,3 +1,7 @@
+import type { QuestionImageInfo } from "../../../components/common/MathText/questionImage.types";
+
+export type { QuestionImageInfo };
+
 export type ExamQuestionDifficulty = "easy" | "medium" | "hard";
 export type ExamKind = "matrix" | "lesson" | "manual";
 export type ExamStatus = "draft" | "confirmed";
@@ -52,6 +56,8 @@ export interface ExamQuestionItem {
     infoReasons?: string[];
     requests?: TeacherRequests;
     inheritedRequests?: TeacherRequests;
+    /** Ảnh của chỗ lấy từ ngân hàng mà câu nguồn có hình (G0 H3); token ⟦img:id⟧ trong chữ trỏ tới `id`. Vắng khi không có hình. */
+    images?: QuestionImageInfo[];
 }
 
 /** Chip yêu cầu của giáo viên (PR B, docs/contract/enums.md TeacherRequest). */
@@ -92,6 +98,12 @@ export function describeInfoReason(reason: string): string {
     if (code === "request_not_met") return `Chưa đúng yêu cầu${detail ? `: ${detail}` : ""}`;
     // D-05: lượt kiểm yêu cầu của hệ thống bị lỗi, yêu cầu chưa được kiểm (không phải "cần xem kỹ")
     if (code === "request_unchecked") return "Chưa kiểm được yêu cầu";
+    // 22/11 (góp ý giáo viên 21/11): câu cùng dạng trong đề là lưu ý, không phải "cần xem kỹ"; giáo viên tự chọn giữ
+    // cả hai hay Đổi câu khác
+    if (code === "similar_in_exam") {
+        const position = /^(I{1,3})\.(\d+)$/.exec(detail.trim());
+        return position ? `Cùng dạng với Phần ${position[1]} – Câu ${position[2]} trong đề` : "Cùng dạng với một câu khác trong đề";
+    }
     return reason;
 }
 
@@ -205,6 +217,8 @@ export interface ExamItemDto {
     inheritedRequests?: TeacherRequests;
     /** Chỉ có trong kết quả Giữ câu (docs/api mục 7.5): câu vừa lưu vào ngân hàng chung hay riêng của thầy/cô. */
     bankVisibility?: BankVisibility;
+    /** Ảnh có URL ký ngắn hạn cho người xem đề; chỉ chỗ `source = "bank"` có hình (G0 H3). Vắng khi rỗng. */
+    images?: QuestionImageInfo[];
 }
 
 /** Ngân hàng chung (mọi giáo viên dùng lại được) hoặc riêng (chỉ người lưu thấy). */

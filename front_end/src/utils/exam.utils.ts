@@ -151,6 +151,23 @@ const ANSWER_FORMAT_START = /^đáp (?:số|án) phải là/i;
 const ANSWER_FORMAT_MESSAGE =
     "Đáp số phải là số nguyên hoặc thập phân tối đa 4 ký tự. Thầy/cô chọn lại số liệu của đề để đáp số vừa khung.";
 
+/**
+ * Đáp án câu trả lời ngắn mà YoungMix nhận được (26/11): số nguyên hoặc thập phân, tối đa 4 ký tự tính cả dấu "-" và ",",
+ * như quy tắc STRICT của backend (docs/contract/enums.md, quyết định 27/10): bỏ cặp $...$ bao cả chuỗi, "−" thành "-",
+ * "{,}" và dấu "." thành ","; không có chữ số 0 thừa ở đầu, không có "-0".
+ */
+export function isYoungMixShortAnswer(value: string | null | undefined): boolean {
+    let s = (value ?? "").trim();
+    if (s.length >= 4 && s.startsWith("$$") && s.endsWith("$$")) s = s.slice(2, -2);
+    else if (s.length >= 2 && s.startsWith("$") && s.endsWith("$")) s = s.slice(1, -1);
+    s = s.trim().replace(/−/g, "-").replace(/\{,\}/g, ",").replace(/\./g, ",");
+    if (!/^-?[0-9]+(,[0-9]+)?$/.test(s) || s.length > 4) return false;
+    const unsigned = s.startsWith("-") ? s.slice(1) : s;
+    const integerPart = unsigned.split(",")[0];
+    if (integerPart.length > 1 && integerPart.startsWith("0")) return false;
+    return !(s.startsWith("-") && !/[1-9]/.test(unsigned));
+}
+
 // Tên trường backend nhắc tới trong cảnh báo định dạng → chỗ trong câu, nói theo giáo viên
 const warningFieldLabels: Record<string, string> = {
     question_text: "câu dẫn",
@@ -394,7 +411,9 @@ export function hasContentFlag(needsReview: boolean | undefined, reasons: string
 
 /**
  * Câu được "Lưu hàng loạt" (CT-7): đã có câu, chưa lưu, không đang tự kiểm tra lại bản sửa, và không có lý do cần xem kỹ
- * nào (kể cả `similar_in_exam`: giáo viên nên đổi một trong hai câu trước). Cờ thông tin (`infoReasons`) không tính là cờ.
+ * nào. Cờ thông tin (`infoReasons`) không tính là cờ; từ 22/11 `similar_in_exam` là cờ thông tin nên câu chỉ cùng dạng với
+ * câu khác trong đề vẫn được lưu hàng loạt (góp ý giáo viên 21/11). Dữ liệu cũ còn `similar_in_exam` trong `reviewReasons`
+ * thì vẫn không lưu hàng loạt.
  */
 export function isBulkKeepCandidate(question: Pick<ExamQuestionItem, "state" | "qcState" | "needsReview" | "reviewReasons">): boolean {
     return (question.state ?? "ready") === "ready"
@@ -510,6 +529,8 @@ export function summarizeQc(question: ExamQuestionItem): QcSummaryLine[] | null 
 
     const formatIssue = reasons.some((r) => r.startsWith("warning:"));
     const duplicate = reasons.some((r) => r.startsWith("duplicate:") || r.startsWith("similar_in_exam:"));
+    // 22/11: câu cùng dạng trong đề là cờ thông tin (infoReasons), chỉ ghi chú, không tô màu lỗi
+    const sameTypeInExam = (question.infoReasons ?? []).some((r) => r.startsWith("similar_in_exam:"));
 
     let solver: { value: string; ok: boolean };
     if (question.qcState === "checking" || has("solver_pending")) {
@@ -530,7 +551,11 @@ export function summarizeQc(question: ExamQuestionItem): QcSummaryLine[] | null 
 
     return [
         { label: "Trình bày", value: formatIssue ? "cần xem lại" : "đạt", ok: !formatIssue },
-        { label: "Trùng câu khác", value: duplicate ? "có câu gần giống" : "không", ok: !duplicate },
+        {
+            label: "Trùng câu khác",
+            value: duplicate ? "có câu gần giống" : sameTypeInExam ? "không (có câu cùng dạng trong đề)" : "không",
+            ok: !duplicate,
+        },
         { label: "Tự giải lại", ...solver },
     ];
 }

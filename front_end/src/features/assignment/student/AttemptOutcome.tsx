@@ -2,6 +2,7 @@ import { Alert, Button } from "antd";
 
 import MathText from "../../../components/common/MathText/MathText";
 import type { AttemptView, ReviewItem, ReviewPart } from "../types/assignment.types";
+import { identityLine } from "../utils/identity";
 import { formatPoints, formatServerTime } from "../utils/timeFormat";
 // Tên Phần dùng chung với trang đề của giáo viên và file Word (G25)
 import { PART_TITLES } from "../../../utils/exam.utils";
@@ -24,7 +25,7 @@ interface AttemptOutcomeProps {
  * chủ báo `resultsReleased` mới hiện điểm theo phần (nếu có `result`) và đáp án + lời giải (nếu có `review`).
  */
 export default function AttemptOutcome({ view, showScore, showSolutions, refreshing, onRefresh, onDone }: AttemptOutcomeProps) {
-    const identity = `Lớp ${view.classLabel}, số ${view.seatNo}`;
+    const identity = identityLine(view);
 
     let body;
     if (!view.submitted) {
@@ -138,7 +139,7 @@ function ReviewCard({ item }: { item: ReviewItem }) {
                 Câu {item.number} <span className="student-review-score">· {formatPoints(item.score)} điểm</span>
             </h3>
             <div className="student-question-text student-math">
-                <MathText text={item.questionText} />
+                <MathText text={item.questionText} images={item.images} />
             </div>
 
             {item.questionType === "mcq" && (
@@ -151,7 +152,7 @@ function ReviewCard({ item }: { item: ReviewItem }) {
                                 key={key}
                                 className={`student-review-option${isCorrect ? " is-correct" : ""}${isYours && !isCorrect ? " is-wrong" : ""}`}
                             >
-                                <strong>{key}.</strong> <MathText text={text} />
+                                <strong>{key}.</strong> <MathText text={text} images={item.images} />
                                 {isCorrect && <span className="student-tag"> Đáp án đúng</span>}
                                 {isYours && <span className="student-tag"> Em chọn</span>}
                             </li>
@@ -165,7 +166,7 @@ function ReviewCard({ item }: { item: ReviewItem }) {
                 <ul className="student-review-options">
                     {(item.statements ?? []).map((s) => (
                         <li key={s.key} className={`student-review-option${s.correct ? " is-correct" : " is-wrong"}`}>
-                            <strong>{s.key})</strong> <MathText text={s.text} />
+                            <strong>{s.key})</strong> <MathText text={s.text} images={item.images} />
                             <div className="student-small">
                                 Đáp án: <strong>{TF_WORD[s.label] ?? s.label}</strong> · Em chọn:{" "}
                                 <strong>{s.yourAnswer ? TF_WORD[s.yourAnswer] ?? s.yourAnswer : "để trống"}</strong>
@@ -185,7 +186,7 @@ function ReviewCard({ item }: { item: ReviewItem }) {
                 <div className="student-explanation student-math">
                     <strong>Lời giải</strong>
                     <div>
-                        <MathText text={item.explanation} />
+                        <MathText text={item.explanation} images={item.images} />
                     </div>
                 </div>
             )}

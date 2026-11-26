@@ -10,6 +10,7 @@ import { AssignmentStatusTag } from "../components/assignmentLabels";
 import { attemptStateLabel, classSummary } from "../utils/labels";
 import { bulkDeleteAttempts, closeAssignment, deleteAssignment, getAssignment } from "../services/assignmentApi";
 import type { Assignment, AttemptRow, PartCode } from "../types/assignment.types";
+import { isNameMode } from "../utils/identity";
 import { formatPoints, formatServerTimeShort, formatServerTime } from "../utils/timeFormat";
 import { showApiError } from "../../../utils/apiError";
 
@@ -87,6 +88,8 @@ export default function AssignmentDetailPage() {
     const attempts = data?.attempts ?? [];
     const inProgress = attempts.filter((a) => a.state === "in_progress").length;
     const duplicates = attempts.filter((a) => a.duplicate);
+    // Chế độ họ tên (quyết định 25/11): cột "Họ và tên" thay cột STT; máy chủ đã sắp theo lớp rồi theo tên
+    const nameMode = isNameMode(data?.identityMode);
 
     const handleClose = () => {
         if (!data) return;
@@ -138,7 +141,9 @@ export default function AssignmentDetailPage() {
         if (selected.length === 0) return;
         Modal.confirm({
             title: `Xóa ${selected.length} lượt làm đã chọn?`,
-            content: "Bài làm của các lượt này bị xóa và không khôi phục được. Học sinh có thể vào làm lại bằng lớp và số thứ tự đó.",
+            content: `Bài làm của các lượt này bị xóa và không khôi phục được. Học sinh có thể vào làm lại bằng lớp và ${
+                nameMode ? "họ tên" : "số thứ tự"
+            } đó.`,
             okText: "Xóa các lượt đã chọn",
             okButtonProps: { danger: true },
             cancelText: "Quay lại",
@@ -161,17 +166,29 @@ export default function AssignmentDetailPage() {
     const columns: ColumnsType<AttemptRow> = useMemo(
         () => [
             { title: "Lớp", dataIndex: "classLabel", key: "classLabel", width: 90 },
-            {
-                title: "STT",
-                key: "seatNo",
-                width: 130,
-                render: (_, row) => (
-                    <Space size={4}>
-                        <span>{row.seatNo}</span>
-                        {row.duplicate && <Tag color="red">Trùng STT</Tag>}
-                    </Space>
-                ),
-            },
+            nameMode
+                ? {
+                    title: "Họ và tên",
+                    key: "studentName",
+                    width: 240,
+                    render: (_, row) => (
+                        <Space size={4} wrap>
+                            <span>{row.studentName}</span>
+                            {row.duplicate && <Tag color="red">Trùng tên</Tag>}
+                        </Space>
+                    ),
+                }
+                : {
+                    title: "STT",
+                    key: "seatNo",
+                    width: 130,
+                    render: (_, row) => (
+                        <Space size={4}>
+                            <span>{row.seatNo}</span>
+                            {row.duplicate && <Tag color="red">Trùng STT</Tag>}
+                        </Space>
+                    ),
+                },
             { title: "Trạng thái", key: "state", width: 150, render: (_, row) => attemptStateLabel(row.state) },
             { title: "Phần I", key: "p1", render: (_, row) => partCell(row, "I") },
             { title: "Phần II", key: "p2", render: (_, row) => partCell(row, "II") },
@@ -192,7 +209,7 @@ export default function AssignmentDetailPage() {
                 render: (_, row) => (row.submittedAt ? formatServerTimeShort(row.submittedAt) : "—"),
             },
         ],
-        []
+        [nameMode]
     );
 
     if (loading && !data) return <Spin description="Đang tải bài giao…" />;
@@ -248,11 +265,12 @@ export default function AssignmentDetailPage() {
 
             <div className="assignment-grid">
                 <Card title="Link cho học sinh">
-                    <AssignmentLinkCard publicCode={data.publicCode} fileName={data.title} />
+                    <AssignmentLinkCard publicCode={data.publicCode} fileName={data.title} identityMode={data.identityMode} />
                 </Card>
                 <Card title="Thông tin bài giao">
                     <Descriptions column={1} size="small">
                         <Descriptions.Item label="Các lớp">{classSummary(data.classes)}</Descriptions.Item>
+                        <Descriptions.Item label="Học sinh nhập">{nameMode ? "Họ và tên" : "Số thứ tự"}</Descriptions.Item>
                         <Descriptions.Item label="Số câu">{data.questionCount} câu, tối đa {formatPoints(data.maxScore)} điểm</Descriptions.Item>
                         <Descriptions.Item label="Thời gian làm">{data.durationMinutes} phút</Descriptions.Item>
                         <Descriptions.Item label="Hạn nộp">{formatServerTime(data.closesAt)}</Descriptions.Item>
@@ -274,7 +292,7 @@ export default function AssignmentDetailPage() {
 
             {tab === "items" && (
                 <Card className="assignment-scores" title="Phân tích câu">
-                    <ItemStatsTab examId={examId} assignmentId={assignmentId} status={data.status} />
+                    <ItemStatsTab examId={examId} assignmentId={assignmentId} status={data.status} identityMode={data.identityMode} />
                 </Card>
             )}
 
@@ -293,32 +311,37 @@ export default function AssignmentDetailPage() {
                             type="warning"
                             showIcon
                             style={{ marginBottom: 12 }}
-                            message={`Có ${data.duplicateCount} lượt trùng số thứ tự`}
+                            message={`Có ${data.duplicateCount} lượt trùng ${nameMode ? "tên" : "số thứ tự"}`}
                             description={
-                                data.status === "open"
-                                    ? "Hai học sinh nhập cùng lớp và số thứ tự thì cả hai lượt đều được giữ và đánh dấu “Trùng STT”. Thầy/cô xem lại rồi xóa lượt nhập nhầm; lượt còn lại sẽ hết dấu trùng."
-                                    : "Bài đã đóng nên không xóa được lượt. Các lượt trùng được đánh dấu để thầy/cô đối chiếu với sổ điểm."
+                                nameMode
+                                    ? "Hai lượt cùng lớp và cùng họ tên (không phân biệt hoa thường) thì cả hai đều được giữ và đánh dấu “Trùng tên”. Lớp có hai em trùng tên thật thì giữ cả hai; nếu một em vào hai lần, thầy/cô xóa lượt thừa, lượt còn lại sẽ hết dấu trùng."
+                                    : "Hai học sinh nhập cùng lớp và số thứ tự thì cả hai lượt đều được giữ và đánh dấu “Trùng STT”. Thầy/cô xem lại rồi xóa lượt nhập nhầm; lượt còn lại sẽ hết dấu trùng."
                             }
                             action={
-                                data.status === "open" ? (
-                                    <Button size="small" onClick={() => setSelected(duplicates.map((a) => a.attemptId))}>
-                                        Chọn các lượt trùng
-                                    </Button>
-                                ) : undefined
+                                <Button size="small" onClick={() => setSelected(duplicates.map((a) => a.attemptId))}>
+                                    Chọn các lượt trùng
+                                </Button>
                             }
                         />
                     )}
 
-                    {data.status === "open" && (
-                        <div className="assignment-bulk">
+                    <div className="assignment-bulk">
+                        <div>
                             <Text type="secondary">
-                                {selected.length > 0 ? `Đã chọn ${selected.length} lượt` : "Tích chọn các lượt cần xóa (ví dụ lượt nhập nhầm số)."}
+                                {selected.length > 0
+                                    ? `Đã chọn ${selected.length} lượt`
+                                    : `Tích chọn các lượt cần xóa (ví dụ lượt nhập nhầm ${nameMode ? "tên" : "số"}).`}
                             </Text>
-                            <Button danger disabled={selected.length === 0} loading={busy} onClick={handleBulkDelete}>
-                                Xóa các lượt đã chọn
-                            </Button>
+                            {data.status === "closed" && (
+                                <div>
+                                    <Text type="secondary">Xóa lượt sẽ tính lại phần Phân tích câu.</Text>
+                                </div>
+                            )}
                         </div>
-                    )}
+                        <Button danger disabled={selected.length === 0} loading={busy} onClick={handleBulkDelete}>
+                            Xóa các lượt đã chọn
+                        </Button>
+                    </div>
 
                     <Table<AttemptRow>
                         rowKey="attemptId"
@@ -328,19 +351,17 @@ export default function AssignmentDetailPage() {
                         pagination={attempts.length > 50 ? { pageSize: 50, showSizeChanger: false } : false}
                         scroll={{ x: 760 }}
                         rowClassName={(row) => (row.duplicate ? "assignment-row-duplicate" : "")}
-                        rowSelection={
-                            data.status === "open"
-                                ? {
-                                    selectedRowKeys: selected,
-                                    onChange: (keys) => setSelected(keys.map(Number)),
-                                }
-                                : undefined
-                        }
+                        rowSelection={{
+                            selectedRowKeys: selected,
+                            onChange: (keys) => setSelected(keys.map(Number)),
+                        }}
                         locale={{ emptyText: "Chưa có học sinh nào vào làm." }}
                     />
                     <p className="assignment-hint">
-                        Bảng điểm không có tên học sinh: thầy/cô đối chiếu theo lớp và số thứ tự. Ô điểm phần ghi điểm và (số câu đúng/tổng);
-                        phần II đếm theo ý.
+                        {nameMode
+                            ? "Họ tên do học sinh tự gõ, sắp theo lớp rồi theo tên; chỉ thầy/cô giao bài xem được. "
+                            : "Bảng điểm không có tên học sinh: thầy/cô đối chiếu theo lớp và số thứ tự. "}
+                        Ô điểm phần ghi điểm và (số câu đúng/tổng); phần II đếm theo ý.
                     </p>
                 </Card>
             )}

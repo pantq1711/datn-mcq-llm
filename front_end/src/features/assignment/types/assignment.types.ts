@@ -1,8 +1,18 @@
 // Kiểu dữ liệu bài giao trực tuyến, theo docs/api mục 11. Thời gian backend trả là giờ máy chủ, không kèm múi giờ.
 
+import type { QuestionImageView } from "../../../components/common/MathText/questionImage.types";
+
+/**
+ * Một hình của câu cho học sinh (S1, docs/api mục 11.2): không có `role`; `url` ký theo lượt làm
+ * ("/api/public/question-images/{id}?exp&a&sig"), dùng nguyên.
+ */
+export type PublicImage = QuestionImageView;
+
 export type AssignmentStatus = "open" | "closed";
 export type AttemptState = "in_progress" | "submitted" | "expired";
 export type PartCode = "I" | "II" | "III";
+/** Học sinh nhập họ và tên (`name`, mặc định từ 25/11) hay số thứ tự (`seat`, bài giao cũ). */
+export type IdentityMode = "name" | "seat";
 
 export interface AssignmentClass {
     classLabel: string;
@@ -16,13 +26,14 @@ export interface PartScore {
     score: number;
 }
 
-/** Một dòng bảng điểm của giáo viên (không có tên học sinh). */
+/** Một dòng bảng điểm của giáo viên. Đúng một trong `seatNo` / `studentName` có giá trị, theo chế độ của bài giao. */
 export interface AttemptRow {
     attemptId: number;
     classLabel: string;
-    seatNo: number;
+    seatNo?: number;
+    studentName?: string;
     state: AttemptState;
-    /** Có lượt khác cùng lớp + số thứ tự (cả hai lượt đều được giữ). */
+    /** Có lượt khác cùng lớp + số thứ tự, hoặc cùng lớp + họ tên (cả hai lượt đều được giữ). */
     duplicate: boolean;
     startedAt: string;
     submittedAt?: string;
@@ -36,6 +47,8 @@ export interface Assignment {
     publicCode: string;
     title: string;
     status: AssignmentStatus;
+    /** Máy chủ trước 25/11 không gửi: coi là số thứ tự. */
+    identityMode?: IdentityMode;
     durationMinutes: number;
     closesAt: string;
     closedAt?: string;
@@ -61,10 +74,14 @@ export interface CreateAssignmentPayload {
     showSolutions: boolean;
     consentConfirmed: true;
     classes: AssignmentClass[];
+    identityMode: IdentityMode;
 }
 
 /** Mã lỗi backend dùng khi xóa đề còn bài giao. */
 export const EXAM_HAS_ASSIGNMENTS = "EXAM_HAS_ASSIGNMENTS";
+
+/** Mã lỗi 409 của P2 (25/11): đã có lượt cùng lớp + tên / số, học sinh chưa xác nhận; chưa tạo lượt. */
+export const ATTEMPT_IDENTITY_TAKEN = "ATTEMPT_IDENTITY_TAKEN";
 
 // ---------- Phân tích câu (docs/api mục 11.3, B1/B2) ----------
 
@@ -116,7 +133,18 @@ export interface PublicAssignmentInfo {
     status: AssignmentStatus;
     showScore: boolean;
     showSolutions: boolean;
+    /** Máy chủ trước 25/11 không gửi: coi là số thứ tự. */
+    identityMode?: IdentityMode;
     classes: AssignmentClass[];
+}
+
+/** Thân P2: chế độ số thứ tự gửi `seatNo`, chế độ họ tên gửi `studentName`. */
+export interface StartAttemptPayload {
+    classLabel: string;
+    seatNo?: number;
+    studentName?: string;
+    /** true khi em đã thấy báo trùng và bấm "Đúng là em, vẫn làm". */
+    confirmDuplicate: boolean;
 }
 
 export interface PublicStatement {
@@ -133,6 +161,8 @@ export interface PublicQuestion {
     questionText: string;
     options?: Record<string, string>;
     statements?: PublicStatement[];
+    /** Hình của đề, phương án, ý (không bao giờ có hình lời giải); vắng khi câu không có hình. */
+    images?: PublicImage[];
 }
 
 export interface PublicPart {
@@ -171,6 +201,8 @@ export interface ReviewItem {
     correctCount: number;
     score: number;
     explanation?: string;
+    /** Mọi hình của câu, kể cả hình lời giải; vắng khi câu không có hình. */
+    images?: PublicImage[];
 }
 
 export interface ReviewPart {
@@ -178,11 +210,17 @@ export interface ReviewPart {
     items: ReviewItem[];
 }
 
-/** Trả lời P2 (có attemptToken, chỉ một lần) và P3. */
+/**
+ * Trả lời P2 (có attemptToken, chỉ một lần) và P3. Đúng một trong `seatNo` / `studentName` có giá trị; `studentName` là
+ * tên của chính lượt này.
+ */
 export interface AttemptView {
     attemptToken?: string;
+    identityMode?: IdentityMode;
     classLabel: string;
-    seatNo: number;
+    seatNo?: number;
+    studentName?: string;
+    /** Có lượt khác cùng lớp + số, hoặc cùng lớp + tên. */
     duplicateSeat: boolean;
     startedAt: string;
     deadlineAt: string;

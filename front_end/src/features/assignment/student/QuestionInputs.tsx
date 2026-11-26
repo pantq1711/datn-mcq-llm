@@ -29,7 +29,7 @@ export function McqInput({ question, value, onChange }: McqProps) {
                         onClick={() => onChange(selected ? undefined : k)}
                     >
                         <span className="student-option-key" aria-hidden="true">{k}</span>
-                        <span className="student-option-text student-math"><MathText text={question.options?.[k]} /></span>
+                        <span className="student-option-text student-math"><MathText text={question.options?.[k]} images={question.images} /></span>
                         <span className="student-visually-hidden">{`Phương án ${k}`}</span>
                     </button>
                 );
@@ -53,7 +53,7 @@ export function TfInput({ question, value, onChange }: TfProps) {
                 return (
                     <div key={s.key} className="student-statement" role="group" aria-label={`Ý ${s.key}`}>
                         <div className="student-statement-text student-math">
-                            <strong>{s.key})</strong> <MathText text={s.text} />
+                            <strong>{s.key})</strong> <MathText text={s.text} images={question.images} />
                         </div>
                         <div className="student-tf-buttons">
                             <button

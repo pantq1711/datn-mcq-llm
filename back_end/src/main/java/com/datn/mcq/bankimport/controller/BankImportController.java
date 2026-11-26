@@ -4,6 +4,7 @@ import com.datn.mcq.bankimport.dto.BankImportDtos.BatchDto;
 import com.datn.mcq.bankimport.dto.BankImportDtos.ConfirmRequest;
 import com.datn.mcq.bankimport.dto.BankImportDtos.ConfirmResult;
 import com.datn.mcq.bankimport.service.BankImportService;
+import com.datn.mcq.common.exception.ApiErrorException;
 import com.datn.mcq.common.security.CurrentUser;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * Nhập ngân hàng câu từ Word (V26): chỉ giáo viên; lô thuộc người tải (lấy từ token), lô của người khác trả 404
@@ -52,6 +54,20 @@ public class BankImportController {
                                      @RequestParam(value = "defaultLevel", required = false) String defaultLevel)
             throws IOException {
         return service.upload(user.id(), file.getOriginalFilename(), file.getBytes(), topic, gradeLevel, defaultLevel);
+    }
+
+    /**
+     * Các lần nhập của tôi đang chờ xác nhận (chưa hết hạn), mới tạo trước, KHÔNG kèm nội dung câu (B1). Không gửi
+     * {@code status} thì coi như {@code preview}; giá trị khác: 400 IMPORT_STATUS_INVALID.
+     */
+    @GetMapping
+    public List<BatchDto> listBankImports(CurrentUser user,
+                                          @RequestParam(value = "status", required = false) String status) {
+        if (status != null && !"preview".equals(status)) {
+            throw ApiErrorException.badRequest("IMPORT_STATUS_INVALID",
+                    "Chỉ lọc được các lần nhập đang chờ xác nhận (status=preview).");
+        }
+        return service.listPending(user.id());
     }
 
     /** Xem lại một lô. Lô chờ xác nhận có danh sách câu kèm cờ; lô đã xác nhận không còn nội dung. 410 IMPORT_EXPIRED. */

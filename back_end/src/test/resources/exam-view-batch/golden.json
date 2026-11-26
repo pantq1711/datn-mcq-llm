@@ -8,7 +8,7 @@
     "matrixId" : "matrix#1",
     "createdAt" : "<createdAt>",
     "buildStatus" : "generating",
-    "needsReviewCount" : 2,
+    "needsReviewCount" : 0,
     "parts" : [ {
       "part" : "I",
       "required" : 5,
@@ -54,10 +54,10 @@
         "correctOption" : "B",
         "explanation" : "Số mũ của x.",
         "difficulty" : "easy",
-        "needsReview" : true,
-        "reviewReasons" : [ "similar_in_exam: I.1" ],
-        "infoReasons" : [ ],
-        "qcState" : "needs_review",
+        "needsReview" : false,
+        "reviewReasons" : [ ],
+        "infoReasons" : [ "similar_in_exam: I.1" ],
+        "qcState" : "passed",
         "edited" : true,
         "originalQuestionId" : "question#3"
       }, {
@@ -78,10 +78,10 @@
         "correctOption" : "B",
         "explanation" : "Số mũ của x.",
         "difficulty" : "easy",
-        "needsReview" : true,
-        "reviewReasons" : [ "similar_in_exam: I.1", "similar_in_exam: I.2" ],
-        "infoReasons" : [ ],
-        "qcState" : "needs_review",
+        "needsReview" : false,
+        "reviewReasons" : [ ],
+        "infoReasons" : [ "similar_in_exam: I.1", "similar_in_exam: I.2" ],
+        "qcState" : "passed",
         "edited" : false
       }, {
         "slotId" : "slot#4",
@@ -297,8 +297,8 @@
         "explanation" : "Số mũ của x.",
         "difficulty" : "easy",
         "needsReview" : true,
-        "reviewReasons" : [ "grounding_pending", "similar_in_exam: I.1" ],
-        "infoReasons" : [ ],
+        "reviewReasons" : [ "grounding_pending" ],
+        "infoReasons" : [ "similar_in_exam: I.1" ],
         "qcState" : "needs_review",
         "edited" : false
       }, {
@@ -320,8 +320,8 @@
         "explanation" : "Số mũ của x.",
         "difficulty" : "easy",
         "needsReview" : true,
-        "reviewReasons" : [ "grounding_failed", "similar_in_exam: I.1", "similar_in_exam: I.2" ],
-        "infoReasons" : [ ],
+        "reviewReasons" : [ "grounding_failed" ],
+        "infoReasons" : [ "similar_in_exam: I.1", "similar_in_exam: I.2" ],
         "qcState" : "needs_review",
         "edited" : false
       } ]

@@ -11,8 +11,9 @@ public final class ItemStatDtos {
     private ItemStatDtos() {}
 
     /**
-     * Lượt không được tính. {@code duplicate}: lượt ĐÃ NỘP nhưng trùng lớp + số thứ tự với một lượt khác (cùng quy tắc
-     * "trùng" của bảng điểm, kể cả trùng với lượt bỏ dở). {@code notSubmitted}: lượt chưa nộp (đang làm hoặc quá hạn).
+     * Lượt không được tính. {@code duplicate}: lượt ĐÃ NỘP nhưng trùng lớp + số thứ tự (hoặc lớp + họ tên, 25/11) với một
+     * lượt khác (cùng quy tắc "trùng" của bảng điểm, kể cả trùng với lượt bỏ dở). {@code notSubmitted}: lượt chưa nộp (đang
+     * làm hoặc quá hạn). Không có họ tên.
      */
     public record ExcludedDto(int duplicate, int notSubmitted) {}
 

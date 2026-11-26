@@ -386,6 +386,91 @@ class QuestionImageApiTest {
                 .andExpect(content().bytes(FAKE_PNG_DATA));
     }
 
+    // ===== F1 (D2, quyết định 16/11): người có chỗ trong đề chưa xóa dùng câu đã gỡ vẫn xem được ảnh =====
+
+    /**
+     * Tạo một đề (chưa xóa) của {@code ownerId} có một chỗ trỏ tới câu ngân hàng của {@code testImage}; trả id đề.
+     * Gọi sau {@link #ganAnhVaoCauNganHangCongKhaiDaGo()}.
+     */
+    private int taoDeCoChoDungCauCuaAnh(int ownerId, String examCode) {
+        int gqId = jdbc.queryForObject("SELECT generated_question_id FROM question_image WHERE id = ?",
+                Integer.class, testImage.getId());
+        int templateId = jdbc.queryForObject("SELECT template_id FROM generated_question WHERE id = ?",
+                Integer.class, gqId);
+        int bankItemId = jdbc.queryForObject("SELECT id FROM bank_item WHERE source_question_id = ?",
+                Integer.class, gqId);
+        int matrixId = jdbc.queryForObject(
+                "INSERT INTO exam_matrix (name, subject_id, created_by) VALUES ('Ma trận F1', ?, ?) RETURNING id",
+                Integer.class, subjectId, ownerId);
+        int cellId = jdbc.queryForObject(
+                "INSERT INTO exam_matrix_cell (matrix_id, position, part, question_type, topic, difficulty,"
+                        + " question_count, template_id) VALUES (?, 1, 'I', 'mcq', 'Hàm số', 'easy', 1, ?) RETURNING id",
+                Integer.class, matrixId, templateId);
+        int examId = jdbc.queryForObject(
+                "INSERT INTO exam (exam_code, title, subject_id, created_by, mode, matrix_id)"
+                        + " VALUES (?, 'Đề F1', ?, ?, 'teacher', ?) RETURNING id",
+                Integer.class, examCode, subjectId, ownerId, matrixId);
+        jdbc.update("INSERT INTO exam_slot (exam_id, cell_id, slot_no, question_type, state, bank_item_id)"
+                + " VALUES (?, ?, 1, 'mcq', 'kept', ?)", examId, cellId, bankItemId);
+        return examId;
+    }
+
+    private org.springframework.test.web.servlet.ResultActions taiAnhVoiTuCach(int viewerId) throws Exception {
+        long exp = signer.calculateExp(Instant.now());
+        String sig = signer.sign(testImage.getId(), exp, viewerId);
+        return mockMvc.perform(get("/api/question-images/{id}", testImage.getId())
+                .param("exp", String.valueOf(exp))
+                .param("u", String.valueOf(viewerId))
+                .param("sig", sig));
+    }
+
+    @Test
+    @DisplayName("F1: chủ đề có chỗ dùng câu đã gỡ vẫn xem được ảnh (200)")
+    void anhCauDaGo_ChuDeCoChoDungCau_Tra200() throws Exception {
+        ganAnhVaoCauNganHangCongKhaiDaGo();
+        taoDeCoChoDungCauCuaAnh(otherTeacherId, "F1-A");
+
+        taiAnhVoiTuCach(otherTeacherId)
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(FAKE_PNG_DATA));
+    }
+
+    @Test
+    @DisplayName("F1: người không có chỗ dùng câu đã gỡ (dù người khác có) vẫn 404")
+    void anhCauDaGo_NguoiKhongCoCho_Tra404() throws Exception {
+        ganAnhVaoCauNganHangCongKhaiDaGo();
+        taoDeCoChoDungCauCuaAnh(otherTeacherId, "F1-B");
+        int thirdTeacherId = AuthTestSupport.insertUser(jdbc, "GV Ba", "gv.ba@test.vn", "teacher", "matkhau-3", true);
+
+        taiAnhVoiTuCach(thirdTeacherId)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("IMAGE_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("F1: đề có chỗ dùng câu đã gỡ nhưng đã xóa: 404")
+    void anhCauDaGo_DeDaXoa_Tra404() throws Exception {
+        ganAnhVaoCauNganHangCongKhaiDaGo();
+        int examId = taoDeCoChoDungCauCuaAnh(otherTeacherId, "F1-C");
+        jdbc.update("UPDATE exam SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?", examId);
+
+        taiAnhVoiTuCach(otherTeacherId)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("IMAGE_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("F1: chủ đề có chỗ dùng câu đã gỡ nhưng tài khoản bị khóa: 404")
+    void anhCauDaGo_ChuDeBiKhoa_Tra404() throws Exception {
+        ganAnhVaoCauNganHangCongKhaiDaGo();
+        taoDeCoChoDungCauCuaAnh(otherTeacherId, "F1-D");
+        jdbc.update("UPDATE users SET enabled = false WHERE id = ?", otherTeacherId);
+
+        taiAnhVoiTuCach(otherTeacherId)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("IMAGE_NOT_FOUND"));
+    }
+
     // ===== Thiếu / sai kiểu tham số: hợp đồng yêu cầu luôn 404 IMAGE_NOT_FOUND (không phân biệt) =====
 
     private void expectImageNotFound(org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request)

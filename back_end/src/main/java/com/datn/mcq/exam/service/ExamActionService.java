@@ -1,5 +1,6 @@
 package com.datn.mcq.exam.service;
 
+import com.datn.mcq.bank.dto.BankItemDto;
 import com.datn.mcq.bank.service.BankService;
 import com.datn.mcq.common.exception.ApiErrorException;
 import com.datn.mcq.common.util.JsonStringArray;
@@ -138,7 +139,7 @@ public class ExamActionService {
             // needsReview của API xem đề. Giữ vẫn được; chỉ khác là câu có cờ vào ngân hàng riêng của người Giữ.
             // A-03 (11/11): item() không gắn similar_in_exam (cờ về đề, không về nội dung) nên câu chỉ có lý do đó vào
             // ngân hàng dùng chung, có chủ ý (ExamSimilarInExamTest, docs/api/README.md mục 7.5).
-            boolean flagged = viewService.item(slot, matrixService.getCell(slot.getCellId())).needsReview();
+            boolean flagged = viewService.item(slot, matrixService.getCell(slot.getCellId()), actorId).needsReview();
             Integer bankItemId = assistedKeepService.keepAssisted(slot.getGeneratedQuestionId(), actorId);
             slot.setBankItemId(bankItemId);
             // W2-3 (quyết định E): câu sinh từ tài liệu của giáo viên vào ngân hàng nhưng chỉ chính họ thấy và dùng lại.
@@ -155,7 +156,7 @@ public class ExamActionService {
         actionRepository.save(new ExamSlotAction(slot.getId(), ExamSlotAction.KEEP, slot.getGeneratedQuestionId(),
                 slot.getBankItemId(), null, actorId));
         // NV-28: kết quả Giữ nói rõ câu nằm ở ngân hàng chung hay riêng (câu lấy từ ngân hàng giữ nguyên chỗ của nó).
-        return viewService.item(slot, matrixService.getCell(slot.getCellId()))
+        return viewService.item(slot, matrixService.getCell(slot.getCellId()), actorId)
                 .withBankVisibility(bankService.visibility(slot.getBankItemId()));
     }
 
@@ -243,7 +244,8 @@ public class ExamActionService {
             }
             newBankItemId = candidates.get(0);
         }
-        // 12/11: lý do quá dễ / quá khó kèm câu cũ vào prompt; đọc câu cũ TRƯỚC khi bỏ khỏi chỗ.
+        // 12/11: lý do quá dễ / quá khó kèm câu cũ vào prompt; đọc câu cũ TRƯỚC khi bỏ khỏi chỗ. D4 (X1): câu cũ có hình thì
+        // không kèm chữ (và đáp số) câu cũ, chỉ giữ lý do (currentQuestionText trả null).
         String oldQuestion = newBankItemId == null && MatrixPromptDraftV0.replaceReasonBlock(cleanReason, null) != null
                 ? currentQuestionText(slot) : null;
         String oldSaAnswer = oldQuestion != null ? currentSaAnswer(slot) : null;
@@ -266,7 +268,7 @@ public class ExamActionService {
             buildService.enqueueReplace(slot, cleanInstruction, cleanReason, oldQuestion, oldSaAnswer, cleanCodes);
         }
         slotRepository.save(slot);
-        return viewService.item(slot, matrixService.getCell(slot.getCellId()));
+        return viewService.item(slot, matrixService.getCell(slot.getCellId()), actorId);
     }
 
     private static boolean isActive(GenerationJob job) {
@@ -288,13 +290,21 @@ public class ExamActionService {
                 .orElse(fallback);
     }
 
-    /** Đề dẫn của câu đang ở chỗ (câu sinh hoặc câu ngân hàng); null khi chỗ chưa có câu. */
+    /**
+     * Đề dẫn của câu đang ở chỗ (câu sinh hoặc câu ngân hàng); null khi chỗ chưa có câu. D4 (X1, docs/design/cau-co-hinh.md
+     * mục 4.3): câu ngân hàng mà câu nguồn có hình (mọi role, như "câu có hình" ở mọi nơi khác) cũng trả null, vì mô hình
+     * không thấy hình nên so độ khó với chữ (kèm token ảnh) là vô nghĩa; khối lý do vẫn có, chỉ không có câu cũ.
+     */
     private String currentQuestionText(ExamSlot slot) {
         if (slot.getGeneratedQuestionId() != null) {
             return generationService.getQuestionById(slot.getGeneratedQuestionId()).getQuestionText();
         }
         if (slot.getBankItemId() != null) {
-            return bankService.getItem(slot.getBankItemId()).questionText();
+            BankItemDto bank = bankService.getItem(slot.getBankItemId());
+            if (!bankService.sourceQuestionsWithImages(List.of(bank.sourceQuestionId())).isEmpty()) {
+                return null;
+            }
+            return bank.questionText();
         }
         return null;
     }
@@ -394,7 +404,7 @@ public class ExamActionService {
             log.setChangedFields(JsonStringArray.write(outcome.changedFields()));
             actionRepository.save(log);
         }
-        return viewService.item(slot, matrixService.getCell(slot.getCellId()));
+        return viewService.item(slot, matrixService.getCell(slot.getCellId()), actorId);
     }
 
     private static QuestionEditInput toInput(EditQuestionRequest r) {

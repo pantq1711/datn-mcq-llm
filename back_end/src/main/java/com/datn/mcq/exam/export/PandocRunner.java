@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -61,8 +62,13 @@ public class PandocRunner {
      * thành HTML/TeX thô. KHÔNG tắt {@code raw_attribute}: ExamMarkdownBuilder tự dùng khối {@code ```{=openxml}} cho bảng
      * đầu đề và ngắt trang (không có cách khác trong Markdown). Nội dung đề không thể tạo khối đó vì ký tự backtick ngoài
      * công thức bị thoát và xuống dòng trong công thức bị thay bằng khoảng trắng (xem ExamMarkdownBuilder).
+     *
+     * <p>P4 (24/11, chạy thử bằng Word thật): tắt {@code implicit_figures}. Ảnh câu hỏi đứng riêng một đoạn (O2) không được
+     * thành "figure" của pandoc, vì khi đó alt {@code qimg:<id>} (dùng để đếm lại qua {@code wp:docPr descr}) in ra thành dòng
+     * chú thích dưới hình và đoạn ảnh mang kiểu Captioned Figure thay cho ExamFigure (mất căn giữa). Tắt đi thì ảnh là ảnh
+     * trong dòng của đoạn ExamFigure, {@code descr} vẫn lấy từ alt.
      */
-    static final String MARKDOWN_FORMAT = "markdown+tex_math_dollars-raw_html-raw_tex";
+    static final String MARKDOWN_FORMAT = "markdown+tex_math_dollars-raw_html-raw_tex-implicit_figures";
     static final String NOT_INSTALLED_MESSAGE = "Máy chủ chưa cài pandoc nên chưa xuất được file Word. Cài pandoc theo "
             + "hướng dẫn trong docs/api/README.md (mục 7.6 Xuất đề ra Word) rồi khởi động lại backend, hoặc đặt PANDOC_PATH.";
 
@@ -185,15 +191,19 @@ public class PandocRunner {
         } catch (IOException e) {
             throw new UncheckedIOException("Không tạo được thư mục tạm để xuất đề", e);
         }
+        // O2 (23/11): số lần chèn mỗi ảnh câu hỏi (alt qimg:<id>); pandoc bỏ ảnh mà vẫn exit 0 nên đếm lại sau pandoc và trên
+        // file cuối (sau MathType và hậu xử lý), lệch thì EXPORT_IMAGE_MISSING, không trả file. Không có ảnh thì không đếm.
+        Map<Long, Integer> figures = ExamFigures.expectedInMarkdown(markdown);
         try {
             Files.writeString(dir.resolve("exam.md"), markdown, StandardCharsets.UTF_8);
             copyReferenceDoc(dir.resolve("reference.docx"), options);
             runPandoc(dir, "exam.md", "-f", MARKDOWN_FORMAT, "-t", "docx",
                     "--reference-doc=reference.docx", "-o", "exam.docx");
             byte[] docx = Files.readAllBytes(dir.resolve("exam.docx"));
+            verifyFigures(docx, figures, "sau pandoc");
             String code = options.examCode();
             if (format != EquationFormat.MATHTYPE) {
-                return new Docx(finish(docx, code), 0, null, null);
+                return verifyFigures(new Docx(finish(docx, code), 0, null, null), figures);
             }
             JsonNode ast;
             List<MathRef> refs;
@@ -204,7 +214,8 @@ public class PandocRunner {
             } catch (DocumentExportException | IOException | UncheckedIOException e) {
                 log.warn("Xuất MathType: không lấy được LaTeX bằng pandoc -t json ({}), trả file Equation",
                         e.getMessage());
-                return new Docx(finish(docx, code), 0, MathTypeDocxConverter.countEquations(docx), 0);
+                return verifyFigures(new Docx(finish(docx, code), 0, MathTypeDocxConverter.countEquations(docx), 0),
+                        figures);
             }
             List<String> latex = refs.stream().map(r -> squash(r.latex())).toList();
             List<String> failedLatex = List.of();
@@ -224,9 +235,9 @@ public class PandocRunner {
                 }
             }
             // Tab (mã giữ chỗ của ExamMarkdownBuilder) thay SAU bước MathType: bước đó có thể tách đoạn quanh công thức rộng.
-            Docx converted = toMathType(docx, latex);
-            return new Docx(finish(converted.content(), code), converted.mathTypeObjects(),
-                    converted.equationsKeptOmml(), converted.equationsScaled(), failed, failedLatex);
+            Docx converted = toMathType(docx, latex, options.fontSizePt());
+            return verifyFigures(new Docx(finish(converted.content(), code), converted.mathTypeObjects(),
+                    converted.equationsKeptOmml(), converted.equationsScaled(), failed, failedLatex), figures);
         } catch (IOException e) {
             throw new UncheckedIOException("Lỗi đọc/ghi file khi xuất đề", e);
         } catch (InterruptedException e) {
@@ -235,6 +246,19 @@ public class PandocRunner {
         } finally {
             deleteQuietly(dir);
         }
+    }
+
+    /** O2: đếm ảnh câu hỏi trong {@code docx} ({@link ExamFigures#verifyDocx}); đề không có ảnh thì bỏ qua. */
+    private static void verifyFigures(byte[] docx, Map<Long, Integer> figures, String stage) {
+        if (!figures.isEmpty()) {
+            ExamFigures.verifyDocx(docx, figures, stage);
+        }
+    }
+
+    /** O2: đếm ảnh trên file trả về (sau MathType nếu có và sau hậu xử lý), rồi trả nguyên file. */
+    private static Docx verifyFigures(Docx docx, Map<Long, Integer> figures) {
+        verifyFigures(docx.content(), figures, "file cuối");
+        return docx;
     }
 
     /** Bước hậu xử lý riêng của đề, sau pandoc và MathType: thay mã giữ chỗ tab, thêm chân trang section đề. */
@@ -276,8 +300,13 @@ public class PandocRunner {
      * bất ngờ) thì trả nguyên file Equation và ghi WARN kèm lý do, để giáo viên vẫn nhận được file.
      */
     static Docx toMathType(byte[] docx, List<String> latex) {
+        return toMathType(docx, latex, ExamDocxOptions.DEFAULT_FONT_SIZE_PT);
+    }
+
+    /** @param fontSizePt (26/11) cỡ chữ của đề: công thức MathType dựng cùng cỡ */
+    static Docx toMathType(byte[] docx, List<String> latex, int fontSizePt) {
         try {
-            MathTypeDocxConverter.Result r = MathTypeDocxConverter.convert(docx, latex);
+            MathTypeDocxConverter.Result r = MathTypeDocxConverter.convert(docx, latex, fontSizePt);
             if (r.keptOmml() > 0) {
                 log.info("Xuất MathType: {} công thức giữ Equation của Word", r.keptOmml());
                 log.debug("Công thức giữ Equation: {}", r.notes());
@@ -431,7 +460,8 @@ public class PandocRunner {
      * File mẫu --reference-doc ({@value #REFERENCE_DOC_RESOURCE}): reference.docx mặc định của pandoc, thêm
      * compatibilityMode = 15 trong settings.xml (Word không mở ở Compatibility Mode, lệnh Convert Equations của MathType
      * chạy được) và font Normal Times New Roman 13. Cách tạo ghi ở docs/api/README.md mục 7.6. Mỗi lần xuất, file này được
-     * vá thêm khổ A4, lề, kiểu của đề và chân trang ({@link ExamReferenceDoc}).
+     * vá thêm khổ A4, lề, kiểu của đề (mọi kiểu về cỡ 12, hoặc 14 theo tùy chọn từ 26/11) và chân trang
+     * ({@link ExamReferenceDoc}).
      */
     private static void copyReferenceDoc(Path target, ExamDocxOptions options) throws IOException {
         Files.write(target, referenceDocBytes(options));

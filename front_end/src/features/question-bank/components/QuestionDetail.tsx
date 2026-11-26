@@ -40,6 +40,7 @@ function toQuestionItem(question: BankItemDetail): ExamQuestionItem {
         questionType: question.questionType,
         saAnswer: question.saAnswer ?? undefined,
         statements: question.statements,
+        images: question.images,
     };
 }
 
@@ -161,7 +162,7 @@ export default function QuestionDetail({
                             className="question-detail-source"
                         >
                             <Paragraph className="question-detail-source-text">
-                                <MathText text={question.sourceQuestion} />
+                                <MathText text={question.sourceQuestion} images={question.images} />
                             </Paragraph>
                         </Card>
                     )}

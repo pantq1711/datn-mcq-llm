@@ -33,4 +33,14 @@ describe("đường dẫn học sinh /lam-bai/:code", () => {
         expect(screen.getByLabelText("Link cho học sinh")).toHaveValue(expected);
         expect(screen.getByTestId("qr")).toHaveAttribute("data-value", expected);
     });
+
+    it("câu nhắc theo chế độ (25/11): họ tên thì không còn ghi 'không nhập họ tên'", () => {
+        const { unmount } = render(<AssignmentLinkCard publicCode="K7M2QX9RTB" identityMode="name" />);
+        expect(screen.getByText(/chỉ chọn lớp và nhập họ tên/)).toBeInTheDocument();
+        expect(screen.queryByText(/không nhập họ tên/)).not.toBeInTheDocument();
+        unmount();
+
+        render(<AssignmentLinkCard publicCode="K7M2QX9RTB" identityMode="seat" />);
+        expect(screen.getByText(/không nhập họ tên/)).toBeInTheDocument();
+    });
 });

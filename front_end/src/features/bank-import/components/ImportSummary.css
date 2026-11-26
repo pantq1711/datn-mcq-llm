@@ -1,0 +1,14 @@
+.import-summary {
+    margin-bottom: 16px;
+}
+
+.import-summary-title.ant-typography {
+    margin: 0 0 4px;
+}
+
+.import-summary-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    margin: 12px 0;
+}

@@ -3,8 +3,13 @@ import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Space,
 import { DownloadOutlined } from "@ant-design/icons";
 
 import type { ExamDetail } from "../types/exam.types";
-import { getExamExportDocx, type ExportEquationFormat } from "../services/examApi";
-import { needsReviewNow } from "../../../utils/exam.utils";
+import {
+    getExamExportDocx,
+    type ExportContent,
+    type ExportEquationFormat,
+    type ExportFontSize,
+} from "../services/examApi";
+import { isYoungMixShortAnswer, needsReviewNow } from "../../../utils/exam.utils";
 
 import "./ExportWordDialog.css";
 
@@ -30,13 +35,34 @@ function formatScore(value: number): string {
     return value.toLocaleString("vi-VN", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 }
 
-/** Tên file mặc định: tên đề + ngày xuất ("Giữa kì I – Toán 8 – 16-11-2026"; tên file không chứa được "/"). */
-function defaultFileName(title: string | undefined): string {
+const SPEC_SUFFIX = "Bản đặc tả";
+const YOUNGMIX_SUFFIX = "YoungMix";
+const DEFAULT_FONT_SIZE: ExportFontSize = 12;
+
+/** Câu giải thích dưới nhóm "Nội dung file", theo lựa chọn. */
+const CONTENT_HINTS: Record<ExportContent, string> = {
+    all: "File có đề, rồi sang trang mới là đáp án và lời giải chi tiết.",
+    exam: "File chỉ có đề, dừng ở dòng HẾT.",
+    spec: "Bảng ngang trang theo mẫu Phụ lục 2, Công văn 7991: số câu theo dạng và mức của từng nội dung, kèm câu số mấy trong đề.",
+    youngmix:
+        "Chỉ nội dung đề, đáp án đúng được gạch chân để YoungMix trộn và tạo đáp án, mã QR chấm. Không có đầu đề, đáp án, lời giải.",
+};
+
+/** Hậu tố tên file theo nội dung (bản đặc tả, bản YoungMix); đề thường không có. */
+const CONTENT_SUFFIX: Partial<Record<ExportContent, string>> = { spec: SPEC_SUFFIX, youngmix: YOUNGMIX_SUFFIX };
+
+/**
+ * Tên file mặc định: tên đề + ngày xuất ("Giữa kì I – Toán 8 – 16-11-2026"; tên file không chứa được "/"); bản đặc tả thêm
+ * " – Bản đặc tả" sau tên đề ("Giữa kì I – Toán 8 – Bản đặc tả – 18-11-2026"), bản YoungMix (26/11) thêm " – YoungMix".
+ */
+function defaultFileName(title: string | undefined, content: ExportContent = "all"): string {
     const d = new Date();
     const pad = (n: number) => String(n).padStart(2, "0");
     const date = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
     const name = toFileName(title, "");
-    return name ? `${name} – ${date}` : date;
+    const suffix = CONTENT_SUFFIX[content];
+    const base = suffix ? (name ? `${name} – ${suffix}` : suffix) : name;
+    return base ? `${base} – ${date}` : date;
 }
 
 interface FormValues {
@@ -44,7 +70,11 @@ interface FormValues {
     examCode?: string;
     fileName?: string;
     equation: ExportEquationFormat;
-    examOnly: boolean;
+    content: ExportContent;
+    /** Tờ phách (26/11), chỉ cho "all" và "exam". */
+    phach?: boolean;
+    /** Cỡ chữ (26/11); bản đặc tả không dùng. */
+    fontSize?: ExportFontSize;
 }
 
 interface ExportWordDialogProps {
@@ -58,13 +88,24 @@ interface ExportWordDialogProps {
 
 /**
  * Hộp xuất Word (16/11, NV-43/NV-44, rà soát giao diện G19/G23 và mục 7.5): bấm "Xuất file Word" luôn mở hộp này. Chọn thời
- * gian làm bài, mã đề, tên file, cách ghi công thức, chỉ đề hay đề kèm đáp án; nếu đề chưa hoàn chỉnh thì nhắc ngay trong
- * hộp (nội dung cảnh báo như hộp xác nhận của NV-40/NV-41, không chặn).
+ * gian làm bài, mã đề, tên file, cách ghi công thức, nội dung file (đề kèm đáp án, chỉ đề, hoặc bản đặc tả từ 18/11); nếu đề
+ * chưa hoàn chỉnh thì nhắc ngay trong hộp (nội dung cảnh báo như hộp xác nhận của NV-40/NV-41, không chặn). Bản đặc tả không
+ * có ô mã đề nên ô Mã đề ẩn khi chọn.
+ *
+ * <p>26/11: thêm bản cho phần mềm trộn đề YoungMix (không dùng mã đề, thời gian, tờ phách; đáp án phần III không phải số hay
+ * quá 4 ký tự thì cảnh báo, không chặn), ô tích tờ phách (chỉ "Đề kèm đáp án" và "Chỉ đề") và cỡ chữ 12 / 14 (trừ bản đặc
+ * tả). Hộp không nhớ lựa chọn: mỗi lần mở điền lại mặc định như các lựa chọn khác.
  */
 export default function ExportWordDialog({ open, examId, detail, onClose, onShowFlagged }: ExportWordDialogProps) {
     const [form] = Form.useForm<FormValues>();
     const [exporting, setExporting] = useState(false);
     const duration = Form.useWatch("durationMinutes", form);
+    const content = Form.useWatch("content", form) ?? "all";
+    const isSpec = content === "spec";
+    const isYoungMix = content === "youngmix";
+    // Bản đặc tả và bản YoungMix không in ô mã đề; tờ phách chỉ cho đề (kèm hoặc không kèm đáp án)
+    const usesExamCode = !isSpec && !isYoungMix;
+    const allowsPhach = content === "all" || content === "exam";
 
     // Mở hộp: điền lại giá trị mặc định (tên file theo ngày hiện tại)
     useEffect(() => {
@@ -74,9 +115,21 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
             examCode: DEFAULT_EXAM_CODE,
             fileName: defaultFileName(detail.title),
             equation: "mathtype",
-            examOnly: false,
+            content: "all",
+            phach: false,
+            fontSize: DEFAULT_FONT_SIZE,
         });
     }, [open, detail.title, form]);
+
+    // Đổi nội dung file: tên file còn là tên mặc định của lựa chọn cũ thì đổi theo (tên giáo viên tự gõ thì giữ)
+    const handleValuesChange = (changed: Partial<FormValues>) => {
+        if (!changed.content) return;
+        const current = form.getFieldValue("fileName");
+        const defaults = (["all", "exam", "spec", "youngmix"] as ExportContent[]).map((c) => defaultFileName(detail.title, c));
+        if (!current || defaults.includes(current)) {
+            form.setFieldValue("fileName", defaultFileName(detail.title, changed.content));
+        }
+    };
 
     // NV-40/NV-41: đề còn chỗ chưa soạn được, chỗ đang soạn, câu có cảnh báo chưa lưu, hoặc tổng điểm phần trắc nghiệm khác 10
     const warnings = useMemo(() => {
@@ -94,6 +147,15 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
     const { failedCount, generatingCount, flaggedCount, totalScore, scoreOff } = warnings;
     const hasWarning = failedCount + generatingCount + flaggedCount > 0 || scoreOff;
 
+    // YoungMix (26/11): câu phần III đã có câu mà đáp án không phải số hoặc quá 4 ký tự ("Câu k phần III", k theo thứ tự
+    // trong phần như file xuất). Chỗ chưa có câu đã được nhắc ở cảnh báo trên.
+    const youngMixAnswerIssues = useMemo(() => {
+        const part = (detail.parts ?? []).find((p) => p.part === "III");
+        return (part?.items ?? []).flatMap((item, i) =>
+            item.questionText && !isYoungMixShortAnswer(item.saAnswer) ? [`Câu ${i + 1} phần III`] : []
+        );
+    }, [detail]);
+
     const handleDownload = async () => {
         let values: FormValues;
         try {
@@ -102,18 +164,25 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
             return; // antd đã hiện lỗi dưới ô
         }
         const equation = values.equation;
-        const examCode = values.examCode?.trim() || DEFAULT_EXAM_CODE;
+        const fileContent = values.content ?? "all";
+        // Bản đặc tả và bản YoungMix không có ô mã đề: không gửi examCode; YoungMix không có đầu đề: không gửi thời gian
+        const noExamCode = fileContent === "spec" || fileContent === "youngmix";
+        const examCode = noExamCode ? DEFAULT_EXAM_CODE : values.examCode?.trim() || DEFAULT_EXAM_CODE;
+        const withPhach = (fileContent === "all" || fileContent === "exam") && values.phach === true;
+        const fontSize = fileContent !== "spec" && values.fontSize === 14 ? values.fontSize : undefined;
         try {
             setExporting(true);
             const { blob, keptOmml, scaled, failed, failedAt, filename } = await getExamExportDocx(examId, equation, {
-                durationMinutes: values.durationMinutes ?? undefined,
+                durationMinutes: fileContent === "youngmix" ? undefined : values.durationMinutes ?? undefined,
                 examCode: examCode === DEFAULT_EXAM_CODE ? undefined : examCode,
-                content: values.examOnly ? "exam" : undefined,
+                content: fileContent === "all" ? undefined : fileContent,
+                phach: withPhach ? true : undefined,
+                fontSize,
             });
             // Tên giáo viên nhập (bỏ đuôi .docx nếu có gõ); trống thì tên đề + ngày, rồi tên backend gửi, rồi mã hệ thống
             const typed = toFileName(values.fileName?.replace(/\.docx$/i, ""), "");
             const name = typed
-                || toFileName(defaultFileName(detail.title), "")
+                || toFileName(defaultFileName(detail.title, fileContent), "")
                 || filename?.replace(/\.docx$/i, "")
                 || toFileName(undefined, detail.examCode ?? `exam-${examId}`);
             const url = window.URL.createObjectURL(blob);
@@ -182,8 +251,19 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
                     title="Xuất file Word khi đề chưa hoàn chỉnh?"
                     description={
                         <ul className="export-word-dialog-warning-list">
-                            {failedCount > 0 && <li>{failedCount} câu chưa soạn được (file ghi "Chưa có câu").</li>}
-                            {generatingCount > 0 && <li>{generatingCount} câu đang soạn (file ghi "Chưa có câu").</li>}
+                            {/* Bản đặc tả không in câu: chỗ chưa có câu vẫn được đếm theo ma trận */}
+                            {failedCount > 0 && (
+                                <li>
+                                    {failedCount} câu chưa soạn được
+                                    {isSpec ? " (bản đặc tả vẫn đếm các chỗ này theo ma trận)." : ' (file ghi "Chưa có câu").'}
+                                </li>
+                            )}
+                            {generatingCount > 0 && (
+                                <li>
+                                    {generatingCount} câu đang soạn
+                                    {isSpec ? " (bản đặc tả vẫn đếm các chỗ này theo ma trận)." : ' (file ghi "Chưa có câu").'}
+                                </li>
+                            )}
                             {flaggedCount > 0 && (
                                 <li>
                                     {flaggedCount} câu cần xem kỹ chưa được xử lý.
@@ -217,7 +297,9 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
                 />
             )}
 
-            <Form form={form} layout="vertical" disabled={exporting} requiredMark={false}>
+            <Form form={form} layout="vertical" disabled={exporting} requiredMark={false} onValuesChange={handleValuesChange}>
+                {/* Bản YoungMix không có đầu đề: bỏ thời gian làm bài (giữ giá trị trong form) */}
+                {!isYoungMix && (
                 <Form.Item
                     label={
                         <span>
@@ -260,24 +342,28 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
                         </Form.Item>
                     </Space>
                 </Form.Item>
+                )}
 
-                <Form.Item
-                    name="examCode"
-                    label={
-                        <span>
-                            Mã đề{" "}
-                            <Text type="secondary" className="export-word-dialog-label-note">
-                                (in ở đầu đề, chân trang và trang đáp án)
-                            </Text>
-                        </span>
-                    }
-                    rules={[{
-                        pattern: /^\s*[1-9]\d{2}\s*$/,
-                        message: "Mã đề là số có 3 chữ số, từ 100 đến 999.",
-                    }]}
-                >
-                    <Input inputMode="numeric" maxLength={3} className="export-word-dialog-code" />
-                </Form.Item>
+                {/* Bản đặc tả và bản YoungMix không có ô mã đề: bỏ ô (form giữ giá trị, không kiểm) */}
+                {usesExamCode && (
+                    <Form.Item
+                        name="examCode"
+                        label={
+                            <span>
+                                Mã đề{" "}
+                                <Text type="secondary" className="export-word-dialog-label-note">
+                                    (in ở đầu đề, chân trang và trang đáp án)
+                                </Text>
+                            </span>
+                        }
+                        rules={[{
+                            pattern: /^\s*[1-9]\d{2}\s*$/,
+                            message: "Mã đề là số có 3 chữ số, từ 100 đến 999.",
+                        }]}
+                    >
+                        <Input inputMode="numeric" maxLength={3} className="export-word-dialog-code" />
+                    </Form.Item>
+                )}
 
                 <Form.Item
                     name="fileName"
@@ -302,12 +388,50 @@ export default function ExportWordDialog({ open, examId, detail, onClose, onShow
                     </Radio.Group>
                 </Form.Item>
 
-                <Form.Item name="examOnly" valuePropName="checked" className="export-word-dialog-last">
-                    <Checkbox>Chỉ đề (không kèm đáp án)</Checkbox>
+                <Form.Item name="content" label="Nội dung file" className="export-word-dialog-last">
+                    <Radio.Group>
+                        <Space orientation="vertical" size={4}>
+                            <Radio value="all">Đề kèm đáp án và lời giải (mặc định)</Radio>
+                            <Radio value="exam">Chỉ đề (không kèm đáp án)</Radio>
+                            <Radio value="spec">Bản đặc tả đề</Radio>
+                            <Radio value="youngmix">Cho phần mềm trộn đề (YoungMix)</Radio>
+                        </Space>
+                    </Radio.Group>
                 </Form.Item>
-                <Text type="secondary">
-                    Không chọn thì file có đề, rồi sang trang mới là đáp án và lời giải chi tiết.
-                </Text>
+                <Text type="secondary">{CONTENT_HINTS[content]}</Text>
+
+                {/* YoungMix chỉ nhận đáp án phần III là số tối đa 4 ký tự: nhắc trước khi tải, không chặn */}
+                {isYoungMix && youngMixAnswerIssues.length > 0 && (
+                    <Alert
+                        type="warning"
+                        showIcon
+                        className="export-word-dialog-youngmix-warning"
+                        title="Có đáp án phần III YoungMix có thể không nhận"
+                        description={
+                            <div>
+                                Đáp án phần III phải là số, tối đa 4 ký tự (kể cả dấu "-" và dấu ","). Thầy/cô sửa đáp án
+                                của: {youngMixAnswerIssues.join(", ")} trước khi trộn (file vẫn được tải về).
+                            </div>
+                        }
+                    />
+                )}
+
+                {/* 26/11: cỡ chữ (trừ bản đặc tả) và tờ phách (chỉ đề kèm đáp án, chỉ đề) */}
+                {!isSpec && (
+                    <div className="export-word-dialog-extra">
+                        <Form.Item name="fontSize" label="Cỡ chữ" className={allowsPhach ? undefined : "export-word-dialog-last"}>
+                            <Radio.Group>
+                                <Radio value={12}>12</Radio>
+                                <Radio value={14}>14</Radio>
+                            </Radio.Group>
+                        </Form.Item>
+                        {allowsPhach && (
+                            <Form.Item name="phach" valuePropName="checked" className="export-word-dialog-last">
+                                <Checkbox>Có tờ phách (thường dùng cho đề cuối kì)</Checkbox>
+                            </Form.Item>
+                        )}
+                    </div>
+                )}
             </Form>
         </Modal>
     );

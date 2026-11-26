@@ -463,7 +463,7 @@ class ExamDocxFormatTest {
 
     @ParameterizedTest
     @EnumSource(EquationFormat.class)
-    void dauDeBangHaiCotKhongVienVaBangBaCotMaDeDiemMaPhach(EquationFormat format) throws Exception {
+    void dauDeBangHaiCotKhongVienVaBangHaiOMaDeDiem(EquationFormat format) throws Exception {
         Document doc = parse(docx.get(format), "word/document.xml");
         Document styles = parse(docx.get(format), "word/styles.xml");
         List<Element> tables = body(doc).stream().filter(e -> !isParagraph(e)).toList();
@@ -499,20 +499,25 @@ class ExamDocxFormatTest {
         }
         String xmlText = PandocTestSupport.documentXml(docx.get(format));
         assertFalse(xmlText.contains("SECTIONPAGES") || xmlText.contains("Đề có"), "bỏ \"(Đề có N trang)\"");
-        assertFalse(xmlText.contains("Họ và tên"), "bỏ dòng Họ và tên / Lớp");
+        assertFalse(xmlText.contains("Mã phách") || xmlText.contains("Điểm bài thi"), "26/11: mặc định không có phách");
 
-        // bảng có viền 3 cột bằng nhau, toàn chiều rộng: tiêu đề đậm căn giữa, hàng 2 cao như mẫu, mã đề ở ô 1
+        // 26/11 (mặc định không phách): bảng có viền 2 cột bằng nhau "Mã đề | Điểm", toàn chiều rộng: tiêu đề đậm căn giữa,
+        // hàng 2 cao như mẫu, mã đề ở ô 1; ngay dưới là dòng "Họ và tên: … Lớp: …". Có phách: ExamPhachFontSizeExportTest.
         Element box = tables.get(1);
         List<Integer> boxGrid = children(child(box, "tblGrid"), W, "gridCol").stream()
                 .map(c -> Integer.parseInt(c.getAttributeNS(W, "w"))).toList();
-        assertEquals(3, boxGrid.size());
+        assertEquals(2, boxGrid.size());
         assertEquals(TEXT_WIDTH, boxGrid.stream().mapToInt(Integer::intValue).sum(), "toàn chiều rộng");
-        assertTrue(Collections.max(boxGrid) - Collections.min(boxGrid) <= 1, "ba cột bằng nhau: " + boxGrid);
+        assertTrue(Collections.max(boxGrid) - Collections.min(boxGrid) <= 1, "hai cột bằng nhau: " + boxGrid);
         for (String side : List.of("top", "left", "bottom", "right", "insideH", "insideV")) {
             assertEquals("single", val(child(child(child(box, "tblPr"), "tblBorders"), side)), "có viền: " + side);
         }
         List<List<String>> cells = table(box);
-        assertEquals(List.of(List.of("Mã đề", "Điểm bài thi", "Mã phách"), List.of("101", "", "")), cells);
+        assertEquals(List.of(List.of("Mã đề", "Điểm"), List.of("101", "")), cells);
+        List<Element> all = body(doc);
+        Element afterBox = all.get(all.indexOf(box) + 1);
+        assertTrue(isParagraph(afterBox), "đoạn ngay sau bảng ô");
+        assertEquals("Họ và tên: …………………… Lớp: ………", text(afterBox), "dòng họ tên ngay dưới bảng ô");
         Element headRow = children(box, W, "tr").get(0);
         for (Element tc : children(headRow, W, "tc")) {
             Element p = children(tc, W, "p").get(0);
