@@ -76,7 +76,7 @@ export function flagView(code: string, type: QuestionType): FlagView {
         case "insufficient_sample":
             return { code, label: "Chưa đủ lượt", tone: "neutral" };
         case "low_discrimination":
-            return { code, label: "Phân biệt kém", tone: "warn" };
+            return { code, label: "Phân loại kém", tone: "warn" };
         case "unused_option":
             return { code, label: arg ? `Phương án ${arg} gần như không ai chọn` : "Có phương án gần như không ai chọn", tone: "warn" };
         case "key_suspect": {

@@ -32,7 +32,7 @@ export default function IdentityConfirm({
     return (
         <section className="student-card" aria-labelledby="identity-confirm-title">
             <h1 id="identity-confirm-title" className="student-heading">
-                Em là lớp {classLabel}, số {seatNo} — đúng không?
+                Em là học sinh lớp {classLabel}, số {seatNo} — đúng không?
             </h1>
             {note && <p className="student-muted">{note}</p>}
             {duplicateSeat && (
