@@ -15,7 +15,14 @@ public enum ExportContent {
      * Bản đặc tả đề kiểm tra (18/11) theo mẫu Phụ lục 2 Công văn 7991/BGDĐT-GDTrH: một section A4 ngang, không có đề, đáp án
      * hay mã đề ({@link ExamSpecBuilder}).
      */
-    SPEC;
+    SPEC,
+
+    /**
+     * Bản cho phần mềm trộn đề YoungMix (26/11): chỉ nội dung đề (tiêu đề phần, dòng hướng dẫn, câu), dòng thẻ nhóm
+     * {@code <gN#P>} dưới tiêu đề mỗi phần, nhãn phương án đúng và nhãn ý Đúng gạch chân, phần III có dòng "A. đáp án" dưới
+     * câu hỏi; không có đầu đề, chân trang, dòng HẾT, đáp án, lời giải ({@link ExamMarkdownBuilder}).
+     */
+    YOUNGMIX;
 
     /** Không phân biệt hoa thường; null hoặc rỗng là {@link #ALL}; giá trị khác ném IllegalArgumentException (400). */
     public static ExportContent parse(String value) {
@@ -27,6 +34,6 @@ public enum ExportContent {
                 return c;
             }
         }
-        throw new IllegalArgumentException("Tham số content chỉ nhận all, exam hoặc spec");
+        throw new IllegalArgumentException("Tham số content chỉ nhận all, exam, spec hoặc youngmix");
     }
 }

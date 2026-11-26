@@ -19,7 +19,8 @@ import java.util.List;
  *   <li>còn lại: mỗi phương án một dòng.</li>
  * </ul>
  *
- * <p>Đo chữ bằng số đo phông Times New Roman 12(trên máy chủ Linux là Liberation Serif, cùng metric); đo công thức bằng
+ * <p>Đo chữ bằng số đo phông Times New Roman 12 (26/11: hoặc 14, theo cỡ chữ của đề; trên máy chủ Linux là Liberation
+ * Serif, cùng metric); đo công thức bằng
  * đúng phép đo ảnh xem trước MathType ({@link PreviewRenderer#widthPt}) cho cả hai dạng công thức, để bố cục Equation và
  * MathType giống nhau. Công thức không đo được coi là rất rộng (xuống mức ít cột hơn), không báo lỗi.
  */
@@ -64,13 +65,20 @@ public enum OptionLayout {
         return stops;
     }
 
-    /**
-     * @param options bốn phương án ở dạng nguồn (có $...$), đã chuẩn hóa dấu chấm cuối
-     */
+    /** Như {@link #choose(List, int)} ở cỡ chữ mặc định 12. */
     public static OptionLayout choose(List<String> options) {
+        return choose(options, ExamPage.FONT_SIZE_PT);
+    }
+
+    /**
+     * @param options    bốn phương án ở dạng nguồn (có $...$), đã chuẩn hóa dấu chấm cuối
+     * @param fontSizePt (26/11) cỡ chữ của đề: chữ và công thức đo ở cỡ này ({@link #widthPt(char, String, int)}); mốc tab
+     *                   và đệm không đổi (theo bề rộng trang)
+     */
+    public static OptionLayout choose(List<String> options, int fontSizePt) {
         double max = 0;
         for (int i = 0; i < options.size(); i++) {
-            max = Math.max(max, widthPt((char) ('A' + i), options.get(i)));
+            max = Math.max(max, widthPt((char) ('A' + i), options.get(i), fontSizePt));
         }
         double line = ExamPage.optionLineWidthPt();
         if (max <= line / 4 - PADDING_PT) {
@@ -82,18 +90,28 @@ public enum OptionLayout {
         return ONE_PER_LINE;
     }
 
-    /** Bề rộng hiển thị (pt) của nhãn "A." đậm, một dấu cách rồi nội dung phương án (chữ và công thức $...$). */
+    /** Như {@link #widthPt(char, String, int)} ở cỡ chữ mặc định 12. */
     public static double widthPt(char label, String option) {
-        double width = textWidth(label + ".", BOLD) + textWidth(" ", PLAIN);
+        return widthPt(label, option, ExamPage.FONT_SIZE_PT);
+    }
+
+    /**
+     * Bề rộng hiển thị (pt) của nhãn "A." đậm, một dấu cách rồi nội dung phương án (chữ và công thức $...$), ở cỡ chữ
+     * {@code fontSizePt} (26/11; công thức đo bằng ảnh xem trước cùng cỡ, như MathType và Equation của file).
+     */
+    public static double widthPt(char label, String option, int fontSizePt) {
+        Font plain = fontSizePt == ExamPage.FONT_SIZE_PT ? PLAIN : PLAIN.deriveFont((float) fontSizePt);
+        Font bold = fontSizePt == ExamPage.FONT_SIZE_PT ? BOLD : BOLD.deriveFont((float) fontSizePt);
+        double width = textWidth(label + ".", bold) + textWidth(" ", plain);
         for (ExamMarkdownBuilder.Piece piece : ExamMarkdownBuilder.pieces(option == null ? "" : option)) {
             if (piece.math()) {
                 try {
-                    width += PreviewRenderer.widthPt(piece.text());
+                    width += PreviewRenderer.widthPt(piece.text(), fontSizePt);
                 } catch (RuntimeException e) {
                     return Double.POSITIVE_INFINITY;
                 }
             } else {
-                width += textWidth(piece.text(), PLAIN);
+                width += textWidth(piece.text(), plain);
             }
         }
         return width;

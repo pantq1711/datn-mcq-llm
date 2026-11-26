@@ -76,12 +76,19 @@ public final class MathTypeDocxConverter {
         }
     }
 
+    /** Như {@link #convert(byte[], List, float)} ở cỡ 12pt. */
+    public static Result convert(byte[] docx, List<String> latex) {
+        return convert(docx, latex, 12f);
+    }
+
     /**
-     * @param docx  docx do pandoc sinh (công thức dạng OMML)
-     * @param latex LaTeX của từng công thức, đúng thứ tự xuất hiện
+     * @param docx   docx do pandoc sinh (công thức dạng OMML)
+     * @param latex  LaTeX của từng công thức, đúng thứ tự xuất hiện
+     * @param fontPt cỡ công thức (26/11): 12 hoặc 14 theo cỡ chữ của đề; ảnh xem trước, phép đo ngắt dòng và EQN_PREFS
+     *               của MTEF cùng cỡ
      * @throws MathTypeConversionException docx không đọc/ghi được, hoặc số công thức khác số LaTeX
      */
-    public static Result convert(byte[] docx, List<String> latex) {
+    public static Result convert(byte[] docx, List<String> latex, float fontPt) {
         DocxPackage pkg;
         try {
             pkg = DocxPackage.read(docx);
@@ -125,22 +132,22 @@ public final class MathTypeDocxConverter {
             List<PreviewRenderer.Preview> previews;
             boolean standalone;
             try {
-                segs = layout(m, latex.get(i), avail, holder != null);
+                segs = layout(m, latex.get(i), avail, holder != null, fontPt);
                 standalone = isStandalone(segs, avail);
                 try {
                     mtefs = new ArrayList<>();
                     previews = new ArrayList<>();
-                    prepare(doc, m, segs, !display && !standalone, mtefs, previews);
+                    prepare(doc, m, segs, !display && !standalone, mtefs, previews, fontPt);
                 } catch (KeepOmml | RuntimeException e) {
                     if (segs.size() == 1) {
                         throw e;
                     }
                     // một đoạn không dựng được: bỏ ngắt dòng, giữ cả công thức làm một đối tượng (thu nhỏ nếu tràn)
-                    segs = List.of(whole(m, latex.get(i)));
+                    segs = List.of(whole(m, latex.get(i), fontPt));
                     standalone = isStandalone(segs, avail);
                     mtefs = new ArrayList<>();
                     previews = new ArrayList<>();
-                    prepare(doc, m, segs, !display && !standalone, mtefs, previews);
+                    prepare(doc, m, segs, !display && !standalone, mtefs, previews, fontPt);
                 }
             } catch (KeepOmml e) {
                 notes.add(n + ": giữ OMML (" + e.getMessage() + ") " + latex.get(i));
@@ -199,21 +206,21 @@ public final class MathTypeDocxConverter {
      * Chia công thức thành các đoạn vừa lề: công thức vừa lề (hoặc không thể tách khỏi đoạn) giữ nguyên; rộng hơn thì
      * ngắt theo quan hệ, rồi đoạn còn rộng ngắt theo +/−. Đoạn nào vẫn rộng hơn lề sẽ bị thu nhỏ ở bước ghi.
      */
-    private static List<Seg> layout(Element m, String latex, double avail, boolean splittable) {
-        Seg whole = whole(m, latex);
+    private static List<Seg> layout(Element m, String latex, double avail, boolean splittable, float fontPt) {
+        Seg whole = whole(m, latex, fontPt);
         if (!splittable || whole.width() <= avail + TOLERANCE_PT) {
             return List.of(whole);
         }
         try {
             List<Seg> out = new ArrayList<>();
             for (Piece byRelation : FormulaBreaker.split(whole.piece(), Level.RELATION)) {
-                Seg seg = byRelation == whole.piece() ? whole : measure(byRelation);
+                Seg seg = byRelation == whole.piece() ? whole : measure(byRelation, fontPt);
                 if (seg.width() <= avail + TOLERANCE_PT) {
                     out.add(seg);
                     continue;
                 }
                 for (Piece byAdditive : FormulaBreaker.split(byRelation, Level.ADDITIVE)) {
-                    out.add(byAdditive == byRelation ? seg : measure(byAdditive));
+                    out.add(byAdditive == byRelation ? seg : measure(byAdditive, fontPt));
                 }
             }
             return out;
@@ -222,12 +229,12 @@ public final class MathTypeDocxConverter {
         }
     }
 
-    private static Seg whole(Element m, String latex) {
-        return measure(new Piece(latex, elementChildren(m)));
+    private static Seg whole(Element m, String latex, float fontPt) {
+        return measure(new Piece(latex, elementChildren(m)), fontPt);
     }
 
-    private static Seg measure(Piece piece) {
-        return new Seg(piece, PreviewRenderer.widthPt(piece.latex()));
+    private static Seg measure(Piece piece, float fontPt) {
+        return new Seg(piece, PreviewRenderer.widthPt(piece.latex(), fontPt));
     }
 
     /** Công thức đứng thành dòng riêng: bị ngắt, hoặc (không ngắt được) tràn lề nên phải thu nhỏ. */
@@ -237,12 +244,12 @@ public final class MathTypeDocxConverter {
 
     /** Dựng MTEF và ảnh xem trước cho từng đoạn; ném nếu có đoạn không chuyển được. */
     private static void prepare(Document doc, Element m, List<Seg> segs, boolean inline, List<byte[]> mtefs,
-                                List<PreviewRenderer.Preview> previews) throws KeepOmml {
+                                List<PreviewRenderer.Preview> previews, float fontPt) throws KeepOmml {
         for (Seg seg : segs) {
             Element oMath = segs.size() == 1 ? m : oMathOf(doc, seg.piece().children());
-            mtefs.add(OmmlToMtef.convert(oMath, inline));
+            mtefs.add(OmmlToMtef.convert(oMath, inline, fontPt));
             try {
-                previews.add(PreviewRenderer.render(seg.piece().latex()));
+                previews.add(PreviewRenderer.render(seg.piece().latex(), fontPt));
             } catch (RuntimeException e) {
                 throw new KeepOmml("không dựng được ảnh: " + e.getMessage());
             }

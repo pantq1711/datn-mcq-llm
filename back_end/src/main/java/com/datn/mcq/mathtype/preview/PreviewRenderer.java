@@ -17,7 +17,8 @@ import org.scilab.forge.jlatexmath.TeXIcon;
 
 /**
  * Ảnh xem trước PNG cho đối tượng OLE (Word hiển thị/in ảnh này cho tới khi MathType vẽ lại). Dựng bằng JLaTeXMath
- * từ LaTeX gốc, cỡ 12pt (bằng cỡ Full trong EQN_PREFS của MTEF) ở {@link #DPI} dpi, nền trong suốt.
+ * từ LaTeX gốc, cỡ 12pt (bằng cỡ Full trong EQN_PREFS của MTEF; 26/11: hoặc cỡ chữ của đề, 14pt) ở {@link #DPI} dpi, nền
+ * trong suốt.
  *
  * <p>Bề ngang ảnh cắt sát nét chữ, chừa {@link #SIDE_MARGIN_PT} mỗi bên: hộp của JLaTeXMath tự để trống ~2,5-3pt mỗi
  * bên (đo 22/11 trên "AB", "IJKL", "x", "\frac{1}{2}"), cộng dấu cách thường trong câu thành khoảng hở cỡ hai dấu cách
@@ -43,12 +44,22 @@ public final class PreviewRenderer {
      * @throws RuntimeException JLaTeXMath không dựng được LaTeX này
      */
     public static double widthPt(String latex) {
-        return draw(latex).getWidth() * (72.0 / DPI);
+        return widthPt(latex, FONT_PT);
+    }
+
+    /** Như {@link #widthPt(String)} ở cỡ {@code fontPt} (26/11: đề cỡ 14). */
+    public static double widthPt(String latex, float fontPt) {
+        return draw(latex, fontPt).getWidth() * (72.0 / DPI);
     }
 
     /** @throws RuntimeException JLaTeXMath không dựng được LaTeX này (bên gọi giữ công thức dạng OMML) */
     public static Preview render(String latex) {
-        TeXIcon icon = icon(latex);
+        return render(latex, FONT_PT);
+    }
+
+    /** Như {@link #render(String)} ở cỡ {@code fontPt} (26/11: đề cỡ 14; cỡ Full trong EQN_PREFS của MTEF cùng cỡ). */
+    public static Preview render(String latex, float fontPt) {
+        TeXIcon icon = icon(latex, fontPt);
         BufferedImage img = cropSides(paint(icon));
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
@@ -61,12 +72,12 @@ public final class PreviewRenderer {
         return new Preview(out.toByteArray(), img.getWidth() * toPt, img.getHeight() * toPt, depthPx * toPt);
     }
 
-    private static BufferedImage draw(String latex) {
-        return cropSides(paint(icon(latex)));
+    private static BufferedImage draw(String latex, float fontPt) {
+        return cropSides(paint(icon(latex, fontPt)));
     }
 
-    private static TeXIcon icon(String latex) {
-        float px = FONT_PT * DPI / 72f;
+    private static TeXIcon icon(String latex, float fontPt) {
+        float px = fontPt * DPI / 72f;
         TeXFormula formula = new TeXFormula(latex);
         // STYLE_DISPLAY: phân số cỡ đầy đủ như MathType vẽ (STYLE_TEXT thu nhỏ \frac)
         TeXIcon icon = formula.createTeXIcon(TeXConstants.STYLE_DISPLAY, px);

@@ -1333,12 +1333,14 @@ class ExamBuildTest {
                 assertTrue(xml.contains(part), "docx thiếu: " + part);
             }
             // 2/11: đầu đề (bảng 2 cột không viền) và mã đề hiển thị 101; mã hệ thống MT... chỉ ở tên file, không in ra file.
+            // 26/11: mặc định không có tờ phách: ô "Mã đề | Điểm" và dòng họ tên (bỏ "Điểm bài thi", "Mã phách").
             for (String part : List.of("UBND PHƯỜNG ……………", "TRƯỜNG THCS ……………", "ĐỀ KIỂM TRA ĐỀ THỬ MA TRẬN",
-                    "Môn: Toán, Lớp: 8.", "(Thời gian làm bài …… phút không kể thời gian giao đề)", "Mã đề",
-                    "Điểm bài thi", "Mã phách", "<w:tbl>",
+                    "Môn: Toán, Lớp: 8.", "(Thời gian làm bài …… phút không kể thời gian giao đề)", ">Mã đề<",
+                    ">Điểm<", "Họ và tên: …………………… Lớp: ………", "<w:tbl>",
                     "ĐÁP ÁN VÀ HƯỚNG DẪN CHẤM – MÃ ĐỀ 101", "LỜI GIẢI CHI TIẾT", "------ HẾT ------")) {
                 assertTrue(xml.contains(part), "đầu đề docx thiếu: " + part);
             }
+            assertFalse(xml.contains("Mã phách") || xml.contains("Điểm bài thi"), "mặc định không có phách");
             assertTrue(xml.contains("<w:top w:val=\"nil\"/>"), "bảng đầu đề không viền");
             assertFalse(xml.contains("MT2"), "mã hệ thống không in ra file");
             assertFalse(xml.contains(code), "mã hệ thống không in ra file");
@@ -1527,6 +1529,56 @@ class ExamBuildTest {
         var bad = perform(get(base + "?content=dacta")).andReturn().getResponse();
         assertEquals(400, bad.getStatus());
         assertTrue(bad.getContentAsString(StandardCharsets.UTF_8).contains("spec"), "thông báo nêu giá trị spec");
+    }
+
+    /**
+     * 26/11: content=youngmix (bản cho phần mềm trộn đề YoungMix: không đầu đề, chân trang, HẾT, đáp án, lời giải; dòng thẻ
+     * nhóm dưới tiêu đề mỗi phần), phach=true|false (tờ phách cho "Chỉ đề" và "Đề kèm đáp án"), fontSize=12|14. Giá trị sai
+     * của phach và fontSize thì 400 như các tham số khác.
+     */
+    @Test
+    void xuatDeRaWordYoungMixPhachCoChu() throws Exception {
+        int examId = readyExam();
+        progress(examId);
+        String code = jdbc.queryForObject("SELECT exam_code FROM exam WHERE id = ?", String.class, examId);
+        String base = "/api/exams/" + examId + "/export/docx";
+        if (PandocTestSupport.find().isPresent()) {
+            for (String query : List.of("?content=youngmix", "?content=YoungMix&equation=mathtype&examCode=205&phach=true"
+                    + "&fontSize=14")) {
+                var ok = perform(get(base + query)).andReturn().getResponse();
+                assertEquals(200, ok.getStatus(), ok.getContentAsString(StandardCharsets.UTF_8));
+                assertTrue(ok.getHeader("Content-Disposition").contains("filename=\"" + code + ".docx\""), query);
+                String xml = PandocTestSupport.documentXml(ok.getContentAsByteArray());
+                assertTrue(xml.contains("&lt;g3#1&gt;") && xml.contains("PHẦN I. TRẮC NGHIỆM NHIỀU LỰA CHỌN"), query);
+                for (String absent : List.of("UBND", "Mã đề", "Mã phách", "HẾT", "ĐÁP ÁN", "LỜI GIẢI", "<w:tbl",
+                        "footerReference")) {
+                    assertFalse(xml.contains(absent), "YoungMix không có " + absent + ": " + query);
+                }
+                assertTrue(xml.contains("<w:u w:val=\"single\""), "nhãn đáp án đúng gạch chân: " + query);
+            }
+            var phach = perform(get(base + "?content=exam&phach=TRUE&fontSize=14")).andReturn().getResponse();
+            assertEquals(200, phach.getStatus(), phach.getContentAsString(StandardCharsets.UTF_8));
+            String xml = PandocTestSupport.documentXml(phach.getContentAsByteArray());
+            assertTrue(xml.contains("Mã phách") && xml.contains("Điểm bài thi"), "có tờ phách");
+            assertEquals(2, xml.split("<w:sectPr", -1).length - 1, "tờ phách và đề");
+            String styles = PandocTestSupport.entry(phach.getContentAsByteArray(), "word/styles.xml");
+            assertTrue(PandocTestSupport.normalIsTimesNewRoman(styles, 28), "cỡ 14");
+            for (String query : List.of("?phach=false&fontSize=12", "?phach=&fontSize=")) {
+                var plain = perform(get(base + query)).andReturn().getResponse();
+                assertEquals(200, plain.getStatus(), query);
+                String x = PandocTestSupport.documentXml(plain.getContentAsByteArray());
+                assertFalse(x.contains("Mã phách"), query);
+                assertTrue(PandocTestSupport.normalIsTimesNewRoman12(
+                        PandocTestSupport.entry(plain.getContentAsByteArray(), "word/styles.xml")), query);
+            }
+        }
+        for (String[] bad : List.of(new String[]{"?fontSize=13", "fontSize"}, new String[]{"?fontSize=abc", "fontSize"},
+                new String[]{"?phach=yes", "phach"}, new String[]{"?phach=1", "phach"},
+                new String[]{"?content=young-mix", "youngmix"})) {
+            var response = perform(get(base + bad[0])).andReturn().getResponse();
+            assertEquals(400, response.getStatus(), bad[0]);
+            assertTrue(response.getContentAsString(StandardCharsets.UTF_8).contains(bad[1]), bad[0]);
+        }
     }
 
     /**

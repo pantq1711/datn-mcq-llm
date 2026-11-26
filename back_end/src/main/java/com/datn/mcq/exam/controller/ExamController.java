@@ -13,6 +13,7 @@ import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
 import com.datn.mcq.exam.export.ExamExportService;
 import com.datn.mcq.exam.export.ExamExportService.DocxFile;
 import com.datn.mcq.exam.export.EquationFormat;
+import com.datn.mcq.exam.export.ExamDocxOptions;
 import com.datn.mcq.exam.export.ExamHeader;
 import com.datn.mcq.exam.export.ExportContent;
 import com.datn.mcq.exam.service.ExamActionService;
@@ -115,19 +116,30 @@ public class ExamController {
      * <p>{@code examCode} (tùy chọn, 16/11): mã đề in ở ô mã đề, tiêu đề trang đáp án và chân trang, số nguyên 100–999;
      * không truyền là 101; giá trị khác 400. {@code content} (tùy chọn, 16/11): {@code all} (mặc định, đề kèm đáp án và lời
      * giải) hoặc {@code exam} (file dừng ở dòng HẾT); từ 18/11 thêm {@code spec}: bản đặc tả đề theo mẫu Phụ lục 2 Công văn
-     * 7991 (A4 ngang, không có ô mã đề nên {@code examCode} bị bỏ qua; tên file như file đề); giá trị khác 400.
+     * 7991 (A4 ngang, không có ô mã đề nên {@code examCode} bị bỏ qua; tên file như file đề); từ 26/11 thêm {@code youngmix}:
+     * bản cho phần mềm trộn đề YoungMix (chỉ nội dung đề, đáp án đúng gạch chân, dòng thẻ nhóm; {@code examCode},
+     * {@code durationMinutes} và {@code phach} bị bỏ qua; tên file như file đề); giá trị khác 400.
+     *
+     * <p>{@code phach} (tùy chọn, 26/11): {@code true} thêm trang tờ phách đầu file và đầu đề "Mã đề | Điểm bài thi | Mã
+     * phách"; {@code false} (mặc định) đầu đề "Mã đề | Điểm" kèm dòng họ tên; chỉ áp cho {@code all} và {@code exam}; giá trị
+     * khác 400. {@code fontSize} (tùy chọn, 26/11): {@code 12} (mặc định) hoặc {@code 14}, mọi kiểu chữ và công thức của đề;
+     * bản đặc tả giữ 12; giá trị khác 400.
      */
     @GetMapping("/{examId}/export/docx")
     public ResponseEntity<byte[]> exportDocx(CurrentUser user, @PathVariable Integer examId,
                                              @RequestParam(required = false) String equation,
                                              @RequestParam(required = false) String durationMinutes,
                                              @RequestParam(required = false) String examCode,
-                                             @RequestParam(required = false) String content) {
+                                             @RequestParam(required = false) String content,
+                                             @RequestParam(required = false) String phach,
+                                             @RequestParam(required = false) String fontSize) {
         EquationFormat format = EquationFormat.parse(equation);
         Integer minutes = ExamHeader.parseDuration(durationMinutes);
         String code = ExamHeader.parseExamCode(examCode);
         ExportContent part = ExportContent.parse(content);
-        DocxFile file = examExportService.docx(examId, user.id(), format, minutes, code, part);
+        boolean withPhach = ExamDocxOptions.parsePhach(phach);
+        int size = ExamDocxOptions.parseFontSize(fontSize);
+        DocxFile file = examExportService.docx(examId, user.id(), format, minutes, code, part, withPhach, size);
         ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(ExamExportService.DOCX_CONTENT_TYPE))
                 .header(HttpHeaders.CONTENT_DISPOSITION,

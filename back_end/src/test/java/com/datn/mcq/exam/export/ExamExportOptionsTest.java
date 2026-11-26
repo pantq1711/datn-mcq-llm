@@ -140,6 +140,11 @@ class ExamExportOptionsTest {
                 new ExamDocxOptions(header.examCode(), content)).content();
     }
 
+    /** Như {@link #footers}, cho test khác cùng gói (26/11). */
+    static Map<String, String> footersOf(byte[] docx) throws Exception {
+        return footers(docx);
+    }
+
     /** Các part chân trang (word/footer*.xml) của file, theo tên part. */
     private static Map<String, String> footers(byte[] docx) throws Exception {
         Map<String, String> out = new LinkedHashMap<>();

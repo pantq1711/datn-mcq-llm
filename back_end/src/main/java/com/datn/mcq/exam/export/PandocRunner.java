@@ -235,7 +235,7 @@ public class PandocRunner {
                 }
             }
             // Tab (mã giữ chỗ của ExamMarkdownBuilder) thay SAU bước MathType: bước đó có thể tách đoạn quanh công thức rộng.
-            Docx converted = toMathType(docx, latex);
+            Docx converted = toMathType(docx, latex, options.fontSizePt());
             return verifyFigures(new Docx(finish(converted.content(), code), converted.mathTypeObjects(),
                     converted.equationsKeptOmml(), converted.equationsScaled(), failed, failedLatex), figures);
         } catch (IOException e) {
@@ -300,8 +300,13 @@ public class PandocRunner {
      * bất ngờ) thì trả nguyên file Equation và ghi WARN kèm lý do, để giáo viên vẫn nhận được file.
      */
     static Docx toMathType(byte[] docx, List<String> latex) {
+        return toMathType(docx, latex, ExamDocxOptions.DEFAULT_FONT_SIZE_PT);
+    }
+
+    /** @param fontSizePt (26/11) cỡ chữ của đề: công thức MathType dựng cùng cỡ */
+    static Docx toMathType(byte[] docx, List<String> latex, int fontSizePt) {
         try {
-            MathTypeDocxConverter.Result r = MathTypeDocxConverter.convert(docx, latex);
+            MathTypeDocxConverter.Result r = MathTypeDocxConverter.convert(docx, latex, fontSizePt);
             if (r.keptOmml() > 0) {
                 log.info("Xuất MathType: {} công thức giữ Equation của Word", r.keptOmml());
                 log.debug("Công thức giữ Equation: {}", r.notes());
@@ -455,7 +460,8 @@ public class PandocRunner {
      * File mẫu --reference-doc ({@value #REFERENCE_DOC_RESOURCE}): reference.docx mặc định của pandoc, thêm
      * compatibilityMode = 15 trong settings.xml (Word không mở ở Compatibility Mode, lệnh Convert Equations của MathType
      * chạy được) và font Normal Times New Roman 13. Cách tạo ghi ở docs/api/README.md mục 7.6. Mỗi lần xuất, file này được
-     * vá thêm khổ A4, lề, kiểu của đề và chân trang ({@link ExamReferenceDoc}).
+     * vá thêm khổ A4, lề, kiểu của đề (mọi kiểu về cỡ 12, hoặc 14 theo tùy chọn từ 26/11) và chân trang
+     * ({@link ExamReferenceDoc}).
      */
     private static void copyReferenceDoc(Path target, ExamDocxOptions options) throws IOException {
         Files.write(target, referenceDocBytes(options));

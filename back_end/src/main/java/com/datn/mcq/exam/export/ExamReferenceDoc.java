@@ -17,10 +17,12 @@ import java.nio.charset.StandardCharsets;
  * một chỗ ({@link ExamPage}) và bộ ngắt dòng MathType ({@code PageGeometry}) đọc đúng khổ đó từ sectPr của file xuất:
  * <ul>
  *   <li>trang A4, lề trên/dưới 1,5 cm, trái 2 cm, phải 1,5 cm;</li>
- *   <li>mọi kiểu dùng Times New Roman 13, kể cả tiêu đề: bỏ phông theme, bỏ màu xanh, tiêu đề đậm đen;</li>
+ *   <li>mọi kiểu dùng Times New Roman 12 (26/11: hoặc 14, {@link ExamDocxOptions#fontSizePt()}), kể cả tiêu đề: bỏ phông
+ *       theme, bỏ màu xanh, tiêu đề đậm đen;</li>
  *   <li>giãn dòng 1,15, cách đoạn 0–3 pt;</li>
  *   <li>các kiểu của đề: câu hỏi (thụt lề treo), phương án, dòng hướng dẫn, ô bảng...;</li>
- *   <li>chân trang "Trang x/y – Mã đề 101" căn giữa (trường PAGE/NUMPAGES); mã đề theo {@link ExamDocxOptions}.</li>
+ *   <li>chân trang "Trang x/y – Mã đề 101" căn giữa (trường PAGE/NUMPAGES); mã đề theo {@link ExamDocxOptions}; bản
+ *       YoungMix (26/11) không có chân trang.</li>
  * </ul>
  */
 public final class ExamReferenceDoc {
@@ -31,7 +33,6 @@ public final class ExamReferenceDoc {
     private static final String FOOTER_TYPE =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
     private static final String FONT = ExamPage.FONT;
-    private static final String SIZE = Integer.toString(ExamPage.FONT_SIZE_PT * 2);
     /** Cách đoạn tối đa (twips) = 3 pt. */
     private static final int MAX_SPACING = ExamPage.PARAGRAPH_AFTER_TWIPS;
 
@@ -54,20 +55,25 @@ public final class ExamReferenceDoc {
         if (styles == null) {
             throw new IOException("File mẫu thiếu word/styles.xml");
         }
-        patchStyles(styles);
+        patchStyles(styles, o);
         // sectPr cuối thân tài liệu là section ĐÁP ÁN (đánh số lại từ 1, chân trang "Đáp án mã đề"); section đề do
         // ExamMarkdownBuilder đóng bằng sectPr trong đoạn HẾT, chân trang của nó do ExamSections thêm sau pandoc.
         // Id riêng: "rIdMT<n>" là Id của bộ chuyển MathType (đối tượng OLE, ảnh) và pandoc giữ nguyên Id của chân trang.
         // Chỉ đề (16/11): đoạn HẾT không có sectPr, nên sectPr cuối (vẫn part và Id này) là section đề: chân trang
-        // "Mã đề …", không đánh số lại trang. Bản đặc tả (18/11): sectPr cuối là section duy nhất, A4 ngang, chân trang
-        // "Bản đặc tả đề kiểm tra" với tab phải ở lề phải của trang ngang.
+        // "Mã đề …", không đánh số lại trang (26/11: có tờ phách thì đánh số lại từ 1, vì trang tờ phách là section trước).
+        // Bản đặc tả (18/11): sectPr cuối là section duy nhất, A4 ngang, chân trang "Bản đặc tả đề kiểm tra" với tab phải
+        // ở lề phải của trang ngang. Bản YoungMix (26/11): section duy nhất, không có chân trang.
+        if (o.youngMix()) {
+            patchSection(pkg.document(), null, false, false);
+            return pkg.write();
+        }
         String left = o.spec() ? SPEC_FOOTER_LEFT
                 : o.examOnly() ? examFooterLeft(o.examCode()) : answerFooterLeft(o.examCode());
         int rightTab = o.spec() ? ExamPage.LANDSCAPE_TEXT_WIDTH_TWIPS : ExamPage.TEXT_WIDTH_TWIPS;
         pkg.put("word/footerAnswer.xml", footerXml(left, rightTab).getBytes(StandardCharsets.UTF_8));
         pkg.ensureOverrideContentType("/word/footerAnswer.xml", FOOTER_TYPE);
         pkg.addRelationship(ExamPage.ANSWER_FOOTER_REL_ID, FOOTER_REL, "footerAnswer.xml");
-        patchSection(pkg.document(), !o.examOnly() && !o.spec(), o.spec());
+        patchSection(pkg.document(), ExamPage.ANSWER_FOOTER_REL_ID, (!o.examOnly() && !o.spec()) || o.phach(), o.spec());
         return pkg.write();
     }
 
@@ -89,10 +95,10 @@ public final class ExamReferenceDoc {
         return "Đáp án mã đề " + examCode;
     }
 
-    private static void patchSection(Document doc, boolean restartPageNumbers, boolean landscape) {
+    /** {@code footerRelId} null: section không có chân trang (bản YoungMix). */
+    private static void patchSection(Document doc, String footerRelId, boolean restartPageNumbers, boolean landscape) {
         Element body = (Element) doc.getElementsByTagNameNS(W, "body").item(0);
-        Element sect = fragment(doc, ExamPage.sectionProperties(ExamPage.ANSWER_FOOTER_REL_ID, restartPageNumbers,
-                landscape));
+        Element sect = fragment(doc, ExamPage.sectionProperties(footerRelId, restartPageNumbers, landscape));
         Node old = null;
         for (Node c = body.getFirstChild(); c != null; c = c.getNextSibling()) {
             if (c instanceof Element e && W.equals(e.getNamespaceURI()) && "sectPr".equals(e.getLocalName())) {
@@ -135,11 +141,17 @@ public final class ExamReferenceDoc {
 
     // ---------------------------------------------------------------- kiểu
 
-    private static void patchStyles(Document doc) {
+    /** Cỡ chữ (nửa điểm, như w:sz) theo tùy chọn: 24 (cỡ 12) hoặc 28 (cỡ 14). */
+    private static String size(ExamDocxOptions o) {
+        return Integer.toString(o.fontSizePt() * 2);
+    }
+
+    private static void patchStyles(Document doc, ExamDocxOptions o) {
+        String size = size(o);
         Element root = doc.getDocumentElement();
         Element defaults = child(root, "docDefaults");
         Element newDefaults = fragment(doc, "<w:docDefaults><w:rPrDefault><w:rPr>" + fonts()
-                + "<w:sz w:val=\"" + SIZE + "\"/><w:szCs w:val=\"" + SIZE + "\"/>"
+                + "<w:sz w:val=\"" + size + "\"/><w:szCs w:val=\"" + size + "\"/>"
                 + "<w:lang w:val=\"vi-VN\" w:eastAsia=\"zh-CN\" w:bidi=\"ar-SA\"/></w:rPr></w:rPrDefault>"
                 + "<w:pPrDefault><w:pPr><w:spacing w:before=\"0\" w:after=\"" + ExamPage.PARAGRAPH_AFTER_TWIPS
                 + "\" w:line=\"" + ExamPage.LINE_SPACING + "\" w:lineRule=\"auto\"/></w:pPr></w:pPrDefault></w:docDefaults>");
@@ -152,14 +164,14 @@ public final class ExamReferenceDoc {
         NodeList styleList = root.getElementsByTagNameNS(W, "style");
         for (int i = 0; i < styleList.getLength(); i++) {
             Element style = (Element) styleList.item(i);
-            sanitizeRunProperties(style);
+            sanitizeRunProperties(style, size);
             clampSpacing(style);
             String id = style.getAttributeNS(W, "styleId");
             if (id.matches("Heading[1-9]")) {
                 makeHeading(doc, style, "Heading1".equals(id));
             }
         }
-        for (String xml : customStyles()) {
+        for (String xml : customStyles(o)) {
             root.appendChild(fragment(doc, xml));
         }
     }
@@ -169,8 +181,8 @@ public final class ExamReferenceDoc {
                 + "\"/>";
     }
 
-    /** Phông Times New Roman 13 cho mọi kiểu: bỏ phông theme, bỏ màu, cỡ chữ về 13. */
-    private static void sanitizeRunProperties(Element style) {
+    /** Phông Times New Roman cỡ của đề cho mọi kiểu: bỏ phông theme, bỏ màu, cỡ chữ về {@code size} (nửa điểm). */
+    private static void sanitizeRunProperties(Element style, String size) {
         Element rPr = child(style, "rPr");
         if (rPr == null) {
             return;
@@ -187,10 +199,10 @@ public final class ExamReferenceDoc {
         for (Element color : children(rPr, "color")) {
             rPr.removeChild(color);
         }
-        for (String size : new String[]{"sz", "szCs"}) {
-            Element e = child(rPr, size);
+        for (String tag : new String[]{"sz", "szCs"}) {
+            Element e = child(rPr, tag);
             if (e != null) {
-                e.setAttributeNS(W, "w:val", SIZE);
+                e.setAttributeNS(W, "w:val", size);
             }
         }
     }
@@ -212,7 +224,7 @@ public final class ExamReferenceDoc {
         spacing.removeAttributeNS(W, "afterLines");
     }
 
-    /** Tiêu đề: đậm, đen, Times New Roman 13; tiêu đề cấp 1 (tên phần đáp án, lời giải) căn giữa. */
+    /** Tiêu đề: đậm, đen, Times New Roman cỡ của đề; tiêu đề cấp 1 (tên phần đáp án, lời giải) căn giữa. */
     private static void makeHeading(Document doc, Element style, boolean center) {
         Element rPr = child(style, "rPr");
         if (rPr == null) {
@@ -238,8 +250,11 @@ public final class ExamReferenceDoc {
         }
     }
 
-    /** Các kiểu đoạn riêng của đề; số đo thụt lề lấy từ {@link ExamPage}. */
-    private static String[] customStyles() {
+    /**
+     * Các kiểu đoạn riêng của đề; số đo thụt lề lấy từ {@link ExamPage}. Dòng cao cố định (ô mã đề, khoảng trống giữa hai bảng
+     * đầu đề) nhân theo tỉ lệ cỡ chữ (26/11, {@link ExamDocxOptions#scaled}); chữ của các kiểu theo cỡ mặc định của tài liệu.
+     */
+    private static String[] customStyles(ExamDocxOptions o) {
         int after = ExamPage.PARAGRAPH_AFTER_TWIPS;
         // Câu hỏi và phương án không thụt lề treo (mẫu của trường): dòng sau về lề trái; phương án đi tới mốc tab 283 bằng
         // một tab đầu dòng (xem ExamTabs).
@@ -257,10 +272,15 @@ public final class ExamReferenceDoc {
                 style("ExamFigure", "<w:keepNext/><w:spacing w:before=\"" + after + "\" w:after=\"" + after + "\"/>"
                         + "<w:jc w:val=\"center\"/>", ""),
                 style("ExamHeaderCell", "<w:spacing w:before=\"0\" w:after=\"0\"/><w:jc w:val=\"center\"/>", ""),
-                // bảng Mã đề / Điểm bài thi / Mã phách: dòng cao đúng 360 twips như mẫu
-                style("ExamBoxCell", "<w:spacing w:before=\"0\" w:after=\"0\" w:line=\"360\" w:lineRule=\"exact\"/>"
-                        + "<w:jc w:val=\"center\"/>", ""),
-                style("ExamGap", "<w:spacing w:before=\"0\" w:after=\"0\" w:line=\"240\" w:lineRule=\"exact\"/>", ""),
+                // bảng Mã đề / Điểm (bài thi) / Mã phách: dòng cao đúng 360 twips như mẫu (cỡ 12)
+                style("ExamBoxCell", "<w:spacing w:before=\"0\" w:after=\"0\" w:line=\"" + o.scaled(360)
+                        + "\" w:lineRule=\"exact\"/><w:jc w:val=\"center\"/>", ""),
+                style("ExamGap", "<w:spacing w:before=\"0\" w:after=\"0\" w:line=\"" + o.scaled(240)
+                        + "\" w:lineRule=\"exact\"/>", ""),
+                // 26/11: dòng "Họ và tên: … Lớp: …" dưới bảng ô (không phách) và các dòng họ tên, lớp của tờ phách
+                style("ExamNameLine", "<w:spacing w:before=\"" + after + "\" w:after=\"" + after + "\"/>", ""),
+                // 26/11 (YoungMix): dòng thẻ nhóm "<g3#1>" ngay dưới dòng hướng dẫn của phần, đi cùng câu đầu
+                style("ExamGroupTag", "<w:keepNext/><w:spacing w:before=\"0\" w:after=\"" + after + "\"/>", ""),
                 style("ExamTableCell", "<w:spacing w:before=\"20\" w:after=\"20\" w:line=\"240\" w:lineRule=\"auto\"/>"
                         + "<w:jc w:val=\"center\"/>", ""),
                 style("ExamSubHeading", "<w:keepNext/><w:spacing w:before=\"" + after + "\" w:after=\"" + after + "\"/>",
