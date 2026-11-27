@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Empty, Popconfirm, Space, Table, Tag, Tooltip, Typography, message } from "antd";
+import { Button, Empty, Popconfirm, Space, Table, Tag, Tooltip, Typography, message } from "antd";
 import type { TableColumnsType } from "antd";
 import { DeleteOutlined, EyeOutlined, FolderOpenOutlined, PlusOutlined, ReloadOutlined, WarningOutlined, } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -137,8 +137,9 @@ export default function MaterialListPage() {
             width: 190,
             align: "center",
             render: (_, record) => (
-                // Nút có chữ thay cho biểu tượng (rà soát giao diện I6)
-                <Space size={4}>
+                // Nút có chữ thay cho biểu tượng (rà soát giao diện I6). Chặn lan sự kiện để bấm nút (kể cả trong
+                // hộp xác nhận Xóa, vẫn nổi bọt qua portal) không kích hoạt bấm cả hàng
+                <Space size={4} onClick={(event) => event.stopPropagation()}>
                     <Button
                         icon={<EyeOutlined />}
                         onClick={() => openPreview(record)}
@@ -188,7 +189,8 @@ export default function MaterialListPage() {
                 </Space>
             </div>
 
-            <Card bordered={false} className="material-list-card">
+            {/* Bảng đặt thẳng trên trang, không bọc card */}
+            <div className="material-list-card">
                 <Table<MaterialDto>
                     columns={columns}
                     dataSource={materials}
@@ -196,6 +198,11 @@ export default function MaterialListPage() {
                     loading={loading}
                     // Màn hẹp: bảng cuộn ngang trong khung, cả trang không bị kéo rộng (rà soát giao diện I7)
                     scroll={{ x: 1000 }}
+                    // Bấm cả hàng để xem nội dung đã đọc, như trang Đề thi và Ngân hàng câu hỏi
+                    onRow={(record) => ({
+                        onClick: () => openPreview(record),
+                        className: "material-list-row-clickable",
+                    })}
                     locale={{
                         emptyText: (
                             <Empty
@@ -222,7 +229,7 @@ export default function MaterialListPage() {
                         },
                     }}
                 />
-            </Card>
+            </div>
 
             {/* Modal Quản lý / Tải lên tài liệu */}
             <MaterialManagerModal

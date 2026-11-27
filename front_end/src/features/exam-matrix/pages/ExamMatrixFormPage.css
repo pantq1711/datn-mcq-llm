@@ -23,11 +23,11 @@
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
 }
 
-/* Tiêu đề từng phần: nền #f5f5f5, viền dưới 2px như các phần của trang Tạo đề thi */
+/* Tiêu đề từng phần: nền xanh nhạt #e3effa, viền dưới 2px như các phần của trang Tạo đề thi */
 .exam-matrix-form-page__section-card>.ant-card-head,
 .exam-matrix-form-page__summary-card>.ant-card-head,
 .exam-matrix-form-page__help-card>.ant-card-head {
-    background-color: #f5f5f5;
+    background-color: #e3effa;
     border-bottom-width: 2px;
     /* Khớp góc bo 12px của card (trừ viền 2px), không để lộ góc nền xám */
     border-radius: 10px 10px 0 0;

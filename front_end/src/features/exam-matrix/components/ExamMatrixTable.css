@@ -3,12 +3,6 @@
     min-width: 0;
 }
 
-.exam-matrix-table__summary {
-    display: flex;
-    justify-content: flex-end;
-    margin: 0 0 12px;
-}
-
 .exam-matrix-table__name-cell,
 .exam-matrix-table__subject-cell {
     display: flex;
@@ -44,8 +38,8 @@
     white-space: nowrap;
 }
 
-@media (max-width: 640px) {
-    .exam-matrix-table__summary {
-        margin-bottom: 8px;
-    }
+/* Dải phân cách giữa các ma trận: dày hơn mặc định 1px của antd Table (cùng kiểu bảng ngân hàng câu hỏi) */
+.exam-matrix-table .ant-table-wrapper .ant-table-tbody>tr>td {
+    border-bottom: 2px solid #ececec;
 }
+

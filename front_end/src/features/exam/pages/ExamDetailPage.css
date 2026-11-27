@@ -44,9 +44,9 @@
     overflow-wrap: anywhere;
 }
 
-/* Bỏ tiêu đề card "Danh sách câu hỏi" (G1): thân card bớt padding trên */
-.exam-detail-page-question-card > .ant-card-body {
-    padding-top: 16px;
+/* Danh sách câu không còn card bao ngoài: các Phần (.question-group) xếp thẳng trong cột phải, có nền và bóng riêng */
+.exam-detail-page-question-card {
+    min-width: 0;
 }
 
 .exam-detail-page-meta {
@@ -162,7 +162,7 @@
     padding: 12px;
     background: rgba(255, 255, 255, 0.9);
     border-radius: 10px;
-    box-shadow: 0 0 12px rgba(0, 0, 0, 0.2);
+    /* Không đổ bóng cả khối Phần; bóng đặt ở từng thẻ câu (.exam-question-item-content) */
 }
 
 .question-group:last-child {

@@ -6,8 +6,20 @@
     min-width: 0;
 }
 
-.exam-matrix-cell-editor__card {
+/* Card từng ô (lồng trong card "Các ô của ma trận"): viền 2px như các khung bên trong trang Tạo đề thi.
+   Tiêu đề ô nền xám nhạt để phân biệt với tiêu đề card ngoài (#e3effa) */
+.exam-matrix-cell-editor .exam-matrix-cell-editor__card {
     border-radius: 8px;
+    border-width: 2px;
+    /* Bóng đổ quanh từng ô, cùng kiểu khối Phần ở trang Chi tiết đề (.question-group trong ExamDetailPage.css) */
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.2);
+}
+
+.exam-matrix-cell-editor .exam-matrix-cell-editor__card>.ant-card-head {
+    background-color: #f5f5f5;
+    border-bottom-width: 2px;
+    /* Khớp góc bo 8px của card (trừ viền 2px) */
+    border-radius: 6px 6px 0 0;
 }
 
 .exam-matrix-cell-editor__label.ant-typography {

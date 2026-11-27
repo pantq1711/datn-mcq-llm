@@ -12,8 +12,9 @@ html:has(.auth-layout) {
     background: #867f73;
 }
 
+/* Hàng tiêu đề mọi bảng: xanh rất nhạt (cột đang sắp xếp/di chuột đặt ở theme Table trong main.tsx) */
 .ant-table-wrapper .ant-table-thead>tr>th {
-    background-color: #ececec;
+    background-color: #e3effa;
 }
 
 textarea,

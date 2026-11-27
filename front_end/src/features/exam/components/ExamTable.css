@@ -14,6 +14,11 @@
     white-space: nowrap;
 }
 
+/* Dải phân cách giữa các đề: dày hơn mặc định 1px của antd Table (cùng kiểu bảng ngân hàng câu hỏi, ma trận) */
+.exam-table .ant-table-wrapper .ant-table-tbody>tr>td {
+    border-bottom: 2px solid #ececec;
+}
+
 /* Bấm cả dòng để mở đề */
 .exam-table .exam-table-row-clickable {
     cursor: pointer;
