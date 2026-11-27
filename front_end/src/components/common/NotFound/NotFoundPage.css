@@ -1,0 +1,18 @@
+.not-found-page {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 100vh;
+}
+
+/* Phần dưới thanh đầu trang (64px): khối 404 nằm giữa, nền như trang Đăng nhập */
+.not-found-page-content {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: calc(100vh - 64px);
+    padding: 24px 16px;
+    box-sizing: border-box;
+    background: #f0f2f5;
+}

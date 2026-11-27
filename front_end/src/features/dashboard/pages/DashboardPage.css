@@ -68,6 +68,14 @@
     margin-inline-end: 0;
 }
 
+/* "3 câu cần xem kỹ": chữ cam nâu đậm trên nền cam nhạt (khoảng 5,2:1), cùng màu thẻ "Cần xem kỹ" ở trang đề
+   (màu volcano mặc định của antd chỉ khoảng 4,37:1) */
+.dashboard-recent-title-row .dashboard-recent-review-tag.ant-tag {
+    color: #ad4e00;
+    background: #fff7e6;
+    border-color: #ffd591;
+}
+
 .dashboard-recent-title {
     font-size: 16px;
 }

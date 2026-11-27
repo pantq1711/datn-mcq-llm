@@ -9,7 +9,7 @@ interface ImportSummaryProps {
     batch: ImportBatch;
 }
 
-/** Tóm tắt một lần nhập: tên, khối, chủ đề, số câu đọc được / chọn được / bị chặn, giờ hết hạn (chỉ để biết, không đếm ngược). */
+/** Tóm tắt một lần nhập: tên, lớp, chủ đề, số câu đọc được / chọn được / bị chặn, giờ hết hạn (chỉ để biết, không đếm ngược). */
 export default function ImportSummary({ batch }: ImportSummaryProps) {
     return (
         <Card size="small" className="import-summary">
@@ -17,7 +17,7 @@ export default function ImportSummary({ batch }: ImportSummaryProps) {
                 {batch.displayName}
             </Title>
             <Text type="secondary">
-                Khối {batch.gradeLevel}
+                Lớp {batch.gradeLevel}
                 {batch.topic ? ` · ${batch.topic}` : ""}
             </Text>
             <div className="import-summary-counts">

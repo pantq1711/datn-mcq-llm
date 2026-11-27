@@ -1,8 +1,8 @@
-import { Button, Card, Col, Empty, Input, InputNumber, Popconfirm, Row, Select, Space, Typography } from 'antd';
+import { Alert, Button, Card, Col, Empty, Input, InputNumber, Popconfirm, Row, Select, Space, Typography } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 
 import type { ExamMatrixCellInput, MatrixDifficulty, MatrixQuestionType } from '../types/examMatrix.types';
-import { MATRIX_LEVELS, MATRIX_LEVEL_LABELS, MATRIX_TYPE_LABELS, createEmptyCell, levelsUsed, withType } from '../../../utils/matrixCell.utils';
+import { MATRIX_LEVELS, MATRIX_LEVEL_LABELS, MATRIX_TYPE_LABELS, createEmptyCell, levelsUsed, matrixCellAnchorId, withType } from '../../../utils/matrixCell.utils';
 import './ExamMatrixCellEditor.css';
 
 const { Text } = Typography;
@@ -20,13 +20,22 @@ export interface ExamMatrixCellEditorProps {
     onChange: (cells: ExamMatrixCellInput[]) => void;
     /** Ma trận đã có đề: chỉ xem, không sửa ô (docs/api mục 7.1a). */
     readOnly?: boolean;
+    /** Ô lỗi khi bấm Lưu (rà soát D9): thẻ có viền đỏ và dòng lý do; trang bỏ đánh dấu khi ô thay đổi. */
+    errorIndex?: number | null;
+    errorReason?: string;
 }
 
 /**
  * Sửa ma trận theo từng ô (mỗi ô một Card): dạng câu, mức, số câu, chủ đề, nội dung, yêu cầu cần đạt theo mức.
  * Thứ tự Card là thứ tự ô gửi lên backend.
  */
-export function ExamMatrixCellEditor({ value, onChange, readOnly = false }: ExamMatrixCellEditorProps) {
+export function ExamMatrixCellEditor({
+    value,
+    onChange,
+    readOnly = false,
+    errorIndex = null,
+    errorReason,
+}: ExamMatrixCellEditorProps) {
     const updateCell = (index: number, next: ExamMatrixCellInput) => {
         onChange(value.map((cell, i) => (i === index ? next : cell)));
     };
@@ -55,8 +64,9 @@ export function ExamMatrixCellEditor({ value, onChange, readOnly = false }: Exam
             {value.map((cell, index) => (
                 <Card
                     key={index}
+                    id={matrixCellAnchorId(index)}
                     size="small"
-                    className="exam-matrix-cell-editor__card"
+                    className={`exam-matrix-cell-editor__card${errorIndex === index ? " exam-matrix-cell-editor__card--error" : ""}`}
                     title={
                         <Space size={8}>
                             <Text strong>Ô {index + 1}</Text>
@@ -77,6 +87,9 @@ export function ExamMatrixCellEditor({ value, onChange, readOnly = false }: Exam
                         )
                     }
                 >
+                    {errorIndex === index && errorReason && (
+                        <Alert type="error" showIcon message={errorReason} className="exam-matrix-cell-editor__error" />
+                    )}
                     <Row gutter={[12, 12]}>
                         {/* Cột dạng câu rộng hơn để đủ tên "Trắc nghiệm nhiều phương án (Phần I)" ở chữ 16px */}
                         <Col xs={24} md={10}>

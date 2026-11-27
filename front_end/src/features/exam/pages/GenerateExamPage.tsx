@@ -9,7 +9,8 @@ import MaterialManagerModal from "../../materials/components/MaterialManagerModa
 import type { MaterialDto } from "../../materials/types/material.types";
 import type { ExamSubjectOption, BuildResultDto, CellContextInput, BuildExamRequest, ExamChallenge, TeacherRequestCode } from "../types/exam.types";
 import { EXAM_CHALLENGE_OPTIONS, TEACHER_REQUEST_OPTIONS, teacherRequestOptionsFor } from "../types/exam.types";
-import type { ExamMatrix, ExamMatrixDetail, ExamMatrixCellPayload } from "../../exam-matrix/types/examMatrix.types";
+import type { ExamMatrixSummary, ExamMatrixDetail, ExamMatrixCellPayload } from "../../exam-matrix/types/examMatrix.types";
+import { describeMatrixOption } from "../utils/matrixOption";
 import { getCatalogSubjects, buildExamByMatrix } from "../services/examApi";
 import { describeLevel, QUESTION_TYPE_LABELS } from "../../../utils/exam.utils";
 import type { ExamQuestionType } from "../types/exam.types";
@@ -81,7 +82,8 @@ export default function GenerateExamPage() {
     const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
 
     // State cho Tab ma trận
-    const [matrices, setMatrices] = useState<ExamMatrix[]>([]);
+    // Danh sách từ GET /api/exam-matrices (MatrixSummaryDto): có createdAt, cellCount, examCount để phân biệt ma trận trùng tên
+    const [matrices, setMatrices] = useState<ExamMatrixSummary[]>([]);
     const [loadingMatrices, setLoadingMatrices] = useState<boolean>(false);
     const [selectedMatrixId, setSelectedMatrixId] = useState<string | null>(initialMatrixId);
     const [matrixDetail, setMatrixDetail] = useState<ExamMatrixDetail | null>(null);
@@ -330,12 +332,18 @@ export default function GenerateExamPage() {
     // id từ URL là chuỗi, id từ API có thể là số: so sánh theo chuỗi
     const selectedMatrix = matrices.find((m) => String(m.id) === String(selectedMatrixId)) || null;
 
+    // Mỗi mục: nhãn một dòng (tên · Lớp · ngày tạo) và dòng phụ (giờ tạo · số ô · số đề đã dùng) để phân biệt các ma
+    // trận trùng tên (rà soát E1). Tên môn chỉ ghi khi hệ thống có từ 2 môn trở lên.
     const matrixSelectOptions = matrices.map((m) => {
-        const sub = subjectOptions.find((s) => s.value === m.subjectId);
+        const sub = subjectOptions.length > 1 ? subjectOptions.find((s) => s.value === m.subjectId) : undefined;
+        const text = describeMatrixOption(m, sub?.label);
         return {
             value: String(m.id),
-            // Ma trận cũ chưa có lớp: bỏ hẳn phần lớp, không hiện "Khối null" (rà soát giao diện E2)
-            label: `${m.name}${m.gradeLevel != null ? ` — Lớp ${m.gradeLevel}` : ""}${sub ? ` (${sub.label})` : ""}`,
+            label: text.label,
+            meta: text.meta,
+            gradeLevel: m.gradeLevel,
+            name: m.name,
+            searchText: text.searchText,
         };
     });
 
@@ -567,11 +575,28 @@ export default function GenerateExamPage() {
                                                                 options={matrixSelectOptions}
                                                                 placeholder="Chọn ma trận..."
                                                                 showSearch
+                                                                // Tìm theo tên, lớp, ngày tạo (gõ "16/11" hay "lớp 8" đều ra)
                                                                 filterOption={(input, opt) =>
-                                                                    (opt?.label ?? "")
-                                                                        .toLowerCase()
-                                                                        .includes(input.toLowerCase())
+                                                                    (opt?.searchText ?? "").includes(
+                                                                        input.trim().toLocaleLowerCase("vi-VN")
+                                                                    )
                                                                 }
+                                                                // Danh sách thả xuống: hai dòng mỗi mục; ô đã chọn chỉ hiện nhãn một dòng
+                                                                optionRender={(option) => (
+                                                                    <div className="generate-exam-matrix-option">
+                                                                        <div className="generate-exam-matrix-option-title">
+                                                                            <span className="generate-exam-matrix-option-name">
+                                                                                {option.data.name}
+                                                                            </span>
+                                                                            {option.data.gradeLevel != null && (
+                                                                                <Tag color="geekblue">Lớp {option.data.gradeLevel}</Tag>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="generate-exam-matrix-option-meta">
+                                                                            {option.data.meta}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
                                                             />
                                                         </Form.Item>
                                                     </Col>

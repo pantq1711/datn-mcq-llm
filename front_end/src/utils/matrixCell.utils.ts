@@ -66,29 +66,56 @@ export function normalizeCell(cell: ExamMatrixCellInput): ExamMatrixCellInput {
         : { ...base, difficulty: cell.difficulty };
 }
 
-/** Kiểm tra như backend, báo theo số ô ("Ô 2: ..."); trả null nếu hợp lệ. */
-export function validateCells(cells: ExamMatrixCellInput[]): string | null {
-    if (cells.length === 0) return "Ma trận cần ít nhất một ô.";
+/** id của thẻ ô thứ `index` (từ 0) trong trang sửa ma trận, để cuộn tới thẻ ô lỗi. */
+export const matrixCellAnchorId = (index: number) => `matrix-cell-${index}`;
+
+export interface CellError {
+    /** Vị trí ô lỗi đầu tiên (từ 0); null khi lỗi không thuộc ô nào ("cần ít nhất một ô"). */
+    index: number | null;
+    /** Câu báo đầy đủ kèm số ô, như backend: "Ô 2: chưa nhập chủ đề." */
+    message: string;
+    /** Lý do không kèm số ô, hiện ngay trong thẻ ô lỗi: "Chưa nhập chủ đề." */
+    reason: string;
+}
+
+/** Lý do ô không hợp lệ (viết thường đầu câu để ghép sau "Ô k: "); null nếu ô hợp lệ. Kiểm như backend. */
+function cellIssue(cell: ExamMatrixCellInput): string | null {
+    if (!cell.topic?.trim()) return "chưa nhập chủ đề.";
+    if (!Number.isInteger(cell.questionCount) || cell.questionCount < 1 || cell.questionCount > 50) {
+        return "số câu phải từ 1 đến 50.";
+    }
+    if (cell.questionType === "tf") {
+        if (cell.statementDifficulties?.length !== 4 || cell.statementDifficulties.some((d) => !d)) {
+            return "câu đúng/sai phải chọn đủ mức cho 4 ý a-d.";
+        }
+    } else if (!cell.difficulty) {
+        return "chưa chọn mức độ.";
+    }
+    const missing = levelsUsed(cell).filter((level) => !cell.learningOutcomes[level]?.trim());
+    if (missing.length > 0) {
+        return `thiếu yêu cầu cần đạt mức ${missing.map((l) => MATRIX_LEVEL_LABELS[l]).join(", ")}.`;
+    }
+    return null;
+}
+
+/** Ô lỗi đầu tiên kèm vị trí, để trang cuộn tới thẻ ô và đánh dấu lỗi trong thẻ (rà soát D9); null nếu mọi ô hợp lệ. */
+export function findCellError(cells: ExamMatrixCellInput[]): CellError | null {
+    if (cells.length === 0) {
+        const message = "Ma trận cần ít nhất một ô.";
+        return { index: null, message, reason: message };
+    }
     for (let i = 0; i < cells.length; i++) {
-        const cell = cells[i];
-        const label = `Ô ${i + 1}`;
-        if (!cell.topic?.trim()) return `${label}: chưa nhập chủ đề.`;
-        if (!Number.isInteger(cell.questionCount) || cell.questionCount < 1 || cell.questionCount > 50) {
-            return `${label}: số câu phải từ 1 đến 50.`;
-        }
-        if (cell.questionType === "tf") {
-            if (cell.statementDifficulties?.length !== 4 || cell.statementDifficulties.some((d) => !d)) {
-                return `${label}: câu đúng/sai phải chọn đủ mức cho 4 ý a-d.`;
-            }
-        } else if (!cell.difficulty) {
-            return `${label}: chưa chọn mức độ.`;
-        }
-        const missing = levelsUsed(cell).filter((level) => !cell.learningOutcomes[level]?.trim());
-        if (missing.length > 0) {
-            return `${label}: thiếu yêu cầu cần đạt mức ${missing.map((l) => MATRIX_LEVEL_LABELS[l]).join(", ")}.`;
+        const issue = cellIssue(cells[i]);
+        if (issue) {
+            return { index: i, message: `Ô ${i + 1}: ${issue}`, reason: issue.charAt(0).toUpperCase() + issue.slice(1) };
         }
     }
     return null;
+}
+
+/** Kiểm tra như backend, báo theo số ô ("Ô 2: ..."); trả null nếu hợp lệ. */
+export function validateCells(cells: ExamMatrixCellInput[]): string | null {
+    return findCellError(cells)?.message ?? null;
 }
 
 /** Tổng như backend: số câu theo phần, lệnh hỏi theo mức (mỗi câu tf là 4 lệnh hỏi). */

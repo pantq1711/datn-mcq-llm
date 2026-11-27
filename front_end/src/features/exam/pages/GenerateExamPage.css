@@ -119,6 +119,35 @@
     box-shadow: 0 0 12px rgba(0, 0, 0, 0.2);
 }
 
+/* Mục trong ô "Chọn ma trận đề thi" (rà soát E1): tên + lớp trên, dòng phụ giờ tạo · số ô · số đề đã dùng dưới */
+.generate-exam-matrix-option {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 2px 0;
+    white-space: normal;
+}
+
+.generate-exam-matrix-option-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+}
+
+.generate-exam-matrix-option-name {
+    font-weight: 600;
+}
+
+.generate-exam-matrix-option-title .ant-tag {
+    margin-inline-end: 0;
+}
+
+.generate-exam-matrix-option-meta {
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.65);
+}
+
 .generate-exam-matrix-card {
     background: #ffffff;
     border-radius: 12px;

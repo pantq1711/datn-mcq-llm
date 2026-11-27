@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { createBrowserRouter, Route, RouterProvider, Routes } from "react-router-dom";
 import { Spin } from "antd";
 import AppRoutes from "./routes/AppRoutes";
 import ScrollToTop from "./components/common/ScrollToTop/ScrollToTop";
@@ -10,9 +10,10 @@ import { STUDENT_ROUTE } from "./features/assignment/studentPath";
 // thử refresh phiên giáo viên mỗi lần mở link).
 const StudentAssignmentPage = lazy(() => import("./features/assignment/student/StudentAssignmentPage"));
 
-function App() {
+/** Cây trang như trước (các <Routes> lồng nhau, AppRoutes giữ nguyên). */
+function Root() {
   return (
-    <BrowserRouter>
+    <>
       <ScrollToTop />
       <Routes>
         <Route
@@ -32,8 +33,16 @@ function App() {
           }
         />
       </Routes>
-    </BrowserRouter>
+    </>
   );
+}
+
+// Router kiểu "data router" để dùng được useBlocker (chặn rời trang khi còn thay đổi chưa lưu: bấm menu, nút Back).
+// Một route bắt mọi đường dẫn bọc cây <Routes> sẵn có, nên không phải viết lại danh sách trang.
+const router = createBrowserRouter([{ path: "*", element: <Root /> }]);
+
+function App() {
+  return <RouterProvider router={router} />;
 }
 
 export default App;

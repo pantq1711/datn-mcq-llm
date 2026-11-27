@@ -19,6 +19,7 @@ import { clearEditDraft, findEditDraftSlots, loadEditDraft } from "../utils/edit
 import { QcTraceModal } from '../components/QcTraceModal';
 import AssignExamModal from "../../assignment/components/AssignExamModal";
 import ExportWordDialog from '../components/ExportWordDialog';
+import { useUnsavedChangesBlocker } from '../../../hooks/useUnsavedChangesBlocker';
 
 const { Title, Text } = Typography;
 
@@ -87,7 +88,11 @@ export default function ExamDetailPage() {
     const [editingSlotId, setEditingSlotId] = useState<number | undefined>(undefined);
     const [editDirty, setEditDirty] = useState(false);
 
-    // Đóng tab hoặc tải lại trang khi đang sửa dở: trình duyệt hỏi lại (bấm menu sang trang khác thì chưa chặn được)
+    // Bấm menu, nút Back, "Bài đã giao"… khi đang sửa dở một câu: hỏi lại trước khi rời trang (hộp ở cuối trang)
+    const hasUnsavedEdit = useCallback(() => editDirty, [editDirty]);
+    const leaveBlocker = useUnsavedChangesBlocker(hasUnsavedEdit);
+
+    // Đóng tab hoặc tải lại trang khi đang sửa dở: trình duyệt hỏi lại
     useEffect(() => {
         if (!editDirty) return;
         const warn = (e: BeforeUnloadEvent) => {
@@ -248,14 +253,14 @@ export default function ExamDetailPage() {
         };
     }, [detail]);
 
-    // Giao bài online cần mọi câu đã Giữ hoặc Sửa
+    // Giao bài online cần mọi câu đã Lưu hoặc Sửa
     const notKeptCount = (detail?.parts ?? [])
         .flatMap((p) => p.items)
         .filter((i) => i.state !== "kept" && i.state !== "edited").length;
     // Đề có câu có hình giao được như mọi đề (A2): học sinh xem hình qua URL ký theo lượt làm
     const assignBlockReason =
         notKeptCount > 0
-            ? `Còn ${notKeptCount} câu chưa Giữ. Giữ hết các câu rồi mới giao bài được.`
+            ? `Còn ${notKeptCount} câu chưa lưu. Lưu hết các câu rồi mới giao bài được.`
             : "";
 
     // Đang lưu hàng loạt thì không tự tải lại giữa chừng (tải lại một lần khi xong)
@@ -333,7 +338,7 @@ export default function ExamDetailPage() {
         parts.forEach((p) => p.questions.forEach((q, i) => numbers.set(q.slotId ?? q.id, i + 1)));
         return numbers;
     }, [parts]);
-    
+
     const getNumber = useCallback(
         (question: ExamQuestionItem, index: number) => questionNumbers.get(question.slotId ?? question.id) ?? index + 1,
         [questionNumbers]
@@ -871,7 +876,7 @@ export default function ExamDetailPage() {
                     </div>
 
                     <Space size={8} className="exam-detail-page-actions">
-                        {/* Giao bài online: cần mọi câu đã Giữ/Sửa (backend cũng kiểm, 409 ASSIGN_NOT_ALL_KEPT) */}
+                        {/* Giao bài online: cần mọi câu đã Lưu/Sửa (backend cũng kiểm, 409 ASSIGN_NOT_ALL_KEPT) */}
                         <Tooltip title={assignBlockReason || undefined}>
                             <span>
                                 <Button
@@ -940,81 +945,107 @@ export default function ExamDetailPage() {
                     </aside>
                 )}
 
-            <div className="exam-detail-page-question-list">
-                {/* Không bọc card ngoài: mỗi Phần (.question-group) đã là một khối có nền và bóng riêng */}
-                <div className="exam-detail-page-question-card">
-                    {parts.length === 0 && (
-                        <ExamQuestionList questions={[]} />
-                    )}
+                <div className="exam-detail-page-question-list">
+                    {/* Không bọc card ngoài: mỗi Phần (.question-group) đã là một khối có nền và bóng riêng */}
+                    <div className="exam-detail-page-question-card">
+                        {parts.length === 0 && (
+                            <ExamQuestionList questions={[]} />
+                        )}
 
-                    {onlyNeedsAttention && parts.length > 0 && visibleParts.length === 0 && (
-                        <Empty
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description="Không còn câu cần xem kỹ hay câu chưa soạn được."
-                        />
-                    )}
-
-                    {visibleParts.map((p) => (
-                        <div key={p.part} className="question-group">
-                            <Title level={5} className="question-group-title">
-                                {PART_TITLES[p.part] ?? `Phần ${p.part}`}{" "}
-                                <Text type="secondary">({p.ready}/{p.required} câu)</Text>
-                            </Title>
-                            <ExamQuestionList
-                                questions={p.questions}
-                                getNumber={getNumber}
-                                showAllExplanations={showAllExplanations}
-                                onJumpTo={jumpToPosition}
-                                flashSlotId={flashSlotId}
-                                onChangeQuestion={(question) => {
-                                    setChangeQuestion(question);
-                                }}
-                                onKeep={handleKeep}
-                                bankKeepVisibility={detail.bankKeepVisibility}
-                                onEdit={startEdit}
-                                editingSlotId={editingSlotId}
-                                renderEditor={(question) => (
-                                    <EditQuestionForm
-                                        // Đổi chỗ thì mở form mới; trang tự tải lại đề không xóa chữ đang gõ
-                                        key={question.slotId}
-                                        question={question}
-                                        positionLabel={describePosition(question)}
-                                        examId={Number(examId)}
-                                        onSaved={handleSaveEditedQuestion}
-                                        onCancel={closeEditor}
-                                        onDirtyChange={setEditDirty}
-                                    />
-                                )}
-                                onViewQcTrace={(question, index) => {
-                                    if (question.slotId !== undefined) openQcTrace(question.slotId, getNumber(question, index));
-                                }}
+                        {onlyNeedsAttention && parts.length > 0 && visibleParts.length === 0 && (
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description="Không còn câu cần xem kỹ hay câu chưa soạn được."
                             />
-                        </div>
-                    ))}
+                        )}
 
-                    <ChangeQuestionModal
-                        open={changeQuestion !== null}
-                        question={changeQuestion}
-                        positionLabel={changeQuestion ? describePosition(changeQuestion) : undefined}
-                        loading={false}
-                        onCancel={() => setChangeQuestion(null)}
-                        onGenerate={handleGenerateReplacement}
-                    />
+                        {visibleParts.map((p) => (
+                            <div key={p.part} className="question-group">
+                                <Title level={5} className="question-group-title">
+                                    {PART_TITLES[p.part] ?? `Phần ${p.part}`}{" "}
+                                    <Text type="secondary">({p.ready}/{p.required} câu)</Text>
+                                </Title>
+                                <ExamQuestionList
+                                    questions={p.questions}
+                                    getNumber={getNumber}
+                                    showAllExplanations={showAllExplanations}
+                                    onJumpTo={jumpToPosition}
+                                    flashSlotId={flashSlotId}
+                                    onChangeQuestion={(question) => {
+                                        setChangeQuestion(question);
+                                    }}
+                                    onKeep={handleKeep}
+                                    bankKeepVisibility={detail.bankKeepVisibility}
+                                    onEdit={startEdit}
+                                    editingSlotId={editingSlotId}
+                                    renderEditor={(question) => (
+                                        <EditQuestionForm
+                                            // Đổi chỗ thì mở form mới; trang tự tải lại đề không xóa chữ đang gõ
+                                            key={question.slotId}
+                                            question={question}
+                                            positionLabel={describePosition(question)}
+                                            examId={Number(examId)}
+                                            onSaved={handleSaveEditedQuestion}
+                                            onCancel={closeEditor}
+                                            onDirtyChange={setEditDirty}
+                                        />
+                                    )}
+                                    onViewQcTrace={(question, index) => {
+                                        if (question.slotId !== undefined) openQcTrace(question.slotId, getNumber(question, index));
+                                    }}
+                                />
+                            </div>
+                        ))}
 
-
-                    {/* Modal hiển thị vết QC cho slot được chọn */}
-                    {selectedSlotId && (
-                        <QcTraceModal
-                            examId={examId!}
-                            slotId={selectedSlotId}
-                            questionNo={selectedQuestionNo}
-                            visible={qcModalVisible}
-                            onClose={() => setQcModalVisible(false)}
+                        <ChangeQuestionModal
+                            open={changeQuestion !== null}
+                            question={changeQuestion}
+                            positionLabel={changeQuestion ? describePosition(changeQuestion) : undefined}
+                            loading={false}
+                            onCancel={() => setChangeQuestion(null)}
+                            onGenerate={handleGenerateReplacement}
                         />
-                    )}
+
+
+                        {/* Modal hiển thị vết QC cho slot được chọn */}
+                        {selectedSlotId && (
+                            <QcTraceModal
+                                examId={examId!}
+                                slotId={selectedSlotId}
+                                questionNo={selectedQuestionNo}
+                                visible={qcModalVisible}
+                                onClose={() => setQcModalVisible(false)}
+                            />
+                        )}
+                    </div>
                 </div>
             </div>
-            </div>
+
+            {/* Rời trang (menu, nút Back…) khi đang sửa dở một câu: cùng câu chữ với hộp hỏi khi đổi sang sửa câu khác */}
+            <Modal
+                open={leaveBlocker.blocked}
+                title="Bỏ các thay đổi chưa lưu?"
+                onCancel={leaveBlocker.stay}
+                footer={[
+                    <Button key="stay" autoFocus onClick={leaveBlocker.stay}>
+                        Tiếp tục sửa
+                    </Button>,
+                    <Button
+                        key="discard"
+                        danger
+                        onClick={() => {
+                            // Chọn bỏ thì xóa luôn bản sửa dở lưu tạm trong tab, quay lại đề không mở lại form
+                            if (editingSlotId !== undefined) clearEditDraft(Number(examId), editingSlotId);
+                            setEditDirty(false);
+                            leaveBlocker.leave();
+                        }}
+                    >
+                        Bỏ thay đổi
+                    </Button>,
+                ]}
+            >
+                Thầy/cô đang sửa dở một câu. Rời trang thì bản đang sửa sẽ mất.
+            </Modal>
         </div>
     );
 }

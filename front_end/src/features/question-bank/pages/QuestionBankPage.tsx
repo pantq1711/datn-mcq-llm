@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Card, message, Typography } from "antd";
 import { FileWordOutlined, ReadOutlined } from "@ant-design/icons";
@@ -67,7 +67,11 @@ export default function QuestionBankPage() {
         fetchSubjects();
     }, []);
 
+    // Bộ đếm lượt tải: lọc ngay khi đổi ô chọn có thể gửi nhiều lượt liền nhau; lượt cũ về muộn thì bỏ, không đè lượt mới
+    const fetchSequenceRef = useRef(0);
+
     const fetchQuestions = async (currentPage = page, currentPageSize = pageSize, currentFilters = filters, currentSort = sort) => {
+        const fetchId = ++fetchSequenceRef.current;
         setLoadingTable(true);
         try {
             const res = await getBankItems({
@@ -76,13 +80,15 @@ export default function QuestionBankPage() {
                 ...currentFilters,
                 sort: currentSort,
             });
+            if (fetchId !== fetchSequenceRef.current) return;
             setQuestions(res.items || []);
             setTotalQuestions(res.totalItems ?? res.total ?? 0);
         } catch (error) {
+            if (fetchId !== fetchSequenceRef.current) return;
             console.error("Lỗi khi tải danh sách câu hỏi ngân hàng:", error);
             message.error("Không thể tải danh sách câu hỏi.");
         } finally {
-            setLoadingTable(false);
+            if (fetchId === fetchSequenceRef.current) setLoadingTable(false);
         }
     };
 
@@ -92,9 +98,10 @@ export default function QuestionBankPage() {
     }, [page, pageSize]);
 
 
-    const handleFilter = () => {
+    // `next`: bộ lọc vừa đổi khi lọc ngay lúc đổi ô chọn (state `filters` lúc đó chưa kịp cập nhật)
+    const handleFilter = (next: QuestionFilterValues = filters) => {
         setPage(1); // Reset về trang 1 khi lọc
-        fetchQuestions(1, pageSize, filters, sort);
+        fetchQuestions(1, pageSize, next, sort);
     };
 
     const handleViewQuestion = async (questionItem: QuestionTableItem) => {

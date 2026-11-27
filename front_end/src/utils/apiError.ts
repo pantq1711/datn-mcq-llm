@@ -1,4 +1,5 @@
 import { Modal, message } from "antd";
+import { createElement } from "react";
 
 interface ApiErrorBody {
     error?: string;
@@ -62,12 +63,48 @@ export function isLimitError(error: unknown): boolean {
     return status === 429 && code !== undefined && LIMIT_ERROR_CODES.includes(code);
 }
 
-/** Báo lỗi API: lỗi giới hạn hiện hộp thoại phải bấm đóng, lỗi khác hiện thông báo ngắn. */
+// Câu hết hạn mức ngày của backend (GenerationQuotaService.dailyMessage): rút số liệu để viết lại thành dòng ngắn
+const DAILY_LIMIT_PATTERN =
+    /tối đa (\d+) câu mỗi ngày[\s\S]*?đã dùng (\d+) câu[\s\S]*?yêu cầu này cần (\d+) câu[\s\S]*?từ 0 giờ ngày ([\d/]+)/;
+
+/** Tách theo câu: cắt sau dấu chấm có khoảng trắng theo sau (ngày "17/11/2026", giờ "07:00" không bị cắt). */
+function splitSentences(text: string): string[] {
+    return text.split(/(?<=\.)\s+/).map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * Các dòng hiện trong hộp lỗi giới hạn (rà soát E14). Hết hạn mức ngày: viết lại thành dòng ngắn từ số liệu trong câu
+ * backend; câu không khớp mẫu (backend đổi lời) thì tách theo câu như mọi lỗi giới hạn khác, không mất chữ nào.
+ */
+export function limitMessageLines(code: string | undefined, text: string): string[] {
+    if (code === "DAILY_GENERATION_LIMIT") {
+        const m = DAILY_LIMIT_PATTERN.exec(text);
+        if (m) {
+            const [, limit, used, requested, date] = m;
+            return [
+                `Hôm nay đã dùng ${used}/${limit} câu.`,
+                `Yêu cầu này cần ${requested} câu.`,
+                `Tạo tiếp được từ 0 giờ ngày ${date}, hoặc dùng câu có sẵn trong ngân hàng.`,
+            ];
+        }
+    }
+    return splitSentences(text);
+}
+
+/** Thông báo lỗi thường giữ 7 giây (mặc định antd 3 giây quá nhanh để đọc hết; rà soát A5). */
+const ERROR_MESSAGE_SECONDS = 7;
+
+/** Báo lỗi API: lỗi giới hạn hiện hộp thoại phải bấm đóng (mỗi ý một dòng), lỗi khác hiện thông báo 7 giây. */
 export function showApiError(error: unknown, fallback: string): void {
     const text = getApiErrorMessage(error, fallback);
     if (isLimitError(error)) {
-        Modal.warning({ title: "Chưa tạo được lúc này", content: text, okText: "Đã hiểu" });
+        const lines = limitMessageLines(getBody(error)?.code, text);
+        Modal.warning({
+            title: "Chưa tạo được lúc này",
+            content: createElement("div", null, ...lines.map((line, i) => createElement("div", { key: i }, line))),
+            okText: "Đã hiểu",
+        });
         return;
     }
-    message.error(text);
+    message.error(text, ERROR_MESSAGE_SECONDS);
 }

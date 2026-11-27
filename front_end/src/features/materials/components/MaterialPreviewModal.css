@@ -22,3 +22,11 @@
     margin-bottom: 0 !important;
     font-size: 14px;
 }
+
+/* Công thức riêng dòng ($$...$$) rộng hơn hộp thì cuộn ngang trong khung công thức, như thẻ câu trang Chi tiết đề */
+.material-preview-text .katex-display {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 4px 0;
+}
