@@ -1,7 +1,7 @@
-import { Alert, Button, Card, Space, Typography, message, Form, Spin } from 'antd';
+import { Alert, Button, Card, Modal, Space, Typography, message, Form, Spin } from 'antd';
 import { ArrowLeftOutlined, CopyOutlined, SaveOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ExamMatrixBasicInfoForm, type ExamMatrixBasicInfoValues, type ExamMatrixSubjectOption } from '../components/ExamMatrixBasicInfoForm';
 import { ExamMatrixCellEditor } from '../components/ExamMatrixCellEditor';
@@ -9,7 +9,8 @@ import { ExamMatrixTotalSummary } from '../components/ExamMatrixTotalSummary';
 import { createExamMatrix, updateExamMatrix, getExamMatrix, duplicateExamMatrix } from '../services/examMatrixService';
 import { getCatalogSubjects } from '../../exam/services/examApi';
 import type { CreateExamMatrixPayload, ExamMatrixCellInput } from '../types/examMatrix.types';
-import { createEmptyCell, normalizeCell, toCellInput, validateCells } from '../../../utils/matrixCell.utils';
+import { createEmptyCell, findCellError, matrixCellAnchorId, normalizeCell, summarizeCells, toCellInput } from '../../../utils/matrixCell.utils';
+import { useUnsavedChangesBlocker } from '../../../hooks/useUnsavedChangesBlocker';
 import './ExamMatrixFormPage.css';
 
 const { Title, Text, Paragraph } = Typography;
@@ -27,7 +28,16 @@ export default function ExamMatrixFormPage() {
     const [loading, setLoading] = useState(false);
     const [duplicating, setDuplicating] = useState(false);
 
-    const [cells, setCells] = useState<ExamMatrixCellInput[]>(() => [createEmptyCell()]);
+    const [cells, setCellsState] = useState<ExamMatrixCellInput[]>(() => [createEmptyCell()]);
+    // Ô lỗi lần bấm Lưu gần nhất (rà soát D9): thẻ ô đó viền đỏ kèm lý do; sửa bất kỳ ô nào thì bỏ đánh dấu
+    const [cellError, setCellError] = useState<{ index: number; reason: string } | null>(null);
+    // Danh sách ô mới nhất cho phần hỏi lại khi rời trang (D8); cập nhật cùng lúc đổi state, không gán trong lúc render
+    const cellsRef = useRef(cells);
+    const setCells = (next: ExamMatrixCellInput[]) => {
+        cellsRef.current = next;
+        setCellsState(next);
+        setCellError(null);
+    };
     // Ma trận đã có đề: giữ nguyên ô gốc để gửi lại đúng cấu trúc cũ (backend trả 200, không đổi gì)
     const [originalCells, setOriginalCells] = useState<ExamMatrixCellInput[]>([]);
     const [examCount, setExamCount] = useState(0);
@@ -39,9 +49,43 @@ export default function ExamMatrixFormPage() {
     const [loadingSubjects, setLoadingSubjects] = useState(false);
 
     const pageTitle = isEditMode ? 'Chỉnh sửa ma trận' : 'Tạo ma trận';
+    // Tổng số câu theo Phần cho thanh Lưu dưới đáy (cùng cách tính với cột Tổng quan)
+    const totals = summarizeCells(cells);
+
+    // ===== Thay đổi chưa lưu (rà soát D8) =====
+    // Ô: so với bản chụp lúc mở trang (ô trống khi tạo mới, ô vừa nạp khi sửa); thông tin chung: ô giáo viên đã tự sửa
+    // (isFieldsTouched bỏ qua giá trị trang tự điền như môn Toán, ma trận nạp để sửa). Đọc qua ref lúc cần hỏi.
+    const cellsSnapshotRef = useRef(JSON.stringify(cells));
+    // Lưu xong thì không hỏi nữa (đang chuyển về danh sách)
+    const savedRef = useRef(false);
+    const hasUnsavedChanges = useCallback(
+        () => !savedRef.current
+            && (basicForm.isFieldsTouched() || JSON.stringify(cellsRef.current) !== cellsSnapshotRef.current),
+        [basicForm]
+    );
+
+    // Đóng tab hoặc tải lại trang khi còn thay đổi chưa lưu: trình duyệt hỏi lại
+    useEffect(() => {
+        const warn = (e: BeforeUnloadEvent) => {
+            if (!hasUnsavedChanges()) return;
+            e.preventDefault();
+            e.returnValue = '';
+        };
+        window.addEventListener('beforeunload', warn);
+        return () => window.removeEventListener('beforeunload', warn);
+    }, [hasUnsavedChanges]);
+
+    // Mọi lần rời trang trong ứng dụng (nút Hủy / Quay lại, menu bên trái, nút Back) đi qua một chỗ: còn thay đổi chưa lưu
+    // thì chặn lại và hiện hộp "Ma trận chưa lưu"; chọn rời thì đi tiếp tới đúng nơi định tới
+    const leaveBlocker = useUnsavedChangesBlocker(hasUnsavedChanges);
 
     const handleCancel = () => {
         navigate('/exam-matrices');
+    };
+
+    const leaveWithoutSaving = () => {
+        savedRef.current = true;
+        leaveBlocker.leave();
     };
 
     useEffect(() => {
@@ -58,8 +102,19 @@ export default function ExamMatrixFormPage() {
 
         const payloadCells = isLocked ? originalCells : cells;
         if (!isLocked) {
-            const cellError = validateCells(payloadCells);
-            if (cellError) throw new Error(cellError);
+            const found = findCellError(payloadCells);
+            if (found) {
+                // Đánh dấu thẻ ô lỗi và cuộn thẻ ra giữa màn hình (không bị thanh đầu trang, thanh Lưu dưới đáy che)
+                if (found.index !== null) {
+                    const index = found.index;
+                    setCellError({ index, reason: found.reason });
+                    window.setTimeout(() => {
+                        document.getElementById(matrixCellAnchorId(index))
+                            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 0);
+                }
+                throw new Error(found.message);
+            }
         }
 
         const notes = (basicValues.notesText ?? '')
@@ -88,9 +143,23 @@ export default function ExamMatrixFormPage() {
                 await createExamMatrix(payload);
                 message.success(`Đã tạo ma trận "${payload.name}" thành công!`);
             }
-            navigate('/exam-matrices');
+            savedRef.current = true;
+            // "Lưu rồi rời trang": đi tiếp tới nơi đang định tới (menu, Back…); bấm Lưu thường thì về danh sách
+            if (leaveBlocker.blocked) {
+                leaveBlocker.leave();
+            } else {
+                navigate('/exam-matrices');
+            }
         } catch (error: any) {
+            // "Lưu rồi rời trang" mà còn lỗi: đóng hộp để thấy ô lỗi (đã đánh dấu và cuộn tới), ở lại trang
+            if (leaveBlocker.blocked) leaveBlocker.stay();
             if (error?.errorFields) {
+                // Trang tự gọi validateFields (không qua onFinish) nên scrollToFirstError của Form không chạy: tự cuộn ô
+                // lỗi đầu tiên ra giữa màn hình và đặt con trỏ vào đó (rà soát D9)
+                const firstField = error.errorFields[0]?.name;
+                if (firstField) {
+                    basicForm.scrollToField(firstField, { behavior: 'smooth', block: 'center', focus: true });
+                }
                 message.error("Vui lòng điền đầy đủ các thông tin bắt buộc!");
                 return;
             }
@@ -133,7 +202,10 @@ export default function ExamMatrixFormPage() {
                 });
                 // Giữ đủ từng ô theo thứ tự (không gộp theo dạng × mức như trước)
                 const loadedCells = (data.cells ?? []).map(toCellInput);
-                setCells(loadedCells);
+                setCellsState(loadedCells);
+                // Bản chụp để biết có sửa ô hay chưa (rà soát D8)
+                cellsRef.current = loadedCells;
+                cellsSnapshotRef.current = JSON.stringify(loadedCells);
                 setOriginalCells(loadedCells);
                 setExamCount(data.examCount ?? 0);
                 setMissingGrade(data.gradeLevel == null);
@@ -243,6 +315,8 @@ export default function ExamMatrixFormPage() {
                                     value={cells}
                                     onChange={setCells}
                                     readOnly={isLocked}
+                                    errorIndex={cellError?.index ?? null}
+                                    errorReason={cellError?.reason}
                                 />
                             </Card>
                         </div>
@@ -269,6 +343,40 @@ export default function ExamMatrixFormPage() {
                             </Card>
                         </aside>
                     </div>
+
+                    {/* Thanh dính đáy màn hình (rà soát D5): tổng số câu theo Phần và nút Lưu luôn thấy khi sửa ô ở giữa form */}
+                    <div className="exam-matrix-form-page__save-bar">
+                        <Text strong className="exam-matrix-form-page__save-bar-total">
+                            Tổng {totals.totalQuestions} câu ({totals.questionsByPart.I} · {totals.questionsByPart.II} ·{' '}
+                            {totals.questionsByPart.III})
+                        </Text>
+                        <Space wrap className="exam-matrix-form-page__save-bar-actions">
+                            <Button onClick={handleCancel}>Hủy</Button>
+                            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>
+                                Lưu ma trận
+                            </Button>
+                        </Space>
+                    </div>
+
+                    {/* Rời trang khi còn thay đổi chưa lưu (rà soát D8): ba lựa chọn, nút an toàn "Ở lại" được chọn sẵn */}
+                    <Modal
+                        open={leaveBlocker.blocked}
+                        title="Ma trận chưa lưu"
+                        onCancel={leaveBlocker.stay}
+                        footer={[
+                            <Button key="stay" autoFocus onClick={leaveBlocker.stay}>
+                                Ở lại
+                            </Button>,
+                            <Button key="discard" danger onClick={leaveWithoutSaving}>
+                                Rời trang, bỏ thay đổi
+                            </Button>,
+                            <Button key="save" type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>
+                                Lưu rồi rời trang
+                            </Button>,
+                        ]}
+                    >
+                        Thầy/cô có thay đổi chưa lưu. Rời trang thì các thay đổi này sẽ mất.
+                    </Modal>
                 </>
             )}
         </main>

@@ -25,6 +25,18 @@
     min-width: 0;
 }
 
+/* Nút mở khung "Lọc thêm": chữ xanh đậm, không viền, đứng trước hai nút Lọc / Đặt lại */
+.question-filters-actions .question-filters-more-toggle {
+    color: #0958d9;
+    font-weight: 500;
+}
+
+/* Khung "Lọc thêm": tách khỏi mặt chính bằng một đường gạch đứt phía trên */
+.question-filters-more {
+    padding-top: 16px;
+    border-top: 2px dashed #f0f0f0;
+}
+
 .question-filter-topic-option {
     display: flex;
     justify-content: space-between;

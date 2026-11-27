@@ -2,6 +2,7 @@ import { Alert, Button, Card, Modal, Space, Spin, Tag, Typography } from "antd";
 import type { MaterialDto } from "../types/material.types";
 import "./MaterialPreviewModal.css";
 import { describeMaterialWarning, formatBytes } from "../../../utils/material.utils";
+import MathText from "../../../components/common/MathText/MathText";
 
 const { Paragraph } = Typography;
 
@@ -74,7 +75,14 @@ export default function MaterialPreviewModal({
 
                     <Card size="small" title="Nội dung đã đọc (500 ký tự đầu)">
                         <Paragraph className="material-preview-text">
-                            {material.textPreview || "Không có đoạn xem trước."}
+                            {!material.textPreview
+                                ? "Không có đoạn xem trước."
+                                // Chỉ docx có quy ước công thức $...$ (pandoc, MathType → LaTeX). PDF/txt giữ chữ thô: dấu $
+                                // thật (giá tiền…) không bị vẽ nhầm thành công thức; công thức trong PDF vốn méo khi trích.
+                                // Đoạn cắt ở 500 ký tự giữa công thức: MathText giữ phần thiếu dấu đóng như chữ thường.
+                                : material.kind === "docx"
+                                    ? <MathText text={material.textPreview} />
+                                    : material.textPreview}
                         </Paragraph>
                     </Card>
                 </div>

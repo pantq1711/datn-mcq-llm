@@ -100,14 +100,17 @@ export default function DashboardPage() {
                                         <Text strong className="dashboard-recent-title">
                                             {exam.title}
                                         </Text>
+                                        {/* Ghi rõ số câu (rà soát C3); màu cam nâu đậm như thẻ "Cần xem kỹ" ở trang đề */}
                                         {(exam.needsReviewSlots ?? 0) > 0 && (
-                                            <Tag color="volcano" icon={<WarningOutlined />}>
-                                                Cần xem kỹ
+                                            <Tag icon={<WarningOutlined />} className="dashboard-recent-review-tag">
+                                                {exam.needsReviewSlots} câu cần xem kỹ
                                             </Tag>
                                         )}
                                     </div>
                                     <div className="dashboard-recent-meta">
                                         {exam.createdAt ? dayjs(exam.createdAt).format("DD/MM/YYYY HH:mm") : "—"}
+                                        {/* Tổng số câu của đề; đề 0 câu (dữ liệu lỗi) thì không ghi "0 câu" */}
+                                        {(exam.totalSlots ?? 0) > 0 && ` · ${exam.totalSlots} câu`}
                                         {" · "}
                                         {describeExamProgress(exam)}
                                     </div>

@@ -7,7 +7,13 @@ import type {
     ExamItemDto, ExamOption, ExamQuestionItem, StatementKey, TruthLabel, UpdateSlotQuestionPayload,
 } from "../types/exam.types";
 import { updateQuestion } from "../services/examApi";
-import { describeFormatIssue, describeLevel } from "../../../utils/exam.utils";
+// Lỗi dạng đáp số: nói kèm ví dụ, bỏ cụm "vừa khung" khó hiểu (rà soát G11); hằng dùng chung với lý do trên thẻ câu
+import {
+    ANSWER_FORMAT_MESSAGE,
+    ANSWER_FORMAT_START,
+    describeFormatIssue,
+    describeLevel,
+} from "../../../utils/exam.utils";
 import { MathField, MathInputProvider, MathSymbolBar } from "./MathInput";
 import { READABLE_MODAL_THEME } from "./readableModalTheme";
 import { clearEditDraft, loadEditDraft, saveEditDraft } from "../utils/editDraft";
@@ -36,10 +42,6 @@ const FIELD_OF_ERROR: Record<string, FieldName> = {
     ])),
 };
 
-// Lỗi dạng đáp số: nói kèm ví dụ, bỏ cụm "vừa khung" khó hiểu (rà soát G11)
-const ANSWER_FORMAT_START = /^đáp (?:số|án) phải là/i;
-const ANSWER_FORMAT_MESSAGE =
-    "Đáp số phải là số nguyên hoặc số thập phân, tối đa 4 kí tự kể cả dấu trừ và dấu phẩy (ví dụ 12; -3,5; 0,25).";
 
 /**
  * Đặt lỗi của backend xuống dưới đúng ô và cuộn tới ô đầu tiên. Trả về các lỗi không gắn được vào ô nào

@@ -22,6 +22,15 @@
     border-radius: 6px 6px 0 0;
 }
 
+/* Ô lỗi khi bấm Lưu (rà soát D9): viền đỏ đậm, dòng lý do ở đầu thẻ */
+.exam-matrix-cell-editor .exam-matrix-cell-editor__card--error {
+    border-color: #cf1322;
+}
+
+.exam-matrix-cell-editor__error {
+    margin-bottom: 12px;
+}
+
 .exam-matrix-cell-editor__label.ant-typography {
     display: block;
     margin-bottom: 4px;

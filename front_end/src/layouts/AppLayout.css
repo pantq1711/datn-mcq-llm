@@ -13,6 +13,9 @@
     top: 64px;
     /* Bóng mờ ở viền phải, cùng kiểu bóng dưới thanh đầu trang (Header.css) */
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+    /* Nằm trên các thanh dính đáy của trang (thanh Lưu ma trận z-index 10, thanh Tạo đề 5) để bóng không bị nền trắng
+       của các thanh đó che; vẫn dưới thanh đầu trang (1000) và lớp phủ màn hẹp (998, 999) */
+    z-index: 20;
 }
 
 /* Màn hẹp: thanh bên mở ra nằm đè lên nội dung, không đẩy nội dung còn vài chục px */

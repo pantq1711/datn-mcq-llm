@@ -10,7 +10,7 @@ const { Text } = Typography;
 /** Khớp spring.servlet.multipart.max-file-size của backend (docs/api mục 10.1). */
 export const MAX_IMPORT_FILE_MB = 10;
 
-const GRADE_OPTIONS = [6, 7, 8, 9].map((grade) => ({ value: grade, label: `Khối ${grade}` }));
+const GRADE_OPTIONS = [6, 7, 8, 9].map((grade) => ({ value: grade, label: `Lớp ${grade}` }));
 const LEVEL_OPTIONS: { value: ImportLevel; label: string }[] = [
     { value: "easy", label: "Nhận biết" },
     { value: "medium", label: "Thông hiểu" },
@@ -25,7 +25,7 @@ interface ImportUploadFormProps {
     onSubmit: (file: File, options: ImportUploadOptions) => void;
 }
 
-/** Bước 1: chọn file .docx và tùy chọn khối, chủ đề, mức mặc định. File được giữ lại khi lỗi để chọn mức rồi đọc lại. */
+/** Bước 1: chọn file .docx và tùy chọn lớp, chủ đề, mức mặc định. File được giữ lại khi lỗi để chọn mức rồi đọc lại. */
 export default function ImportUploadForm({ uploading, error, onSubmit }: ImportUploadFormProps) {
     const [file, setFile] = useState<File | null>(null);
     const [fileError, setFileError] = useState<string | null>(null);
@@ -72,7 +72,7 @@ export default function ImportUploadForm({ uploading, error, onSubmit }: ImportU
                 <p className="ant-upload-text">Kéo thả hoặc bấm để chọn file Word (.docx)</p>
                 <p className="ant-upload-hint">
                     Tối đa {MAX_IMPORT_FILE_MB} MB và 200 câu mỗi lần. Đặt tên file theo mẫu "KHỐI 8 - CHƯƠNG 1 - BÀI 2 - Tên bài" để hệ
-                    thống tự lấy khối và chủ đề.
+                    thống tự lấy lớp và chủ đề.
                 </p>
             </Dragger>
 
@@ -85,7 +85,7 @@ export default function ImportUploadForm({ uploading, error, onSubmit }: ImportU
 
             <div className="import-upload-options">
                 <div className="import-upload-field">
-                    <label htmlFor="import-grade">Khối (không bắt buộc)</label>
+                    <label htmlFor="import-grade">Lớp (không bắt buộc)</label>
                     <Select
                         id="import-grade"
                         allowClear

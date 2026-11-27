@@ -1,5 +1,5 @@
 import { configure, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as examApi from "../services/examApi";
@@ -56,14 +56,12 @@ function detail(items: ExamItemDto[]): ExamDetail {
     } as ExamDetail;
 }
 
+// Data router như ứng dụng thật (App.tsx dùng createBrowserRouter): trang dùng useBlocker, không chạy dưới MemoryRouter
 function renderPage() {
-    return render(
-        <MemoryRouter initialEntries={["/exams/5"]}>
-            <Routes>
-                <Route path="/exams/:id" element={<ExamDetailPage />} />
-            </Routes>
-        </MemoryRouter>
-    );
+    const router = createMemoryRouter([{ path: "/exams/:id", element: <ExamDetailPage /> }], {
+        initialEntries: ["/exams/5"],
+    });
+    return render(<RouterProvider router={router} />);
 }
 
 describe("ExamDetailPage: nút Giao bài online", () => {

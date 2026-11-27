@@ -434,6 +434,9 @@ export default function BuildByLessonForm({
                 form={form}
                 layout="vertical"
                 onFinish={handleSubmit}
+                // Thiếu ô bắt buộc (vd. tên bài) thì cuộn ô lỗi đầu tiên ra giữa màn hình (không bị thanh đầu trang che)
+                // và đặt con trỏ vào ô đó (rà soát E7)
+                scrollToFirstError={{ behavior: "smooth", block: "center", focus: true }}
                 initialValues={{
                     gradeLevel: 8,
                     challenge: "standard",
@@ -755,7 +758,24 @@ export default function BuildByLessonForm({
                     />
                 </Card>
 
+                {/* Thanh dính đáy màn hình (rà soát E7): tổng số câu, tên bài, nút Tạo đề luôn thấy khi đang điền */}
                 <div className="build-lesson-footer">
+                    <div className="build-lesson-footer-summary">
+                        {totalQuestions <= 0 ? (
+                            <Text type="secondary">Chưa chọn câu nào</Text>
+                        ) : totalQuestions > MAX_QUESTIONS_PER_EXAM ? (
+                            <Text type="danger" strong>
+                                Tổng {totalQuestions} câu, vượt tối đa {MAX_QUESTIONS_PER_EXAM}
+                            </Text>
+                        ) : (
+                            <Text strong>Tổng {totalQuestions} câu</Text>
+                        )}
+                        {typeof watchedLesson === "string" && watchedLesson.trim() && (
+                            <Text type="secondary" className="build-lesson-footer-lesson">
+                                {" · "}Bài: {watchedLesson.trim()}
+                            </Text>
+                        )}
+                    </div>
                     <Button
                         type="primary"
                         size="large"

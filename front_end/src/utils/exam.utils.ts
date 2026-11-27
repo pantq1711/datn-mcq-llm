@@ -146,10 +146,11 @@ const readableAnswerErrors = [
 
 // Lỗi dạng đáp số (quá 4 ký tự, phân số, căn, đơn vị…): nhận ra theo phần đầu của thông báo backend ("Đáp số phải là"
 // từ 2/11, "đáp án phải là" ở dữ liệu cũ), không theo phần còn lại, và hiện chữ của frontend để đổi câu chữ backend
-// không làm mất chỗ nhận.
-const ANSWER_FORMAT_START = /^đáp (?:số|án) phải là/i;
-const ANSWER_FORMAT_MESSAGE =
-    "Đáp số phải là số nguyên hoặc thập phân tối đa 4 ký tự. Thầy/cô chọn lại số liệu của đề để đáp số vừa khung.";
+// không làm mất chỗ nhận. Dùng chung cho lý do trên thẻ câu (describeFormatIssue) và lỗi dưới ô "Đáp số" của form sửa câu
+// (EditQuestionForm), để hai chỗ nói cùng một câu.
+export const ANSWER_FORMAT_START = /^đáp (?:số|án) phải là/i;
+export const ANSWER_FORMAT_MESSAGE =
+    "Đáp số phải là số nguyên hoặc số thập phân, tối đa 4 kí tự kể cả dấu trừ và dấu phẩy (ví dụ 12; -3,5; 0,25).";
 
 /**
  * Đáp án câu trả lời ngắn mà YoungMix nhận được (26/11): số nguyên hoặc thập phân, tối đa 4 ký tự tính cả dấu "-" và ",",

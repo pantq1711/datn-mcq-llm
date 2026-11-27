@@ -170,11 +170,29 @@
     border-radius: 8px;
 }
 
+/* Thanh "Tạo đề" dính đáy màn hình khi cuộn (rà soát E7). Trải hết bề ngang thân card (antd đệm 24px) bằng margin âm;
+   tới cuối form thì nằm đúng chỗ, không che nội dung. sticky cần các khung bao ngoài không đặt overflow: hidden. */
 .build-lesson-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
     display: flex;
-    justify-content: flex-end;
-    margin-top: 24px;
-    padding-top: 16px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin: 24px -24px -24px;
+    padding: 12px 24px;
+    background: #ffffff;
+    border-top: 2px solid #f0f0f0;
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.build-lesson-footer-summary {
+    min-width: 0;
+    font-size: 16px;
+    overflow-wrap: anywhere;
 }
 
 .build-lesson-submit-btn {
@@ -183,4 +201,17 @@
     font-size: 16px;
     font-weight: 600;
     border-radius: 8px;
+}
+
+/* Màn hẹp: dòng tổng ở trên, nút chiếm cả hàng ở dưới */
+@media (max-width: 576px) {
+    .build-lesson-footer {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .build-lesson-submit-btn {
+        width: 100%;
+        min-width: 0;
+    }
 }

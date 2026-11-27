@@ -129,7 +129,8 @@ export default function UserManagementPage() {
                         <Radio.Button value="all">Tất cả vai trò</Radio.Button>
                         <Radio.Button value="teacher">Giáo viên</Radio.Button>
                         <Radio.Button value="admin">Quản trị viên</Radio.Button>
-                        <Radio.Button value="researcher">Nghiên cứu</Radio.Button>
+                        {/* Bỏ lọc "Nghiên cứu" (rà soát L5): giao diện không tạo được tài khoản loại này nên lọc luôn rỗng.
+                            Tài khoản nghiên cứu có sẵn trong DB (nếu có) vẫn hiện ở "Tất cả vai trò" với nhãn "Nghiên cứu". */}
                     </Radio.Group>
                 </div>
 
