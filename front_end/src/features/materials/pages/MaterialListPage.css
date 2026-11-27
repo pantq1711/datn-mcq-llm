@@ -31,20 +31,31 @@
     color: #595959;
 }
 
+/* Khung chứa bảng (không còn là card): bảng nằm thẳng trên nền trang */
 .material-list-card {
-    border-radius: 12px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+    width: 100%;
+    min-width: 0;
 }
 
 /* Bổ sung tùy chỉnh cho bảng danh sách tài liệu */
 .material-list-card .ant-table-thead>tr>th {
-    background-color: #fafafa;
+    background-color: #e3effa;
     font-weight: 600;
     color: #262626;
 }
 
+/* Dải phân cách giữa các tài liệu: dày hơn mặc định 1px của antd Table (cùng kiểu bảng đề thi, ma trận, ngân hàng) */
+.material-list-card .ant-table-wrapper .ant-table-tbody>tr>td {
+    border-bottom: 2px solid #ececec;
+}
+
 .material-list-card .ant-table-row {
     transition: background-color 0.2s ease;
+}
+
+/* Bấm cả hàng để xem tài liệu */
+.material-list-card .material-list-row-clickable {
+    cursor: pointer;
 }
 
 .material-list-card .ant-table-row:hover {

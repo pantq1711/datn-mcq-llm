@@ -10,7 +10,8 @@ import "./DashboardPage.css";
 
 const { Title, Text } = Typography;
 
-const RECENT_EXAM_COUNT = 5;
+// Số chẵn để lưới 2 cột đủ hàng
+const RECENT_EXAM_COUNT = 6;
 
 /** Tình trạng soạn của một đề, nói bằng chữ của giáo viên. */
 function describeExamProgress(exam: ExamListItem): string {
@@ -85,6 +86,8 @@ export default function DashboardPage() {
                     </Empty>
                 ) : (
                     <List
+                        // Lưới 2 cột; màn hẹp (< 768px) về 1 cột
+                        grid={{ gutter: 16, xs: 1, sm: 1, md: 2, lg: 2, xl: 2, xxl: 2 }}
                         dataSource={exams}
                         renderItem={(exam) => (
                             <List.Item
@@ -92,20 +95,23 @@ export default function DashboardPage() {
                                 onClick={() => navigate(`/exams/${exam.examId}`)}
                             >
                                 <div className="dashboard-recent-main">
-                                    <Text strong className="dashboard-recent-title">
-                                        {exam.title}
-                                    </Text>
+                                    {/* Nhãn "Cần xem kỹ" đứng ngay sau tên đề */}
+                                    <div className="dashboard-recent-title-row">
+                                        <Text strong className="dashboard-recent-title">
+                                            {exam.title}
+                                        </Text>
+                                        {(exam.needsReviewSlots ?? 0) > 0 && (
+                                            <Tag color="volcano" icon={<WarningOutlined />}>
+                                                Cần xem kỹ
+                                            </Tag>
+                                        )}
+                                    </div>
                                     <div className="dashboard-recent-meta">
                                         {exam.createdAt ? dayjs(exam.createdAt).format("DD/MM/YYYY HH:mm") : "—"}
                                         {" · "}
                                         {describeExamProgress(exam)}
                                     </div>
                                 </div>
-                                {(exam.needsReviewSlots ?? 0) > 0 && (
-                                    <Tag color="volcano" icon={<WarningOutlined />}>
-                                        Cần xem kỹ
-                                    </Tag>
-                                )}
                             </List.Item>
                         )}
                     />

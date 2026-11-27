@@ -6,7 +6,7 @@
 
 .exam-matrix-list-page-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 16px;
     flex-wrap: wrap;
@@ -17,23 +17,26 @@
     margin: 0 !important;
 }
 
+/* Bên phải header: ô tìm kiếm + "Đặt lại", rồi các nút tạo ma trận; thiếu chỗ thì xuống dòng */
 .exam-matrix-list-page-actions {
-    flex-shrink: 0;
-}
-
-.exam-matrix-filter-card {
-    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    min-width: 0;
 }
 
 .exam-matrix-filter {
     display: flex;
     align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
 }
 
 .exam-matrix-search {
-    width: min(100%, 380px);
+    width: 360px;
+    max-width: 100%;
 }
 
 .exam-matrix-list-card {
@@ -48,6 +51,12 @@
     margin: 0 0 4px !important;
 }
 
+/* "(12 ma trận)" sau tiêu đề card: chữ thường, nhỏ hơn tiêu đề */
+.exam-matrix-list-count {
+    font-size: 16px;
+    font-weight: 400;
+}
+
 @media (max-width: 768px) {
     .exam-matrix-list-page {
         padding: 24px 16px 40px;
@@ -58,20 +67,31 @@
         align-items: stretch;
     }
 
+    /* Màn hẹp: ô tìm kiếm chiếm cả hàng, các nút tạo ma trận chia đều hàng dưới */
     .exam-matrix-list-page-actions {
         width: 100%;
-    }
-
-    .exam-matrix-list-page-actions .ant-btn {
-        flex: 1;
-    }
-
-    .exam-matrix-search {
-        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
     }
 
     .exam-matrix-filter {
-        flex-direction: column;
-        align-items: stretch;
+        width: 100%;
+    }
+
+    .exam-matrix-search {
+        flex: 1;
+        width: auto;
+    }
+
+    .exam-matrix-create-buttons {
+        width: 100%;
+    }
+
+    .exam-matrix-create-buttons .ant-space-item {
+        flex: 1;
+    }
+
+    .exam-matrix-create-buttons .ant-btn {
+        width: 100%;
     }
 }

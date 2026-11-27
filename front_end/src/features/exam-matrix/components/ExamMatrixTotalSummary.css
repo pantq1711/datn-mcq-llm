@@ -134,7 +134,8 @@
     gap: 5px;
     min-width: 0;
     padding: 10px 8px;
-    border: 1px solid #f0f0f0;
+    /* Viền 2px như các khung bên trong trang Tạo đề thi */
+    border: 2px solid #f0f0f0;
     border-radius: 8px;
     background: #fafafa;
 }
@@ -159,7 +160,7 @@
 .exam-matrix-total-summary__empty-hint {
     margin-top: 16px;
     padding: 10px 8px 0;
-    border-top: 1px dashed #f0f0f0;
+    border-top: 2px dashed #f0f0f0;
 }
 
 .exam-matrix-total-summary__empty-hint .ant-empty {

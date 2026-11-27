@@ -55,6 +55,8 @@
     border: 1px solid #f0f0f0;
     border-radius: 8px;
     background: #f0f8ff;
+    /* Bóng đổ quanh từng câu (trước đặt ở cả khối Phần .question-group) */
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.2);
 }
 
 .exam-question-item-needs-review {
@@ -142,21 +144,22 @@
     animation: exam-question-flash 1.5s ease-out;
 }
 
+/* Viền xanh nháy khi nhảy tới câu; giữ kèm bóng thường của thẻ để lúc nháy bóng không mất rồi hiện lại */
 @keyframes exam-question-flash {
     0%,
     40% {
-        box-shadow: 0 0 0 3px #0958d9;
+        box-shadow: 0 0 0 3px #0958d9, 0 0 12px rgba(0, 0, 0, 0.2);
     }
 
     100% {
-        box-shadow: 0 0 0 3px rgba(9, 88, 217, 0);
+        box-shadow: 0 0 0 3px rgba(9, 88, 217, 0), 0 0 12px rgba(0, 0, 0, 0.2);
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
     .exam-question-item-flash {
         animation: none;
-        box-shadow: 0 0 0 3px #0958d9;
+        box-shadow: 0 0 0 3px #0958d9, 0 0 12px rgba(0, 0, 0, 0.2);
     }
 }
 

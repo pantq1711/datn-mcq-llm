@@ -5,10 +5,9 @@ import { CopyOutlined, DeleteOutlined, EditOutlined, FileAddOutlined } from '@an
 
 import './ExamMatrixTable.css';
 import type { ExamMatrixSummary } from "../types/examMatrix.types";
+import { filterMatrixRows, toMatrixRows, type MatrixRow } from "../utils/matrixSearch";
 
 const { Text } = Typography;
-
-type MatrixRow = ExamMatrixSummary & { subjectName: string };
 
 export interface ExamMatrixTableProps {
     /** Danh sách từ GET /api/exam-matrices (MatrixSummaryDto). */
@@ -29,17 +28,6 @@ export interface ExamMatrixTableProps {
     onGenerateExam?: (matrixId: string) => void;
     /** Bấm "Tạo từ mẫu" ở trạng thái rỗng (chưa có ma trận nào). */
     onCreateFromTemplate?: () => void;
-}
-
-/** Bỏ dấu tiếng Việt để tìm kiếm linh hoạt hơn (ví dụ: "ma tran" tìm được "Ma trận"). */
-function normalizeSearchValue(value: string): string {
-    return value
-        .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
-        .replace(/đ/g, 'd')
-        .replace(/Đ/g, 'D')
-        .toLocaleLowerCase('vi-VN')
-        .trim();
 }
 
 function formatDate(value?: string | null): string {
@@ -70,31 +58,9 @@ export function ExamMatrixTable({
     onGenerateExam,
     onCreateFromTemplate,
 }: ExamMatrixTableProps) {
-    const rows = useMemo<MatrixRow[]>(
-        () =>
-            matrices.map((m) => ({
-                ...m,
-                subjectName: subjectNames[m.subjectId] ?? `Môn #${m.subjectId}`,
-            })),
-        [matrices, subjectNames]
-    );
-
-    const filteredMatrices = useMemo(() => {
-        const keyword = normalizeSearchValue(searchText);
-        if (!keyword) return rows;
-
-        return rows.filter(matrix => {
-            const searchableText = normalizeSearchValue(
-                [
-                    matrix.name,
-                    matrix.subjectName,
-                    // Bảng ghi "Lớp 8"; vẫn tìm được theo cách gõ cũ "khối 8"
-                    matrix.gradeLevel == null ? '' : `lop ${matrix.gradeLevel} khoi ${matrix.gradeLevel}`,
-                ].join(' ')
-            );
-            return searchableText.includes(keyword);
-        });
-    }, [rows, searchText]);
+    const rows = useMemo(() => toMatrixRows(matrices, subjectNames), [matrices, subjectNames]);
+    // Cùng phép lọc với số đếm trên tiêu đề card ở ExamMatrixListPage
+    const filteredMatrices = useMemo(() => filterMatrixRows(rows, searchText), [rows, searchText]);
 
     const columns: TableColumnsType<MatrixRow> = [
         {
@@ -241,14 +207,7 @@ export function ExamMatrixTable({
 
     return (
         <div className="exam-matrix-table">
-            <div className="exam-matrix-table__summary">
-                <Text type="secondary">
-                    {searchText.trim()
-                        ? `Tìm thấy ${filteredMatrices.length} ma trận`
-                        : `${filteredMatrices.length} ma trận`}
-                </Text>
-            </div>
-
+            {/* Số ma trận hiện trên tiêu đề card (ExamMatrixListPage) */}
             <Table<MatrixRow>
                 rowKey="id"
                 columns={columns}

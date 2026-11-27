@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button, Card, Empty, Result, Spin, Space, Tooltip, Typography, message, Modal } from "antd";
+import { Button, Empty, Result, Spin, Space, Tooltip, Typography, message, Modal } from "antd";
 import { ArrowLeftOutlined, FileWordOutlined, ProfileOutlined, SendOutlined } from "@ant-design/icons";
 
 import ExamQuestionList from "../components/ExamQuestionList";
@@ -941,7 +941,8 @@ export default function ExamDetailPage() {
                 )}
 
             <div className="exam-detail-page-question-list">
-                <Card className="exam-detail-page-question-card">
+                {/* Không bọc card ngoài: mỗi Phần (.question-group) đã là một khối có nền và bóng riêng */}
+                <div className="exam-detail-page-question-card">
                     {parts.length === 0 && (
                         <ExamQuestionList questions={[]} />
                     )}
@@ -1011,7 +1012,7 @@ export default function ExamDetailPage() {
                             onClose={() => setQcModalVisible(false)}
                         />
                     )}
-                </Card>
+                </div>
             </div>
             </div>
         </div>

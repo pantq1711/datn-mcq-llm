@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button, Card, Input, Space, Spin, Typography, message } from 'antd';
 import { CopyOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, TableOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -8,9 +8,10 @@ import { ExamMatrixTemplateModal } from '../components/ExamMatrixTemplateModal';
 import type { ExamMatrixSummary } from '../types/examMatrix.types.ts';
 import { listExamMatrices, deleteExamMatrix, duplicateExamMatrix, createExamMatrixFromSample } from "../services/examMatrixService";
 import { getCatalogSubjects } from '../../exam/services/examApi';
+import { filterMatrixRows, toMatrixRows } from '../utils/matrixSearch';
 import './ExamMatrixListPage.css';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 export default function ExamMatrixListPage() {
     const navigate = useNavigate();
@@ -21,6 +22,12 @@ export default function ExamMatrixListPage() {
     const [subjectNames, setSubjectNames] = useState<Record<number, string>>({});
 
     const [loading, setLoading] = useState(false);
+
+    // Số ma trận trên tiêu đề card: cùng phép lọc với bảng (tên, môn, lớp)
+    const matchedCount = useMemo(
+        () => filterMatrixRows(toMatrixRows(matrices, subjectNames), searchText).length,
+        [matrices, subjectNames, searchText]
+    );
 
     const handleCreateMatrix = () => navigate('/exam-matrices/new');
     const handleEditMatrix = (matrixId: string) =>
@@ -108,33 +115,34 @@ export default function ExamMatrixListPage() {
                         Quản lý ma trận
                     </Title>
                 </div>
-                <Space className="exam-matrix-list-page-actions" wrap>
-                    <Button icon={<CopyOutlined />} onClick={() => setIsTemplateModalOpen(true)}>
-                        Tạo từ mẫu
-                    </Button>
-                    <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateMatrix}>
-                        Tạo ma trận
-                    </Button>
-                </Space>
-            </div>
+                {/* Ô tìm kiếm nằm trên header, ngay bên trái các nút tạo ma trận (bỏ card tìm kiếm riêng) */}
+                <div className="exam-matrix-list-page-actions">
+                    <div className="exam-matrix-filter">
+                        <Input
+                            className="exam-matrix-search"
+                            placeholder="Tìm theo tên ma trận, môn học hoặc lớp..."
+                            prefix={<SearchOutlined />}
+                            allowClear
+                            value={searchText}
+                            onChange={(event) => setSearchText(event.target.value)}
+                            aria-label="Tìm kiếm ma trận"
+                        />
 
-            <Card className="exam-matrix-filter-card">
-                <div className="exam-matrix-filter">
-                    <Input
-                        className="exam-matrix-search"
-                        placeholder="Tìm theo tên ma trận, môn học hoặc lớp..."
-                        prefix={<SearchOutlined />}
-                        allowClear
-                        value={searchText}
-                        onChange={(event) => setSearchText(event.target.value)}
-                        aria-label="Tìm kiếm ma trận"
-                    />
+                        <Button icon={<ReloadOutlined />} onClick={handleReset}>
+                            Đặt lại
+                        </Button>
+                    </div>
 
-                    <Button icon={<ReloadOutlined />} onClick={handleReset}>
-                        Đặt lại
-                    </Button>
+                    <Space className="exam-matrix-create-buttons" wrap>
+                        <Button icon={<CopyOutlined />} onClick={() => setIsTemplateModalOpen(true)}>
+                            Tạo từ mẫu
+                        </Button>
+                        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateMatrix}>
+                            Tạo ma trận
+                        </Button>
+                    </Space>
                 </div>
-            </Card>
+            </div>
 
             {loading ? (
                 <div className="exam-matrix-list-loading" style={{ textAlign: "center", padding: "80px 0" }}>
@@ -144,11 +152,15 @@ export default function ExamMatrixListPage() {
             ) : (
                 <Card className="exam-matrix-list-card">
                     <div className="exam-matrix-list-header">
-                        <div>
-                            <Title level={4} className="exam-matrix-list-title">
-                                Danh sách ma trận
-                            </Title>
-                        </div>
+                        <Title level={4} className="exam-matrix-list-title">
+                            Danh sách ma trận{" "}
+                            {/* Số ma trận (đang tìm thì là số tìm thấy), cùng phép lọc với bảng */}
+                            <Text type="secondary" className="exam-matrix-list-count">
+                                {searchText.trim()
+                                    ? `(tìm thấy ${matchedCount} ma trận)`
+                                    : `(${matchedCount} ma trận)`}
+                            </Text>
+                        </Title>
                     </div>
 
                     <ExamMatrixTable

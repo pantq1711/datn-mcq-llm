@@ -55,15 +55,13 @@ export default function QuestionTable({
             key: "questionText",
             // Cột co giãn: đủ rộng để thấy công thức đầu câu, không bị ép còn vài chữ
             minWidth: 240,
-            ellipsis: {
-                showTitle: false,
-            },
+            // Không dùng `ellipsis` của antd (ép một dòng); cắt 3 dòng bằng CSS .question-table-question
             render: (questionText: string, record) => {
                 // Không để ô trống: nội dung không vẽ ra được gì (chữ rỗng, công thức rỗng) thì hiện dòng dự phòng
                 if (isBlankMath(questionText)) {
                     return <Text type="secondary">(Không có nội dung hiển thị)</Text>;
                 }
-                // Một dòng: ảnh thành nhãn [Hình] (không tải ảnh cho cả trang); hover mới vẽ ảnh thật
+                // Tối đa 3 dòng: ảnh thành nhãn [Hình] (không tải ảnh cho cả trang); hover mới vẽ ảnh thật
                 return (
                     <Tooltip title={<MathText text={questionText} images={record.images} />} placement="topLeft">
                         <span className="question-table-question">

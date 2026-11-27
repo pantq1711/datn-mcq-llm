@@ -12,11 +12,14 @@
 
     background: #ffffff;
     border-bottom: 3px solid #f0f0f0;
+    /* Bóng mờ dưới viền: tách thanh đầu khỏi nội dung khi cuộn (thanh dính trên cùng) */
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .app-header-auth {
     background: #ffffff;
     border-bottom: none;
+    box-shadow: none;
 }
 
 .app-header-left {
@@ -32,19 +35,25 @@
     font-size: 18px;
 }
 
+/* Vùng logo + tên ứng dụng: nền xanh nhạt (cùng màu tiêu đề bảng, tiêu đề card), phần còn lại của thanh vẫn trắng */
 .app-header-brand {
     display: flex;
     align-items: center;
     gap: 10px;
     min-width: 0;
+    padding: 2px 14px 2px 2px;
+    /* Cách mép trên, mép dưới thanh 8px: 8 + (42 ảnh + 4 đệm) + 8 = 62px, vừa trong thanh cao 64px */
+    margin: 8px 0;
+    background: #d8ecfe;
+    border-radius: 30px;
     cursor: pointer;
 }
 
 .app-header-brand-logo {
-    width: 50px;
-    height: 50px;
+    width: 42px;
+    height: 42px;
     object-fit: contain;
-    margin-left: 12px;
+    margin-left: 8px;
 }
 
 .app-header-brand-title {

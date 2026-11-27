@@ -102,14 +102,21 @@
     border-bottom-width: 2px;
 }
 
-/* Nền tiêu đề từng phần (BuildByLessonForm.css đặt #fafafa) */
+/* Nền tiêu đề từng phần: xanh nhạt như hàng tiêu đề bảng (BuildByLessonForm.css đặt #fafafa) */
 .generate-exam-tab-content .build-lesson-section>.ant-card-head,
 .generate-exam-tab-content .generate-exam-matrix-card .ant-card>.ant-card-head {
-    background-color: #f5f5f5;
+    background-color: #e3effa;
 }
 
 .generate-exam-tab-content .build-lesson-matrix-row:last-child {
     border-bottom: none;
+}
+
+/* Bóng đổ quanh bảng, cùng kiểu khối Phần ở trang Chi tiết đề (.question-group trong ExamDetailPage.css):
+   bảng cấu trúc câu hỏi (tab Theo bài học) và bảng các ô của ma trận đã chọn (tab Theo ma trận) */
+.generate-exam-tab-content .build-lesson-matrix-table,
+.generate-exam-tab-content .generate-exam-matrix-card .ant-table {
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.2);
 }
 
 .generate-exam-matrix-card {

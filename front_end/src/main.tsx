@@ -40,6 +40,8 @@ createRoot(document.getElementById("root")!).render(
           // Thẻ cảnh báo (vd. "Có công thức MathType không đọc được"): chữ vàng #faad14 trên nền vàng nhạt
           // chỉ ~1,9:1; đổi sang nâu đậm ~5,2:1, nền và viền vẫn vàng nhạt như cũ
           Tag: { colorWarning: "#ad4e00" },
+          // Hàng tiêu đề bảng xanh nhạt #e3effa; cột đang sắp xếp hoặc di chuột vào đậm hơn một chút
+          Table: { headerBg: "#e3effa", headerSortActiveBg: "#d4e5f7", headerSortHoverBg: "#d4e5f7" },
         },
       }}
     >

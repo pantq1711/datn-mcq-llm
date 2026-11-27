@@ -6,17 +6,39 @@
     width: 100%;
 }
 
+/* Đề bài hiện tối đa 3 dòng, dòng thứ 3 cắt bằng dấu … (đủ đề bài nằm trong tooltip và ngăn chi tiết) */
 .question-table-question {
-    display: block;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     line-height: 1.5;
 }
 
-/* MathText đặt pre-wrap cho phần chữ; trong ô bảng vẫn phải một dòng để có dấu … */
+/* MathText đặt pre-wrap cho phần chữ; trong ô bảng gộp xuống dòng thừa để 3 dòng chứa được nhiều chữ hơn */
 .question-table-question span {
+    white-space: normal !important;
+}
+
+/* Bên trong công thức KaTeX giữ nguyên không xuống dòng: các span của KaTeX bị cho xuống dòng thì số mũ, phân số,
+   dấu ngoặc rơi vỡ thành nhiều dòng. Mạnh hơn luật span ở trên (cùng !important, bộ chọn cụ thể hơn) */
+.question-table-question .katex,
+.question-table-question .katex span {
     white-space: nowrap !important;
+    overflow-wrap: normal;
+}
+
+/* Công thức dạng khối ($$…$$) hiện liền dòng chữ, không chiếm riêng một dòng có lề */
+.question-table-question .katex-display {
+    display: inline;
+    margin: 0;
+}
+
+.question-table-question .katex-display > .katex {
+    display: inline;
 }
 
 /* Nhãn "Có hình" dưới tên dạng câu */
@@ -34,4 +56,8 @@
 /* Bấm cả dòng để mở chi tiết */
 .question-table .question-table-row-clickable {
     cursor: pointer;
+}
+
+.question-table .ant-table-wrapper .ant-table-tbody>tr>td {
+    border-bottom: 2px solid #ececec;
 }
