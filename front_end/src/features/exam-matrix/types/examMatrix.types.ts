@@ -64,10 +64,12 @@ export interface ExamMatrixSample {
     notes: string[] | null;
 }
 
-/** Một dòng của GET /api/exam-matrices (MatrixSummaryDto): không có ô, không có tổng câu. */
+/** Một dòng của GET /api/exam-matrices (MatrixSummaryDto): không có ô. */
 export interface ExamMatrixSummary extends ExamMatrix {
     /** Số ô; mỗi ô có ít nhất 1 câu nên lớn hơn 0 là ma trận đã có câu. */
     cellCount: number;
     /** Số đề đã tạo từ ma trận: lớn hơn 0 thì không xóa được (409 MATRIX_IN_USE). */
     examCount: number;
+    /** Tổng số câu của các ô (đợt 3); câu Đúng/Sai tính 1 câu, không đếm 4 ý. */
+    questionCount: number;
 }

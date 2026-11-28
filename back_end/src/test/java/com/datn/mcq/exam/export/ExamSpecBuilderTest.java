@@ -282,6 +282,15 @@ class ExamSpecBuilderTest {
         }
     }
 
+    /** Đợt 3 (28/11): tên đề mặc định kèm ngày "– 28/11": đầu đề bản đặc tả bỏ đuôi ngày rồi bỏ "– Toán 8" như bản đề. */
+    @Test
+    void dauDeBanDacTaBoDuoiNgayCuaTenDe() {
+        ExamHeader dated = ExamHeader.of("Giữa kì I – Toán 8 – 28/11", "Toán", 8, 90);
+        List<String> t = texts(ExamSpecBuilder.build(exam(), cells(), dated, ExamMarkdownBuilder.DEFAULT_SCORING, TODAY));
+        assertTrue(t.contains("ĐỀ KIỂM TRA GIỮA KÌ I"), t.toString());
+        assertTrue(t.stream().noneMatch(s -> s.contains("28/11")), "không in đuôi ngày: " + t);
+    }
+
     @Test
     void tieuDeBangBonTangTheoMau() {
         String md = markdown();

@@ -13,6 +13,7 @@ import com.datn.mcq.exam.dto.ExamViewDtos.ExamSummaryDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ItemStatementDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.PartDto;
+import com.datn.mcq.exam.dto.ExamViewDtos.RenameExamResponse;
 import com.datn.mcq.exam.dto.ExamViewDtos.RequestsDto;
 import com.datn.mcq.exam.entity.Exam;
 import com.datn.mcq.exam.entity.ExamSlot;
@@ -45,6 +46,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -266,9 +268,13 @@ public class ExamViewService {
     /**
      * Đề của người gọi, mới nhất trước (W1-1). Chỉ đọc, không đối soát: số chỗ theo lần đối soát gần nhất. Cờ "cần xem
      * kỹ" tính như {@link #item}: chỗ ready, câu hệ thống sinh, chưa có bản ngân hàng, có lý do cần xem.
+     *
+     * <p>Đợt 3 (BE-2): {@code q} tùy chọn lọc theo tên đề (chứa chuỗi, không phân biệt hoa thường, còn phân biệt dấu), cùng
+     * cách tìm của ngân hàng ({@code BankService}: trim, trống là không lọc, tối đa {@value #MAX_QUERY_LENGTH} ký tự, ký tự
+     * đại diện của LIKE được hiểu là chữ thường).
      */
     @Transactional(readOnly = true)
-    public ExamPageDto list(Integer actorId, int page, int size, String kind) {
+    public ExamPageDto list(Integer actorId, int page, int size, String kind, String q) {
         if (page < 0) {
             throw new IllegalArgumentException("page phải từ 0");
         }
@@ -278,9 +284,20 @@ public class ExamViewService {
         if (kind != null && !kind.equals(ExamMatrix.KIND_LESSON) && !kind.equals(ExamMatrix.KIND_MATRIX)) {
             throw new IllegalArgumentException("kind phải là lesson hoặc matrix");
         }
+        String text = q == null || q.isBlank() ? null : q.strip();
+        if (text != null && text.length() > MAX_QUERY_LENGTH) {
+            throw new IllegalArgumentException("q dài tối đa " + MAX_QUERY_LENGTH + " ký tự");
+        }
         PageRequest paging = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
-        Page<Exam> exams = kind == null ? examRepository.findByCreatedByAndDeletedAtIsNull(actorId, paging)
-                : examRepository.findByCreatedByAndMatrixKind(actorId, kind, paging);
+        Page<Exam> exams;
+        if (text == null) {
+            exams = kind == null ? examRepository.findByCreatedByAndDeletedAtIsNull(actorId, paging)
+                    : examRepository.findByCreatedByAndMatrixKind(actorId, kind, paging);
+        } else {
+            String pattern = "%" + escapeLike(text) + "%";
+            exams = kind == null ? examRepository.searchByTitle(actorId, pattern, paging)
+                    : examRepository.searchByTitleAndMatrixKind(actorId, kind, pattern, paging);
+        }
         Map<Integer, String> kinds = matrixService.kindsByIds(exams.getContent().stream().map(Exam::getMatrixId)
                 .filter(java.util.Objects::nonNull).distinct().toList());
         List<Integer> ids = exams.getContent().stream().map(Exam::getId).toList();
@@ -311,6 +328,37 @@ public class ExamViewService {
                     e.getStatus(), publicMatrixId(e, examKind), e.getCreatedAt(), slots.size(), ready, kept, needsReview, generating, failed));
         }
         return new ExamPageDto(items, page, size, exams.getTotalElements(), exams.getTotalPages());
+    }
+
+    /** Độ dài tối đa của {@code q} khi tìm đề theo tên (như ô tìm của ngân hàng). */
+    static final int MAX_QUERY_LENGTH = 100;
+    /** Độ dài tối đa của tên đề ({@code exam.title VARCHAR(255)}, V1), như khi tạo đề. */
+    static final int MAX_TITLE_LENGTH = 255;
+
+    /** Thoát ký tự đại diện của LIKE (dấu ! là ký tự thoát), cùng cách với {@code BankSearchRepository.escapeLike}. */
+    static String escapeLike(String s) {
+        return s.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    }
+
+    /**
+     * Đợt 3 (BE-3): đổi tên đề của chính người gọi, ở mọi trạng thái đề. Tên được trim; rỗng hoặc dài quá
+     * {@value #MAX_TITLE_LENGTH} ký tự thì 400; đề của người khác, không có hoặc đã xóa thì 404. Bài giao đã có giữ tên
+     * chụp lúc giao ({@code exam_assignment.title}, V32); xuất Word và các màn đọc tên đề sống thì dùng tên mới. Ghi bằng
+     * một câu UPDATE có điều kiện (không qua entity) để không ghi đè các cột khác, kể cả khi đề vừa bị xóa đồng thời.
+     */
+    @Transactional
+    public RenameExamResponse rename(Integer examId, String name, Integer actorId) {
+        String title = name == null ? "" : name.strip();
+        if (title.isEmpty()) {
+            throw new IllegalArgumentException("Tên đề không được để trống");
+        }
+        if (title.length() > MAX_TITLE_LENGTH) {
+            throw new IllegalArgumentException("Tên đề dài tối đa " + MAX_TITLE_LENGTH + " ký tự");
+        }
+        if (examRepository.renameLive(examId, actorId, title) == 0) {
+            throw new NoSuchElementException("Không tìm thấy đề id=" + examId);
+        }
+        return new RenameExamResponse(examId, title);
     }
 
     @Transactional

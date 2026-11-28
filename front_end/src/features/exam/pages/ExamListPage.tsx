@@ -1,10 +1,11 @@
-import { Button, Card, Modal, Segmented, Typography, message } from "antd";
-import { FileTextOutlined, PlusOutlined } from "@ant-design/icons";
+import { Button, Card, Input, Modal, Segmented, Typography, message } from "antd";
+import { FileTextOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 
 import ExamTable from "../components/ExamTable";
-import type { ExamListItem, ExamKind } from "../types/exam.types";
+import { RenameExamModal, type RenameExamTarget } from "../components/RenameExamModal";
+import type { ExamListItem, ExamKind, GetMyExamsParams } from "../types/exam.types";
 import { deleteExam, getMyExams } from "../services/examApi";
 import { examKindConfig } from "../../../utils/exam.utils";
 import { isExamHasAssignmentsError } from "../../assignment/utils/examDeleteError";
@@ -14,6 +15,11 @@ import "./ExamListPage.css";
 const { Title } = Typography;
 
 type ExamKindFilter = "all" | "lesson" | "matrix";
+
+/** Ngừng gõ bao lâu thì mới tìm (ms). */
+const SEARCH_DEBOUNCE_MS = 400;
+/** Backend nhận q tối đa 100 ký tự (dài hơn 400). */
+const MAX_QUERY_LENGTH = 100;
 
 export default function ExamListPage() {
     const navigate = useNavigate();
@@ -34,23 +40,56 @@ export default function ExamListPage() {
     // Ref đếm số thứ tự request để chặn kết quả trả về trễ
     const fetchSequenceRef = useRef<number>(0);
 
-    // 3. Tự động reset về trang 1 mỗi khi `selectedKind` thay đổi (bao gồm cả khi bấm Back/Forward)
+    // Đợt 3: tìm theo tên đề. `q` nằm trên URL như `kind`; ô tìm ghi URL sau khi ngừng gõ SEARCH_DEBOUNCE_MS
+    const urlQuery = (searchParams.get("q") ?? "").trim();
+    const [searchText, setSearchText] = useState<string>(urlQuery);
+    // Giá trị q do chính ô tìm ghi lên URL gần nhất: để phân biệt với URL đổi từ ngoài (Back/Forward, mở link)
+    const writtenQueryRef = useRef<string>(urlQuery);
+
+    useEffect(() => {
+        if (urlQuery === writtenQueryRef.current) return;
+        writtenQueryRef.current = urlQuery;
+        setSearchText(urlQuery);
+    }, [urlQuery]);
+
+    useEffect(() => {
+        const next = searchText.trim();
+        if (next === urlQuery) return;
+        const timer = window.setTimeout(() => {
+            writtenQueryRef.current = next;
+            setSearchParams((prev) => {
+                const params = new URLSearchParams(prev);
+                if (next) {
+                    params.set("q", next);
+                } else {
+                    params.delete("q");
+                }
+                return params;
+            }, { replace: true });
+        }, SEARCH_DEBOUNCE_MS);
+        return () => window.clearTimeout(timer);
+    }, [searchText, urlQuery, setSearchParams]);
+
+    // 3. Tự động reset về trang 1 mỗi khi `selectedKind` hoặc từ khóa thay đổi (bao gồm cả khi bấm Back/Forward)
     useEffect(() => {
         setPage(1);
-    }, [selectedKind]);
+    }, [selectedKind, urlQuery]);
 
     // 4. Hàm gọi API lấy danh sách đề thi
-    const fetchExams = async (currentPage: number, currentPageSize: number, kind: ExamKindFilter) => {
+    const fetchExams = async (currentPage: number, currentPageSize: number, kind: ExamKindFilter, query: string) => {
         const currentSeq = ++fetchSequenceRef.current;
         setLoading(true);
         try {
-            const params: { page: number; size: number; kind?: ExamKind } = {
+            const params: GetMyExamsParams = {
                 page: currentPage - 1,
                 size: currentPageSize,
             };
 
             if (kind !== "all") {
                 params.kind = kind as ExamKind;
+            }
+            if (query) {
+                params.q = query;
             }
 
             const res = await getMyExams(params);
@@ -71,10 +110,17 @@ export default function ExamListPage() {
         }
     };
 
-    // 5. Sử dụng useEffect gọi API khi page, pageSize hoặc selectedKind thay đổi
+    // 5. Sử dụng useEffect gọi API khi page, pageSize, selectedKind hoặc từ khóa trên URL thay đổi
     useEffect(() => {
-        fetchExams(page, pageSize, selectedKind);
-    }, [page, pageSize, selectedKind]);
+        fetchExams(page, pageSize, selectedKind, urlQuery);
+    }, [page, pageSize, selectedKind, urlQuery]);
+
+    // Đợt 3: đổi tên đề ngay ở danh sách; xong thì tải lại trang hiện tại (đề có thể không còn khớp từ khóa)
+    const [renameTarget, setRenameTarget] = useState<RenameExamTarget | null>(null);
+    const handleRenamed = async () => {
+        setRenameTarget(null);
+        await fetchExams(page, pageSize, selectedKind, urlQuery);
+    };
 
     const handleViewExam = (exam: ExamListItem) => {
         navigate(`/exams/${exam.examId}`);
@@ -90,7 +136,7 @@ export default function ExamListPage() {
             if (exams.length === 1 && page > 1) {
                 setPage(page - 1);
             } else {
-                await fetchExams(page, pageSize, selectedKind);
+                await fetchExams(page, pageSize, selectedKind, urlQuery);
             }
         } catch (error) {
             if (isExamHasAssignmentsError(error)) {
@@ -159,6 +205,17 @@ export default function ExamListPage() {
                                 { label: examKindConfig.matrix.label, value: "matrix" },
                             ]}
                         />
+                        {/* Backend tìm không phân biệt hoa thường nhưng còn phân biệt dấu (docs/api mục 7.0) */}
+                        <Input
+                            allowClear
+                            className="exam-list-search"
+                            prefix={<SearchOutlined />}
+                            placeholder="Tìm theo tên đề (gõ có dấu)"
+                            aria-label="Tìm theo tên đề"
+                            maxLength={MAX_QUERY_LENGTH}
+                            value={searchText}
+                            onChange={(e) => setSearchText(e.target.value)}
+                        />
                     </div>
                     <ExamTable
                         data={exams}
@@ -171,9 +228,17 @@ export default function ExamListPage() {
                         deletingId={deletingId}
                         onCreate={() => navigate("/exams/generate")}
                         onPageChange={handlePageChange}
+                        onRename={(exam) => setRenameTarget({ examId: exam.examId, title: exam.title })}
+                        searching={urlQuery !== ""}
                     />
                 </Card>
             </div>
+
+            <RenameExamModal
+                target={renameTarget}
+                onCancel={() => setRenameTarget(null)}
+                onRenamed={handleRenamed}
+            />
         </div>
     );
 }

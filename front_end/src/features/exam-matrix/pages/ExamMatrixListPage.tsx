@@ -5,8 +5,9 @@ import { useNavigate } from 'react-router-dom';
 
 import { ExamMatrixTable } from '../components/ExamMatrixTable';
 import { ExamMatrixTemplateModal } from '../components/ExamMatrixTemplateModal';
-import type { ExamMatrixSummary } from '../types/examMatrix.types.ts';
-import { listExamMatrices, deleteExamMatrix, duplicateExamMatrix, createExamMatrixFromSample } from "../services/examMatrixService";
+import { DuplicateMatrixModal, type DuplicateMatrixSource } from '../components/DuplicateMatrixModal';
+import type { ExamMatrixDetail, ExamMatrixSummary } from '../types/examMatrix.types.ts';
+import { listExamMatrices, deleteExamMatrix, createExamMatrixFromSample } from "../services/examMatrixService";
 import { getCatalogSubjects } from '../../exam/services/examApi';
 import { filterMatrixRows, toMatrixRows } from '../utils/matrixSearch';
 import './ExamMatrixListPage.css';
@@ -68,14 +69,18 @@ export default function ExamMatrixListPage() {
         }
     };
 
-    const handleDuplicateMatrix = async (matrixId: string) => {
-        try {
-            const newMatrix = await duplicateExamMatrix(matrixId);
-            message.success(`Đã sao chép ma trận: ${newMatrix.name}`);
-            await fetchMatrices();
-        } catch (err: any) {
-            message.error(err?.response?.data?.error || 'Không sao chép được ma trận');
-        }
+    // Đợt 3 (D2): sao chép hỏi tên trước (điền sẵn "<tên gốc> – DD/MM")
+    const [duplicateSource, setDuplicateSource] = useState<DuplicateMatrixSource | null>(null);
+
+    const handleDuplicateMatrix = (matrixId: string) => {
+        const source = matrices.find((m) => String(m.id) === String(matrixId));
+        if (source) setDuplicateSource({ id: source.id, name: source.name });
+    };
+
+    const handleDuplicated = async (newMatrix: ExamMatrixDetail) => {
+        setDuplicateSource(null);
+        message.success(`Đã sao chép ma trận: ${newMatrix.name}`);
+        await fetchMatrices();
     };
 
     const handleCreateFromSample = async (key: string) => {
@@ -181,6 +186,12 @@ export default function ExamMatrixListPage() {
                 open={isTemplateModalOpen}
                 onCancel={() => setIsTemplateModalOpen(false)}
                 onCreateFromSample={handleCreateFromSample}
+            />
+
+            <DuplicateMatrixModal
+                source={duplicateSource}
+                onCancel={() => setDuplicateSource(null)}
+                onDuplicated={handleDuplicated}
             />
         </div>
     );

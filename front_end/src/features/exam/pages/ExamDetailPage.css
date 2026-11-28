@@ -44,6 +44,11 @@
     overflow-wrap: anywhere;
 }
 
+/* Đợt 3: nút đổi tên đề nằm ngay sau tiêu đề */
+.exam-detail-page-rename-button {
+    flex: 0 0 auto;
+}
+
 /* Danh sách câu không còn card bao ngoài: các Phần (.question-group) xếp thẳng trong cột phải, có nền và bóng riêng */
 .exam-detail-page-question-card {
     min-width: 0;

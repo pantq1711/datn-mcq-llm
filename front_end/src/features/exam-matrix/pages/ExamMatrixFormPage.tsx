@@ -6,9 +6,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExamMatrixBasicInfoForm, type ExamMatrixBasicInfoValues, type ExamMatrixSubjectOption } from '../components/ExamMatrixBasicInfoForm';
 import { ExamMatrixCellEditor } from '../components/ExamMatrixCellEditor';
 import { ExamMatrixTotalSummary } from '../components/ExamMatrixTotalSummary';
-import { createExamMatrix, updateExamMatrix, getExamMatrix, duplicateExamMatrix } from '../services/examMatrixService';
+import { DuplicateMatrixModal, type DuplicateMatrixSource } from '../components/DuplicateMatrixModal';
+import { createExamMatrix, updateExamMatrix, getExamMatrix } from '../services/examMatrixService';
 import { getCatalogSubjects } from '../../exam/services/examApi';
-import type { CreateExamMatrixPayload, ExamMatrixCellInput } from '../types/examMatrix.types';
+import type { CreateExamMatrixPayload, ExamMatrixCellInput, ExamMatrixDetail } from '../types/examMatrix.types';
 import { createEmptyCell, findCellError, matrixCellAnchorId, normalizeCell, summarizeCells, toCellInput } from '../../../utils/matrixCell.utils';
 import { useUnsavedChangesBlocker } from '../../../hooks/useUnsavedChangesBlocker';
 import './ExamMatrixFormPage.css';
@@ -26,7 +27,8 @@ export default function ExamMatrixFormPage() {
     const [basicForm] = Form.useForm<ExamMatrixBasicInfoValues>();
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [duplicating, setDuplicating] = useState(false);
+    // Tên ma trận đã lưu (lúc nạp để sửa): tên gợi ý khi sao chép
+    const [savedName, setSavedName] = useState('');
 
     const [cells, setCellsState] = useState<ExamMatrixCellInput[]>(() => [createEmptyCell()]);
     // Ô lỗi lần bấm Lưu gần nhất (rà soát D9): thẻ ô đó viền đỏ kèm lý do; sửa bất kỳ ô nào thì bỏ đánh dấu
@@ -171,19 +173,18 @@ export default function ExamMatrixFormPage() {
         }
     };
 
-    // Ma trận đã có đề không đổi cấu trúc được: nhân bản rồi sửa bản sao
-    const handleDuplicate = async () => {
+    // Ma trận đã có đề không đổi cấu trúc được: nhân bản rồi sửa bản sao. Đợt 3 (D2): hỏi tên trước, điền sẵn
+    // "<tên đã lưu> – DD/MM" (bản sao chép từ ma trận đã lưu, không từ ô đang gõ)
+    const [duplicateSource, setDuplicateSource] = useState<DuplicateMatrixSource | null>(null);
+    const handleDuplicate = () => {
         if (!id) return;
-        try {
-            setDuplicating(true);
-            const copy = await duplicateExamMatrix(id);
-            message.success(`Đã sao chép thành "${copy.name}". Thầy/cô sửa cấu trúc ở bản này.`);
-            navigate(`/exam-matrices/${copy.id}/edit`);
-        } catch (err: any) {
-            message.error(err?.response?.data?.error || 'Không sao chép được ma trận');
-        } finally {
-            setDuplicating(false);
-        }
+        setDuplicateSource({ id, name: savedName });
+    };
+
+    const handleDuplicated = (copy: ExamMatrixDetail) => {
+        setDuplicateSource(null);
+        message.success(`Đã sao chép thành "${copy.name}". Thầy/cô sửa cấu trúc ở bản này.`);
+        navigate(`/exam-matrices/${copy.id}/edit`);
     };
 
     useEffect(() => {
@@ -192,6 +193,7 @@ export default function ExamMatrixFormPage() {
         (async () => {
             try {
                 const data = await getExamMatrix(id!);
+                setSavedName(data.name);
                 basicForm.setFieldsValue({
                     name: data.name,
                     subjectId: data.subjectId,
@@ -283,7 +285,7 @@ export default function ExamMatrixFormPage() {
                             }
                             description="Muốn đổi môn, lớp hoặc các ô, thầy/cô sao chép ma trận rồi sửa bản sao chép."
                             action={
-                                <Button icon={<CopyOutlined />} loading={duplicating} onClick={handleDuplicate}>
+                                <Button icon={<CopyOutlined />} onClick={handleDuplicate}>
                                     Sao chép để sửa
                                 </Button>
                             }
@@ -377,6 +379,12 @@ export default function ExamMatrixFormPage() {
                     >
                         Thầy/cô có thay đổi chưa lưu. Rời trang thì các thay đổi này sẽ mất.
                     </Modal>
+
+                    <DuplicateMatrixModal
+                        source={duplicateSource}
+                        onCancel={() => setDuplicateSource(null)}
+                        onDuplicated={handleDuplicated}
+                    />
                 </>
             )}
         </main>

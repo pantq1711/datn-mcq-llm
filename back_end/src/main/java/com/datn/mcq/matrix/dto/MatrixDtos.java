@@ -159,9 +159,13 @@ public final class MatrixDtos {
             int examCount
     ) {}
 
-    /** @param examCount số đề đã tạo từ ma trận (W1-4): lớn hơn 0 thì khóa sửa ô và xóa */
+    /**
+     * @param examCount     số đề đã tạo từ ma trận (W1-4): lớn hơn 0 thì khóa sửa ô và xóa
+     * @param questionCount (đợt 3) tổng số câu của các ô ({@code exam_matrix_cell.question_count}); câu Đúng/Sai tính 1 câu,
+     *                      không đếm theo ý; bằng số chỗ của một đề tạo từ ma trận
+     */
     public record MatrixSummaryDto(Integer id, String name, Integer subjectId, Integer gradeLevel,
-                                   LocalDateTime createdAt, int cellCount, int examCount) {}
+                                   LocalDateTime createdAt, int cellCount, int examCount, int questionCount) {}
 
     /** Body nhân bản ma trận (tùy chọn): {@code name} bỏ trống thì "&lt;tên&gt; (bản sao)". */
     public record DuplicateMatrixRequest(String name) {}

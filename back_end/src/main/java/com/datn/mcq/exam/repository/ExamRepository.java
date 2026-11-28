@@ -4,6 +4,7 @@ import com.datn.mcq.exam.entity.Exam;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -64,4 +65,28 @@ public interface ExamRepository extends JpaRepository<Exam, Integer> {
             + "(SELECT 1 FROM ExamMatrix m WHERE m.id = e.matrixId AND m.kind = :kind)")
     Page<Exam> findByCreatedByAndMatrixKind(@Param("createdBy") Integer createdBy, @Param("kind") String kind,
                                             Pageable pageable);
+
+    /**
+     * Đợt 3 (BE-2): đề chưa xóa của một người có tên khớp {@code pattern} (mẫu LIKE đã thoát ký tự đại diện bằng dấu !),
+     * không phân biệt hoa thường.
+     */
+    @Query("SELECT e FROM Exam e WHERE e.createdBy = :createdBy AND e.deletedAt IS NULL"
+            + " AND LOWER(e.title) LIKE LOWER(:pattern) ESCAPE '!'")
+    Page<Exam> searchByTitle(@Param("createdBy") Integer createdBy, @Param("pattern") String pattern,
+                             Pageable pageable);
+
+    /** Như {@link #searchByTitle}, thêm điều kiện loại ma trận gốc như {@link #findByCreatedByAndMatrixKind}. */
+    @Query("SELECT e FROM Exam e WHERE e.createdBy = :createdBy AND e.deletedAt IS NULL"
+            + " AND LOWER(e.title) LIKE LOWER(:pattern) ESCAPE '!' AND EXISTS "
+            + "(SELECT 1 FROM ExamMatrix m WHERE m.id = e.matrixId AND m.kind = :kind)")
+    Page<Exam> searchByTitleAndMatrixKind(@Param("createdBy") Integer createdBy, @Param("kind") String kind,
+                                          @Param("pattern") String pattern, Pageable pageable);
+
+    /**
+     * Đợt 3 (BE-3): đổi tên đề chưa xóa của một người; trả số hàng đã đổi (0: không có, của người khác hoặc đã xóa). Chỉ ghi
+     * cột {@code title}.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE Exam e SET e.title = :title WHERE e.id = :id AND e.createdBy = :owner AND e.deletedAt IS NULL")
+    int renameLive(@Param("id") Integer id, @Param("owner") Integer owner, @Param("title") String title);
 }

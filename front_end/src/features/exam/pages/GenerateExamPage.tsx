@@ -11,11 +11,13 @@ import type { ExamSubjectOption, BuildResultDto, CellContextInput, BuildExamRequ
 import { EXAM_CHALLENGE_OPTIONS, TEACHER_REQUEST_OPTIONS, teacherRequestOptionsFor } from "../types/exam.types";
 import type { ExamMatrixSummary, ExamMatrixDetail, ExamMatrixCellPayload } from "../../exam-matrix/types/examMatrix.types";
 import { describeMatrixOption } from "../utils/matrixOption";
+import { MAX_NAME_LENGTH, datedName, nextAutoTitle } from "../utils/examName";
+import { DuplicateMatrixModal, type DuplicateMatrixSource } from "../../exam-matrix/components/DuplicateMatrixModal";
 import { getCatalogSubjects, buildExamByMatrix } from "../services/examApi";
 import { describeLevel, QUESTION_TYPE_LABELS } from "../../../utils/exam.utils";
 import type { ExamQuestionType } from "../types/exam.types";
 import { showApiError } from "../../../utils/apiError";
-import { listExamMatrices, getExamMatrix, duplicateExamMatrix, } from "../../exam-matrix/services/examMatrixService";
+import { listExamMatrices, getExamMatrix, } from "../../exam-matrix/services/examMatrixService";
 
 import "./GenerateExamPage.css";
 
@@ -82,20 +84,24 @@ export default function GenerateExamPage() {
     const [loadingSubjects, setLoadingSubjects] = useState<boolean>(false);
 
     // State cho Tab ma trận
-    // Danh sách từ GET /api/exam-matrices (MatrixSummaryDto): có createdAt, cellCount, examCount để phân biệt ma trận trùng tên
+    // Danh sách từ GET /api/exam-matrices (MatrixSummaryDto): có createdAt, questionCount, examCount để phân biệt ma trận trùng tên
     const [matrices, setMatrices] = useState<ExamMatrixSummary[]>([]);
     const [loadingMatrices, setLoadingMatrices] = useState<boolean>(false);
     const [selectedMatrixId, setSelectedMatrixId] = useState<string | null>(initialMatrixId);
     const [matrixDetail, setMatrixDetail] = useState<ExamMatrixDetail | null>(null);
     const [loadingMatrixDetail, setLoadingMatrixDetail] = useState<boolean>(false);
-    const [matrixExamTitle, setMatrixExamTitle] = useState<string>("");
+    // Đợt 3 (C5): ô tên đề tự điền "<tên ma trận> – DD/MM" khi chọn ma trận. `auto` là giá trị tự điền gần nhất: ô còn
+    // đúng giá trị đó (hoặc trống) thì đổi ma trận sẽ điền lại, giáo viên đã gõ tên khác thì giữ nguyên.
+    const [examTitleState, setExamTitleState] = useState<{ value: string; auto: string | null }>({ value: "", auto: null });
+    const matrixExamTitle = examTitleState.value;
     const [matrixChallenge, setMatrixChallenge] = useState<ExamChallenge>("standard");
     // NV-11: bỏ chọn thì mọi câu soạn mới (đề thứ hai từ cùng ma trận không lặp lại câu đã lưu)
     const [matrixUseBank, setMatrixUseBank] = useState<boolean>(true);
     // Chip yêu cầu cho cả đề (PR B)
     const [matrixRequestCodes, setMatrixRequestCodes] = useState<TeacherRequestCode[]>([]);
     const [buildingMatrixExam, setBuildingMatrixExam] = useState<boolean>(false);
-    const [duplicating, setDuplicating] = useState<boolean>(false);
+    // Đợt 3 (D2): sao chép ma trận đang chọn qua hộp hỏi tên
+    const [duplicateSource, setDuplicateSource] = useState<DuplicateMatrixSource | null>(null);
 
     // Tài liệu chung cho toàn bộ ma trận
     const [globalMaterials, setGlobalMaterials] = useState<MaterialDto[]>([]);
@@ -263,23 +269,32 @@ export default function GenerateExamPage() {
         };
     }, [selectedMatrixId]);
 
+    // Đợt 3 (C5): chọn ma trận (kể cả ma trận trang tự chọn sẵn) thì tự điền tên đề "<tên ma trận> – DD/MM" khi ô đang
+    // trống hoặc vẫn là giá trị tự điền trước đó; giáo viên đã gõ tên khác thì không ghi đè
+    const selectedMatrixName = matrices.find((m) => String(m.id) === String(selectedMatrixId))?.name;
+    useEffect(() => {
+        if (!selectedMatrixName) return;
+        const auto = datedName(selectedMatrixName);
+        setExamTitleState((s) => {
+            const value = nextAutoTitle(s.value, s.auto, auto);
+            return value === auto ? { value, auto } : s;
+        });
+    }, [selectedMatrixName]);
+
     const handleExamCreated = (result: BuildResultDto) => {
         navigate(`/exams/${result.examId}`);
     };
 
-    const handleDuplicateSelectedMatrix = async () => {
-        if (!selectedMatrixId) return;
-        setDuplicating(true);
-        try {
-            const newMatrix = await duplicateExamMatrix(selectedMatrixId);
-            message.success(`Đã sao chép ma trận: ${newMatrix.name}`);
-            await fetchMatrices();
-            setSelectedMatrixId(String(newMatrix.id));
-        } catch (err: any) {
-            message.error(err?.response?.data?.error || "Không sao chép được ma trận");
-        } finally {
-            setDuplicating(false);
-        }
+    const handleDuplicateSelectedMatrix = () => {
+        const source = matrices.find((m) => String(m.id) === String(selectedMatrixId));
+        if (source) setDuplicateSource({ id: source.id, name: source.name });
+    };
+
+    const handleMatrixDuplicated = async (newMatrix: ExamMatrixDetail) => {
+        setDuplicateSource(null);
+        message.success(`Đã sao chép ma trận: ${newMatrix.name}`);
+        await fetchMatrices();
+        setSelectedMatrixId(String(newMatrix.id));
     };
 
     const handleBuildByMatrix = async () => {
@@ -605,7 +620,6 @@ export default function GenerateExamPage() {
                                                             <Space wrap>
                                                                 <Button
                                                                     icon={<CopyOutlined />}
-                                                                    loading={duplicating}
                                                                     disabled={!selectedMatrixId}
                                                                     onClick={handleDuplicateSelectedMatrix}
                                                                 >
@@ -733,14 +747,17 @@ export default function GenerateExamPage() {
                                                     <Col xs={24} md={14}>
                                                         <Form.Item
                                                             label="Tên đề thi hiển thị (tùy chọn)"
-                                                            tooltip="Mặc định lấy theo tên của ma trận đã chọn"
+                                                            tooltip="Tự điền tên ma trận kèm ngày hôm nay; thầy/cô sửa được"
                                                         >
                                                             <Input
                                                                 size="middle"
                                                                 value={matrixExamTitle}
-                                                                onChange={(e) => setMatrixExamTitle(e.target.value)}
+                                                                onChange={(e) => {
+                                                                    const value = e.target.value;
+                                                                    setExamTitleState((s) => ({ ...s, value }));
+                                                                }}
                                                                 placeholder="Mặc định lấy theo tên ma trận"
-                                                                maxLength={255}
+                                                                maxLength={MAX_NAME_LENGTH}
                                                             />
                                                         </Form.Item>
                                                     </Col>
@@ -859,6 +876,12 @@ export default function GenerateExamPage() {
                 />
                 )}
             </div>
+
+            <DuplicateMatrixModal
+                source={duplicateSource}
+                onCancel={() => setDuplicateSource(null)}
+                onDuplicated={handleMatrixDuplicated}
+            />
 
             {/* Modal chọn tài liệu chung cho ma trận */}
             <MaterialManagerModal

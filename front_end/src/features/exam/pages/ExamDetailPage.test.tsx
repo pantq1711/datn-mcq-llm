@@ -1,4 +1,5 @@
 import { configure, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -108,5 +109,28 @@ describe("ExamDetailPage: nút Giao bài online", () => {
 
         const button = await screen.findByRole("button", { name: /Giao bài online/ });
         expect(button).toBeDisabled();
+    });
+});
+
+describe("ExamDetailPage: đổi tên đề ở đầu trang (đợt 3)", () => {
+    beforeEach(() => {
+        vi.resetAllMocks();
+        mocked.getExamProgress.mockRejectedValue(new Error("không cần tiến độ"));
+    });
+
+    it("bấm nút đổi tên, lưu tên mới thì tiêu đề trang đổi theo", async () => {
+        mocked.getExamDetail.mockResolvedValue(detail([item({ slotId: 1 })]));
+        mocked.renameExam.mockResolvedValue({ examId: 5, title: "Giữa kì I – 8A1" });
+        renderPage();
+
+        await userEvent.click(await screen.findByRole("button", { name: "Đổi tên đề" }));
+        const input = screen.getByLabelText("Tên đề");
+        expect(input).toHaveValue("Đề có hình");
+        await userEvent.clear(input);
+        await userEvent.type(input, "Giữa kì I – 8A1");
+        await userEvent.click(screen.getByRole("button", { name: "Lưu tên" }));
+
+        expect(await screen.findByRole("heading", { level: 2, name: "Giữa kì I – 8A1" })).toBeInTheDocument();
+        expect(mocked.renameExam).toHaveBeenCalledWith(5, "Giữa kì I – 8A1");
     });
 });

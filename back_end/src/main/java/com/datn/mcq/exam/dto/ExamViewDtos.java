@@ -291,4 +291,10 @@ public final class ExamViewDtos {
 
     /** @param page trang hiện tại (từ 0) */
     public record ExamPageDto(List<ExamSummaryDto> items, int page, int size, long totalItems, int totalPages) {}
+
+    /** Đợt 3 (BE-3): body của PATCH /api/exams/{id}; {@code name} được trim, không rỗng, tối đa 255 ký tự. */
+    public record RenameExamRequest(String name) {}
+
+    /** Kết quả đổi tên đề: {@code title} là tên đã lưu (đã trim). */
+    public record RenameExamResponse(Integer examId, String title) {}
 }

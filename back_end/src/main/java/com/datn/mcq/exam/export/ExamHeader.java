@@ -36,6 +36,11 @@ public record ExamHeader(String periodName, String subjectName, Integer gradeLev
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern ASCII_DIGITS = Pattern.compile("[0-9]+");
     /**
+     * Đuôi ngày ở cuối tên đề (đợt 3, 28/11): dấu nối (–, — hoặc -) rồi DD/MM hoặc DD/MM/YYYY, như tên mặc định
+     * "&lt;tên ma trận&gt; – 28/11" của giao diện. Không có dấu nối ("Đề 28/11") thì không phải đuôi ngày.
+     */
+    private static final Pattern DATE_SUFFIX = Pattern.compile("\\s*[–—-]\\s*\\d{1,2}/\\d{1,2}(?:/\\d{4})?\\s*$");
+    /**
      * Tiền tố "Kiểm tra" / "Đề kiểm tra" của tên đề (đã NFC), kèm dấu nối theo sau: bỏ đi để dòng tên kì không lặp chữ "KIỂM
      * TRA". Chỉ khớp cả từ ("Kiểm tranh…" không phải tiền tố).
      */
@@ -54,12 +59,13 @@ public record ExamHeader(String periodName, String subjectName, Integer gradeLev
     private static final Locale VI = Locale.forLanguageTag("vi-VN");
 
     /**
-     * Tên kì theo tên đề (16/11; trước đó là tên ma trận); bỏ hậu tố "(bản sao)" rồi hậu tố "– Môn Khối" thừa (tên ma trận
-     * mẫu, cũng là tên đề mặc định, là "Giữa kì I – Toán 8"). Mã đề mặc định 101 ({@link #withExamCode}).
+     * Tên kì theo tên đề (16/11; trước đó là tên ma trận); bỏ hậu tố "(bản sao)", rồi MỘT đuôi ngày "– DD/MM" ở cuối tên
+     * (đợt 3, 28/11), rồi hậu tố "– Môn Khối" thừa (tên ma trận mẫu, cũng là tên đề mặc định, là "Giữa kì I – Toán 8"; tên
+     * mặc định từ 28/11 là "Giữa kì I – Toán 8 – 28/11"). Mã đề mặc định 101 ({@link #withExamCode}).
      */
     public static ExamHeader of(String periodName, String subjectName, Integer gradeLevel, Integer durationMinutes) {
-        return new ExamHeader(withoutSubjectSuffix(withoutCopySuffix(periodName), subjectName, gradeLevel), subjectName,
-                gradeLevel, durationMinutes, ORIGINAL_CODE);
+        return new ExamHeader(withoutSubjectSuffix(withoutDateSuffix(withoutCopySuffix(periodName)), subjectName,
+                gradeLevel), subjectName, gradeLevel, durationMinutes, ORIGINAL_CODE);
     }
 
     /** Đầu đề khi không có ma trận hoặc thiếu thông tin: chỉ tên đề (bỏ hậu tố "(bản sao)"), môn để trống. */
@@ -180,6 +186,15 @@ public record ExamHeader(String periodName, String subjectName, Integer gradeLev
             return null;
         }
         String stripped = COPY_SUFFIX.matcher(name).replaceFirst("").strip();
+        return stripped.isEmpty() ? name : stripped;
+    }
+
+    /** Bỏ một đuôi ngày ({@link #DATE_SUFFIX}) ở cuối tên; tên chỉ có ngày (bỏ hết) thì giữ nguyên tên. */
+    private static String withoutDateSuffix(String name) {
+        if (name == null) {
+            return null;
+        }
+        String stripped = DATE_SUFFIX.matcher(name).replaceFirst("").strip();
         return stripped.isEmpty() ? name : stripped;
     }
 

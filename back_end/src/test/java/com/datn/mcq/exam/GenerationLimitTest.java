@@ -43,8 +43,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestSafetyConfiguration.class)
 class GenerationLimitTest extends ExamFlowTestBase {
 
-    static final String QUEUE_MESSAGE =
-            "Thầy/cô đang có quá nhiều câu chờ soạn. Vui lòng đợi các đề hiện tại soạn xong rồi tạo tiếp.";
+    /** Đợt 3 (BE-5): câu báo kèm số câu đang chờ, mức tối đa và số câu yêu cầu này cần; mã lỗi giữ nguyên. */
+    static final String QUEUE_MESSAGE = "Thầy/cô đang có 6 câu chờ soạn (tối đa 6 câu cùng lúc). Yêu cầu này cần thêm"
+            + " 1 câu. Vui lòng đợi các đề hiện tại soạn xong rồi tạo tiếp.";
     private static final ZoneId VN = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private int newTeacher(String tag) {
@@ -156,7 +157,8 @@ class GenerationLimitTest extends ExamFlowTestBase {
 
         postAs(c, "/api/exams/" + first + "/slots/" + slot + "/replace", "{\"source\": \"generate\"}")
                 .andExpect(status().isTooManyRequests())
-                .andExpect(jsonPath("$.code").value("GENERATION_QUEUE_LIMIT"));
+                .andExpect(jsonPath("$.code").value("GENERATION_QUEUE_LIMIT"))
+                .andExpect(jsonPath("$.error").value(QUEUE_MESSAGE));
         assertEquals("ready", slotState(slot), "Đổi câu bị chặn thì chỗ giữ nguyên");
         assertEquals(0, count("SELECT count(*) FROM exam_slot_action WHERE slot_id = ?", slot));
     }

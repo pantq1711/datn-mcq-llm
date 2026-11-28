@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button, Empty, Result, Spin, Space, Tooltip, Typography, message, Modal } from "antd";
-import { ArrowLeftOutlined, FileWordOutlined, ProfileOutlined, SendOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, EditOutlined, FileWordOutlined, ProfileOutlined, SendOutlined } from "@ant-design/icons";
 
 import ExamQuestionList from "../components/ExamQuestionList";
 import ExamQuestionNav from "../components/ExamQuestionNav";
@@ -19,6 +19,7 @@ import { clearEditDraft, findEditDraftSlots, loadEditDraft } from "../utils/edit
 import { QcTraceModal } from '../components/QcTraceModal';
 import AssignExamModal from "../../assignment/components/AssignExamModal";
 import ExportWordDialog from '../components/ExportWordDialog';
+import { RenameExamModal, type RenameExamTarget } from '../components/RenameExamModal';
 import { useUnsavedChangesBlocker } from '../../../hooks/useUnsavedChangesBlocker';
 
 const { Title, Text } = Typography;
@@ -111,6 +112,10 @@ export default function ExamDetailPage() {
     const [exportOpen, setExportOpen] = useState(false);
 
     const [assignOpen, setAssignOpen] = useState(false);
+
+    // Đợt 3: đổi tên đề ở đầu trang (mọi trạng thái đề). Giữ đích trong state để trang tải lại tiến độ không làm hộp
+    // điền lại tên khi đang gõ
+    const [renameTarget, setRenameTarget] = useState<RenameExamTarget | null>(null);
 
     const [qcModalVisible, setQcModalVisible] = useState(false);
     const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
@@ -863,6 +868,15 @@ export default function ExamDetailPage() {
                             <Title level={2} className="exam-detail-page-title">
                                 {detail.title}
                             </Title>
+                            <Tooltip title="Đổi tên đề">
+                                <Button
+                                    type="text"
+                                    icon={<EditOutlined />}
+                                    aria-label="Đổi tên đề"
+                                    className="exam-detail-page-rename-button"
+                                    onClick={() => setRenameTarget({ examId: detail.examId, title: detail.title })}
+                                />
+                            </Tooltip>
                         </div>
 
                         <Space size={8} wrap className="exam-detail-page-meta">
@@ -935,6 +949,15 @@ export default function ExamDetailPage() {
                 examId={examId!}
                 onClose={() => setAssignOpen(false)}
                 onCreated={() => undefined}
+            />
+
+            <RenameExamModal
+                target={renameTarget}
+                onCancel={() => setRenameTarget(null)}
+                onRenamed={(title) => {
+                    setRenameTarget(null);
+                    setDetail((d) => (d ? { ...d, title } : d));
+                }}
             />
 
             {/* Bàn làm việc: mục lục cố định bên trái, danh sách câu bên phải */}
