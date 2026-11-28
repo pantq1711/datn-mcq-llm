@@ -30,7 +30,7 @@ export default function PendingImportsPanel({ batches, onOpen, onCancel }: Pendi
     };
 
     return (
-        <Card size="small" title="Lần nhập đang chờ xác nhận" style={{ marginTop: 16 }}>
+        <Card className="bank-import-page__section-card" title="Lần nhập đang chờ xác nhận" bordered>
             {batches.length >= MAX_PENDING_IMPORTS && (
                 <Alert
                     type="info"
@@ -43,7 +43,7 @@ export default function PendingImportsPanel({ batches, onOpen, onCancel }: Pendi
                 <div
                     key={batch.id}
                     data-testid={`pending-import-${batch.id}`}
-                    style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "6px 0" }}
+                    className="pending-import-item"
                 >
                     <div style={{ flex: "1 1 240px", minWidth: 0 }}>
                         <div>

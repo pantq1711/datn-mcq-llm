@@ -78,8 +78,9 @@ export default function ImportUploadForm({ uploading, error, onSubmit }: ImportU
 
             {fileError && <Alert type="error" showIcon style={{ marginTop: 12 }} title={fileError} />}
             {file && (
-                <div style={{ marginTop: 12 }}>
-                    <FileWordOutlined /> <Text strong>{file.name}</Text>
+                <div className="import-upload-file-badge">
+                    <FileWordOutlined style={{ color: "#1677ff" }} />
+                    <Text strong>{file.name}</Text>
                 </div>
             )}
 

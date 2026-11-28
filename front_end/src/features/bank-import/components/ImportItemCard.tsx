@@ -28,26 +28,28 @@ function ImportItemCard({ item, selected, onToggle }: ImportItemCardProps) {
             size="small"
             className={item.blocking ? "import-item import-item--blocked" : "import-item"}
             data-testid={`import-item-${item.key}`}
+            title={
+                <div className="import-item-head">
+                    <Checkbox
+                        aria-label={`Chọn câu ${item.key}`}
+                        checked={selected && !item.blocking}
+                        disabled={item.blocking}
+                        onChange={() => onToggle(item.key)}
+                    />
+                    <Text strong>{item.locator}</Text>
+                    <Tag>{QUESTION_TYPE_LABELS[item.type] ?? item.type}</Tag>
+                    <Tag color={level.color}>{level.label}</Tag>
+                    {other.map((flag) => {
+                        const info = describeFlag(flag);
+                        return (
+                            <Tooltip key={flag} title={info.hint}>
+                                <Tag>{info.label}</Tag>
+                            </Tooltip>
+                        );
+                    })}
+                </div>
+            }
         >
-            <div className="import-item-head">
-                <Checkbox
-                    aria-label={`Chọn câu ${item.key}`}
-                    checked={selected && !item.blocking}
-                    disabled={item.blocking}
-                    onChange={() => onToggle(item.key)}
-                />
-                <Text strong>{item.locator}</Text>
-                <Tag>{QUESTION_TYPE_LABELS[item.type] ?? item.type}</Tag>
-                <Tag color={level.color}>{level.label}</Tag>
-                {other.map((flag) => {
-                    const info = describeFlag(flag);
-                    return (
-                        <Tooltip key={flag} title={info.hint}>
-                            <Tag>{info.label}</Tag>
-                        </Tooltip>
-                    );
-                })}
-            </div>
 
             {item.blocking && (
                 <Alert

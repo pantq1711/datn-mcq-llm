@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { Alert, Button, Popconfirm, Result, Spin, Steps, Typography } from "antd";
+import { Alert, Button, Card, Popconfirm, Result, Spin, Steps, Typography } from "antd";
 import { ArrowLeftOutlined, FileWordOutlined } from "@ant-design/icons";
 import ImportItemCard from "../components/ImportItemCard";
 import ImportResult from "../components/ImportResult";
@@ -199,39 +199,70 @@ function BankImportFlow({ routeId }: { routeId: number | null | undefined }) {
 
     return (
         <div className="bank-import-page">
-            <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => navigate("/question-bank")} style={{ paddingLeft: 0 }}>
-                Về ngân hàng câu hỏi
-            </Button>
-            <Title level={2} className="bank-import-title">
-                <FileWordOutlined style={{ marginRight: 10, color: "#1677ff" }} />
-                Nhập câu hỏi từ Word
-            </Title>
-            <Paragraph type="secondary">
-                Câu nhập vào là câu riêng của thầy/cô. Hệ thống không dùng AI ở bước này; thầy/cô xem từng câu, chọn câu rồi mới nhập.
-            </Paragraph>
-            <Steps
-                size="small"
-                current={stepIndex}
-                items={[{ title: "Tải file lên" }, { title: "Xem lại và chọn câu" }, { title: "Hoàn tất" }]}
-                className="bank-import-steps"
-            />
+            <div className="bank-import-page__header-top">
+                <Button
+                    type="text"
+                    icon={<ArrowLeftOutlined />}
+                    className="bank-import-page__back-button"
+                    onClick={() => navigate("/question-bank")}
+                >
+                    Về ngân hàng câu hỏi
+                </Button>
+            </div>
+
+            <header className="bank-import-page__header">
+                <div className="bank-import-page__heading">
+                    <Title level={2} className="bank-import-title">
+                        <FileWordOutlined style={{ marginRight: 10, color: "#1677ff" }} />
+                        Nhập câu hỏi từ Word
+                    </Title>
+                    <Paragraph type="secondary" className="bank-import-subtitle">
+                        Câu nhập vào là câu riêng của thầy/cô. Hệ thống không dùng AI ở bước này; thầy/cô xem từng câu, chọn câu rồi mới nhập.
+                    </Paragraph>
+                </div>
+            </header>
+
+            <div className="bank-import-page__steps-card">
+                <Steps
+                    size="small"
+                    current={stepIndex}
+                    items={[{ title: "Tải file lên" }, { title: "Xem lại và chọn câu" }, { title: "Hoàn tất" }]}
+                    className="bank-import-steps"
+                />
+            </div>
 
             {phase === "upload" && (
-                <>
-                    <ImportUploadForm uploading={uploading} error={uploadError} onSubmit={handleUpload} />
-                    {pendingError && <Alert type="error" showIcon style={{ marginTop: 16 }} title={pendingError} />}
-                    <PendingImportsPanel
-                        batches={pending}
-                        onOpen={(id) => navigate(`${IMPORT_PATH}/${id}`)}
-                        onCancel={handleCancelPending}
-                    />
-                </>
+                <div className="bank-import-page__content">
+                    <div className="bank-import-page__main-column">
+                        <Card className="bank-import-page__section-card" title="Chọn file Word (.docx)" bordered>
+                            <ImportUploadForm uploading={uploading} error={uploadError} onSubmit={handleUpload} />
+                        </Card>
+                        {pendingError && <Alert type="error" showIcon title={pendingError} />}
+                        <PendingImportsPanel
+                            batches={pending}
+                            onOpen={(id) => navigate(`${IMPORT_PATH}/${id}`)}
+                            onCancel={handleCancelPending}
+                        />
+                    </div>
+                    <aside className="bank-import-page__sidebar">
+                        <Card className="bank-import-page__help-card" title="Lưu ý" bordered>
+                            <Text type="secondary">
+                                Chỉ nhận file Word (.docx), tối đa 10 MB và 200 câu mỗi lần. Đặt tên file theo mẫu
+                                {" "}"KHỐI 8 - CHƯƠNG 1 - BÀI 2 - Tên bài" để hệ thống tự lấy lớp và chủ đề. Mỗi giáo
+                                viên có tối đa 3 lần nhập chờ xác nhận (giữ trong 24 giờ).
+                            </Text>
+                        </Card>
+                    </aside>
+                </div>
             )}
 
             {phase === "loading" && (
-                <div className="bank-import-center">
-                    <Spin />
-                </div>
+                <Card className="bank-import-page__section-card" bordered>
+                    <div className="bank-import-center">
+                        <Spin size="large" />
+                        <Text type="secondary">Đang tải bản xem trước…</Text>
+                    </div>
+                </Card>
             )}
 
             {phase === "error" && (
@@ -256,89 +287,111 @@ function BankImportFlow({ routeId }: { routeId: number | null | undefined }) {
             )}
 
             {phase === "gone" && (
-                <Result
-                    status="warning"
-                    title="Bản xem trước đã hết hạn hoặc không còn."
-                    subTitle="Lần nhập chỉ được giữ 24 giờ. Thầy/cô tải lại file để đọc lại."
-                    extra={
-                        <Button type="primary" onClick={goUpload}>
-                            Tải file lại
-                        </Button>
-                    }
-                />
+                <Card className="bank-import-page__section-card" bordered>
+                    <Result
+                        status="warning"
+                        title="Bản xem trước đã hết hạn hoặc không còn."
+                        subTitle="Lần nhập chỉ được giữ 24 giờ. Thầy/cô tải lại file để đọc lại."
+                        extra={
+                            <Button type="primary" onClick={goUpload}>
+                                Tải file lại
+                            </Button>
+                        }
+                    />
+                </Card>
             )}
 
             {phase === "result" && result && (
-                <ImportResult
-                    imported={result.imported}
-                    onViewBank={() => navigate("/question-bank")}
-                    onImportMore={goUpload}
-                />
+                <Card className="bank-import-page__section-card" bordered>
+                    <ImportResult
+                        imported={result.imported}
+                        onViewBank={() => navigate("/question-bank")}
+                        onImportMore={goUpload}
+                    />
+                </Card>
             )}
 
             {phase === "preview" && batch && (
-                <>
-                    <ImportSummary batch={batch} />
-                    <ImportSkippedPanel skipped={batch.skipped} skippedItems={batch.skippedItems} />
+                <div className="bank-import-page__content">
+                    <div className="bank-import-page__main-column">
+                        <ImportSkippedPanel skipped={batch.skipped} skippedItems={batch.skippedItems} />
 
-                    <div className="bank-import-toolbar">
-                        <Button onClick={() => setSelected(selectAllKeys(items))}>Chọn tất cả câu chọn được</Button>
-                        <Button onClick={() => setSelected(new Set())}>Bỏ chọn tất cả</Button>
-                        {hasImages && (
-                            <Button loading={reloading} onClick={handleReloadImages}>
-                                Tải lại hình
-                            </Button>
-                        )}
-                        <Popconfirm
-                            title="Hủy lần nhập này?"
-                            description="Bản xem trước và hình của lần nhập này sẽ bị xóa."
-                            okText="Hủy lần nhập này"
-                            cancelText="Giữ lại"
-                            onConfirm={handleCancelCurrent}
+                        <Card
+                            className="bank-import-page__section-card"
+                            title={`Danh sách câu hỏi xem trước (${items.length})`}
+                            bordered
                         >
-                            <Button danger>Hủy lần nhập</Button>
-                        </Popconfirm>
-                    </div>
+                            <div className="bank-import-toolbar">
+                                <Button onClick={() => setSelected(selectAllKeys(items))}>Chọn tất cả câu chọn được</Button>
+                                <Button onClick={() => setSelected(new Set())}>Bỏ chọn tất cả</Button>
+                                {hasImages && (
+                                    <Button loading={reloading} onClick={handleReloadImages}>
+                                        Tải lại hình
+                                    </Button>
+                                )}
+                                <Popconfirm
+                                    title="Hủy lần nhập này?"
+                                    description="Bản xem trước và hình của lần nhập này sẽ bị xóa."
+                                    okText="Hủy lần nhập này"
+                                    cancelText="Giữ lại"
+                                    onConfirm={handleCancelCurrent}
+                                >
+                                    <Button danger>Hủy lần nhập</Button>
+                                </Popconfirm>
+                            </div>
 
-                    {actionError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title={actionError} />}
-                    {summary.hasTf && (
-                        <Alert
-                            type="info"
-                            showIcon
-                            style={{ marginBottom: 12 }}
-                            title="Câu đúng/sai nhập từ Word chỉ có một mức chung cho cả 4 ý nên thường không được tự lấy vào đề theo ma trận; câu vẫn nằm trong ngân hàng, xem và tìm được."
-                        />
-                    )}
-
-                    {items.length === 0 ? (
-                        <Alert type="warning" showIcon title="Không có câu nào trong bản xem trước." />
-                    ) : (
-                        <div className="bank-import-list" data-testid="bank-import-list">
-                            {items.map((item) => (
-                                <ImportItemCard
-                                    key={item.key}
-                                    item={item}
-                                    selected={selected.has(item.key)}
-                                    onToggle={(key) => setSelected((current) => toggleKey(current, key, items))}
+                            {actionError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title={actionError} />}
+                            {summary.hasTf && (
+                                <Alert
+                                    type="info"
+                                    showIcon
+                                    style={{ marginBottom: 12 }}
+                                    title="Câu đúng/sai nhập từ Word chỉ có một mức chung cho cả 4 ý nên thường không được tự lấy vào đề theo ma trận; câu vẫn nằm trong ngân hàng, xem và tìm được."
                                 />
-                            ))}
-                            <div
-                                className="bank-import-list-spacer"
-                                data-testid="bank-import-list-spacer"
-                                aria-hidden="true"
-                            />
-                        </div>
-                    )}
+                            )}
 
-                    <div className="bank-import-confirm-bar">
-                        <Text type="secondary">
-                            Đã chọn {summary.count} / {batch.importableCount} câu chọn được
-                        </Text>
-                        <Button type="primary" size="large" disabled={summary.count === 0} loading={confirming} onClick={handleConfirm}>
-                            {`Nhập ${summary.count} câu đã chọn`}
-                        </Button>
+                            {items.length === 0 ? (
+                                <Alert type="warning" showIcon title="Không có câu nào trong bản xem trước." />
+                            ) : (
+                                <div className="bank-import-list" data-testid="bank-import-list">
+                                    {items.map((item) => (
+                                        <ImportItemCard
+                                            key={item.key}
+                                            item={item}
+                                            selected={selected.has(item.key)}
+                                            onToggle={(key) => setSelected((current) => toggleKey(current, key, items))}
+                                        />
+                                    ))}
+                                    <div
+                                        className="bank-import-list-spacer"
+                                        data-testid="bank-import-list-spacer"
+                                        aria-hidden="true"
+                                    />
+                                </div>
+                            )}
+
+                            <div className="bank-import-confirm-bar">
+                                <Text strong className="bank-import-confirm-bar__total">
+                                    Đã chọn {summary.count} / {batch.importableCount} câu chọn được
+                                </Text>
+                                <Button type="primary" size="large" disabled={summary.count === 0} loading={confirming} onClick={handleConfirm}>
+                                    {`Nhập ${summary.count} câu đã chọn`}
+                                </Button>
+                            </div>
+                        </Card>
                     </div>
-                </>
+
+                    <aside className="bank-import-page__sidebar">
+                        <ImportSummary batch={batch} />
+
+                        <Card className="bank-import-page__help-card" title="Lưu ý" bordered>
+                            <Text type="secondary">
+                                Câu nhập từ Word là câu riêng của thầy/cô. Câu có cờ chặn cần sửa trong file Word rồi tải
+                                lại.
+                            </Text>
+                        </Card>
+                    </aside>
+                </div>
             )}
         </div>
     );
