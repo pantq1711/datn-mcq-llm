@@ -472,16 +472,23 @@ public class MatrixService {
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy ô ma trận id=" + cellId));
     }
 
-    /** Ma trận của người gọi, mới nhất trước (W1-1). */
+    /**
+     * Ma trận của người gọi, mới nhất trước (W1-1). Đợt 3: kèm tổng số câu của các ô (câu Đúng/Sai tính 1), tính trên cùng
+     * danh sách ô đã nạp để đếm ô.
+     */
     @Transactional(readOnly = true)
     public List<MatrixSummaryDto> list(Integer ownerId) {
         List<ExamMatrix> matrices = matrixRepository.findAllByCreatedByAndKindAndDeletedAtIsNullOrderByIdDesc(ownerId,
                 ExamMatrix.KIND_MATRIX);
         Map<Integer, Integer> exams = usage.examCounts(matrices.stream().map(ExamMatrix::getId).toList());
         return matrices.stream()
-                .map(m -> new MatrixSummaryDto(m.getId(), m.getName(), m.getSubjectId(), m.getGradeLevel(),
-                        m.getCreatedAt(), cellRepository.findByMatrixIdOrderByPositionAsc(m.getId()).size(),
-                        exams.getOrDefault(m.getId(), 0)))
+                .map(m -> {
+                    List<ExamMatrixCell> cells = cellRepository.findByMatrixIdOrderByPositionAsc(m.getId());
+                    int questions = cells.stream().mapToInt(c -> c.getQuestionCount() == null ? 0 : c.getQuestionCount())
+                            .sum();
+                    return new MatrixSummaryDto(m.getId(), m.getName(), m.getSubjectId(), m.getGradeLevel(),
+                            m.getCreatedAt(), cells.size(), exams.getOrDefault(m.getId(), 0), questions);
+                })
                 .toList();
     }
 

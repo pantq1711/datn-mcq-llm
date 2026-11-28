@@ -28,6 +28,22 @@
     margin-bottom: 16px;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+/* Đợt 3: ô tìm theo tên đề, bên phải nhóm lọc loại đề */
+.exam-list-search {
+    width: 320px;
+    max-width: 100%;
+    margin-left: auto;
+}
+
+@media (max-width: 576px) {
+    .exam-list-search {
+        width: 100%;
+        margin-left: 0;
+    }
 }
 
 @media (max-width: 576px) {

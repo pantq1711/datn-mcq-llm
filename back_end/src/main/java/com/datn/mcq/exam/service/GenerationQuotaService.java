@@ -35,8 +35,6 @@ public class GenerationQuotaService {
     public static final String QUEUE_LIMIT = "GENERATION_QUEUE_LIMIT";
     /** 429: giáo viên đã yêu cầu sinh quá số câu cho phép trong ngày (giờ Việt Nam). */
     public static final String DAILY_LIMIT = "DAILY_GENERATION_LIMIT";
-    static final String QUEUE_LIMIT_MESSAGE =
-            "Thầy/cô đang có quá nhiều câu chờ soạn. Vui lòng đợi các đề hiện tại soạn xong rồi tạo tiếp.";
     public static final ZoneId VIETNAM = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter DATE_VN = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
@@ -90,10 +88,21 @@ public class GenerationQuotaService {
             throw ApiErrorException.tooManyRequests(DAILY_LIMIT,
                     dailyMessage(used, newJobs, limits.getMaxDailyQuestions(), retryAfter, today), retryAfter);
         }
-        if (repository.countActiveGenerateJobs(userId) + newJobs > limits.getMaxPendingJobs()) {
-            throw ApiErrorException.tooManyRequests(QUEUE_LIMIT, QUEUE_LIMIT_MESSAGE, null);
+        int active = repository.countActiveGenerateJobs(userId);
+        if (active + newJobs > limits.getMaxPendingJobs()) {
+            throw ApiErrorException.tooManyRequests(QUEUE_LIMIT,
+                    queueMessage(active, newJobs, limits.getMaxPendingJobs()), null);
         }
         repository.setUsed(userId, today, used + newJobs);
+    }
+
+    /**
+     * Đợt 3 (BE-5): câu báo {@value #QUEUE_LIMIT} kèm số câu đang chờ/đang soạn (job generate pending/running), mức tối đa
+     * và số câu yêu cầu này cần. Mã lỗi không đổi; frontend hiện nguyên câu này.
+     */
+    static String queueMessage(int active, int requested, int limit) {
+        return "Thầy/cô đang có " + active + " câu chờ soạn (tối đa " + limit + " câu cùng lúc). Yêu cầu này cần thêm "
+                + requested + " câu. Vui lòng đợi các đề hiện tại soạn xong rồi tạo tiếp.";
     }
 
     static String dailyMessage(int used, int requested, int limit, long retryAfterSeconds, LocalDate today) {

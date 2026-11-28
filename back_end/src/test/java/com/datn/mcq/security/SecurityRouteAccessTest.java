@@ -79,6 +79,7 @@ class SecurityRouteAccessTest {
         RULES.put("POST /api/exams/build-by-lesson", Access.TEACHER);
         RULES.put("GET /api/exams/{examId}", Access.TEACHER);
         RULES.put("DELETE /api/exams/{examId}", Access.TEACHER);
+        RULES.put("PATCH /api/exams/{examId}", Access.TEACHER);
         RULES.put("GET /api/exams/{examId}/progress", Access.TEACHER);
         RULES.put("GET /api/exams/{examId}/cells/{cellId}", Access.TEACHER);
         RULES.put("GET /api/exams/{examId}/export/docx", Access.TEACHER);

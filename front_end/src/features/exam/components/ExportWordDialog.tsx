@@ -10,6 +10,7 @@ import {
     type ExportFontSize,
 } from "../services/examApi";
 import { isYoungMixShortAnswer, needsReviewNow } from "../../../utils/exam.utils";
+import { stripDateSuffix } from "../utils/examName";
 
 import "./ExportWordDialog.css";
 
@@ -52,14 +53,15 @@ const CONTENT_HINTS: Record<ExportContent, string> = {
 const CONTENT_SUFFIX: Partial<Record<ExportContent, string>> = { spec: SPEC_SUFFIX, youngmix: YOUNGMIX_SUFFIX };
 
 /**
- * Tên file mặc định: tên đề + ngày xuất ("Giữa kì I – Toán 8 – 16-11-2026"; tên file không chứa được "/"); bản đặc tả thêm
- * " – Bản đặc tả" sau tên đề ("Giữa kì I – Toán 8 – Bản đặc tả – 18-11-2026"), bản YoungMix (26/11) thêm " – YoungMix".
+ * Tên file mặc định: tên đề (bỏ đuôi ngày `– DD/MM` của đợt 3 để không lặp ngày dạng "28 11 – 28-11-2026") + ngày xuất
+ * ("Giữa kì I – Toán 8 – 16-11-2026"; tên file không chứa được "/"); bản đặc tả thêm " – Bản đặc tả" sau tên đề
+ * ("Giữa kì I – Toán 8 – Bản đặc tả – 18-11-2026"), bản YoungMix (26/11) thêm " – YoungMix".
  */
 function defaultFileName(title: string | undefined, content: ExportContent = "all"): string {
     const d = new Date();
     const pad = (n: number) => String(n).padStart(2, "0");
     const date = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
-    const name = toFileName(title, "");
+    const name = toFileName(title ? stripDateSuffix(title) : undefined, "");
     const suffix = CONTENT_SUFFIX[content];
     const base = suffix ? (name ? `${name} – ${suffix}` : suffix) : name;
     return base ? `${base} – ${date}` : date;

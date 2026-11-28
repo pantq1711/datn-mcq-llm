@@ -475,7 +475,7 @@ cho tới khi `status` khác `generating` → `GET /api/exams/{id}` để xem đ
 ### 7.0. Đề của tôi
 
 ```http
-GET /api/exams?page=0&size=10[&kind=lesson|matrix]
+GET /api/exams?page=0&size=10[&kind=lesson|matrix][&q=giữa kì]
 → {"items": [{"examId": 12, "examCode": "MT261022213000123", "title": "Đề giữa kì I", "mode": "teacher",
               "kind": "matrix", "status": "draft", "matrixId": 3, "createdAt": "2026-10-22T21:30:00", "totalSlots": 18,
               "readySlots": 10, "keptSlots": 5, "needsReviewSlots": 2, "generatingSlots": 2, "failedSlots": 1}],
@@ -487,6 +487,11 @@ GET /api/exams?page=0&size=10[&kind=lesson|matrix]
   hoặc matrix`). Loại suy ra từ ma trận gốc của đề, không có cột riêng.
 - Chỉ đề do người gọi tạo, CHƯA XÓA (V31), mới nhất trước. `page` từ 0 (mặc định 0), `size` từ 1 đến 50 (mặc định 10);
   sai thì 400.
+- (28/11, đợt 3) `q` tùy chọn: chỉ đề có **tên** (`title`) chứa chuỗi này, cùng cách tìm của ngân hàng (`ILIKE`). Được trim;
+  trống hoặc chỉ khoảng trắng thì không lọc; dài quá 100 ký tự thì 400 (`q dài tối đa 100 ký tự`). Ký tự `%`, `_`, `!`
+  được hiểu là chữ thường. Kết hợp được với `kind`; phân trang, `totalItems`, thứ tự như trên. **Không phân biệt hoa
+  thường nhưng còn phân biệt dấu**: "giữa kì" tìm ra "GIỮA KÌ I", còn "giua ki" không ra (backend không có `unaccent`;
+  ô tìm của giao diện ghi "gõ có dấu"). Khác ô tìm ma trận (lọc ở trình duyệt, bỏ dấu).
 - `readySlots`: chỗ đã có câu, chưa Giữ (`ready`); `keptSlots`: đã Giữ (`kept`, `edited`); `needsReviewSlots`: số chỗ có
   `needsReview = true` trong `GET /api/exams/{id}` của cùng đề (từ 4/11 dùng CHUNG một hàm dựng mục với trang chi tiết, nên
   luôn bằng `needsReviewCount` của trang chi tiết; 4/11–21/11 gồm cả cờ `similar_in_exam`, từ 22/11 cờ đó là cờ thông tin
@@ -497,6 +502,29 @@ GET /api/exams?page=0&size=10[&kind=lesson|matrix]
 - F-07 (4/11): danh sách và trang chi tiết nạp dữ liệu theo lô, số truy vấn cố định (khoảng 14 cho danh sách, 13 cho xem đề)
   không phụ thuộc số câu hay số đề trong trang; xem `docs/experiments/trial/do-f07-so-cau-sql.md`. Trước 4/11
   `needsReviewSlots` bị N+1, chỉ đếm chỗ `ready` và không có cờ `similar_in_exam` nên có thể nhỏ hơn `needsReviewCount`.
+
+### 7.0a. Đổi tên đề (28/11, đợt 3)
+
+```http
+PATCH /api/exams/12
+{"name": "  Giữa kì I – 8A1  "}
+→ 200 {"examId": 12, "title": "Giữa kì I – 8A1"}
+```
+
+- Chỉ chủ đề; đề của người khác, không có hoặc đã xóa: **404** như không tồn tại. Admin: 403 (như mục 7).
+- `name` được trim; trống, chỉ khoảng trắng hoặc thiếu: **400** `Tên đề không được để trống`; dài quá 255 ký tự (sau trim,
+  như khi tạo đề): **400** `Tên đề dài tối đa 255 ký tự`. Lỗi thì không đổi gì.
+- Đổi được ở **mọi trạng thái** đề (đang soạn, có chỗ hỏng, đã đủ câu, đã giao bài). Chỉ ghi cột `exam.title`.
+- Nơi dùng tên mới: danh sách đề (7.0), xem đề (7.4), tiến độ (7.3), "đề đang dùng câu" của ngân hàng, và **file Word xuất
+  từ lần sau** (đầu đề "ĐỀ KIỂM TRA …" của bản đề và bản đặc tả, 7.6). Tên file Word theo mã đề nên không đổi.
+- **Bài giao đã có giữ tên chụp lúc giao** (`exam_assignment.title`, V32): trang học sinh làm bài, chi tiết và danh sách bài
+  giao, tên file mã QR, thống kê theo bài giao vẫn hiện tên cũ. Bài giao tạo sau khi đổi tên dùng tên mới.
+
+| Mã | `code` | Khi nào |
+|---|---|---|
+| 200 | — | Đã đổi tên |
+| 400 | — | Tên trống hoặc dài quá 255 ký tự |
+| 404 | — | Đề không có, của giáo viên khác hoặc đã xóa |
 
 #### Xóa đề (NV-01, V31)
 
@@ -581,6 +609,11 @@ POST   /api/exam-matrices/3/duplicate       {"name": "Đề thử (cô Lan)"} (b
 
 `GET /api/exam-matrices` và `GET /api/exam-matrices/{id}` có thêm `examCount`: số đề CHƯA XÓA tạo từ ma trận (UI dùng để
 báo trước ma trận nào đang bị khóa; V31: đề đã xóa không tính). Quyền như mục 7: chỉ giáo viên, chỉ ma trận của mình.
+
+Mỗi dòng của `GET /api/exam-matrices` (danh sách) gồm `id`, `name`, `subjectId`, `gradeLevel`, `createdAt`, `cellCount`
+(số ô), `examCount` và (28/11, đợt 3) **`questionCount`**: tổng `questionCount` của các ô, tức số câu của một đề tạo từ
+ma trận. Câu Đúng/Sai tính **1 câu** (không đếm 4 ý). Ví dụ ma trận 3 ô gồm 2 câu `mcq`, 3 câu `tf`, 1 câu `sa`:
+`cellCount = 3`, `questionCount = 6`.
 
 - **Chưa có đề nào (`examCount = 0`):**
   - sửa: thay toàn bộ môn, khối, tên, nguồn, ghi chú và các ô (kiểm tra như tạo). Mọi ô được tạo lại nên **id ô và
@@ -782,8 +815,11 @@ môi trường (`app.generation-limits.*`, xem `docs/deploy/README.md`):
   hoặc `source = "generate"`). Yêu cầu bị chặn không để lại gì (không đề, không ma trận ẩn, không job, chỗ giữ nguyên).
   Tạo đề cần N câu sinh mới thì kiểm "đang chờ + N" và "đã dùng hôm nay + N" so với trần.
 - Thử lại tự động của hệ thống (job lỗi, câu lệch Solver) và việc sửa câu (job Solver) không tính vào hai trần này.
-- `GENERATION_QUEUE_LIMIT`: `error` = "Thầy/cô đang có quá nhiều câu chờ soạn. Vui lòng đợi các đề hiện tại soạn xong rồi tạo
-  tiếp." Không có `Retry-After`: frontend hiện thông báo, cho thử lại sau khi đề đang soạn xong.
+- `GENERATION_QUEUE_LIMIT`: (28/11, đợt 3) `error` nêu số câu đang chờ/đang soạn (job sinh câu `pending`, `running`), mức
+  tối đa và số câu yêu cầu này cần, ví dụ "Thầy/cô đang có 58 câu chờ soạn (tối đa 60 câu cùng lúc). Yêu cầu này cần thêm
+  6 câu. Vui lòng đợi các đề hiện tại soạn xong rồi tạo tiếp." (trước 28/11: "Thầy/cô đang có quá nhiều câu chờ soạn. …").
+  Mã lỗi giữ nguyên; frontend hiện nguyên câu (mỗi câu một dòng). Không có `Retry-After`: cho thử lại sau khi đề đang soạn
+  xong.
 - `DAILY_GENERATION_LIMIT`: `error` nêu trần, số đã dùng, số còn lại, số câu yêu cầu cần và thời điểm được tạo tiếp (từ 0
   giờ ngày hôm sau, giờ Việt Nam); khi trần ngày đã hết, kiểm trần ngày trước trần hàng đợi.
 - **Hết lượt gọi Gemini trong ngày của cả hệ thống (F-18):** trước khi trừ hạn mức giáo viên và xếp job, `build`,
@@ -1166,7 +1202,10 @@ GET /api/exams/12/export/docx  (đề có câu ngân hàng có hình)  → 200, 
   ……………" và "TRƯỜNG THCS ……………". Cột phải, căn giữa: "Thứ..... ngày........ tháng..... năm <năm hiện tại>" (nghiêng), "ĐỀ KIỂM
   TRA <tên kì in hoa>" (đậm; từ 16/11 (NV-42) là tên đề giáo viên nhập cho mọi loại đề, trước đó đề theo ma trận dùng tên ma
   trận; tên đề bỏ trống lúc tạo thì bằng tên ma trận nên đề cũ in như cũ. Bỏ hậu tố "(bản sao)" (kể cả lặp, không phân biệt
-  hoa thường) rồi phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8 (bản sao)" thành "GIỮA KÌ I"; bỏ hết thì giữ nguyên tên.
+  hoa thường), rồi (28/11, đợt 3) MỘT đuôi ngày ở cuối tên dạng "– DD/MM" hoặc "– DD/MM/YYYY" (dấu nối –, — hoặc -; tên mặc
+  định của giao diện từ 28/11 là "<tên ma trận> – DD/MM"), rồi phần "– Môn Khối" thừa, ví dụ "Giữa kì I – Toán 8 (bản sao)"
+  và "Giữa kì I – Toán 8 – 28/11" đều thành "GIỮA KÌ I"; "Đề 28/11" (không có dấu nối) giữ nguyên; bỏ hết thì giữ nguyên tên.
+  Áp cho cả bản đặc tả (`content=spec`).
   Tên đã mở đầu bằng "Kiểm tra" hoặc "Đề kiểm tra" (không phân biệt hoa thường) thì không lặp chữ: "Kiểm tra giữa kì I" in
   "ĐỀ KIỂM TRA GIỮA KÌ I"),
   "NĂM HỌC <y> - <y+1>" (đậm; y = năm hiện tại nếu tháng ≥ 8, ngược lại năm

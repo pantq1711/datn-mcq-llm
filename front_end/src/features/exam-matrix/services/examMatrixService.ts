@@ -34,9 +34,11 @@ export async function deleteExamMatrix(id: string): Promise<DeleteResponse> {
     return data;
 }
 
-// Nhân bản ma trận hiện có -> trả về ExamMatrixDetail mới
-export const duplicateExamMatrix = async (id: string) => {
-    const { data } = await axiosInstance.post<ExamMatrixDetail>(`/api/exam-matrices/${id}/duplicate`);
+// Nhân bản ma trận hiện có -> trả về ExamMatrixDetail mới. `name` (đợt 3) là tên bản sao; bỏ trống thì backend đặt
+// "<tên> (bản sao)" (docs/api mục 7.1a)
+export const duplicateExamMatrix = async (id: string, name?: string) => {
+    const body = name && name.trim() ? { name: name.trim() } : undefined;
+    const { data } = await axiosInstance.post<ExamMatrixDetail>(`/api/exam-matrices/${id}/duplicate`, body);
     return data;
 };
 

@@ -97,16 +97,16 @@ export function ExamMatrixTable({
             ),
         },
         {
-            // Danh sách không có tổng câu (MatrixSummaryDto chỉ có cellCount)
-            title: 'Số ô',
-            dataIndex: 'cellCount',
-            key: 'cellCount',
+            // Đợt 3: tổng số câu của các ô (MatrixSummaryDto.questionCount), câu Đúng/Sai tính 1 câu
+            title: 'Số câu',
+            dataIndex: 'questionCount',
+            key: 'questionCount',
             align: 'center',
             width: 90,
-            sorter: (a, b) => a.cellCount - b.cellCount,
-            render: (cellCount: number) => (
+            sorter: (a, b) => (a.questionCount ?? 0) - (b.questionCount ?? 0),
+            render: (questionCount: number | undefined) => (
                 <Text className="exam-matrix-table__question-count">
-                    {cellCount.toLocaleString('vi-VN')}
+                    {(questionCount ?? 0).toLocaleString('vi-VN')}
                 </Text>
             ),
         },

@@ -1,6 +1,6 @@
 import axiosInstance from "../../../services/apiClient";
 import { getApiErrorMessage } from "../../../utils/apiError";
-import type { Subject, ExamItemDto, UpdateSlotQuestionPayload, ExamListResponse, GetMyExamsParams, ExamDetail, ExamProgress, BuildByLessonPayload, BuildResultDto, BuildExamRequest, ReplaceQuestionParams } from "../types/exam.types";
+import type { Subject, ExamItemDto, UpdateSlotQuestionPayload, ExamListResponse, GetMyExamsParams, ExamDetail, ExamProgress, BuildByLessonPayload, BuildResultDto, BuildExamRequest, ReplaceQuestionParams, RenameExamResponse } from "../types/exam.types";
 import type { QcTraceResponse } from "../types/qcTrace.types";
 
 export async function getCatalogSubjects(): Promise<Subject[]> {
@@ -56,6 +56,7 @@ export async function getMyExams(params?: GetMyExamsParams): Promise<ExamListRes
         if (params?.page !== undefined) cleanParams.page = params.page;
         if (params?.size !== undefined) cleanParams.size = params.size;
         if (params?.kind) cleanParams.kind = params.kind;
+        if (params?.q && params.q.trim()) cleanParams.q = params.q.trim();
 
         const response = await axiosInstance.get<ExamListResponse>("/api/exams", {
             params: cleanParams,
@@ -76,6 +77,20 @@ export async function deleteExam(examId: number): Promise<void> {
         await axiosInstance.delete(`/api/exams/${examId}`);
     } catch (error: unknown) {
         throw new Error(getApiErrorMessage(error, "Không thể xóa đề thi"), { cause: error });
+    }
+}
+
+/**
+ * Đợt 3: đổi tên đề của mình (PATCH /api/exams/{id}, docs/api mục 7.0a), ở mọi trạng thái đề. Backend trim tên; rỗng
+ * hoặc dài quá 255 ký tự: 400; đề không có hoặc đã xóa: 404. Bài giao đã có giữ tên lúc giao. Lỗi ném ra là Error với câu
+ * báo lỗi của backend.
+ */
+export async function renameExam(examId: number | string, name: string): Promise<RenameExamResponse> {
+    try {
+        const response = await axiosInstance.patch<RenameExamResponse>(`/api/exams/${examId}`, { name });
+        return response.data;
+    } catch (error: unknown) {
+        throw new Error(getApiErrorMessage(error, "Không đổi được tên đề"), { cause: error });
     }
 }
 

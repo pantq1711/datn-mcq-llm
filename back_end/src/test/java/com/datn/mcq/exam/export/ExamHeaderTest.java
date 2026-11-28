@@ -141,6 +141,31 @@ class ExamHeaderTest {
         assertEquals("(bản sao)", ExamHeader.of("(bản sao)", "Toán", 8, null).periodName(), "bỏ hết thì giữ nguyên tên");
     }
 
+    /**
+     * Đợt 3 (28/11): tên đề mặc định "&lt;tên ma trận&gt; – DD/MM" (FE-1, FE-2). Trước khi bỏ "– Môn Khối", bỏ MỘT đuôi ngày ở
+     * cuối tên: dấu nối –, — hoặc -, rồi DD/MM hoặc DD/MM/YYYY. Không có dấu nối, ngày không ở cuối, hoặc tên chỉ có ngày thì
+     * giữ nguyên.
+     */
+    @Test
+    void tenKiBoMotDuoiNgayOCuoiTenTruocKhiBoMonKhoi() {
+        assertEquals("Giữa kì I", ExamHeader.of("Giữa kì I – Toán 8 – 28/11", "Toán", 8, null).periodName());
+        assertEquals("ĐỀ KIỂM TRA GIỮA KÌ I", ExamHeader.of("Giữa kì I – Toán 8 – 28/11", "Toán", 8, null).titleLine());
+        assertEquals("Giữa kì I", ExamHeader.of("Giữa kì I – 28/11", "Toán", 8, null).periodName());
+        assertEquals("Đề 28/11", ExamHeader.of("Đề 28/11", "Toán", 8, null).periodName(), "không có dấu nối thì không cắt");
+        assertEquals("Giữa kì I", ExamHeader.of("Giữa kì I - 28/11/2026", "Toán", 8, null).periodName());
+        assertEquals("Giữa kì I", ExamHeader.of("Giữa kì I — 5/9  ", "Toán", 8, null).periodName());
+        assertEquals("Giữa kì I", ExamHeader.of("Giữa kì I–28/11", "Toán", 8, null).periodName());
+        assertEquals("Giữa kì I – 28/11 – Toán 8 – 01/12",
+                ExamHeader.of("Giữa kì I – 28/11 – Toán 8 – 01/12 – 02/12", "Toán", 8, null).periodName(),
+                "chỉ cắt một đuôi ngày, rồi \"– Toán 8\" không còn ở cuối nên giữ");
+        assertEquals("Giữa kì I – 28/11 chiều", ExamHeader.of("Giữa kì I – 28/11 chiều", "Toán", 8, null).periodName(),
+                "ngày không ở cuối thì giữ");
+        assertEquals("– 28/11", ExamHeader.of("– 28/11", "Toán", 8, null).periodName(), "tên chỉ có ngày thì giữ nguyên");
+        assertEquals("Giữa kì I – 2026/11", ExamHeader.of("Giữa kì I – 2026/11", "Toán", 8, null).periodName(),
+                "không đúng dạng DD/MM thì giữ");
+        assertEquals("Giữa kì I", ExamHeader.of("Giữa kì I – Toán 8 – 28/11 (bản sao)", "Toán", 8, null).periodName());
+    }
+
     /** NV-43 (16/11): mã đề in ra mặc định 101; đổi bằng tham số examCode thì ô mã đề và chân trang theo mã đó. */
     @Test
     void maDeTheoThamSo() {

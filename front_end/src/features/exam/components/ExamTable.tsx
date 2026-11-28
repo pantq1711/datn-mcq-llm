@@ -1,6 +1,6 @@
 import { Button, Empty, Grid, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
-import { DeleteOutlined, EyeOutlined, WarningOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, EyeOutlined, WarningOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 
 import "./ExamTable.css";
@@ -23,6 +23,10 @@ interface ExamTableProps {
     deletingId?: number | null;
     /** Bấm "Tạo đề đầu tiên" ở trạng thái rỗng. */
     onCreate?: () => void;
+    /** Đợt 3: bấm "Đổi tên" của một đề. Không truyền thì không có nút. */
+    onRename?: (exam: ExamListItem) => void;
+    /** Đợt 3: danh sách đang lọc theo tên; rỗng thì báo không có đề khớp (không mời tạo đề đầu tiên). */
+    searching?: boolean;
 }
 
 
@@ -37,6 +41,8 @@ export default function ExamTable({
     onDelete,
     deletingId = null,
     onCreate,
+    onRename,
+    searching = false,
 }: ExamTableProps) {
     // Màn hẹp (dưới 768px): không ghim cột "Thao tác" bên phải, để tên đề còn chỗ hiện
     const screens = Grid.useBreakpoint();
@@ -129,7 +135,7 @@ export default function ExamTable({
         {
             title: "Thao tác",
             key: "actions",
-            width: 190,
+            width: onRename ? 290 : 190,
             align: "center",
             fixed: screens.md ? "right" : undefined,
             render: (_, record) => (
@@ -141,6 +147,16 @@ export default function ExamTable({
                     >
                         Mở đề
                     </Button>
+                    {onRename && (
+                        <Button
+                            type="text"
+                            icon={<EditOutlined />}
+                            aria-label={`Đổi tên đề ${record.title}`}
+                            onClick={() => onRename(record)}
+                        >
+                            Đổi tên
+                        </Button>
+                    )}
                     {onDelete && (
                         <Popconfirm
                             title="Xóa đề này?"
@@ -186,7 +202,9 @@ export default function ExamTable({
                     className: onView ? "exam-table-row-clickable" : undefined,
                 })}
                 locale={{
-                    emptyText: (
+                    emptyText: searching ? (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có đề nào khớp tên đã tìm." />
+                    ) : (
                         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có đề nào.">
                             {onCreate && (
                                 <Button type="primary" size="large" onClick={onCreate}>

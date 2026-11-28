@@ -181,6 +181,14 @@ export interface GetMyExamsParams {
     page?: number;
     size?: number;
     kind?: ExamKind;
+    /** Tìm theo tên đề (đợt 3): không phân biệt hoa thường, còn phân biệt dấu; tối đa 100 ký tự. */
+    q?: string;
+}
+
+/** Kết quả PATCH /api/exams/{id} (đổi tên đề, đợt 3). */
+export interface RenameExamResponse {
+    examId: number;
+    title: string;
 }
 
 /** Một chỗ (câu) của đề, khớp ExamViewDtos.ExamItemDto. Chỗ chưa có câu chỉ có phần định danh và state. */

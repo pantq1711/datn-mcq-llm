@@ -365,6 +365,30 @@ class MatrixManageTest extends ExamFlowTestBase {
         assertEquals(0, getMatrix(unused).get("examCount").asInt());
     }
 
+    /**
+     * Đợt 3 (BE-4): danh sách có questionCount = tổng question_count của các ô; câu Đúng/Sai tính 1 câu (không đếm 4 ý).
+     * Ma trận 3 ô: 2 câu mcq + 3 câu tf + 1 câu sa = 6 câu.
+     */
+    @Test
+    void danhSachCoQuestionCountTongSoCauCacOCauDungSaiTinhMot() throws Exception {
+        String tf = "{\"part\": \"II\", \"questionType\": \"tf\", \"statementDifficulties\": [\"easy\", \"easy\","
+                + " \"medium\", \"hard\"], \"questionCount\": 3, \"topic\": \"Hằng đẳng thức\","
+                + " \"learningOutcomes\": {\"easy\": \"Nhận biết.\", \"medium\": \"Khai triển.\", \"hard\": \"Vận dụng.\"}}";
+        String sa = "{\"part\": \"III\", \"questionType\": \"sa\", \"difficulty\": \"medium\", \"questionCount\": 1,"
+                + " \"topic\": \"Tứ giác\", \"learningOutcomes\": {\"medium\": \"Tính được góc.\"}}";
+        int mixed = createMatrix(mcqCell(TOPIC, null, 2), tf, sa);
+        int single = createMatrix(mcqCell("Tứ giác", null, 1));
+
+        JsonNode list = json(perform(get("/api/exam-matrices")).andExpect(status().isOk()));
+        assertEquals(2, list.size());
+        for (JsonNode m : list) {
+            boolean isMixed = m.get("id").asInt() == mixed;
+            assertEquals(isMixed ? 3 : 1, m.get("cellCount").asInt());
+            assertEquals(isMixed ? 6 : 1, m.get("questionCount").asInt());
+        }
+        assertTrue(list.get(0).get("id").asInt() == single, "mới nhất trước");
+    }
+
     // ---------- chủ sở hữu ----------
 
     @Test

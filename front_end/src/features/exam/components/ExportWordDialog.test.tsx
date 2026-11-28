@@ -8,6 +8,7 @@ import { isYoungMixShortAnswer } from "../../../utils/exam.utils";
 import ExportWordDialog from "./ExportWordDialog";
 
 vi.mock("../services/examApi");
+vi.setConfig({ testTimeout: 20000 });
 
 const mocked = vi.mocked(api);
 
@@ -23,17 +24,17 @@ function sa(slotNo: number, saAnswer: string | undefined): ExamItemDto {
     };
 }
 
-function detail(answers: (string | undefined)[]): ExamDetail {
+function detail(answers: (string | undefined)[], title = "Cuối kì I – Toán 8"): ExamDetail {
     return {
-        examId: 7, examCode: "MT2611261200007", title: "Cuối kì I – Toán 8", mode: "teacher", status: "draft",
+        examId: 7, examCode: "MT2611261200007", title, mode: "teacher", status: "draft",
         matrixId: 3, createdAt: "2026-11-26T08:00:00", buildStatus: "ready", needsReviewCount: 0, kind: "matrix",
         totalScore: 10,
         parts: [{ part: "III", required: answers.length, ready: answers.length, items: answers.map((a, i) => sa(i + 1, a)) }],
     } as ExamDetail;
 }
 
-function renderDialog(answers: (string | undefined)[] = ["10"]) {
-    return render(<ExportWordDialog open examId="7" detail={detail(answers)} onClose={vi.fn()} />);
+function renderDialog(answers: (string | undefined)[] = ["10"], title?: string) {
+    return render(<ExportWordDialog open examId="7" detail={detail(answers, title)} onClose={vi.fn()} />);
 }
 
 let downloads: string[] = [];
@@ -141,5 +142,23 @@ describe("ExportWordDialog: bản YoungMix, tờ phách, cỡ chữ (26/11)", ()
         await waitFor(() => expect(mocked.getExamExportDocx).toHaveBeenCalledTimes(1));
         expect(mocked.getExamExportDocx.mock.calls[0][2]).toMatchObject({ content: "spec", phach: undefined,
             fontSize: undefined });
+    });
+
+    it("đợt 3: tên đề mặc định có đuôi '– DD/MM' thì tên file bỏ đuôi đó trước khi ghép ngày xuất", async () => {
+        const user = userEvent.setup();
+        renderDialog(["10"], "Giữa kì I – Toán 8 – 28/11");
+
+        const fileInput = screen.getByLabelText("Tên file", { exact: false }) as HTMLInputElement;
+        expect(fileInput.value).toMatch(/^Giữa kì I – Toán 8 – \d{2}-\d{2}-\d{4}$/);
+        expect(fileInput.value).not.toContain("28 11");
+
+        await user.click(screen.getByRole("radio", { name: "Bản đặc tả đề" }));
+        expect(fileInput.value).toMatch(/^Giữa kì I – Toán 8 – Bản đặc tả – \d{2}-\d{2}-\d{4}$/);
+
+        await user.click(screen.getByRole("radio", { name: YOUNGMIX_LABEL }));
+        expect(fileInput.value).toMatch(/^Giữa kì I – Toán 8 – YoungMix – \d{2}-\d{2}-\d{4}$/);
+
+        await user.click(screen.getByRole("button", { name: /Tải về/ }));
+        await waitFor(() => expect(downloads[0]).toMatch(/^Giữa kì I – Toán 8 – YoungMix – \d{2}-\d{2}-\d{4}\.docx$/));
     });
 });

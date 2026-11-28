@@ -10,6 +10,8 @@ import com.datn.mcq.exam.dto.ExamQcTraceDtos.QcTraceDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamItemDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamPageDto;
 import com.datn.mcq.exam.dto.ExamViewDtos.ExamViewDto;
+import com.datn.mcq.exam.dto.ExamViewDtos.RenameExamRequest;
+import com.datn.mcq.exam.dto.ExamViewDtos.RenameExamResponse;
 import com.datn.mcq.exam.export.ExamExportService;
 import com.datn.mcq.exam.export.ExamExportService.DocxFile;
 import com.datn.mcq.exam.export.EquationFormat;
@@ -29,6 +31,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -83,12 +86,25 @@ public class ExamController {
      * @param page từ 0
      * @param size từ 1 đến 50
      * @param kind tùy chọn: "lesson" (sinh theo bài) hoặc "matrix" (từ ma trận); sai thì 400
+     * @param q    tùy chọn (đợt 3): tên đề chứa chuỗi này, không phân biệt hoa thường, còn phân biệt dấu; trim, trống là
+     *             không lọc, tối đa 100 ký tự (dài hơn 400)
      */
     @GetMapping
     public ExamPageDto list(CurrentUser user, @RequestParam(defaultValue = "0") int page,
                             @RequestParam(defaultValue = "10") int size,
-                            @RequestParam(required = false) String kind) {
-        return examViewService.list(user.id(), page, size, kind);
+                            @RequestParam(required = false) String kind,
+                            @RequestParam(required = false) String q) {
+        return examViewService.list(user.id(), page, size, kind, q);
+    }
+
+    /**
+     * Đợt 3: đổi tên đề của mình, ở mọi trạng thái đề. {@code name} được trim; rỗng hoặc dài quá 255 ký tự thì 400; đề của
+     * người khác, không có hoặc đã xóa thì 404. Bài giao đã có giữ tên lúc giao; xuất Word dùng tên mới.
+     */
+    @PatchMapping("/{examId}")
+    public RenameExamResponse rename(CurrentUser user, @PathVariable Integer examId,
+                                     @RequestBody RenameExamRequest request) {
+        return examViewService.rename(examId, request == null ? null : request.name(), user.id());
     }
 
     /**
