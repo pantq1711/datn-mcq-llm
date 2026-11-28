@@ -209,6 +209,21 @@ describe("BankImportPage: bản xem trước", () => {
         expect(screen.getByRole("checkbox", { name: "Chọn câu mcq-002" })).toBeDisabled();
     });
 
+    it("danh sách câu có khung bao và phần tử đệm cuối danh sách trước thanh chọn câu nổi", async () => {
+        const { container } = openPreview();
+        await screen.findByRole("checkbox", { name: "Chọn câu mcq-001" });
+
+        const list = screen.getByTestId("bank-import-list");
+        const spacer = screen.getByTestId("bank-import-list-spacer");
+        const bar = container.querySelector(".bank-import-confirm-bar");
+
+        expect(list).toHaveClass("bank-import-list");
+        expect(spacer).toHaveClass("bank-import-list-spacer");
+        expect(spacer).toHaveAttribute("aria-hidden", "true");
+        expect(list.lastElementChild).toBe(spacer);
+        expect(list.nextElementSibling).toBe(bar);
+    });
+
     it("mặc định chưa chọn câu nào; chọn tất cả chỉ lấy câu chọn được; nút nhập ghi số câu", async () => {
         openPreview();
         const user = userEvent.setup();
